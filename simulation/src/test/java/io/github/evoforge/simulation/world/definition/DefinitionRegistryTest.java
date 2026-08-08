@@ -5,18 +5,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DefinitionRegistryTest {
 
     @Test
-    void registersDefinition() {
+    void registersKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
-        ObjectDefinition definition = new TestDefinition("food.apple");
 
-        DefinitionId id = registry.register(definition);
+        DefinitionId id = registry.register("object.apple");
 
         assertEquals(DefinitionId.of(0), id);
         assertEquals(1, registry.size());
@@ -26,59 +24,46 @@ class DefinitionRegistryTest {
     void assignsSequentialIds() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId first = registry.register(new TestDefinition("food.apple"));
-
-        DefinitionId second = registry.register(new TestDefinition("food.bread"));
+        DefinitionId first = registry.register("object.apple");
+        DefinitionId second = registry.register("animal.wolf");
 
         assertEquals(DefinitionId.of(0), first);
         assertEquals(DefinitionId.of(1), second);
     }
 
     @Test
-    void returnsDefinitionById() {
-        DefinitionRegistry registry = new DefinitionRegistry();
-        ObjectDefinition definition = new TestDefinition("food.apple");
-
-        DefinitionId id = registry.register(definition);
-
-        assertSame(definition, registry.get(id));
-    }
-
-    @Test
-    void returnsDefinitionByKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
-        ObjectDefinition definition = new TestDefinition("food.apple");
-
-        registry.register(definition);
-
-        assertSame(definition, registry.get("food.apple"));
-    }
-
-    @Test
     void returnsIdByKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId id = registry.register(new TestDefinition("food.apple"));
+        DefinitionId id = registry.register("object.apple");
 
-        assertEquals(id, registry.idOf("food.apple"));
+        assertEquals(id, registry.idOf("object.apple"));
+    }
+
+    @Test
+    void returnsKeyById() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        DefinitionId id = registry.register("object.apple");
+
+        assertEquals("object.apple", registry.keyOf(id));
     }
 
     @Test
     void rejectsDuplicateKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        registry.register(new TestDefinition("food.apple"));
+        registry.register("object.apple");
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> registry.register(
-                        new TestDefinition("food.apple")));
+                () -> registry.register("object.apple"));
 
         assertEquals(1, registry.size());
     }
 
     @Test
-    void rejectsNullDefinition() {
+    void rejectsNullKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
         assertThrows(
@@ -87,27 +72,34 @@ class DefinitionRegistryTest {
     }
 
     @Test
-    void returnsNullForUnknownId() {
+    void rejectsBlankKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.get(DefinitionId.of(100)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("   "));
     }
 
     @Test
     void returnsNullForUnknownKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.get("food.unknown"));
-        assertNull(registry.idOf("food.unknown"));
+        assertNull(registry.idOf("object.unknown"));
+    }
+
+    @Test
+    void returnsNullForUnknownId() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        assertNull(registry.keyOf(DefinitionId.of(100)));
     }
 
     @Test
     void handlesNullLookup() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.get((DefinitionId) null));
-        assertNull(registry.get((String) null));
         assertNull(registry.idOf(null));
+        assertNull(registry.keyOf(null));
     }
 
     @Test
@@ -125,35 +117,23 @@ class DefinitionRegistryTest {
     void rejectsRegistrationAfterFreeze() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        registry.register(new TestDefinition("food.apple"));
+        registry.register("object.apple");
         registry.freeze();
 
         assertThrows(
                 IllegalStateException.class,
-                () -> registry.register(
-                        new TestDefinition("food.bread")));
-
-        assertEquals(1, registry.size());
+                () -> registry.register("animal.wolf"));
     }
 
     @Test
     void allowsReadingAfterFreeze() {
         DefinitionRegistry registry = new DefinitionRegistry();
-        ObjectDefinition definition = new TestDefinition("food.apple");
 
-        DefinitionId id = registry.register(definition);
+        DefinitionId id = registry.register("object.apple");
+
         registry.freeze();
 
-        assertSame(definition, registry.get(id));
-        assertSame(definition, registry.get("food.apple"));
-        assertEquals(id, registry.idOf("food.apple"));
-    }
-
-    private static final class TestDefinition
-            extends ObjectDefinition {
-
-        private TestDefinition(String key) {
-            super(key);
-        }
+        assertEquals(id, registry.idOf("object.apple"));
+        assertEquals("object.apple", registry.keyOf(id));
     }
 }

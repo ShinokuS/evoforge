@@ -7,59 +7,35 @@ import java.util.Map;
 
 public final class DefinitionRegistry {
 
-    private final List<ObjectDefinition> definitions = new ArrayList<>();
+    private final List<String> keys = new ArrayList<>();
     private final Map<String, DefinitionId> idsByKey = new HashMap<>();
 
     private boolean frozen;
 
-    public DefinitionId register(ObjectDefinition definition) {
-        if (definition == null) {
-            throw new IllegalArgumentException("definition must not be null");
+    public DefinitionId register(String key) {
+        if (key == null) {
+            throw new IllegalArgumentException("key must not be null");
+        }
+
+        if (key.isBlank()) {
+            throw new IllegalArgumentException("key must not be blank");
         }
 
         if (frozen) {
             throw new IllegalStateException("registry is frozen");
         }
 
-        if (idsByKey.containsKey(definition.key())) {
+        if (idsByKey.containsKey(key)) {
             throw new IllegalArgumentException(
-                    "definition already registered: " + definition.key());
+                    "definition already registered: " + key);
         }
 
-        DefinitionId id = DefinitionId.of(definitions.size());
+        DefinitionId id = DefinitionId.of(keys.size());
 
-        definitions.add(definition);
-        idsByKey.put(definition.key(), id);
+        keys.add(key);
+        idsByKey.put(key, id);
 
         return id;
-    }
-
-    public ObjectDefinition get(DefinitionId id) {
-        if (id == null) {
-            return null;
-        }
-
-        int index = id.asInt();
-
-        if (index >= definitions.size()) {
-            return null;
-        }
-
-        return definitions.get(index);
-    }
-
-    public ObjectDefinition get(String key) {
-        if (key == null) {
-            return null;
-        }
-
-        DefinitionId id = idsByKey.get(key);
-
-        if (id == null) {
-            return null;
-        }
-
-        return definitions.get(id.asInt());
     }
 
     public DefinitionId idOf(String key) {
@@ -70,8 +46,22 @@ public final class DefinitionRegistry {
         return idsByKey.get(key);
     }
 
+    public String keyOf(DefinitionId id) {
+        if (id == null) {
+            return null;
+        }
+
+        int index = id.asInt();
+
+        if (index >= keys.size()) {
+            return null;
+        }
+
+        return keys.get(index);
+    }
+
     public int size() {
-        return definitions.size();
+        return keys.size();
     }
 
     public void freeze() {
