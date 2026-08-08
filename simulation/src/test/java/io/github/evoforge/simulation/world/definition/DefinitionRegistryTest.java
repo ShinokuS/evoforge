@@ -136,4 +136,20 @@ class DefinitionRegistryTest {
         assertEquals(id, registry.idOf("object.apple"));
         assertEquals("object.apple", registry.keyOf(id));
     }
+
+    @Test
+    void resolvesIdByKey() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        DefinitionId id = registry.register("core:apple");
+
+        assertEquals(id, registry.resolve("core:apple"));
+    }
+
+    @Test
+    void returnsNullWhenResolvingUnknownKey() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        assertNull(registry.resolve("core:unknown"));
+    }
 }

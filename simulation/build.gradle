@@ -3,6 +3,8 @@
 eclipse.project.name = appName + '-simulation'
 
 dependencies {
+    implementation "com.google.code.gson:gson:$gsonVersion"
+
     testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }

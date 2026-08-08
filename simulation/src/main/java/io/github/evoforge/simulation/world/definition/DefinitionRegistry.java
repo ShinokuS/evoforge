@@ -5,7 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class DefinitionRegistry {
+public final class DefinitionRegistry
+        implements DefinitionResolver {
 
     private final List<String> keys = new ArrayList<>();
     private final Map<String, DefinitionId> idsByKey = new HashMap<>();
@@ -44,6 +45,11 @@ public final class DefinitionRegistry {
         }
 
         return idsByKey.get(key);
+    }
+
+    @Override
+    public DefinitionId resolve(String key) {
+        return idOf(key);
     }
 
     public String keyOf(DefinitionId id) {
