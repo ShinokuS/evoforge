@@ -4,8 +4,14 @@ eclipse.project.name = appName + '-simulation'
 
 dependencies {
     testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
 test {
     useJUnitPlatform()
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+    }
 }

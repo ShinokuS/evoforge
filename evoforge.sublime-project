@@ -1,0 +1,24 @@
+{
+    "folders": [
+        {
+            "name": "SIMULATION",
+            "path": "simulation/src/main/java/io/github/evoforge/simulation"
+        },
+        {
+            "name": "SIMULATION TESTS",
+            "path": "simulation/src/test/java/io/github/evoforge/simulation"
+        },
+        {
+            "name": "CORE",
+            "path": "core/src/main/java/io/github/evoforge"
+        },
+        {
+            "name": "PROJECT",
+            "path": ".",
+            "folder_exclude_patterns": [
+                ".gradle",
+                "build"
+            ]
+        }
+    ]
+}
