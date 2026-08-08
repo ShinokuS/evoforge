@@ -14,7 +14,7 @@ class DefinitionRegistryTest {
     void registersKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId id = registry.register("object.apple");
+        DefinitionId id = registry.register("core:apple");
 
         assertEquals(DefinitionId.of(0), id);
         assertEquals(1, registry.size());
@@ -24,8 +24,9 @@ class DefinitionRegistryTest {
     void assignsSequentialIds() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId first = registry.register("object.apple");
-        DefinitionId second = registry.register("animal.wolf");
+        DefinitionId first = registry.register("core:apple");
+
+        DefinitionId second = registry.register("core:wolf");
 
         assertEquals(DefinitionId.of(0), first);
         assertEquals(DefinitionId.of(1), second);
@@ -35,29 +36,33 @@ class DefinitionRegistryTest {
     void returnsIdByKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId id = registry.register("object.apple");
+        DefinitionId id = registry.register("core:apple");
 
-        assertEquals(id, registry.idOf("object.apple"));
+        assertEquals(
+                id,
+                registry.idOf("core:apple"));
     }
 
     @Test
     void returnsKeyById() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId id = registry.register("object.apple");
+        DefinitionId id = registry.register("core:apple");
 
-        assertEquals("object.apple", registry.keyOf(id));
+        assertEquals(
+                "core:apple",
+                registry.keyOf(id));
     }
 
     @Test
     void rejectsDuplicateKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        registry.register("object.apple");
+        registry.register("core:apple");
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> registry.register("object.apple"));
+                () -> registry.register("core:apple"));
 
         assertEquals(1, registry.size());
     }
@@ -81,17 +86,60 @@ class DefinitionRegistryTest {
     }
 
     @Test
+    void rejectsInvalidKeyFormat() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("apple"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("object.apple"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("Core:Apple"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("core:"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register(":apple"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> registry.register("core:apple:test"));
+    }
+
+    @Test
+    void acceptsValidKeyFormats() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        registry.register("core:apple");
+        registry.register("core:rotten_apple");
+        registry.register("core:oak-tree");
+        registry.register("mod.example:magic.apple");
+
+        assertEquals(4, registry.size());
+    }
+
+    @Test
     void returnsNullForUnknownKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.idOf("object.unknown"));
+        assertNull(
+                registry.idOf("core:unknown"));
     }
 
     @Test
     void returnsNullForUnknownId() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.keyOf(DefinitionId.of(100)));
+        assertNull(
+                registry.keyOf(DefinitionId.of(100)));
     }
 
     @Test
@@ -99,6 +147,7 @@ class DefinitionRegistryTest {
         DefinitionRegistry registry = new DefinitionRegistry();
 
         assertNull(registry.idOf(null));
+        assertNull(registry.resolve(null));
         assertNull(registry.keyOf(null));
     }
 
@@ -117,24 +166,31 @@ class DefinitionRegistryTest {
     void rejectsRegistrationAfterFreeze() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        registry.register("object.apple");
+        registry.register("core:apple");
         registry.freeze();
 
         assertThrows(
                 IllegalStateException.class,
-                () -> registry.register("animal.wolf"));
+                () -> registry.register("core:wolf"));
+
+        assertEquals(1, registry.size());
     }
 
     @Test
     void allowsReadingAfterFreeze() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        DefinitionId id = registry.register("object.apple");
+        DefinitionId id = registry.register("core:apple");
 
         registry.freeze();
 
-        assertEquals(id, registry.idOf("object.apple"));
-        assertEquals("object.apple", registry.keyOf(id));
+        assertEquals(
+                id,
+                registry.idOf("core:apple"));
+
+        assertEquals(
+                "core:apple",
+                registry.keyOf(id));
     }
 
     @Test
@@ -143,13 +199,16 @@ class DefinitionRegistryTest {
 
         DefinitionId id = registry.register("core:apple");
 
-        assertEquals(id, registry.resolve("core:apple"));
+        assertEquals(
+                id,
+                registry.resolve("core:apple"));
     }
 
     @Test
     void returnsNullWhenResolvingUnknownKey() {
         DefinitionRegistry registry = new DefinitionRegistry();
 
-        assertNull(registry.resolve("core:unknown"));
+        assertNull(
+                registry.resolve("core:unknown"));
     }
 }

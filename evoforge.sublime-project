@@ -13,6 +13,10 @@
             "path": "core/src/main/java/io/github/evoforge"
         },
         {
+            "name": "ASSETS",
+            "path": "assets"
+        },
+        {
             "name": "PROJECT",
             "path": ".",
             "folder_exclude_patterns": [

@@ -1,0 +1,8 @@
+{
+    "key": "core:apple",
+    "aspects": {
+        "physical": {
+            "mass": 0.18
+        }
+    }
+}

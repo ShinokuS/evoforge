@@ -4,9 +4,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public final class DefinitionRegistry
         implements DefinitionResolver {
+
+    private static final Pattern KEY_PATTERN = Pattern.compile(
+            "[a-z0-9][a-z0-9_.-]*:[a-z0-9][a-z0-9_.-]*");
 
     private final List<String> keys = new ArrayList<>();
     private final Map<String, DefinitionId> idsByKey = new HashMap<>();
@@ -15,15 +19,23 @@ public final class DefinitionRegistry
 
     public DefinitionId register(String key) {
         if (key == null) {
-            throw new IllegalArgumentException("key must not be null");
+            throw new IllegalArgumentException(
+                    "key must not be null");
         }
 
         if (key.isBlank()) {
-            throw new IllegalArgumentException("key must not be blank");
+            throw new IllegalArgumentException(
+                    "key must not be blank");
+        }
+
+        if (!KEY_PATTERN.matcher(key).matches()) {
+            throw new IllegalArgumentException(
+                    "invalid definition key: " + key);
         }
 
         if (frozen) {
-            throw new IllegalStateException("registry is frozen");
+            throw new IllegalStateException(
+                    "registry is frozen");
         }
 
         if (idsByKey.containsKey(key)) {
