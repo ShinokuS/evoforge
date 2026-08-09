@@ -1,18 +1,18 @@
 package io.github.evoforge.simulation.world.object;
 
 import io.github.evoforge.simulation.world.definition.DefinitionId;
-import io.github.evoforge.simulation.world.definition.DefinitionResolver;
+import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
 
 import java.util.function.BiFunction;
 
 public final class ObjectFactory {
 
     private final ObjectRepository objects;
-    private final DefinitionResolver definitions;
+    private final DefinitionCatalog definitions;
 
     public ObjectFactory(
             ObjectRepository objects,
-            DefinitionResolver definitions) {
+            DefinitionCatalog definitions) {
 
         if (objects == null) {
             throw new IllegalArgumentException(
@@ -70,6 +70,11 @@ public final class ObjectFactory {
         if (definitionId == null) {
             throw new IllegalArgumentException(
                     "definitionId must not be null");
+        }
+
+        if (!definitions.contains(definitionId)) {
+            throw new IllegalArgumentException(
+                    "unknown definition: " + definitionId);
         }
 
         if (creator == null) {

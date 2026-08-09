@@ -20,47 +20,38 @@ class DefinitionDirectoryLoaderTest {
     @Test
     void loadsDefinitionsFromDirectory() throws IOException {
         Files.writeString(
-            directory.resolve("test.json"),
-            """
-            {
-                "key": "core:test",
-                "aspects": {
-                    "test-aspect": {
-                        "value": 42
-                    }
-                }
-            }
-            """,
-            UTF_8
-        );
+                directory.resolve("test.json"),
+                """
+                        {
+                            "key": "core:test",
+                            "aspects": {
+                                "test-aspect": {
+                                    "value": 42
+                                }
+                            }
+                        }
+                        """,
+                UTF_8);
 
-        DefinitionRegistry definitions =
-            new DefinitionRegistry();
+        DefinitionRegistry definitions = new DefinitionRegistry();
 
-        DefinitionCompilerRegistry compilers =
-            new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
 
-        TestCompiler compiler =
-            new TestCompiler();
+        TestCompiler compiler = new TestCompiler();
 
         compilers.register(compiler);
 
-        DefinitionLoader loader =
-            new DefinitionLoader(
+        DefinitionLoader loader = new DefinitionLoader(
                 definitions,
-                compilers
-            );
+                compilers);
 
-        DefinitionDirectoryLoader directoryLoader =
-            new DefinitionDirectoryLoader(
+        DefinitionDirectoryLoader directoryLoader = new DefinitionDirectoryLoader(
                 new DefinitionFileReader(),
-                loader
-            );
+                loader);
 
         directoryLoader.load(directory);
 
-        DefinitionId id =
-            definitions.resolve("core:test");
+        DefinitionId id = definitions.resolve("core:test");
 
         assertEquals(DefinitionId.of(0), id);
         assertEquals(42, compiler.value);
@@ -69,34 +60,28 @@ class DefinitionDirectoryLoaderTest {
 
     @Test
     void rejectsNullReader() {
-        DefinitionLoader loader =
-            new DefinitionLoader(
+        DefinitionLoader loader = new DefinitionLoader(
                 new DefinitionRegistry(),
-                new DefinitionCompilerRegistry()
-            );
+                new DefinitionCompilerRegistry());
 
         assertThrows(
-            IllegalArgumentException.class,
-            () -> new DefinitionDirectoryLoader(
-                null,
-                loader
-            )
-        );
+                IllegalArgumentException.class,
+                () -> new DefinitionDirectoryLoader(
+                        null,
+                        loader));
     }
 
     @Test
     void rejectsNullLoader() {
         assertThrows(
-            IllegalArgumentException.class,
-            () -> new DefinitionDirectoryLoader(
-                new DefinitionFileReader(),
-                null
-            )
-        );
+                IllegalArgumentException.class,
+                () -> new DefinitionDirectoryLoader(
+                        new DefinitionFileReader(),
+                        null));
     }
 
     private static final class TestCompiler
-        implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler {
 
         private DefinitionId definitionId;
         private int value;
@@ -108,10 +93,9 @@ class DefinitionDirectoryLoaderTest {
 
         @Override
         public void compile(
-            DefinitionId definitionId,
-            JsonObject data,
-            DefinitionResolver resolver
-        ) {
+                DefinitionId definitionId,
+                JsonObject data,
+                DefinitionCatalog catalog) {
             this.definitionId = definitionId;
             value = data.get("value").getAsInt();
         }

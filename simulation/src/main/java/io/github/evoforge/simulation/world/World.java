@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world;
 
-import io.github.evoforge.simulation.world.definition.DefinitionResolver;
+import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 
@@ -9,7 +9,7 @@ public final class World {
     private final ObjectRepository objects;
     private final ObjectFactory objectFactory;
 
-    public World(DefinitionResolver definitions) {
+    public World(DefinitionCatalog definitions) {
         if (definitions == null) {
             throw new IllegalArgumentException(
                     "definitions must not be null");

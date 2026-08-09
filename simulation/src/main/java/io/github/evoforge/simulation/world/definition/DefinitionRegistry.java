@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 public final class DefinitionRegistry
-        implements DefinitionResolver {
+        implements DefinitionCatalog {
 
     private static final Pattern KEY_PATTERN = Pattern.compile(
             "[a-z0-9][a-z0-9_.-]*:[a-z0-9][a-z0-9_.-]*");
@@ -76,6 +76,17 @@ public final class DefinitionRegistry
         }
 
         return keys.get(index);
+    }
+
+    @Override
+    public boolean contains(DefinitionId id) {
+        if (id == null) {
+            return false;
+        }
+
+        int index = id.asInt();
+
+        return index >= 0 && index < keys.size();
     }
 
     public int size() {

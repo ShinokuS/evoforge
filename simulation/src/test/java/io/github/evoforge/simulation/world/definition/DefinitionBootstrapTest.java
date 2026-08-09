@@ -73,7 +73,7 @@ class DefinitionBootstrapTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionResolver resolver) {
+                DefinitionCatalog catalog) {
             this.definitionId = definitionId;
             value = data.get("value").getAsInt();
         }

@@ -211,4 +211,25 @@ class DefinitionRegistryTest {
         assertNull(
                 registry.resolve("core:unknown"));
     }
+
+    @Test
+    void containsRegisteredDefinitionId() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        DefinitionId id = registry.register("core:apple");
+
+        assertTrue(
+                registry.contains(id));
+    }
+
+    @Test
+    void doesNotContainUnknownDefinitionId() {
+        DefinitionRegistry registry = new DefinitionRegistry();
+
+        registry.register("core:apple");
+
+        assertFalse(
+                registry.contains(
+                        DefinitionId.of(100)));
+    }
 }

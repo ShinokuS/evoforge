@@ -9,5 +9,5 @@ public interface DefinitionAspectCompiler {
     void compile(
             DefinitionId definitionId,
             JsonObject data,
-            DefinitionResolver resolver);
+            DefinitionCatalog catalog);
 }

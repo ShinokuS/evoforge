@@ -152,7 +152,7 @@ class DefinitionLoaderTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionResolver resolver) {
+                DefinitionCatalog catalog) {
             compileCount++;
             this.definitionId = definitionId;
             this.data = data;
@@ -173,8 +173,8 @@ class DefinitionLoaderTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionResolver resolver) {
-            resolvedTarget = resolver.resolve(
+                DefinitionCatalog catalog) {
+            resolvedTarget = catalog.resolve(
                     data.get("target").getAsString());
         }
     }

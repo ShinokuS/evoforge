@@ -5,7 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import io.github.evoforge.simulation.world.definition.DefinitionAspectCompiler;
 import io.github.evoforge.simulation.world.definition.DefinitionId;
-import io.github.evoforge.simulation.world.definition.DefinitionResolver;
+import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
 
 public final class PhysicalDefinitionCompiler
         implements DefinitionAspectCompiler {
@@ -31,7 +31,7 @@ public final class PhysicalDefinitionCompiler
     public void compile(
             DefinitionId definitionId,
             JsonObject data,
-            DefinitionResolver resolver) {
+            DefinitionCatalog catalog) {
         if (data == null) {
             throw new IllegalArgumentException(
                     "data must not be null");
