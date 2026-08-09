@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world;
 
 import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
+import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 
 public final class World {
@@ -22,7 +23,7 @@ public final class World {
                 definitions);
     }
 
-    public ObjectRepository objects() {
+    public ObjectLookup objects() {
         return objects;
     }
 

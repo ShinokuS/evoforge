@@ -98,4 +98,43 @@ class PhysicalDefinitionsTest {
                 IllegalArgumentException.class,
                 () -> definitions.put(null, 1.0));
     }
+
+    @Test
+    void freezesDefinitions() {
+        PhysicalDefinitions definitions = new PhysicalDefinitions();
+
+        definitions.freeze();
+
+        assertTrue(definitions.isFrozen());
+    }
+
+    @Test
+    void rejectsPutAfterFreeze() {
+        PhysicalDefinitions definitions = new PhysicalDefinitions();
+
+        definitions.freeze();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> definitions.put(
+                        DefinitionId.of(0),
+                        0.18));
+    }
+
+    @Test
+    void remainsReadableAfterFreeze() {
+        PhysicalDefinitions definitions = new PhysicalDefinitions();
+
+        DefinitionId id = DefinitionId.of(0);
+
+        definitions.put(id, 0.18);
+
+        definitions.freeze();
+
+        assertTrue(definitions.has(id));
+
+        assertEquals(
+                0.18,
+                definitions.mass(id));
+    }
 }

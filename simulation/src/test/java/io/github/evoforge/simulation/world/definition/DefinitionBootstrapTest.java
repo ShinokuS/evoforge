@@ -78,4 +78,60 @@ class DefinitionBootstrapTest {
             value = data.get("value").getAsInt();
         }
     }
+
+    @Test
+    void rejectsSecondLoad()
+            throws IOException {
+
+        Files.writeString(
+                directory.resolve("test.json"),
+                """
+                        {
+                            "key": "core:test",
+                            "aspects": {
+                                "test-aspect": {
+                                    "value": 42
+                                }
+                            }
+                        }
+                        """,
+                UTF_8);
+
+        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+                new TestCompiler());
+
+        bootstrap.load(directory);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> bootstrap.load(directory));
+    }
+
+    @Test
+    void rejectsRetryAfterFailedLoad()
+            throws IOException {
+
+        Files.writeString(
+                directory.resolve("test.json"),
+                """
+                        {
+                            "key": "core:test",
+                            "aspects": {
+                                "unknown": {}
+                            }
+                        }
+                        """,
+                UTF_8);
+
+        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+                new TestCompiler());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bootstrap.load(directory));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> bootstrap.load(directory));
+    }
 }

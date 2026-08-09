@@ -36,6 +36,7 @@ public final class DefinitionLoader {
 
         registerDefinitions(documents);
         compileDefinitions(documents);
+        compilers.finishAll();
     }
 
     private void registerDefinitions(List<JsonObject> documents) {

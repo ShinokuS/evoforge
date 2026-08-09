@@ -4,8 +4,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import io.github.evoforge.simulation.world.definition.DefinitionAspectCompiler;
-import io.github.evoforge.simulation.world.definition.DefinitionId;
 import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.world.definition.DefinitionId;
 
 public final class PhysicalDefinitionCompiler
         implements DefinitionAspectCompiler {
@@ -14,6 +14,7 @@ public final class PhysicalDefinitionCompiler
 
     public PhysicalDefinitionCompiler(
             PhysicalDefinitions definitions) {
+
         if (definitions == null) {
             throw new IllegalArgumentException(
                     "definitions must not be null");
@@ -32,6 +33,7 @@ public final class PhysicalDefinitionCompiler
             DefinitionId definitionId,
             JsonObject data,
             DefinitionCatalog catalog) {
+
         if (data == null) {
             throw new IllegalArgumentException(
                     "data must not be null");
@@ -41,6 +43,7 @@ public final class PhysicalDefinitionCompiler
 
         if (massElement == null
                 || !massElement.isJsonPrimitive()) {
+
             throw new IllegalArgumentException(
                     "physical.mass is required");
         }
@@ -55,5 +58,10 @@ public final class PhysicalDefinitionCompiler
         definitions.put(
                 definitionId,
                 massPrimitive.getAsDouble());
+    }
+
+    @Override
+    public void finish() {
+        definitions.freeze();
     }
 }

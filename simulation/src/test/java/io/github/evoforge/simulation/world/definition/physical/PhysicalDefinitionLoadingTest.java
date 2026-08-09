@@ -1,7 +1,6 @@
 package io.github.evoforge.simulation.world.definition.physical;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import io.github.evoforge.simulation.world.definition.DefinitionCompilerRegistry;
 import io.github.evoforge.simulation.world.definition.DefinitionId;
 import io.github.evoforge.simulation.world.definition.DefinitionLoader;
@@ -11,12 +10,13 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PhysicalDefinitionLoadingTest {
 
     @Test
-    void loadsPhysicalAspect() {
+    void loadsPhysicalDefinition() {
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
@@ -24,29 +24,59 @@ class PhysicalDefinitionLoadingTest {
         PhysicalDefinitions physical = new PhysicalDefinitions();
 
         compilers.register(
-                new PhysicalDefinitionCompiler(physical));
+                new PhysicalDefinitionCompiler(
+                        physical));
 
-        DefinitionLoader loader = new DefinitionLoader(definitions, compilers);
+        DefinitionLoader loader = new DefinitionLoader(
+                definitions,
+                compilers);
 
-        JsonObject document = JsonParser
-                .parseString("""
-                        {
-                            "key": "core:apple",
-                            "aspects": {
-                                "physical": {
-                                    "mass": 0.18
-                                }
-                            }
-                        }
-                        """)
-                .getAsJsonObject();
+        JsonObject document = new JsonObject();
 
-        loader.load(List.of(document));
+        document.addProperty(
+                "key",
+                "core:apple");
 
-        DefinitionId apple = definitions.resolve("core:apple");
+        JsonObject aspects = new JsonObject();
 
-        assertEquals(DefinitionId.of(0), apple);
-        assertTrue(physical.has(apple));
-        assertEquals(0.18, physical.mass(apple));
+        JsonObject physicalAspect = new JsonObject();
+
+        physicalAspect.addProperty(
+                "mass",
+                0.18);
+
+        aspects.add(
+                "physical",
+                physicalAspect);
+
+        document.add(
+                "aspects",
+                aspects);
+
+        loader.load(
+                List.of(document));
+
+        DefinitionId id = definitions.resolve(
+                "core:apple");
+
+        assertEquals(
+                DefinitionId.of(0),
+                id);
+
+        assertTrue(
+                physical.has(id));
+
+        assertEquals(
+                0.18,
+                physical.mass(id));
+
+        assertTrue(
+                physical.isFrozen());
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> physical.put(
+                        DefinitionId.of(10),
+                        1.0));
     }
 }

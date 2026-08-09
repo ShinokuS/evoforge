@@ -1,30 +1,28 @@
 package io.github.evoforge.simulation.world.definition;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class DefinitionCompilerRegistry {
 
-    private final Map<String, DefinitionAspectCompiler> compilers =
-        new HashMap<>();
+    private final Map<String, DefinitionAspectCompiler> compilers = new LinkedHashMap<>();
 
     public void register(DefinitionAspectCompiler compiler) {
         if (compiler == null) {
-            throw new IllegalArgumentException("compiler must not be null");
+            throw new IllegalArgumentException(
+                    "compiler must not be null");
         }
 
         String key = compiler.key();
 
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException(
-                "compiler key must not be blank"
-            );
+                    "compiler key must not be blank");
         }
 
         if (compilers.containsKey(key)) {
             throw new IllegalArgumentException(
-                "compiler already registered: " + key
-            );
+                    "compiler already registered: " + key);
         }
 
         compilers.put(key, compiler);
@@ -48,5 +46,11 @@ public final class DefinitionCompilerRegistry {
 
     public int size() {
         return compilers.size();
+    }
+
+    public void finishAll() {
+        for (DefinitionAspectCompiler compiler : compilers.values()) {
+            compiler.finish();
+        }
     }
 }

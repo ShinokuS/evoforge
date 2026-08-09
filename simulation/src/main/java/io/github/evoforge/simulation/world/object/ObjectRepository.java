@@ -2,7 +2,8 @@ package io.github.evoforge.simulation.world.object;
 
 import java.util.function.Function;
 
-public final class ObjectRepository {
+public final class ObjectRepository
+        implements ObjectLookup {
 
     private static final int DEFAULT_CAPACITY = 16;
 
@@ -62,6 +63,7 @@ public final class ObjectRepository {
         return object;
     }
 
+    @Override
     public WorldObject get(ObjectId id) {
         if (!isAlive(id)) {
             return null;
@@ -70,6 +72,7 @@ public final class ObjectRepository {
         return objects[id.slot()];
     }
 
+    @Override
     public boolean isAlive(ObjectId id) {
         if (id == null) {
             return false;
@@ -103,6 +106,7 @@ public final class ObjectRepository {
         return true;
     }
 
+    @Override
     public int size() {
         return size;
     }

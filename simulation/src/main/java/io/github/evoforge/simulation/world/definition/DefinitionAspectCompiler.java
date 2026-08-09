@@ -10,4 +10,7 @@ public interface DefinitionAspectCompiler {
             DefinitionId definitionId,
             JsonObject data,
             DefinitionCatalog catalog);
+
+    default void finish() {
+    }
 }

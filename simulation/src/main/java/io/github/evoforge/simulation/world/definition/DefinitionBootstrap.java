@@ -7,34 +7,39 @@ public final class DefinitionBootstrap {
     private final DefinitionRegistry definitions;
     private final DefinitionDirectoryLoader loader;
 
+    private boolean used;
+
     public DefinitionBootstrap(
-        DefinitionAspectCompiler... compilers
-    ) {
+            DefinitionAspectCompiler... compilers) {
+
         if (compilers == null) {
             throw new IllegalArgumentException(
-                "compilers must not be null"
-            );
+                    "compilers must not be null");
         }
 
         definitions = new DefinitionRegistry();
 
-        DefinitionCompilerRegistry compilerRegistry =
-            new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry compilerRegistry = new DefinitionCompilerRegistry();
 
         for (DefinitionAspectCompiler compiler : compilers) {
             compilerRegistry.register(compiler);
         }
 
         loader = new DefinitionDirectoryLoader(
-            new DefinitionFileReader(),
-            new DefinitionLoader(
-                definitions,
-                compilerRegistry
-            )
-        );
+                new DefinitionFileReader(),
+                new DefinitionLoader(
+                        definitions,
+                        compilerRegistry));
     }
 
     public DefinitionRegistry load(Path root) {
+        if (used) {
+            throw new IllegalStateException(
+                    "bootstrap has already been used");
+        }
+
+        used = true;
+
         loader.load(root);
         definitions.freeze();
 
