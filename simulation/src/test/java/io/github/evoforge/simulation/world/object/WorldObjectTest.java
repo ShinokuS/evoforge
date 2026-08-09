@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.object;
 
+import io.github.evoforge.simulation.world.definition.DefinitionId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,24 +9,44 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WorldObjectTest {
 
     @Test
-    void storesObjectId() {
-        ObjectId id = ObjectId.of(42, 7);
-        WorldObject object = new TestWorldObject(id);
+    void storesIdentity() {
+        ObjectId id = ObjectId.of(3, 2);
+
+        DefinitionId definitionId = DefinitionId.of(7);
+
+        WorldObject object = new TestWorldObject(id, definitionId);
 
         assertEquals(id, object.id());
+        assertEquals(
+                definitionId,
+                object.definitionId());
     }
 
     @Test
-    void rejectsNullId() {
+    void rejectsNullObjectId() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new TestWorldObject(null));
+                () -> new TestWorldObject(
+                        null,
+                        DefinitionId.of(0)));
     }
 
-    private static final class TestWorldObject extends WorldObject {
+    @Test
+    void rejectsNullDefinitionId() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new TestWorldObject(
+                        ObjectId.of(0, 0),
+                        null));
+    }
 
-        private TestWorldObject(ObjectId id) {
-            super(id);
+    private static final class TestWorldObject
+            extends WorldObject {
+
+        private TestWorldObject(
+                ObjectId id,
+                DefinitionId definitionId) {
+            super(id, definitionId);
         }
     }
 }

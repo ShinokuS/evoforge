@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.object;
 
+import io.github.evoforge.simulation.world.definition.DefinitionId;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -193,7 +195,7 @@ class ObjectRepositoryTest {
     private static final class TestWorldObject extends WorldObject {
 
         private TestWorldObject(ObjectId id) {
-            super(id);
+            super(id, DefinitionId.of(0));
         }
     }
 }
