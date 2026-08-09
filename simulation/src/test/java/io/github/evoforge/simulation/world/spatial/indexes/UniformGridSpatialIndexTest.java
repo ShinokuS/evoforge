@@ -4,15 +4,68 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UniformGridSpatialIndexTest {
 
         @Test
-        void addsObjectToCell() {
+        void exposesGridProperties() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                assertEquals(
+                                10,
+                                lookup.cellSize());
+
+                assertEquals(
+                                1,
+                                lookup.cellX(15));
+
+                assertEquals(
+                                2,
+                                lookup.cellY(25));
+        }
+
+        @Test
+        void convertsNegativeCoordinatesUsingFloor() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                assertEquals(
+                                -1,
+                                lookup.cellX(-0.1));
+
+                assertEquals(
+                                -1,
+                                lookup.cellY(-10));
+
+                assertEquals(
+                                -2,
+                                lookup.cellX(-10.1));
+        }
+
+        @Test
+        void separatesCellBoundary() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                assertEquals(
+                                0,
+                                lookup.cellX(9.999));
+
+                assertEquals(
+                                1,
+                                lookup.cellX(10));
+        }
+
+        @Test
+        void addsAndReadsObject() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -22,20 +75,25 @@ class UniformGridSpatialIndexTest {
                                 25,
                                 0);
 
-                assertTrue(
-                                index.contains(
-                                                id,
-                                                15,
-                                                25));
-
                 assertEquals(
                                 1,
-                                index.cellCount());
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
         }
 
         @Test
         void storesMultipleObjectsInSameCell() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId first = ObjectId.of(0, 0);
 
@@ -51,28 +109,77 @@ class UniformGridSpatialIndexTest {
                                 second,
                                 19,
                                 29,
-                                5);
+                                100);
 
-                assertTrue(
-                                index.contains(
-                                                first,
-                                                15,
-                                                25));
+                assertEquals(
+                                2,
+                                lookup.objectCount(
+                                                1,
+                                                2));
 
-                assertTrue(
-                                index.contains(
-                                                second,
-                                                15,
-                                                25));
+                assertEquals(
+                                first,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                second,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                1));
 
                 assertEquals(
                                 1,
-                                index.cellCount());
+                                index.occupiedCellCount());
         }
 
         @Test
-        void movingInsideSameCellDoesNotMoveIndexEntry() {
+        void storesObjectsInDifferentCells() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                ObjectId first = ObjectId.of(0, 0);
+
+                ObjectId second = ObjectId.of(1, 0);
+
+                index.add(
+                                first,
+                                9.999,
+                                5,
+                                0);
+
+                index.add(
+                                second,
+                                10,
+                                5,
+                                0);
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                0,
+                                                0));
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                0));
+
+                assertEquals(
+                                2,
+                                index.occupiedCellCount());
+        }
+
+        @Test
+        void moveInsideSameCellKeepsEntry() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -89,22 +196,31 @@ class UniformGridSpatialIndexTest {
                                 0,
                                 19,
                                 29,
-                                10);
-
-                assertTrue(
-                                index.contains(
-                                                id,
-                                                19,
-                                                29));
+                                50);
 
                 assertEquals(
                                 1,
-                                index.cellCount());
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
         }
 
         @Test
         void movesObjectBetweenCells() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -123,26 +239,35 @@ class UniformGridSpatialIndexTest {
                                 45,
                                 0);
 
-                assertFalse(
-                                index.contains(
-                                                id,
-                                                15,
-                                                25));
-
-                assertTrue(
-                                index.contains(
-                                                id,
-                                                35,
-                                                45));
+                assertEquals(
+                                0,
+                                lookup.objectCount(
+                                                1,
+                                                2));
 
                 assertEquals(
                                 1,
-                                index.cellCount());
+                                lookup.objectCount(
+                                                3,
+                                                4));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                3,
+                                                4,
+                                                0));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
         }
 
         @Test
-        void removesObject() {
+        void removesObjectAndEmptyCell() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -158,20 +283,22 @@ class UniformGridSpatialIndexTest {
                                 25,
                                 0);
 
-                assertFalse(
-                                index.contains(
-                                                id,
-                                                15,
-                                                25));
+                assertEquals(
+                                0,
+                                lookup.objectCount(
+                                                1,
+                                                2));
 
                 assertEquals(
                                 0,
-                                index.cellCount());
+                                index.occupiedCellCount());
         }
 
         @Test
-        void keepsCellWhileOtherObjectsRemain() {
+        void keepsCellWhileAnotherObjectRemains() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId first = ObjectId.of(0, 0);
 
@@ -195,76 +322,29 @@ class UniformGridSpatialIndexTest {
                                 21,
                                 0);
 
-                assertFalse(
-                                index.contains(
-                                                first,
-                                                11,
-                                                21));
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                2));
 
-                assertTrue(
-                                index.contains(
-                                                second,
-                                                12,
-                                                22));
+                assertEquals(
+                                second,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
 
                 assertEquals(
                                 1,
-                                index.cellCount());
-        }
-
-        @Test
-        void handlesNegativeCoordinatesUsingFloor() {
-                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
-
-                ObjectId id = ObjectId.of(0, 0);
-
-                index.add(
-                                id,
-                                -0.1,
-                                -0.1,
-                                0);
-
-                assertTrue(
-                                index.contains(
-                                                id,
-                                                -5,
-                                                -5));
-
-                assertFalse(
-                                index.contains(
-                                                id,
-                                                5,
-                                                5));
-        }
-
-        @Test
-        void separatesAdjacentCells() {
-                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
-
-                ObjectId first = ObjectId.of(0, 0);
-
-                ObjectId second = ObjectId.of(1, 0);
-
-                index.add(
-                                first,
-                                9.999,
-                                5,
-                                0);
-
-                index.add(
-                                second,
-                                10,
-                                5,
-                                0);
-
-                assertEquals(
-                                2,
-                                index.cellCount());
+                                index.occupiedCellCount());
         }
 
         @Test
         void ignoresZForCellMembership() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
 
                 ObjectId first = ObjectId.of(0, 0);
 
@@ -283,20 +363,53 @@ class UniformGridSpatialIndexTest {
                                 1000);
 
                 assertEquals(
-                                1,
-                                index.cellCount());
+                                2,
+                                lookup.objectCount(
+                                                1,
+                                                2));
+        }
 
-                assertTrue(
-                                index.contains(
-                                                first,
-                                                15,
-                                                25));
+        @Test
+        void returnsZeroForEmptyCell() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
 
-                assertTrue(
-                                index.contains(
-                                                second,
-                                                15,
-                                                25));
+                assertEquals(
+                                0,
+                                index.lookup().objectCount(
+                                                100,
+                                                100));
+        }
+
+        @Test
+        void rejectsObjectAtForEmptyCell() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                assertThrows(
+                                IndexOutOfBoundsException.class,
+                                () -> index.lookup().objectAt(
+                                                100,
+                                                100,
+                                                0));
+        }
+
+        @Test
+        void rejectsObjectAtOutsideCellRange() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                index.add(
+                                id,
+                                15,
+                                25,
+                                0);
+
+                assertThrows(
+                                IndexOutOfBoundsException.class,
+                                () -> index.lookup().objectAt(
+                                                1,
+                                                2,
+                                                1));
         }
 
         @Test
@@ -321,15 +434,13 @@ class UniformGridSpatialIndexTest {
         }
 
         @Test
-        void rejectsMoveWhenObjectIsMissingFromOldCell() {
+        void rejectsMoveWhenObjectIsMissing() {
                 UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
-
-                ObjectId id = ObjectId.of(0, 0);
 
                 assertThrows(
                                 IllegalStateException.class,
                                 () -> index.move(
-                                                id,
+                                                ObjectId.of(0, 0),
                                                 10,
                                                 20,
                                                 0,
@@ -349,6 +460,46 @@ class UniformGridSpatialIndexTest {
                                                 10,
                                                 20,
                                                 0));
+        }
+
+        @Test
+        void rejectsNullObjectId() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> index.add(
+                                                null,
+                                                0,
+                                                0,
+                                                0));
+        }
+
+        @Test
+        void rejectsNonFiniteCoordinates() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> lookup.cellX(
+                                                Double.NaN));
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> lookup.cellY(
+                                                Double.POSITIVE_INFINITY));
+        }
+
+        @Test
+        void rejectsCoordinateOutsideGridRange() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> index.lookup().cellX(
+                                                Double.MAX_VALUE));
         }
 
         @Test

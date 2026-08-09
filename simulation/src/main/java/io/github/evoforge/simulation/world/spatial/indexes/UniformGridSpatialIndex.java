@@ -10,11 +10,33 @@ import java.util.Map;
 
 public final class UniformGridSpatialIndex implements SpatialIndex {
 
+    public interface Lookup {
+
+        double cellSize();
+
+        int cellX(double x);
+
+        int cellY(double y);
+
+        int objectCount(
+                int cellX,
+                int cellY);
+
+        ObjectId objectAt(
+                int cellX,
+                int cellY,
+                int index);
+    }
+
     private final double cellSize;
 
     private final Map<Long, List<ObjectId>> cells = new HashMap<>();
 
-    public UniformGridSpatialIndex(double cellSize) {
+    private final Lookup lookup = new LookupView();
+
+    public UniformGridSpatialIndex(
+            double cellSize) {
+
         if (!Double.isFinite(cellSize)
                 || cellSize <= 0) {
 
@@ -23,6 +45,10 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
         }
 
         this.cellSize = cellSize;
+    }
+
+    public Lookup lookup() {
+        return lookup;
     }
 
     @Override
@@ -64,15 +90,25 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
 
         requireId(id);
 
-        long oldKey = cellKey(oldX, oldY);
+        long oldKey = cellKey(
+                oldX,
+                oldY);
 
-        long newKey = cellKey(newX, newY);
+        long newKey = cellKey(
+                newX,
+                newY);
 
         List<ObjectId> oldCell = cells.get(oldKey);
 
-        if (oldCell == null
-                || !oldCell.contains(id)) {
+        if (oldCell == null) {
+            throw new IllegalStateException(
+                    "object is missing from old spatial cell: "
+                            + id);
+        }
 
+        int oldIndex = oldCell.indexOf(id);
+
+        if (oldIndex < 0) {
             throw new IllegalStateException(
                     "object is missing from old spatial cell: "
                             + id);
@@ -92,7 +128,7 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
                             + id);
         }
 
-        oldCell.remove(id);
+        oldCell.remove(oldIndex);
 
         if (oldCell.isEmpty()) {
             cells.remove(oldKey);
@@ -100,7 +136,9 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
 
         if (newCell == null) {
             newCell = new ArrayList<>();
-            cells.put(newKey, newCell);
+            cells.put(
+                    newKey,
+                    newCell);
         }
 
         newCell.add(id);
@@ -119,53 +157,29 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
 
         List<ObjectId> cell = cells.get(key);
 
-        if (cell == null
-                || !cell.remove(id)) {
-
+        if (cell == null) {
             throw new IllegalStateException(
                     "object is missing from spatial cell: "
                             + id);
         }
+
+        int index = cell.indexOf(id);
+
+        if (index < 0) {
+            throw new IllegalStateException(
+                    "object is missing from spatial cell: "
+                            + id);
+        }
+
+        cell.remove(index);
 
         if (cell.isEmpty()) {
             cells.remove(key);
         }
     }
 
-    double cellSize() {
-        return cellSize;
-    }
-
-    int cellCount() {
+    int occupiedCellCount() {
         return cells.size();
-    }
-
-    boolean contains(
-            ObjectId id,
-            double x,
-            double y) {
-
-        if (id == null) {
-            return false;
-        }
-
-        List<ObjectId> cell = cells.get(
-                cellKey(x, y));
-
-        return cell != null
-                && cell.contains(id);
-    }
-
-    private long cellKey(
-            double x,
-            double y) {
-
-        int cellX = cellCoordinate(x);
-
-        int cellY = cellCoordinate(y);
-
-        return ((long) cellX << 32)
-                | ((long) cellY & 0xFFFF_FFFFL);
     }
 
     private int cellCoordinate(
@@ -189,12 +203,107 @@ public final class UniformGridSpatialIndex implements SpatialIndex {
         return (int) cell;
     }
 
+    private long cellKey(
+            double x,
+            double y) {
+
+        return cellKey(
+                cellCoordinate(x),
+                cellCoordinate(y));
+    }
+
+    private long cellKey(
+            int cellX,
+            int cellY) {
+
+        return ((long) cellX << 32)
+                | ((long) cellY
+                        & 0xFFFF_FFFFL);
+    }
+
+    private int objectCount(
+            int cellX,
+            int cellY) {
+
+        List<ObjectId> cell = cells.get(
+                cellKey(
+                        cellX,
+                        cellY));
+
+        if (cell == null) {
+            return 0;
+        }
+
+        return cell.size();
+    }
+
+    private ObjectId objectAt(
+            int cellX,
+            int cellY,
+            int index) {
+
+        List<ObjectId> cell = cells.get(
+                cellKey(
+                        cellX,
+                        cellY));
+
+        if (cell == null) {
+            throw new IndexOutOfBoundsException(
+                    "cell is empty");
+        }
+
+        return cell.get(index);
+    }
+
     private static void requireId(
             ObjectId id) {
 
         if (id == null) {
             throw new IllegalArgumentException(
                     "id must not be null");
+        }
+    }
+
+    private final class LookupView
+            implements Lookup {
+
+        @Override
+        public double cellSize() {
+            return cellSize;
+        }
+
+        @Override
+        public int cellX(double x) {
+            return cellCoordinate(x);
+        }
+
+        @Override
+        public int cellY(double y) {
+            return cellCoordinate(y);
+        }
+
+        @Override
+        public int objectCount(
+                int cellX,
+                int cellY) {
+
+            return UniformGridSpatialIndex.this
+                    .objectCount(
+                            cellX,
+                            cellY);
+        }
+
+        @Override
+        public ObjectId objectAt(
+                int cellX,
+                int cellY,
+                int index) {
+
+            return UniformGridSpatialIndex.this
+                    .objectAt(
+                            cellX,
+                            cellY,
+                            index);
         }
     }
 }
