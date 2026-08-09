@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.definition.physical;
+package io.github.evoforge.simulation.world.mechanics.physical;
 
 import io.github.evoforge.simulation.world.definition.DefinitionId;
 

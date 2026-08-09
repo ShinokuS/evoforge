@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.definition.physical;
+package io.github.evoforge.simulation.world.mechanics.physical;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.world;
 
 import io.github.evoforge.simulation.world.definition.DefinitionBootstrap;
 import io.github.evoforge.simulation.world.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.definition.physical.PhysicalDefinitionCompiler;
-import io.github.evoforge.simulation.world.definition.physical.PhysicalDefinitions;
+import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitionCompiler;
+import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitions;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,56 +19,56 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorldDefinitionIntegrationTest {
 
-        @TempDir
-        Path directory;
+    @TempDir
+    Path directory;
 
-        @Test
-        void createsWorldObjectFromLoadedDefinition()
-                        throws IOException {
+    @Test
+    void createsWorldObjectFromLoadedDefinition()
+            throws IOException {
 
-                Files.writeString(
-                                directory.resolve("apple.json"),
-                                """
-                                                {
-                                                    "key": "core:apple",
-                                                    "aspects": {
-                                                        "physical": {
-                                                            "mass": 0.18
-                                                        }
-                                                    }
-                                                }
-                                                """,
-                                UTF_8);
+        Files.writeString(
+                directory.resolve("apple.json"),
+                """
+                        {
+                            "key": "core:apple",
+                            "aspects": {
+                                "physical": {
+                                    "mass": 0.18
+                                }
+                            }
+                        }
+                        """,
+                UTF_8);
 
-                PhysicalDefinitions physical = new PhysicalDefinitions();
+        PhysicalDefinitions physical = new PhysicalDefinitions();
 
-                DefinitionBootstrap bootstrap = new DefinitionBootstrap(
-                                new PhysicalDefinitionCompiler(
-                                                physical));
+        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+                new PhysicalDefinitionCompiler(
+                        physical));
 
-                DefinitionRegistry definitions = bootstrap.load(directory);
+        DefinitionRegistry definitions = bootstrap.load(directory);
 
-                World world = new World(definitions);
+        World world = new World(definitions);
 
-                WorldObject apple = world.objectFactory().create(
-                                "core:apple");
+        WorldObject apple = world.objectFactory().create(
+                "core:apple");
 
-                assertEquals(
-                                definitions.resolve("core:apple"),
-                                apple.definitionId());
+        assertEquals(
+                definitions.resolve("core:apple"),
+                apple.definitionId());
 
-                assertEquals(
-                                0.18,
-                                physical.mass(
-                                                apple.definitionId()));
+        assertEquals(
+                0.18,
+                physical.mass(
+                        apple.definitionId()));
 
-                assertTrue(
-                                world.objects().isAlive(
-                                                apple.id()));
+        assertTrue(
+                world.objects().isAlive(
+                        apple.id()));
 
-                assertSame(
-                                apple,
-                                world.objects().get(
-                                                apple.id()));
-        }
+        assertSame(
+                apple,
+                world.objects().get(
+                        apple.id()));
+    }
 }
