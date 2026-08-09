@@ -522,4 +522,176 @@ class UniformGridSpatialIndexTest {
                                 () -> new UniformGridSpatialIndex(
                                                 Double.POSITIVE_INFINITY));
         }
+
+        @Test
+        void failedMoveFromWrongCellLeavesIndexUnchanged() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                index.add(
+                                id,
+                                15,
+                                25,
+                                0);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> index.move(
+                                                id,
+                                                55,
+                                                65,
+                                                0,
+                                                35,
+                                                45,
+                                                0));
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                0,
+                                lookup.objectCount(
+                                                3,
+                                                4));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
+        }
+
+        @Test
+        void failedMoveToInvalidCoordinateLeavesIndexUnchanged() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                index.add(
+                                id,
+                                15,
+                                25,
+                                0);
+
+                assertThrows(
+                                IllegalArgumentException.class,
+                                () -> index.move(
+                                                id,
+                                                15,
+                                                25,
+                                                0,
+                                                Double.NaN,
+                                                45,
+                                                0));
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
+        }
+
+        @Test
+        void failedRemoveFromWrongCellLeavesIndexUnchanged() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                index.add(
+                                id,
+                                15,
+                                25,
+                                0);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> index.remove(
+                                                id,
+                                                55,
+                                                65,
+                                                0));
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
+        }
+
+        @Test
+        void failedDuplicateAddLeavesIndexUnchanged() {
+                UniformGridSpatialIndex index = new UniformGridSpatialIndex(10);
+
+                UniformGridSpatialIndex.Lookup lookup = index.lookup();
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                index.add(
+                                id,
+                                15,
+                                25,
+                                0);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> index.add(
+                                                id,
+                                                15,
+                                                25,
+                                                0));
+
+                assertEquals(
+                                1,
+                                lookup.objectCount(
+                                                1,
+                                                2));
+
+                assertEquals(
+                                id,
+                                lookup.objectAt(
+                                                1,
+                                                2,
+                                                0));
+
+                assertEquals(
+                                1,
+                                index.occupiedCellCount());
+        }
 }

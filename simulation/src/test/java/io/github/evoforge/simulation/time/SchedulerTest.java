@@ -419,4 +419,207 @@ class SchedulerTest {
 
                 scheduler.dispatchDue(10);
         }
+
+        @Test
+        void handlerFailureDoesNotPreventLaterTasksInSameBatch() {
+                List<Long> handled = new ArrayList<>();
+
+                HandlerRegistry handlers = new HandlerRegistry();
+
+                HandlerId handlerId = handlers.register(
+                                processId -> {
+                                        handled.add(
+                                                        processId);
+
+                                        if (processId == 2) {
+                                                throw new IllegalStateException(
+                                                                "boom");
+                                        }
+                                });
+
+                Scheduler scheduler = new Scheduler(handlers);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                1);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                2);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                3);
+
+                Scheduler.DispatchException exception = assertThrows(
+                                Scheduler.DispatchException.class,
+                                () -> scheduler.dispatchDue(10));
+
+                assertEquals(
+                                List.of(
+                                                1L,
+                                                2L,
+                                                3L),
+                                handled);
+
+                assertEquals(
+                                1,
+                                exception.failureCount());
+
+                assertEquals(
+                                0,
+                                scheduler.size());
+        }
+
+        @Test
+        void collectsMultipleHandlerFailures() {
+                List<Long> handled = new ArrayList<>();
+
+                HandlerRegistry handlers = new HandlerRegistry();
+
+                HandlerId handlerId = handlers.register(
+                                processId -> {
+                                        handled.add(
+                                                        processId);
+
+                                        if (processId == 2
+                                                        || processId == 4) {
+
+                                                throw new IllegalStateException(
+                                                                "boom " + processId);
+                                        }
+                                });
+
+                Scheduler scheduler = new Scheduler(handlers);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                1);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                2);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                3);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                4);
+
+                Scheduler.DispatchException exception = assertThrows(
+                                Scheduler.DispatchException.class,
+                                () -> scheduler.dispatchDue(10));
+
+                assertEquals(
+                                List.of(
+                                                1L,
+                                                2L,
+                                                3L,
+                                                4L),
+                                handled);
+
+                assertEquals(
+                                2,
+                                exception.failureCount());
+
+                assertEquals(
+                                1,
+                                exception.getSuppressed().length);
+
+                assertEquals(
+                                0,
+                                scheduler.size());
+        }
+
+        @Test
+        void failedTaskIsNotRetried() {
+                List<Long> handled = new ArrayList<>();
+
+                HandlerRegistry handlers = new HandlerRegistry();
+
+                HandlerId handlerId = handlers.register(
+                                processId -> {
+                                        handled.add(
+                                                        processId);
+
+                                        throw new IllegalStateException(
+                                                        "boom");
+                                });
+
+                Scheduler scheduler = new Scheduler(handlers);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                1);
+
+                assertThrows(
+                                Scheduler.DispatchException.class,
+                                () -> scheduler.dispatchDue(10));
+
+                assertEquals(
+                                List.of(1L),
+                                handled);
+
+                assertEquals(
+                                0,
+                                scheduler.size());
+
+                scheduler.dispatchDue(10);
+
+                assertEquals(
+                                List.of(1L),
+                                handled);
+        }
+
+        @Test
+        void canDispatchAgainAfterHandlerFailure() {
+                List<Long> handled = new ArrayList<>();
+
+                HandlerRegistry handlers = new HandlerRegistry();
+
+                HandlerId handlerId = handlers.register(
+                                processId -> {
+                                        handled.add(
+                                                        processId);
+
+                                        if (processId == 1) {
+                                                throw new IllegalStateException(
+                                                                "boom");
+                                        }
+                                });
+
+                Scheduler scheduler = new Scheduler(handlers);
+
+                scheduler.schedule(
+                                10,
+                                handlerId,
+                                1);
+
+                assertThrows(
+                                Scheduler.DispatchException.class,
+                                () -> scheduler.dispatchDue(10));
+
+                scheduler.schedule(
+                                20,
+                                handlerId,
+                                2);
+
+                scheduler.dispatchDue(20);
+
+                assertEquals(
+                                List.of(
+                                                1L,
+                                                2L),
+                                handled);
+        }
 }

@@ -363,4 +363,416 @@ class SpatialSystemTest {
                         this.z = z;
                 }
         }
+
+        @Test
+        void failedPlaceRollsBackPreviousChanges() {
+                RecordingIndex first = new RecordingIndex();
+
+                FailingIndex second = new FailingIndex();
+
+                second.failAdd = true;
+
+                SpatialSystem spatial = new SpatialSystem(
+                                first,
+                                second);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.place(
+                                                id,
+                                                10,
+                                                20,
+                                                3));
+
+                assertFalse(
+                                spatial.transforms().has(id));
+
+                assertEquals(
+                                1,
+                                first.addCount);
+
+                assertEquals(
+                                1,
+                                first.removeCount);
+
+                assertTrue(
+                                spatial.isFaulted());
+        }
+
+        @Test
+        void failedMoveRollsBackPreviousChanges() {
+                RecordingIndex first = new RecordingIndex();
+
+                FailingIndex second = new FailingIndex();
+
+                SpatialSystem spatial = new SpatialSystem(
+                                first,
+                                second);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                spatial.place(
+                                id,
+                                10,
+                                20,
+                                3);
+
+                second.failMove = true;
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.move(
+                                                id,
+                                                30,
+                                                40,
+                                                5));
+
+                assertEquals(
+                                10,
+                                spatial.transforms().x(id));
+
+                assertEquals(
+                                20,
+                                spatial.transforms().y(id));
+
+                assertEquals(
+                                3,
+                                spatial.transforms().z(id));
+
+                assertEquals(
+                                2,
+                                first.moveCount);
+
+                assertEquals(
+                                30,
+                                first.oldX);
+
+                assertEquals(
+                                40,
+                                first.oldY);
+
+                assertEquals(
+                                5,
+                                first.oldZ);
+
+                assertEquals(
+                                10,
+                                first.newX);
+
+                assertEquals(
+                                20,
+                                first.newY);
+
+                assertEquals(
+                                3,
+                                first.newZ);
+
+                assertTrue(
+                                spatial.isFaulted());
+        }
+
+        @Test
+        void failedRemoveRollsBackPreviousChanges() {
+                RecordingIndex first = new RecordingIndex();
+
+                FailingIndex second = new FailingIndex();
+
+                SpatialSystem spatial = new SpatialSystem(
+                                first,
+                                second);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                spatial.place(
+                                id,
+                                10,
+                                20,
+                                3);
+
+                second.failRemove = true;
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.remove(id));
+
+                assertTrue(
+                                spatial.transforms().has(id));
+
+                assertEquals(
+                                10,
+                                spatial.transforms().x(id));
+
+                assertEquals(
+                                20,
+                                spatial.transforms().y(id));
+
+                assertEquals(
+                                3,
+                                spatial.transforms().z(id));
+
+                assertEquals(
+                                2,
+                                first.addCount);
+
+                assertEquals(
+                                1,
+                                first.removeCount);
+
+                assertTrue(
+                                spatial.isFaulted());
+        }
+
+        @Test
+        void doesNotUpdateIndexesAfterFailure() {
+                RecordingIndex first = new RecordingIndex();
+
+                FailingIndex second = new FailingIndex();
+
+                RecordingIndex third = new RecordingIndex();
+
+                second.failAdd = true;
+
+                SpatialSystem spatial = new SpatialSystem(
+                                first,
+                                second,
+                                third);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.place(
+                                                ObjectId.of(0, 0),
+                                                10,
+                                                20,
+                                                0));
+
+                assertEquals(
+                                0,
+                                third.addCount);
+
+                assertEquals(
+                                0,
+                                third.moveCount);
+
+                assertEquals(
+                                0,
+                                third.removeCount);
+        }
+
+        @Test
+        void rejectsMutationAfterSpatialFailure() {
+                FailingIndex index = new FailingIndex();
+
+                index.failAdd = true;
+
+                SpatialSystem spatial = new SpatialSystem(index);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.place(
+                                                ObjectId.of(0, 0),
+                                                1,
+                                                2,
+                                                3));
+
+                assertTrue(
+                                spatial.isFaulted());
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.place(
+                                                ObjectId.of(1, 0),
+                                                4,
+                                                5,
+                                                6));
+        }
+
+        @Test
+        void allowsReadingAfterSpatialFailure() {
+                FailingIndex index = new FailingIndex();
+
+                SpatialSystem spatial = new SpatialSystem(index);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                spatial.place(
+                                id,
+                                10,
+                                20,
+                                3);
+
+                index.failMove = true;
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.move(
+                                                id,
+                                                30,
+                                                40,
+                                                5));
+
+                assertTrue(
+                                spatial.isFaulted());
+
+                assertTrue(
+                                spatial.transforms().has(id));
+
+                assertEquals(
+                                10,
+                                spatial.transforms().x(id));
+
+                assertEquals(
+                                20,
+                                spatial.transforms().y(id));
+
+                assertEquals(
+                                3,
+                                spatial.transforms().z(id));
+        }
+
+        @Test
+        void preservesRollbackFailureAsSuppressed() {
+                FailingRollbackIndex first = new FailingRollbackIndex();
+
+                FailingIndex second = new FailingIndex();
+
+                second.failMove = true;
+
+                SpatialSystem spatial = new SpatialSystem(
+                                first,
+                                second);
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                spatial.place(
+                                id,
+                                10,
+                                20,
+                                3);
+
+                first.failNextMove = false;
+                first.failMoveNumber = 2;
+
+                IllegalStateException failure = assertThrows(
+                                IllegalStateException.class,
+                                () -> spatial.move(
+                                                id,
+                                                30,
+                                                40,
+                                                5));
+
+                assertTrue(
+                                spatial.isFaulted());
+
+                assertEquals(
+                                1,
+                                failure.getSuppressed().length);
+
+                assertEquals(
+                                10,
+                                spatial.transforms().x(id));
+
+                assertEquals(
+                                20,
+                                spatial.transforms().y(id));
+
+                assertEquals(
+                                3,
+                                spatial.transforms().z(id));
+        }
+
+        private static final class FailingRollbackIndex
+                        implements SpatialIndex {
+
+                private int moveCount;
+                private int failMoveNumber = -1;
+                private boolean failNextMove;
+
+                @Override
+                public void add(
+                                ObjectId id,
+                                double x,
+                                double y,
+                                double z) {
+                }
+
+                @Override
+                public void move(
+                                ObjectId id,
+                                double oldX,
+                                double oldY,
+                                double oldZ,
+                                double newX,
+                                double newY,
+                                double newZ) {
+
+                        moveCount++;
+
+                        if (failNextMove
+                                        || moveCount == failMoveNumber) {
+
+                                throw new IllegalStateException(
+                                                "rollback failure");
+                        }
+                }
+
+                @Override
+                public void remove(
+                                ObjectId id,
+                                double x,
+                                double y,
+                                double z) {
+                }
+        }
+
+        private static final class FailingIndex
+                        implements SpatialIndex {
+
+                private boolean failAdd;
+                private boolean failMove;
+                private boolean failRemove;
+
+                @Override
+                public void add(
+                                ObjectId id,
+                                double x,
+                                double y,
+                                double z) {
+
+                        if (failAdd) {
+                                throw new IllegalStateException(
+                                                "add failure");
+                        }
+                }
+
+                @Override
+                public void move(
+                                ObjectId id,
+                                double oldX,
+                                double oldY,
+                                double oldZ,
+                                double newX,
+                                double newY,
+                                double newZ) {
+
+                        if (failMove) {
+                                throw new IllegalStateException(
+                                                "move failure");
+                        }
+                }
+
+                @Override
+                public void remove(
+                                ObjectId id,
+                                double x,
+                                double y,
+                                double z) {
+
+                        if (failRemove) {
+                                throw new IllegalStateException(
+                                                "remove failure");
+                        }
+                }
+        }
 }

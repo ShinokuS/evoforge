@@ -67,12 +67,16 @@ public final class Scheduler {
                 processId);
 
         queue.add(task);
-        activeTasks.put(handle, task);
+        activeTasks.put(
+                handle,
+                task);
 
         return handle;
     }
 
-    public boolean cancel(TaskHandle handle) {
+    public boolean cancel(
+            TaskHandle handle) {
+
         if (handle == null) {
             return false;
         }
@@ -80,7 +84,9 @@ public final class Scheduler {
         return activeTasks.remove(handle) != null;
     }
 
-    public void dispatchDue(long now) {
+    public void dispatchDue(
+            long now) {
+
         if (now < 0) {
             throw new IllegalArgumentException(
                     "now must be >= 0");
@@ -106,15 +112,20 @@ public final class Scheduler {
         return activeTasks.size();
     }
 
-    private void collectDue(long now) {
+    private void collectDue(
+            long now) {
+
         while (!queue.isEmpty()
                 && queue.peek().when() <= now) {
 
-            dueBatch.add(queue.poll());
+            dueBatch.add(
+                    queue.poll());
         }
     }
 
     private void dispatchBatch() {
+        DispatchException failure = null;
+
         for (int index = 0; index < dueBatch.size(); index++) {
 
             ScheduledTask task = dueBatch.get(index);
@@ -126,9 +137,6 @@ public final class Scheduler {
                 continue;
             }
 
-            activeTasks.remove(
-                    task.handle());
-
             ScheduledHandler handler = handlers.get(
                     task.handlerId());
 
@@ -138,8 +146,68 @@ public final class Scheduler {
                                 + task.handlerId());
             }
 
-            handler.handle(
-                    task.processId());
+            activeTasks.remove(
+                    task.handle());
+
+            try {
+                handler.handle(
+                        task.processId());
+            } catch (RuntimeException exception) {
+
+                if (failure == null) {
+                    failure = new DispatchException(
+                            task,
+                            exception);
+                } else {
+                    failure.addFailure(
+                            task,
+                            exception);
+                }
+            }
+        }
+
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    public static final class DispatchException
+            extends RuntimeException {
+
+        private int failureCount = 1;
+
+        private DispatchException(
+                ScheduledTask task,
+                RuntimeException cause) {
+
+            super(
+                    message(task),
+                    cause);
+        }
+
+        public int failureCount() {
+            return failureCount;
+        }
+
+        private void addFailure(
+                ScheduledTask task,
+                RuntimeException cause) {
+
+            failureCount++;
+
+            addSuppressed(
+                    new RuntimeException(
+                            message(task),
+                            cause));
+        }
+
+        private static String message(
+                ScheduledTask task) {
+
+            return "scheduled handler failed"
+                    + ": handle=" + task.handle()
+                    + ", handler=" + task.handlerId()
+                    + ", processId=" + task.processId();
         }
     }
 }
