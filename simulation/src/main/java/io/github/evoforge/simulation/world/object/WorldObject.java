@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.object;
 
 import io.github.evoforge.simulation.world.definition.DefinitionId;
 
-public abstract class WorldObject {
+public class WorldObject {
 
     private final ObjectId id;
     private final DefinitionId definitionId;

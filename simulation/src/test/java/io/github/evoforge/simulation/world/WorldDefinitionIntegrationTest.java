@@ -1,0 +1,74 @@
+package io.github.evoforge.simulation.world;
+
+import io.github.evoforge.simulation.world.definition.DefinitionBootstrap;
+import io.github.evoforge.simulation.world.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.world.definition.physical.PhysicalDefinitionCompiler;
+import io.github.evoforge.simulation.world.definition.physical.PhysicalDefinitions;
+import io.github.evoforge.simulation.world.object.WorldObject;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class WorldDefinitionIntegrationTest {
+
+        @TempDir
+        Path directory;
+
+        @Test
+        void createsWorldObjectFromLoadedDefinition()
+                        throws IOException {
+
+                Files.writeString(
+                                directory.resolve("apple.json"),
+                                """
+                                                {
+                                                    "key": "core:apple",
+                                                    "aspects": {
+                                                        "physical": {
+                                                            "mass": 0.18
+                                                        }
+                                                    }
+                                                }
+                                                """,
+                                UTF_8);
+
+                PhysicalDefinitions physical = new PhysicalDefinitions();
+
+                DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+                                new PhysicalDefinitionCompiler(
+                                                physical));
+
+                DefinitionRegistry definitions = bootstrap.load(directory);
+
+                World world = new World(definitions);
+
+                WorldObject apple = world.objectFactory().create(
+                                "core:apple");
+
+                assertEquals(
+                                definitions.resolve("core:apple"),
+                                apple.definitionId());
+
+                assertEquals(
+                                0.18,
+                                physical.mass(
+                                                apple.definitionId()));
+
+                assertTrue(
+                                world.objects().isAlive(
+                                                apple.id()));
+
+                assertSame(
+                                apple,
+                                world.objects().get(
+                                                apple.id()));
+        }
+}

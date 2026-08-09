@@ -12,14 +12,68 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ObjectFactoryTest {
 
     @Test
-    void createsObjectFromDefinitionKey() {
+    void createsWorldObjectFromDefinitionKey() {
         ObjectRepository objects = new ObjectRepository();
 
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         DefinitionId definitionId = definitions.register("core:test");
 
-        ObjectFactory factory = new ObjectFactory(objects, definitions);
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
+
+        WorldObject object = factory.create("core:test");
+
+        assertEquals(
+                definitionId,
+                object.definitionId());
+
+        assertTrue(
+                objects.isAlive(object.id()));
+
+        assertSame(
+                object,
+                objects.get(object.id()));
+    }
+
+    @Test
+    void createsWorldObjectFromDefinitionId() {
+        ObjectRepository objects = new ObjectRepository();
+
+        DefinitionRegistry definitions = new DefinitionRegistry();
+
+        DefinitionId definitionId = definitions.register("core:test");
+
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
+
+        WorldObject object = factory.create(definitionId);
+
+        assertEquals(
+                definitionId,
+                object.definitionId());
+
+        assertTrue(
+                objects.isAlive(object.id()));
+
+        assertSame(
+                object,
+                objects.get(object.id()));
+    }
+
+    @Test
+    void createsSpecializedObjectFromDefinitionKey() {
+        ObjectRepository objects = new ObjectRepository();
+
+        DefinitionRegistry definitions = new DefinitionRegistry();
+
+        DefinitionId definitionId = definitions.register("core:test");
+
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
 
         TestWorldObject object = factory.create(
                 "core:test",
@@ -29,7 +83,8 @@ class ObjectFactoryTest {
                 definitionId,
                 object.definitionId());
 
-        assertTrue(objects.isAlive(object.id()));
+        assertTrue(
+                objects.isAlive(object.id()));
 
         assertSame(
                 object,
@@ -37,14 +92,16 @@ class ObjectFactoryTest {
     }
 
     @Test
-    void createsObjectFromDefinitionId() {
+    void createsSpecializedObjectFromDefinitionId() {
         ObjectRepository objects = new ObjectRepository();
 
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         DefinitionId definitionId = definitions.register("core:test");
 
-        ObjectFactory factory = new ObjectFactory(objects, definitions);
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
 
         TestWorldObject object = factory.create(
                 definitionId,
@@ -54,7 +111,8 @@ class ObjectFactoryTest {
                 definitionId,
                 object.definitionId());
 
-        assertTrue(objects.isAlive(object.id()));
+        assertTrue(
+                objects.isAlive(object.id()));
 
         assertSame(
                 object,
@@ -62,29 +120,44 @@ class ObjectFactoryTest {
     }
 
     @Test
-    void assignsObjectIds() {
+    void assignsSequentialObjectIds() {
         ObjectRepository objects = new ObjectRepository();
 
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         DefinitionId definitionId = definitions.register("core:test");
 
-        ObjectFactory factory = new ObjectFactory(objects, definitions);
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
 
-        TestWorldObject first = factory.create(
-                definitionId,
-                TestWorldObject::new);
+        WorldObject first = factory.create(definitionId);
 
-        TestWorldObject second = factory.create(
-                definitionId,
-                TestWorldObject::new);
+        WorldObject second = factory.create(definitionId);
 
-        assertEquals(0, first.id().slot());
-        assertEquals(1, second.id().slot());
+        assertEquals(
+                0,
+                first.id().slot());
+
+        assertEquals(
+                1,
+                second.id().slot());
     }
 
     @Test
     void rejectsUnknownDefinitionKey() {
+        ObjectFactory factory = new ObjectFactory(
+                new ObjectRepository(),
+                new DefinitionRegistry());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        "core:unknown"));
+    }
+
+    @Test
+    void rejectsUnknownDefinitionKeyWithCreator() {
         ObjectFactory factory = new ObjectFactory(
                 new ObjectRepository(),
                 new DefinitionRegistry());
@@ -97,14 +170,16 @@ class ObjectFactoryTest {
     }
 
     @Test
-    void rejectsWrongDefinitionId() {
+    void rejectsWrongDefinitionIdFromCreator() {
         ObjectRepository objects = new ObjectRepository();
 
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         DefinitionId definitionId = definitions.register("core:test");
 
-        ObjectFactory factory = new ObjectFactory(objects, definitions);
+        ObjectFactory factory = new ObjectFactory(
+                objects,
+                definitions);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -114,11 +189,25 @@ class ObjectFactoryTest {
                                 objectId,
                                 DefinitionId.of(100))));
 
-        assertEquals(0, objects.size());
+        assertEquals(
+                0,
+                objects.size());
     }
 
     @Test
     void rejectsNullDefinitionKey() {
+        ObjectFactory factory = new ObjectFactory(
+                new ObjectRepository(),
+                new DefinitionRegistry());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        (String) null));
+    }
+
+    @Test
+    void rejectsNullDefinitionKeyWithCreator() {
         ObjectFactory factory = new ObjectFactory(
                 new ObjectRepository(),
                 new DefinitionRegistry());
@@ -139,12 +228,24 @@ class ObjectFactoryTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> factory.create(
+                        (DefinitionId) null));
+    }
+
+    @Test
+    void rejectsNullDefinitionIdWithCreator() {
+        ObjectFactory factory = new ObjectFactory(
+                new ObjectRepository(),
+                new DefinitionRegistry());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
                         (DefinitionId) null,
                         TestWorldObject::new));
     }
 
     @Test
-    void rejectsNullCreatorForKey() {
+    void rejectsNullCreatorForDefinitionKey() {
         DefinitionRegistry definitions = new DefinitionRegistry();
 
         definitions.register("core:test");
@@ -201,7 +302,10 @@ class ObjectFactoryTest {
         private TestWorldObject(
                 ObjectId id,
                 DefinitionId definitionId) {
-            super(id, definitionId);
+
+            super(
+                    id,
+                    definitionId);
         }
     }
 }

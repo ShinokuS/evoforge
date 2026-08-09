@@ -13,6 +13,7 @@ public final class ObjectFactory {
     public ObjectFactory(
             ObjectRepository objects,
             DefinitionResolver definitions) {
+
         if (objects == null) {
             throw new IllegalArgumentException(
                     "objects must not be null");
@@ -27,9 +28,26 @@ public final class ObjectFactory {
         this.definitions = definitions;
     }
 
+    public WorldObject create(
+            String definitionKey) {
+
+        return create(
+                definitionKey,
+                WorldObject::new);
+    }
+
+    public WorldObject create(
+            DefinitionId definitionId) {
+
+        return create(
+                definitionId,
+                WorldObject::new);
+    }
+
     public <T extends WorldObject> T create(
             String definitionKey,
             BiFunction<ObjectId, DefinitionId, T> creator) {
+
         if (definitionKey == null) {
             throw new IllegalArgumentException(
                     "definitionKey must not be null");
@@ -48,6 +66,7 @@ public final class ObjectFactory {
     public <T extends WorldObject> T create(
             DefinitionId definitionId,
             BiFunction<ObjectId, DefinitionId, T> creator) {
+
         if (definitionId == null) {
             throw new IllegalArgumentException(
                     "definitionId must not be null");
@@ -69,12 +88,14 @@ public final class ObjectFactory {
             ObjectId objectId,
             DefinitionId definitionId,
             BiFunction<ObjectId, DefinitionId, T> creator) {
+
         T object = creator.apply(
                 objectId,
                 definitionId);
 
         if (object != null
                 && !definitionId.equals(object.definitionId())) {
+
             throw new IllegalArgumentException(
                     "created object must use the supplied DefinitionId");
         }

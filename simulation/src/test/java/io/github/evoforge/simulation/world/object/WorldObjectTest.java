@@ -14,9 +14,14 @@ class WorldObjectTest {
 
         DefinitionId definitionId = DefinitionId.of(7);
 
-        WorldObject object = new TestWorldObject(id, definitionId);
+        WorldObject object = new WorldObject(
+                id,
+                definitionId);
 
-        assertEquals(id, object.id());
+        assertEquals(
+                id,
+                object.id());
+
         assertEquals(
                 definitionId,
                 object.definitionId());
@@ -26,7 +31,7 @@ class WorldObjectTest {
     void rejectsNullObjectId() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new TestWorldObject(
+                () -> new WorldObject(
                         null,
                         DefinitionId.of(0)));
     }
@@ -35,18 +40,8 @@ class WorldObjectTest {
     void rejectsNullDefinitionId() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new TestWorldObject(
+                () -> new WorldObject(
                         ObjectId.of(0, 0),
                         null));
-    }
-
-    private static final class TestWorldObject
-            extends WorldObject {
-
-        private TestWorldObject(
-                ObjectId id,
-                DefinitionId definitionId) {
-            super(id, definitionId);
-        }
     }
 }
