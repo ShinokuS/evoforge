@@ -109,6 +109,8 @@ A new Shape that fits the contract is added as a new implementation plus tests, 
 
 A structural transition connects one source XYZ to exactly one of its 26 immediate three-dimensional neighbors.
 
+Therefore a single structural edge may change X, Y and Z simultaneously, as long as every coordinate delta is in `[-1, 1]` and the total delta is not `(0,0,0)`.
+
 Shape contributes three independent facts for local directions:
 
 ```text
@@ -122,6 +124,8 @@ Multiple Shape contributions are composed generically:
 ```text
 resolved = departures & arrivals & ~blocks
 ```
+
+The public resolved mask is always restricted to the 26 valid neighbor directions.
 
 Contributions are accumulated by OR before resolution. Composition therefore does not depend on concrete Shape type or processing order.
 
@@ -149,13 +153,15 @@ Navigation:
 
 For one source XYZ, the base resolver reads only the local `3x3x3` geometry neighborhood.
 
+Structural topology is genuinely three-dimensional: a Shape may expose elevation-changing neighbor edges without Navigation learning any Shape-specific rule.
+
 ### 9.1 Directed graph [FIXED]
 
 Structural navigation is a **directed graph**.
 
 If `transitions(A)` contains direction `d`, it does not imply that `transitions(A + d)` contains `-d`.
 
-Symmetric flat movement emerges because both directed edges are independently supported. Future falls, ledges, ramps or one-way topology may legitimately be asymmetric.
+Symmetric movement emerges only when both directed edges are independently supported. Shapes may expose bidirectional or asymmetric topology as their semantics require.
 
 ### 9.2 Caching [DEFERRED IMPLEMENTATION]
 
@@ -182,6 +188,8 @@ Movement decides whether and how a concrete actor performs a transition. Actor c
 Pathfinding is a replaceable consumer of Navigation. A*, Dijkstra, hierarchical search, flow fields or other algorithms are implementation choices, not project-wide architecture.
 
 Transition/path costs remain **DEFERRED** until the first real Pathfinder/Movement consumer demonstrates what information is required.
+
+Involuntary movement such as falling is not yet assigned to Navigation or Movement semantics. That ownership remains **DEFERRED** until Basic Movement is designed; it must not be inferred merely from the existence of vertical Shape edges.
 
 ## 11. Determinism [FIXED PRINCIPLE]
 
@@ -275,7 +283,8 @@ The architecture intentionally does not yet fix:
 - water/temperature/weather simulation details;
 - occupancy representation and collision precision;
 - mover-specific capability model;
-- production Ramp/Stair orientation/content semantics;
+- richer ramp/stair topology beyond the current primitive cardinal ramp;
+- involuntary falling semantics;
 - Navigation caching and cache lifecycle;
 - pathfinding algorithm, hierarchy and path cache;
 - path cost representation;
