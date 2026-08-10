@@ -1,33 +1,35 @@
-# evoforge
+# EvoForge
 
-A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
+EvoForge is a deterministic emergent-simulation project built with Java 21 and libGDX.
 
-This project was generated with a template including simple application launchers and an `ApplicationAdapter` extension that draws libGDX logo.
+The simulation architecture lives in the pure-Java `simulation` module. libGDX modules are presentation/launcher layers and must not become owners of authoritative simulation state.
 
-## Platforms
+## Architecture
 
-- `core`: Main module with the application logic shared by all platforms.
-- `lwjgl3`: Primary desktop platform using LWJGL3; was called 'desktop' in older docs.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — stable semantic contracts, invariants and deferred architectural decisions.
+- [`docs/TECHNICAL_REFERENCE.md`](docs/TECHNICAL_REFERENCE.md) — current implementation, packages, algorithms, tests and known technical gaps.
+
+## Modules
+
+- `simulation` — domain and simulation code, headless-testable and independent of libGDX.
+- `core` — shared libGDX application/presentation layer.
+- `lwjgl3` — desktop launcher.
+- `assets` — definitions and presentation assets.
+
+## Tests
+
+Run the simulation suite:
+
+```bash
+./gradlew :simulation:test --rerun-tasks --console=plain
+```
+
+Windows:
+
+```bat
+.\gradlew.bat :simulation:test --rerun-tasks --console=plain
+```
 
 ## Gradle
 
-This project uses [Gradle](https://gradle.org/) to manage dependencies.
-The Gradle wrapper was included, so you can run Gradle tasks using `gradlew.bat` or `./gradlew` commands.
-Useful Gradle tasks and flags:
-
-- `--continue`: when using this flag, errors will not stop the tasks from running.
-- `--daemon`: thanks to this flag, Gradle daemon will be used to run chosen tasks.
-- `--offline`: when using this flag, cached dependency archives will be used.
-- `--refresh-dependencies`: this flag forces validation of all dependencies. Useful for snapshot versions.
-- `build`: builds sources and archives of every project.
-- `cleanEclipse`: removes Eclipse project data.
-- `cleanIdea`: removes IntelliJ project data.
-- `clean`: removes `build` folders, which store compiled classes and built archives.
-- `eclipse`: generates Eclipse project data.
-- `idea`: generates IntelliJ project data.
-- `lwjgl3:jar`: builds application's runnable jar, which can be found at `lwjgl3/build/libs`.
-- `lwjgl3:run`: starts the application.
-- `test`: runs unit tests (if any).
-
-Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
-For example, `core:clean` removes `build` folder only from the `core` project.
+The project uses the included Gradle wrapper. Avoid routine `clean`; normal incremental test/build tasks are preferred unless a clean build is specifically required.
