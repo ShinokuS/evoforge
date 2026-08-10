@@ -220,6 +220,28 @@ final class TransitionCompositionTest {
                 topology.resolve());
     }
 
+    @Test
+    void masksInvalidCenterBitFromRawPorts() {
+        long allBits =
+                (1L << 27) - 1L;
+
+        long malformedPorts =
+                allBits | allBits << 27;
+
+        int resolved =
+                TransitionComposition.resolve(
+                        malformedPorts,
+                        TransitionMask.NONE);
+
+        assertEquals(
+                TransitionMask.ALL,
+                resolved);
+
+        assertEquals(
+                26,
+                Integer.bitCount(resolved));
+    }
+
     private static Accumulator flatNeighborhood(
             int missingX,
             int missingY) {

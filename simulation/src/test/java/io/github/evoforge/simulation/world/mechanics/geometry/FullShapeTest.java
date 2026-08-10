@@ -214,19 +214,39 @@ final class FullShapeTest {
     }
 
     @Test
-    void returnsNoBlocksOutsideOccupiedLayerNeighborhood() {
-        assertEquals(
-                TransitionMask.NONE,
+    void blocksDirectDiagonalVerticalEntryIntoItsCell() {
+        int blocks =
                 FullShape.INSTANCE.transitionBlocks(
-                        -1,
                         0,
-                        1));
+                        -1,
+                        -1);
 
+        assertEquals(
+                1,
+                Integer.bitCount(blocks));
+
+        assertTrue(
+                TransitionMask.contains(
+                        blocks,
+                        0,
+                        1,
+                        1));
+    }
+
+    @Test
+    void returnsNoBlocksOutsideLocalNeighborhood() {
         assertEquals(
                 TransitionMask.NONE,
                 FullShape.INSTANCE.transitionBlocks(
                         2,
                         0,
                         0));
+
+        assertEquals(
+                TransitionMask.NONE,
+                FullShape.INSTANCE.transitionBlocks(
+                        0,
+                        0,
+                        2));
     }
 }

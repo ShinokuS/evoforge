@@ -13,6 +13,7 @@ public final class TransitionComposition {
 
         return TransitionPorts.departures(ports)
                 & TransitionPorts.arrivals(ports)
-                & ~blocks;
+                & ~blocks
+                & TransitionMask.ALL;
     }
 }
