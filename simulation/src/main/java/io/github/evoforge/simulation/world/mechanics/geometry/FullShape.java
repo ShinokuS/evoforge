@@ -6,7 +6,7 @@ public final class FullShape
     public static final FullShape INSTANCE =
             new FullShape();
 
-    private static final int TOP_TRANSITIONS =
+    private static final int HORIZONTAL =
             TransitionMask.of(-1, -1, 0)
                     | TransitionMask.of(0, -1, 0)
                     | TransitionMask.of(1, -1, 0)
@@ -16,11 +16,14 @@ public final class FullShape
                     | TransitionMask.of(0, 1, 0)
                     | TransitionMask.of(1, 1, 0);
 
+    private static final long TOP_PORTS =
+            TransitionPorts.departuresOnly(HORIZONTAL);
+
     private FullShape() {
     }
 
     @Override
-    public int transitionMask(
+    public long transitionPorts(
             int relativeX,
             int relativeY,
             int relativeZ) {
@@ -28,16 +31,58 @@ public final class FullShape
         if (relativeZ != 1
                 || relativeX < -1 || relativeX > 1
                 || relativeY < -1 || relativeY > 1) {
+            return TransitionPorts.NONE;
+        }
+
+        if (relativeX == 0 && relativeY == 0) {
+            return TOP_PORTS;
+        }
+
+        return TransitionPorts.arrivalsOnly(
+                TransitionMask.of(
+                        -relativeX,
+                        -relativeY,
+                        0));
+    }
+
+    @Override
+    public int transitionBlocks(
+            int relativeX,
+            int relativeY,
+            int relativeZ) {
+
+        if (relativeZ != 0
+                || relativeX < -1 || relativeX > 1
+                || relativeY < -1 || relativeY > 1) {
             return TransitionMask.NONE;
         }
 
         if (relativeX == 0 && relativeY == 0) {
-            return TOP_TRANSITIONS;
+            return HORIZONTAL;
         }
 
-        return TransitionMask.of(
-                -relativeX,
-                -relativeY,
-                0);
+        int towardX = -relativeX;
+        int towardY = -relativeY;
+
+        if (towardX != 0 && towardY != 0) {
+            return TransitionMask.of(
+                    towardX,
+                    towardY,
+                    0);
+        }
+
+        int blocks = TransitionMask.NONE;
+
+        if (towardX != 0) {
+            blocks |= TransitionMask.of(towardX, -1, 0);
+            blocks |= TransitionMask.of(towardX, 0, 0);
+            blocks |= TransitionMask.of(towardX, 1, 0);
+        } else {
+            blocks |= TransitionMask.of(-1, towardY, 0);
+            blocks |= TransitionMask.of(0, towardY, 0);
+            blocks |= TransitionMask.of(1, towardY, 0);
+        }
+
+        return blocks;
     }
 }
