@@ -14,11 +14,11 @@ class DefinitionLoaderTest {
 
     @Test
     void registersDefinition() {
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> definitions = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
-        DefinitionLoader loader = new DefinitionLoader(definitions, compilers);
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(definitions, compilers);
 
         JsonObject document = parse("""
                 {
@@ -36,15 +36,15 @@ class DefinitionLoaderTest {
 
     @Test
     void dispatchesAspectToRegisteredCompiler() {
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> definitions = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
         TestCompiler compiler = new TestCompiler("test-aspect");
 
         compilers.register(compiler);
 
-        DefinitionLoader loader = new DefinitionLoader(definitions, compilers);
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(definitions, compilers);
 
         JsonObject document = parse("""
                 {
@@ -66,15 +66,15 @@ class DefinitionLoaderTest {
 
     @Test
     void registersAllDefinitionsBeforeCompilingAspects() {
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> definitions = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
         ResolvingCompiler compiler = new ResolvingCompiler();
 
         compilers.register(compiler);
 
-        DefinitionLoader loader = new DefinitionLoader(definitions, compilers);
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(definitions, compilers);
 
         JsonObject first = parse("""
                 {
@@ -104,11 +104,11 @@ class DefinitionLoaderTest {
 
     @Test
     void rejectsUnknownAspect() {
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> definitions = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
-        DefinitionLoader loader = new DefinitionLoader(definitions, compilers);
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(definitions, compilers);
 
         JsonObject document = parse("""
                 {
@@ -131,7 +131,7 @@ class DefinitionLoaderTest {
     }
 
     private static final class TestCompiler
-            implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler<DefinitionId> {
 
         private final String key;
 
@@ -152,7 +152,7 @@ class DefinitionLoaderTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionCatalog catalog) {
+                DefinitionCatalog<DefinitionId> catalog) {
             compileCount++;
             this.definitionId = definitionId;
             this.data = data;
@@ -160,7 +160,7 @@ class DefinitionLoaderTest {
     }
 
     private static final class ResolvingCompiler
-            implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler<DefinitionId> {
 
         private DefinitionId resolvedTarget;
 
@@ -173,7 +173,7 @@ class DefinitionLoaderTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionCatalog catalog) {
+                DefinitionCatalog<DefinitionId> catalog) {
             resolvedTarget = catalog.resolve(
                     data.get("target").getAsString());
         }

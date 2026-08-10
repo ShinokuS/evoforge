@@ -5,6 +5,7 @@ import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionBoo
 import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitionCompiler;
 import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitions;
 import io.github.evoforge.simulation.world.object.WorldObject;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,7 +47,7 @@ class WorldDefinitionIntegrationTest {
                 new PhysicalDefinitionCompiler(
                         physical));
 
-        DefinitionRegistry definitions = bootstrap.load(directory);
+        DefinitionRegistry<ObjectDefinitionId> definitions = bootstrap.load(directory);
 
         World world = new World(definitions);
 

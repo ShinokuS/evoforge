@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +15,9 @@ class ObjectFactoryTest {
         void createsWorldObjectFromDefinitionKey() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -38,12 +38,12 @@ class ObjectFactoryTest {
         }
 
         @Test
-        void createsWorldObjectFromDefinitionId() {
+        void createsWorldObjectFromObjectDefinitionId() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -67,9 +67,9 @@ class ObjectFactoryTest {
         void createsSpecializedObjectFromDefinitionKey() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -92,12 +92,12 @@ class ObjectFactoryTest {
         }
 
         @Test
-        void createsSpecializedObjectFromDefinitionId() {
+        void createsSpecializedObjectFromObjectDefinitionId() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -123,9 +123,9 @@ class ObjectFactoryTest {
         void assignsSequentialObjectIds() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -148,7 +148,7 @@ class ObjectFactoryTest {
         void rejectsUnknownDefinitionKey() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -160,7 +160,7 @@ class ObjectFactoryTest {
         void rejectsUnknownDefinitionKeyWithCreator() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -170,8 +170,8 @@ class ObjectFactoryTest {
         }
 
         @Test
-        void rejectsUnknownDefinitionId() {
-                DefinitionRegistry definitions = new DefinitionRegistry();
+        void rejectsUnknownObjectDefinitionId() {
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
                 definitions.register("core:test");
 
@@ -182,12 +182,12 @@ class ObjectFactoryTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> factory.create(
-                                                DefinitionId.of(1_000_000)));
+                                                ObjectDefinitionId.of(1_000_000)));
         }
 
         @Test
-        void rejectsUnknownDefinitionIdWithCreator() {
-                DefinitionRegistry definitions = new DefinitionRegistry();
+        void rejectsUnknownObjectDefinitionIdWithCreator() {
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
                 definitions.register("core:test");
 
@@ -198,17 +198,17 @@ class ObjectFactoryTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> factory.create(
-                                                DefinitionId.of(1_000_000),
+                                                ObjectDefinitionId.of(1_000_000),
                                                 TestWorldObject::new));
         }
 
         @Test
-        void rejectsWrongDefinitionIdFromCreator() {
+        void rejectsWrongObjectDefinitionIdFromCreator() {
                 ObjectRepository objects = new ObjectRepository();
 
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 objects,
@@ -218,9 +218,9 @@ class ObjectFactoryTest {
                                 IllegalArgumentException.class,
                                 () -> factory.create(
                                                 definitionId,
-                                                (objectId, suppliedDefinitionId) -> new TestWorldObject(
+                                                (objectId, suppliedObjectDefinitionId) -> new TestWorldObject(
                                                                 objectId,
-                                                                DefinitionId.of(100))));
+                                                                ObjectDefinitionId.of(100))));
 
                 assertEquals(
                                 0,
@@ -231,7 +231,7 @@ class ObjectFactoryTest {
         void rejectsNullDefinitionKey() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -243,7 +243,7 @@ class ObjectFactoryTest {
         void rejectsNullDefinitionKeyWithCreator() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
@@ -253,33 +253,33 @@ class ObjectFactoryTest {
         }
 
         @Test
-        void rejectsNullDefinitionId() {
+        void rejectsNullObjectDefinitionId() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> factory.create(
-                                                (DefinitionId) null));
+                                                (ObjectDefinitionId) null));
         }
 
         @Test
-        void rejectsNullDefinitionIdWithCreator() {
+        void rejectsNullObjectDefinitionIdWithCreator() {
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
-                                new DefinitionRegistry());
+                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt));
 
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> factory.create(
-                                                (DefinitionId) null,
+                                                (ObjectDefinitionId) null,
                                                 TestWorldObject::new));
         }
 
         @Test
         void rejectsNullCreatorForDefinitionKey() {
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
                 definitions.register("core:test");
 
@@ -295,10 +295,10 @@ class ObjectFactoryTest {
         }
 
         @Test
-        void rejectsNullCreatorForDefinitionId() {
-                DefinitionRegistry definitions = new DefinitionRegistry();
+        void rejectsNullCreatorForObjectDefinitionId() {
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionId definitionId = definitions.register("core:test");
+                ObjectDefinitionId definitionId = definitions.register("core:test");
 
                 ObjectFactory factory = new ObjectFactory(
                                 new ObjectRepository(),
@@ -317,7 +317,7 @@ class ObjectFactoryTest {
                                 IllegalArgumentException.class,
                                 () -> new ObjectFactory(
                                                 null,
-                                                new DefinitionRegistry()));
+                                                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt)));
         }
 
         @Test
@@ -334,7 +334,7 @@ class ObjectFactoryTest {
 
                 private TestWorldObject(
                                 ObjectId id,
-                                DefinitionId definitionId) {
+                                ObjectDefinitionId definitionId) {
 
                         super(
                                         id,

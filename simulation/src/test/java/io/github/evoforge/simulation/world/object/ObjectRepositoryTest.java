@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 import org.junit.jupiter.api.Test;
 
@@ -195,7 +195,7 @@ class ObjectRepositoryTest {
     private static final class TestWorldObject extends WorldObject {
 
         private TestWorldObject(ObjectId id) {
-            super(id, DefinitionId.of(0));
+            super(id, ObjectDefinitionId.of(0));
         }
     }
 }

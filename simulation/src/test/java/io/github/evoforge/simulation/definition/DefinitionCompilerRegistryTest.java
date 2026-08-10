@@ -14,9 +14,9 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void registersCompiler() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
-        DefinitionAspectCompiler compiler = new TestCompiler("physical");
+        DefinitionAspectCompiler<DefinitionId> compiler = new TestCompiler("physical");
 
         registry.register(compiler);
 
@@ -26,9 +26,9 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void returnsCompilerByKey() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
-        DefinitionAspectCompiler compiler = new TestCompiler("physical");
+        DefinitionAspectCompiler<DefinitionId> compiler = new TestCompiler("physical");
 
         registry.register(compiler);
 
@@ -37,11 +37,11 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void supportsDifferentCompilers() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
-        DefinitionAspectCompiler physical = new TestCompiler("physical");
+        DefinitionAspectCompiler<DefinitionId> physical = new TestCompiler("physical");
 
-        DefinitionAspectCompiler decay = new TestCompiler("decay");
+        DefinitionAspectCompiler<DefinitionId> decay = new TestCompiler("decay");
 
         registry.register(physical);
         registry.register(decay);
@@ -53,7 +53,7 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void rejectsDuplicateCompilerKey() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         registry.register(new TestCompiler("physical"));
 
@@ -67,7 +67,7 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void rejectsNullCompiler() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -76,7 +76,7 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void rejectsNullCompilerKey() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -86,7 +86,7 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void rejectsBlankCompilerKey() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -96,21 +96,21 @@ class DefinitionCompilerRegistryTest {
 
     @Test
     void returnsNullForUnknownCompiler() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         assertNull(registry.get("unknown"));
     }
 
     @Test
     void handlesNullLookup() {
-        DefinitionCompilerRegistry registry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> registry = new DefinitionCompilerRegistry<>();
 
         assertNull(registry.get(null));
         assertFalse(registry.contains(null));
     }
 
     private static final class TestCompiler
-            implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler<DefinitionId> {
 
         private final String key;
 
@@ -127,7 +127,7 @@ class DefinitionCompilerRegistryTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionCatalog catalog) {
+                DefinitionCatalog<DefinitionId> catalog) {
         }
     }
 }

@@ -11,8 +11,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DefinitionRegistryTest {
 
     @Test
+    void rejectsNullIdProducedByFactory() {
+        DefinitionRegistry<DefinitionId> registry =
+                new DefinitionRegistry<>(
+                        index -> null,
+                        DefinitionId::asInt);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> registry.register("core:test"));
+    }
+
+    @Test
+    void rejectsInconsistentIdFactoryAndIndexer() {
+        DefinitionRegistry<DefinitionId> registry =
+                new DefinitionRegistry<>(
+                        index -> DefinitionId.of(index + 1),
+                        DefinitionId::asInt);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> registry.register("core:test"));
+    }
+
+    @Test
+    void failedIdCreationDoesNotRegisterDefinition() {
+        DefinitionRegistry<DefinitionId> registry =
+                new DefinitionRegistry<>(
+                        index -> DefinitionId.of(index + 1),
+                        DefinitionId::asInt);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> registry.register("core:test"));
+
+        assertNull(registry.resolve("core:test"));
+        assertEquals(0, registry.size());
+    }
+
+    @Test
     void registersKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -22,7 +61,7 @@ class DefinitionRegistryTest {
 
     @Test
     void assignsSequentialIds() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId first = registry.register("core:apple");
 
@@ -34,7 +73,7 @@ class DefinitionRegistryTest {
 
     @Test
     void returnsIdByKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -45,7 +84,7 @@ class DefinitionRegistryTest {
 
     @Test
     void returnsKeyById() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -56,7 +95,7 @@ class DefinitionRegistryTest {
 
     @Test
     void rejectsDuplicateKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         registry.register("core:apple");
 
@@ -69,7 +108,7 @@ class DefinitionRegistryTest {
 
     @Test
     void rejectsNullKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -78,7 +117,7 @@ class DefinitionRegistryTest {
 
     @Test
     void rejectsBlankKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -87,7 +126,7 @@ class DefinitionRegistryTest {
 
     @Test
     void rejectsInvalidKeyFormat() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -116,7 +155,7 @@ class DefinitionRegistryTest {
 
     @Test
     void acceptsValidKeyFormats() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         registry.register("core:apple");
         registry.register("core:rotten_apple");
@@ -128,7 +167,7 @@ class DefinitionRegistryTest {
 
     @Test
     void returnsNullForUnknownKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertNull(
                 registry.idOf("core:unknown"));
@@ -136,7 +175,7 @@ class DefinitionRegistryTest {
 
     @Test
     void returnsNullForUnknownId() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertNull(
                 registry.keyOf(DefinitionId.of(100)));
@@ -144,7 +183,7 @@ class DefinitionRegistryTest {
 
     @Test
     void handlesNullLookup() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertNull(registry.idOf(null));
         assertNull(registry.resolve(null));
@@ -153,7 +192,7 @@ class DefinitionRegistryTest {
 
     @Test
     void freezesRegistry() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertFalse(registry.isFrozen());
 
@@ -164,7 +203,7 @@ class DefinitionRegistryTest {
 
     @Test
     void rejectsRegistrationAfterFreeze() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         registry.register("core:apple");
         registry.freeze();
@@ -178,7 +217,7 @@ class DefinitionRegistryTest {
 
     @Test
     void allowsReadingAfterFreeze() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -195,7 +234,7 @@ class DefinitionRegistryTest {
 
     @Test
     void resolvesIdByKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -206,7 +245,7 @@ class DefinitionRegistryTest {
 
     @Test
     void returnsNullWhenResolvingUnknownKey() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         assertNull(
                 registry.resolve("core:unknown"));
@@ -214,7 +253,7 @@ class DefinitionRegistryTest {
 
     @Test
     void containsRegisteredDefinitionId() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         DefinitionId id = registry.register("core:apple");
 
@@ -224,7 +263,7 @@ class DefinitionRegistryTest {
 
     @Test
     void doesNotContainUnknownDefinitionId() {
-        DefinitionRegistry registry = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> registry = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
         registry.register("core:apple");
 

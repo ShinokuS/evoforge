@@ -2,14 +2,14 @@ package io.github.evoforge.simulation.definition;
 
 import java.nio.file.Path;
 
-public final class DefinitionDirectoryLoader {
+public final class DefinitionDirectoryLoader<I> {
 
     private final DefinitionFileReader reader;
-    private final DefinitionLoader loader;
+    private final DefinitionLoader<I> loader;
 
     public DefinitionDirectoryLoader(
             DefinitionFileReader reader,
-            DefinitionLoader loader) {
+            DefinitionLoader<I> loader) {
         if (reader == null) {
             throw new IllegalArgumentException(
                     "reader must not be null");

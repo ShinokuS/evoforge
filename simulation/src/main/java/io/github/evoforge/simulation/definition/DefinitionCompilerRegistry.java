@@ -3,11 +3,11 @@ package io.github.evoforge.simulation.definition;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public final class DefinitionCompilerRegistry {
+public final class DefinitionCompilerRegistry<I> {
 
-    private final Map<String, DefinitionAspectCompiler> compilers = new LinkedHashMap<>();
+    private final Map<String, DefinitionAspectCompiler<I>> compilers = new LinkedHashMap<>();
 
-    public void register(DefinitionAspectCompiler compiler) {
+    public void register(DefinitionAspectCompiler<I> compiler) {
         if (compiler == null) {
             throw new IllegalArgumentException(
                     "compiler must not be null");
@@ -28,7 +28,7 @@ public final class DefinitionCompilerRegistry {
         compilers.put(key, compiler);
     }
 
-    public DefinitionAspectCompiler get(String key) {
+    public DefinitionAspectCompiler<I> get(String key) {
         if (key == null) {
             return null;
         }
@@ -49,7 +49,7 @@ public final class DefinitionCompilerRegistry {
     }
 
     public void finishAll() {
-        for (DefinitionAspectCompiler compiler : compilers.values()) {
+        for (DefinitionAspectCompiler<I> compiler : compilers.values()) {
             compiler.finish();
         }
     }

@@ -1,9 +1,9 @@
 package io.github.evoforge.simulation.definition;
 
-public interface DefinitionCatalog {
-    DefinitionId resolve(String key);
+public interface DefinitionCatalog<I> {
+    I resolve(String key);
 
-    String keyOf(DefinitionId id);
+    String keyOf(I id);
 
-    boolean contains(DefinitionId id);
+    boolean contains(I id);
 }

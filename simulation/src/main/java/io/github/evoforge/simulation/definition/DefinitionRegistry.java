@@ -5,19 +5,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.function.IntFunction;
+import java.util.function.ToIntFunction;
 
-public final class DefinitionRegistry
-        implements DefinitionCatalog {
+public final class DefinitionRegistry<I>
+        implements DefinitionCatalog<I> {
 
     private static final Pattern KEY_PATTERN = Pattern.compile(
             "[a-z0-9][a-z0-9_.-]*:[a-z0-9][a-z0-9_.-]*");
 
     private final List<String> keys = new ArrayList<>();
-    private final Map<String, DefinitionId> idsByKey = new HashMap<>();
+    private final List<I> ids = new ArrayList<>();
+    private final Map<String, I> idsByKey = new HashMap<>();
+    private final IntFunction<I> idFactory;
+    private final ToIntFunction<I> idIndexer;
 
     private boolean frozen;
 
-    public DefinitionId register(String key) {
+    public DefinitionRegistry(
+            IntFunction<I> idFactory,
+            ToIntFunction<I> idIndexer) {
+        if (idFactory == null) {
+            throw new IllegalArgumentException("idFactory must not be null");
+        }
+        if (idIndexer == null) {
+            throw new IllegalArgumentException("idIndexer must not be null");
+        }
+        this.idFactory = idFactory;
+        this.idIndexer = idIndexer;
+    }
+
+    public I register(String key) {
         if (key == null) {
             throw new IllegalArgumentException(
                     "key must not be null");
@@ -43,15 +61,32 @@ public final class DefinitionRegistry
                     "definition already registered: " + key);
         }
 
-        DefinitionId id = DefinitionId.of(keys.size());
+        int index = keys.size();
+        I id = idFactory.apply(index);
+
+        if (id == null) {
+            throw new IllegalStateException(
+                    "idFactory returned null for index " + index);
+        }
+
+        int actualIndex = idIndexer.applyAsInt(id);
+
+        if (actualIndex != index) {
+            throw new IllegalStateException(
+                    "idFactory/idIndexer mismatch: expected "
+                            + index
+                            + ", got "
+                            + actualIndex);
+        }
 
         keys.add(key);
+        ids.add(id);
         idsByKey.put(key, id);
 
         return id;
     }
 
-    public DefinitionId idOf(String key) {
+    public I idOf(String key) {
         if (key == null) {
             return null;
         }
@@ -60,18 +95,14 @@ public final class DefinitionRegistry
     }
 
     @Override
-    public DefinitionId resolve(String key) {
+    public I resolve(String key) {
         return idOf(key);
     }
 
-    public String keyOf(DefinitionId id) {
-        if (id == null) {
-            return null;
-        }
+    public String keyOf(I id) {
+        int index = registeredIndexOf(id);
 
-        int index = id.asInt();
-
-        if (index >= keys.size()) {
+        if (index < 0) {
             return null;
         }
 
@@ -79,14 +110,26 @@ public final class DefinitionRegistry
     }
 
     @Override
-    public boolean contains(DefinitionId id) {
+    public boolean contains(I id) {
+        return registeredIndexOf(id) >= 0;
+    }
+
+    private int registeredIndexOf(I id) {
         if (id == null) {
-            return false;
+            return -1;
         }
 
-        int index = id.asInt();
+        int index = idIndexer.applyAsInt(id);
 
-        return index >= 0 && index < keys.size();
+        if (index < 0 || index >= ids.size()) {
+            return -1;
+        }
+
+        if (!ids.get(index).equals(id)) {
+            return -1;
+        }
+
+        return index;
     }
 
     public int size() {

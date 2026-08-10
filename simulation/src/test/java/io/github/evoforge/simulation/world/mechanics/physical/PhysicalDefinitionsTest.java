@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.physical;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,7 +14,7 @@ class PhysicalDefinitionsTest {
     void storesMass() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        DefinitionId id = DefinitionId.of(3);
+        ObjectDefinitionId id = ObjectDefinitionId.of(3);
 
         definitions.put(id, 0.18);
 
@@ -26,14 +26,14 @@ class PhysicalDefinitionsTest {
     void returnsFalseForMissingDefinition() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        assertFalse(definitions.has(DefinitionId.of(3)));
+        assertFalse(definitions.has(ObjectDefinitionId.of(3)));
     }
 
     @Test
-    void growsForLargeDefinitionId() {
+    void growsForLargeObjectDefinitionId() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        DefinitionId id = DefinitionId.of(100);
+        ObjectDefinitionId id = ObjectDefinitionId.of(100);
 
         definitions.put(id, 2.5);
 
@@ -45,7 +45,7 @@ class PhysicalDefinitionsTest {
     void rejectsDuplicateDefinition() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        DefinitionId id = DefinitionId.of(1);
+        ObjectDefinitionId id = ObjectDefinitionId.of(1);
 
         definitions.put(id, 1.0);
 
@@ -58,7 +58,7 @@ class PhysicalDefinitionsTest {
     void rejectsInvalidMass() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        DefinitionId id = DefinitionId.of(0);
+        ObjectDefinitionId id = ObjectDefinitionId.of(0);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -85,7 +85,7 @@ class PhysicalDefinitionsTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> definitions.mass(DefinitionId.of(0)));
+                () -> definitions.mass(ObjectDefinitionId.of(0)));
     }
 
     @Test
@@ -117,7 +117,7 @@ class PhysicalDefinitionsTest {
         assertThrows(
                 IllegalStateException.class,
                 () -> definitions.put(
-                        DefinitionId.of(0),
+                        ObjectDefinitionId.of(0),
                         0.18));
     }
 
@@ -125,7 +125,7 @@ class PhysicalDefinitionsTest {
     void remainsReadableAfterFreeze() {
         PhysicalDefinitions definitions = new PhysicalDefinitions();
 
-        DefinitionId id = DefinitionId.of(0);
+        ObjectDefinitionId id = ObjectDefinitionId.of(0);
 
         definitions.put(id, 0.18);
 

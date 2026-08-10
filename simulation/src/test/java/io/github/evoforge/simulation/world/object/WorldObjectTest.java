@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +12,7 @@ class WorldObjectTest {
     void storesIdentity() {
         ObjectId id = ObjectId.of(3, 2);
 
-        DefinitionId definitionId = DefinitionId.of(7);
+        ObjectDefinitionId definitionId = ObjectDefinitionId.of(7);
 
         WorldObject object = new WorldObject(
                 id,
@@ -33,11 +33,11 @@ class WorldObjectTest {
                 IllegalArgumentException.class,
                 () -> new WorldObject(
                         null,
-                        DefinitionId.of(0)));
+                        ObjectDefinitionId.of(0)));
     }
 
     @Test
-    void rejectsNullDefinitionId() {
+    void rejectsNullObjectDefinitionId() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new WorldObject(

@@ -1,18 +1,18 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 import java.util.function.BiFunction;
 
 public final class ObjectFactory {
 
     private final ObjectRepository objects;
-    private final DefinitionCatalog definitions;
+    private final DefinitionCatalog<ObjectDefinitionId> definitions;
 
     public ObjectFactory(
             ObjectRepository objects,
-            DefinitionCatalog definitions) {
+            DefinitionCatalog<ObjectDefinitionId> definitions) {
 
         if (objects == null) {
             throw new IllegalArgumentException(
@@ -37,7 +37,7 @@ public final class ObjectFactory {
     }
 
     public WorldObject create(
-            DefinitionId definitionId) {
+            ObjectDefinitionId definitionId) {
 
         return create(
                 definitionId,
@@ -46,14 +46,14 @@ public final class ObjectFactory {
 
     public <T extends WorldObject> T create(
             String definitionKey,
-            BiFunction<ObjectId, DefinitionId, T> creator) {
+            BiFunction<ObjectId, ObjectDefinitionId, T> creator) {
 
         if (definitionKey == null) {
             throw new IllegalArgumentException(
                     "definitionKey must not be null");
         }
 
-        DefinitionId definitionId = definitions.resolve(definitionKey);
+        ObjectDefinitionId definitionId = definitions.resolve(definitionKey);
 
         if (definitionId == null) {
             throw new IllegalArgumentException(
@@ -64,8 +64,8 @@ public final class ObjectFactory {
     }
 
     public <T extends WorldObject> T create(
-            DefinitionId definitionId,
-            BiFunction<ObjectId, DefinitionId, T> creator) {
+            ObjectDefinitionId definitionId,
+            BiFunction<ObjectId, ObjectDefinitionId, T> creator) {
 
         if (definitionId == null) {
             throw new IllegalArgumentException(
@@ -91,8 +91,8 @@ public final class ObjectFactory {
 
     private <T extends WorldObject> T createObject(
             ObjectId objectId,
-            DefinitionId definitionId,
-            BiFunction<ObjectId, DefinitionId, T> creator) {
+            ObjectDefinitionId definitionId,
+            BiFunction<ObjectId, ObjectDefinitionId, T> creator) {
 
         T object = creator.apply(
                 objectId,
@@ -102,7 +102,7 @@ public final class ObjectFactory {
                 && !definitionId.equals(object.definitionId())) {
 
             throw new IllegalArgumentException(
-                    "created object must use the supplied DefinitionId");
+                    "created object must use the supplied ObjectDefinitionId");
         }
 
         return object;

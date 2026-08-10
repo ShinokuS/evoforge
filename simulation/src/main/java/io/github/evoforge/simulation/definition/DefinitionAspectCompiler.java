@@ -2,14 +2,14 @@ package io.github.evoforge.simulation.definition;
 
 import com.google.gson.JsonObject;
 
-public interface DefinitionAspectCompiler {
+public interface DefinitionAspectCompiler<I> {
 
     String key();
 
     void compile(
-            DefinitionId definitionId,
+            I definitionId,
             JsonObject data,
-            DefinitionCatalog catalog);
+            DefinitionCatalog<I> catalog);
 
     default void finish() {
     }

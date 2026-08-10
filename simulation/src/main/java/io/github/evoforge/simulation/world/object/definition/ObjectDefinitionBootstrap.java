@@ -11,35 +11,39 @@ import java.nio.file.Path;
 
 public final class ObjectDefinitionBootstrap {
 
-    private final DefinitionRegistry definitions;
-    private final DefinitionDirectoryLoader loader;
+    private final DefinitionRegistry<ObjectDefinitionId> definitions;
+    private final DefinitionDirectoryLoader<ObjectDefinitionId> loader;
 
     private boolean used;
 
+    @SafeVarargs
     public ObjectDefinitionBootstrap(
-            DefinitionAspectCompiler... compilers) {
+            DefinitionAspectCompiler<ObjectDefinitionId>... compilers) {
 
         if (compilers == null) {
             throw new IllegalArgumentException(
                     "compilers must not be null");
         }
 
-        definitions = new DefinitionRegistry();
+        definitions = new DefinitionRegistry<>(
+                ObjectDefinitionId::of,
+                ObjectDefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilerRegistry = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<ObjectDefinitionId> compilerRegistry =
+                new DefinitionCompilerRegistry<>();
 
-        for (DefinitionAspectCompiler compiler : compilers) {
+        for (DefinitionAspectCompiler<ObjectDefinitionId> compiler : compilers) {
             compilerRegistry.register(compiler);
         }
 
-        loader = new DefinitionDirectoryLoader(
+        loader = new DefinitionDirectoryLoader<>(
                 new DefinitionFileReader(),
-                new DefinitionLoader(
+                new DefinitionLoader<>(
                         definitions,
                         compilerRegistry));
     }
 
-    public DefinitionRegistry load(Path root) {
+    public DefinitionRegistry<ObjectDefinitionId> load(Path root) {
         if (used) {
             throw new IllegalStateException(
                     "bootstrap has already been used");

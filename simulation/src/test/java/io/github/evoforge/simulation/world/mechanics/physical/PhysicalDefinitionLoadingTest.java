@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.physical;
 
 import com.google.gson.JsonObject;
 import io.github.evoforge.simulation.definition.DefinitionCompilerRegistry;
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.definition.DefinitionLoader;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import org.junit.jupiter.api.Test;
@@ -17,9 +17,9 @@ class PhysicalDefinitionLoadingTest {
 
         @Test
         void loadsPhysicalDefinition() {
-                DefinitionRegistry definitions = new DefinitionRegistry();
+                DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
-                DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+                DefinitionCompilerRegistry<ObjectDefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
                 PhysicalDefinitions physical = new PhysicalDefinitions();
 
@@ -27,7 +27,7 @@ class PhysicalDefinitionLoadingTest {
                                 new PhysicalDefinitionCompiler(
                                                 physical));
 
-                DefinitionLoader loader = new DefinitionLoader(
+                DefinitionLoader<ObjectDefinitionId> loader = new DefinitionLoader<>(
                                 definitions,
                                 compilers);
 
@@ -56,11 +56,11 @@ class PhysicalDefinitionLoadingTest {
                 loader.load(
                                 List.of(document));
 
-                DefinitionId id = definitions.resolve(
+                ObjectDefinitionId id = definitions.resolve(
                                 "core:apple");
 
                 assertEquals(
-                                DefinitionId.of(0),
+                                ObjectDefinitionId.of(0),
                                 id);
 
                 assertTrue(
@@ -76,7 +76,7 @@ class PhysicalDefinitionLoadingTest {
                 assertThrows(
                                 IllegalStateException.class,
                                 () -> physical.put(
-                                                DefinitionId.of(10),
+                                                ObjectDefinitionId.of(10),
                                                 1.0));
         }
 }

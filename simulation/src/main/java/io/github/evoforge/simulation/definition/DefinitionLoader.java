@@ -6,14 +6,14 @@ import com.google.gson.JsonObject;
 import java.util.List;
 import java.util.Map;
 
-public final class DefinitionLoader {
+public final class DefinitionLoader<I> {
 
-    private final DefinitionRegistry definitions;
-    private final DefinitionCompilerRegistry compilers;
+    private final DefinitionRegistry<I> definitions;
+    private final DefinitionCompilerRegistry<I> compilers;
 
     public DefinitionLoader(
-            DefinitionRegistry definitions,
-            DefinitionCompilerRegistry compilers) {
+            DefinitionRegistry<I> definitions,
+            DefinitionCompilerRegistry<I> compilers) {
         if (definitions == null) {
             throw new IllegalArgumentException(
                     "definitions must not be null");
@@ -55,7 +55,7 @@ public final class DefinitionLoader {
     private void compileDefinitions(List<JsonObject> documents) {
         for (JsonObject document : documents) {
             String key = document.get("key").getAsString();
-            DefinitionId definitionId = definitions.resolve(key);
+            I definitionId = definitions.resolve(key);
 
             JsonElement aspectsElement = document.get("aspects");
 
@@ -77,10 +77,10 @@ public final class DefinitionLoader {
     }
 
     private void compileAspect(
-            DefinitionId definitionId,
+            I definitionId,
             String aspectKey,
             JsonElement data) {
-        DefinitionAspectCompiler compiler = compilers.get(aspectKey);
+        DefinitionAspectCompiler<I> compiler = compilers.get(aspectKey);
 
         if (compiler == null) {
             throw new IllegalArgumentException(

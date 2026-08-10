@@ -5,10 +5,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import io.github.evoforge.simulation.definition.DefinitionAspectCompiler;
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 public final class PhysicalDefinitionCompiler
-        implements DefinitionAspectCompiler {
+        implements DefinitionAspectCompiler<ObjectDefinitionId> {
 
     private final PhysicalDefinitions definitions;
 
@@ -30,9 +30,9 @@ public final class PhysicalDefinitionCompiler
 
     @Override
     public void compile(
-            DefinitionId definitionId,
+            ObjectDefinitionId definitionId,
             JsonObject data,
-            DefinitionCatalog catalog) {
+            DefinitionCatalog<ObjectDefinitionId> catalog) {
 
         if (data == null) {
             throw new IllegalArgumentException(

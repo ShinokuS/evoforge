@@ -1,15 +1,15 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 public class WorldObject {
 
     private final ObjectId id;
-    private final DefinitionId definitionId;
+    private final ObjectDefinitionId definitionId;
 
     protected WorldObject(
             ObjectId id,
-            DefinitionId definitionId) {
+            ObjectDefinitionId definitionId) {
         if (id == null) {
             throw new IllegalArgumentException(
                     "id must not be null");
@@ -28,7 +28,7 @@ public class WorldObject {
         return id;
     }
 
-    public final DefinitionId definitionId() {
+    public final ObjectDefinitionId definitionId() {
         return definitionId;
     }
 }

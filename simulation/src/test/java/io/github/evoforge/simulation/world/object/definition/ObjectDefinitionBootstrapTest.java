@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.object.definition;
 
 import io.github.evoforge.simulation.definition.DefinitionAspectCompiler;
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 
 import com.google.gson.JsonObject;
@@ -45,28 +45,29 @@ class ObjectDefinitionBootstrapTest {
 
         ObjectDefinitionBootstrap bootstrap = new ObjectDefinitionBootstrap(compiler);
 
-        DefinitionRegistry definitions = bootstrap.load(directory);
+        DefinitionRegistry<ObjectDefinitionId> definitions = bootstrap.load(directory);
 
-        DefinitionId id = definitions.resolve("core:test");
+        ObjectDefinitionId id = definitions.resolve("core:test");
 
-        assertEquals(DefinitionId.of(0), id);
+        assertEquals(ObjectDefinitionId.of(0), id);
         assertEquals(id, compiler.definitionId);
         assertEquals(42, compiler.value);
         assertTrue(definitions.isFrozen());
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void rejectsNullCompilers() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ObjectDefinitionBootstrap(
-                        (DefinitionAspectCompiler[]) null));
+                        (DefinitionAspectCompiler<ObjectDefinitionId>[]) null));
     }
 
     private static final class TestCompiler
-            implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler<ObjectDefinitionId> {
 
-        private DefinitionId definitionId;
+        private ObjectDefinitionId definitionId;
         private int value;
 
         @Override
@@ -76,9 +77,9 @@ class ObjectDefinitionBootstrapTest {
 
         @Override
         public void compile(
-                DefinitionId definitionId,
+                ObjectDefinitionId definitionId,
                 JsonObject data,
-                DefinitionCatalog catalog) {
+                DefinitionCatalog<ObjectDefinitionId> catalog) {
             this.definitionId = definitionId;
             value = data.get("value").getAsInt();
         }

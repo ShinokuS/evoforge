@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
@@ -13,7 +13,7 @@ class WorldTest {
 
     @Test
     void ownsObjectInfrastructure() {
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<ObjectDefinitionId> definitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
 
         definitions.register("core:test");
 
@@ -40,7 +40,7 @@ class WorldTest {
 
         private TestWorldObject(
                 ObjectId id,
-                DefinitionId definitionId) {
+                ObjectDefinitionId definitionId) {
             super(id, definitionId);
         }
     }

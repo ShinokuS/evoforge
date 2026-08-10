@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.physical;
 
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 public final class PhysicalDefinitions {
 
@@ -13,7 +13,7 @@ public final class PhysicalDefinitions {
     private boolean frozen;
 
     public void put(
-            DefinitionId id,
+            ObjectDefinitionId id,
             double mass) {
 
         if (frozen) {
@@ -44,7 +44,7 @@ public final class PhysicalDefinitions {
         present[index] = true;
     }
 
-    public boolean has(DefinitionId id) {
+    public boolean has(ObjectDefinitionId id) {
         if (id == null) {
             return false;
         }
@@ -55,7 +55,7 @@ public final class PhysicalDefinitions {
                 && present[index];
     }
 
-    public double mass(DefinitionId id) {
+    public double mass(ObjectDefinitionId id) {
         if (!has(id)) {
             throw new IllegalArgumentException(
                     "physical definition not found: " + id);

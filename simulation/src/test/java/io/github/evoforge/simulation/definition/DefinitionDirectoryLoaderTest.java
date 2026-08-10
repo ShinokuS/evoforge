@@ -33,19 +33,19 @@ class DefinitionDirectoryLoaderTest {
                         """,
                 UTF_8);
 
-        DefinitionRegistry definitions = new DefinitionRegistry();
+        DefinitionRegistry<DefinitionId> definitions = new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt);
 
-        DefinitionCompilerRegistry compilers = new DefinitionCompilerRegistry();
+        DefinitionCompilerRegistry<DefinitionId> compilers = new DefinitionCompilerRegistry<>();
 
         TestCompiler compiler = new TestCompiler();
 
         compilers.register(compiler);
 
-        DefinitionLoader loader = new DefinitionLoader(
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(
                 definitions,
                 compilers);
 
-        DefinitionDirectoryLoader directoryLoader = new DefinitionDirectoryLoader(
+        DefinitionDirectoryLoader<DefinitionId> directoryLoader = new DefinitionDirectoryLoader<>(
                 new DefinitionFileReader(),
                 loader);
 
@@ -60,13 +60,13 @@ class DefinitionDirectoryLoaderTest {
 
     @Test
     void rejectsNullReader() {
-        DefinitionLoader loader = new DefinitionLoader(
-                new DefinitionRegistry(),
-                new DefinitionCompilerRegistry());
+        DefinitionLoader<DefinitionId> loader = new DefinitionLoader<>(
+                new DefinitionRegistry<>(DefinitionId::of, DefinitionId::asInt),
+                new DefinitionCompilerRegistry<>());
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DefinitionDirectoryLoader(
+                () -> new DefinitionDirectoryLoader<>(
                         null,
                         loader));
     }
@@ -75,13 +75,13 @@ class DefinitionDirectoryLoaderTest {
     void rejectsNullLoader() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DefinitionDirectoryLoader(
+                () -> new DefinitionDirectoryLoader<>(
                         new DefinitionFileReader(),
                         null));
     }
 
     private static final class TestCompiler
-            implements DefinitionAspectCompiler {
+            implements DefinitionAspectCompiler<DefinitionId> {
 
         private DefinitionId definitionId;
         private int value;
@@ -95,7 +95,7 @@ class DefinitionDirectoryLoaderTest {
         public void compile(
                 DefinitionId definitionId,
                 JsonObject data,
-                DefinitionCatalog catalog) {
+                DefinitionCatalog<DefinitionId> catalog) {
             this.definitionId = definitionId;
             value = data.get("value").getAsInt();
         }

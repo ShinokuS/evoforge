@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.physical;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,7 +25,7 @@ class PhysicalDefinitionCompilerTest {
 
                 PhysicalDefinitionCompiler compiler = new PhysicalDefinitionCompiler(definitions);
 
-                DefinitionId id = DefinitionId.of(3);
+                ObjectDefinitionId id = ObjectDefinitionId.of(3);
 
                 JsonObject data = parse("""
                                 {
@@ -51,7 +51,7 @@ class PhysicalDefinitionCompilerTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> compiler.compile(
-                                                DefinitionId.of(0),
+                                                ObjectDefinitionId.of(0),
                                                 data,
                                                 null));
         }
@@ -70,7 +70,7 @@ class PhysicalDefinitionCompilerTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> compiler.compile(
-                                                DefinitionId.of(0),
+                                                ObjectDefinitionId.of(0),
                                                 data,
                                                 null));
         }
@@ -89,7 +89,7 @@ class PhysicalDefinitionCompilerTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> compiler.compile(
-                                                DefinitionId.of(0),
+                                                ObjectDefinitionId.of(0),
                                                 data,
                                                 null));
         }
@@ -102,7 +102,7 @@ class PhysicalDefinitionCompilerTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> compiler.compile(
-                                                DefinitionId.of(0),
+                                                ObjectDefinitionId.of(0),
                                                 null,
                                                 null));
         }
