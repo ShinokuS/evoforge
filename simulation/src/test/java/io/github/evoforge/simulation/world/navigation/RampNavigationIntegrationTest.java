@@ -86,6 +86,80 @@ final class RampNavigationIntegrationTest {
     }
 
     @Test
+    void consecutiveRampsConnectThreeLevels() {
+        TestTerrainLookup terrain =
+                new TestTerrainLookup();
+
+        terrain.add(
+                0,
+                1,
+                0);
+        terrain.add(
+                0,
+                3,
+                1);
+
+        GeometrySystem geometry =
+                new GeometrySystem(terrain);
+
+        geometry.setShape(
+                0,
+                1,
+                0,
+                RampShape.POSITIVE_Y);
+        geometry.setShape(
+                0,
+                3,
+                1,
+                RampShape.POSITIVE_Y);
+
+        NavigationLookup navigation =
+                new NavigationSystem(
+                        geometry.lookup()).lookup();
+
+        int middle =
+                navigation.transitions(
+                        0,
+                        2,
+                        1);
+
+        assertEquals(
+                2,
+                Integer.bitCount(middle));
+        assertTrue(
+                TransitionMask.contains(
+                        middle,
+                        0,
+                        -1,
+                        0));
+        assertTrue(
+                TransitionMask.contains(
+                        middle,
+                        0,
+                        1,
+                        1));
+
+        int secondRamp =
+                navigation.transitions(
+                        0,
+                        3,
+                        2);
+
+        assertTrue(
+                TransitionMask.contains(
+                        secondRamp,
+                        0,
+                        -1,
+                        -1));
+        assertTrue(
+                TransitionMask.contains(
+                        secondRamp,
+                        0,
+                        1,
+                        0));
+    }
+
+    @Test
     void rampCannotBeEnteredFromItsSide() {
         TestTerrainLookup terrain =
                 baseTerrain();
