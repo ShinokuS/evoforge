@@ -8,7 +8,9 @@ import java.util.SplittableRandom;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionPorts;
@@ -82,13 +84,13 @@ final class NavigationReferencePropertyTest {
 
         int x =
                 source[0]
-                        + random.nextInt(-2, 3);
+                        + random.nextInt(-3, 4);
         int y =
                 source[1]
-                        + random.nextInt(-2, 3);
+                        + random.nextInt(-3, 4);
         int z =
                 source[2]
-                        + random.nextInt(-2, 3);
+                        + random.nextInt(-3, 4);
 
         if (random.nextInt(4) == 0) {
             geometry.remove(
@@ -106,6 +108,19 @@ final class NavigationReferencePropertyTest {
     }
 
     private static Shape randomShape(
+            SplittableRandom random) {
+
+        return switch (random.nextInt(8)) {
+            case 0 -> FullShape.INSTANCE;
+            case 1 -> RampShape.POSITIVE_X;
+            case 2 -> RampShape.NEGATIVE_X;
+            case 3 -> RampShape.POSITIVE_Y;
+            case 4 -> RampShape.NEGATIVE_Y;
+            default -> randomProbeShape(random);
+        };
+    }
+
+    private static Shape randomProbeShape(
             SplittableRandom random) {
 
         long[] ports =
