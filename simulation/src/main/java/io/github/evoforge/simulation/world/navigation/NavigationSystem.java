@@ -32,55 +32,41 @@ public final class NavigationSystem {
             int y,
             int z) {
 
+        int minOffsetX = x == Integer.MIN_VALUE ? 0 : -1;
+        int maxOffsetX = x == Integer.MAX_VALUE ? 0 : 1;
+        int minOffsetY = y == Integer.MIN_VALUE ? 0 : -1;
+        int maxOffsetY = y == Integer.MAX_VALUE ? 0 : 1;
+        int minOffsetZ = z == Integer.MIN_VALUE ? 0 : -1;
+        int maxOffsetZ = z == Integer.MAX_VALUE ? 0 : 1;
+
         long ports = TransitionPorts.NONE;
         int blocks = TransitionMask.NONE;
 
-        for (int offsetZ = -1; offsetZ <= 1; offsetZ++) {
-            long shapeZ = (long) z + offsetZ;
+        for (int offsetZ = minOffsetZ; offsetZ <= maxOffsetZ; offsetZ++) {
+            int shapeZ = z + offsetZ;
 
-            if (shapeZ < Integer.MIN_VALUE
-                    || shapeZ > Integer.MAX_VALUE) {
-                continue;
-            }
+            for (int offsetY = minOffsetY; offsetY <= maxOffsetY; offsetY++) {
+                int shapeY = y + offsetY;
 
-            for (int offsetY = -1; offsetY <= 1; offsetY++) {
-                long shapeY = (long) y + offsetY;
-
-                if (shapeY < Integer.MIN_VALUE
-                        || shapeY > Integer.MAX_VALUE) {
-                    continue;
-                }
-
-                for (int offsetX = -1; offsetX <= 1; offsetX++) {
-                    long shapeX = (long) x + offsetX;
-
-                    if (shapeX < Integer.MIN_VALUE
-                            || shapeX > Integer.MAX_VALUE) {
-                        continue;
-                    }
-
+                for (int offsetX = minOffsetX; offsetX <= maxOffsetX; offsetX++) {
                     Shape shape = geometry.find(
-                            (int) shapeX,
-                            (int) shapeY,
-                            (int) shapeZ);
+                            x + offsetX,
+                            shapeY,
+                            shapeZ);
 
                     if (shape == null) {
                         continue;
                     }
 
-                    int relativeX = -offsetX;
-                    int relativeY = -offsetY;
-                    int relativeZ = -offsetZ;
-
                     ports |= shape.transitionPorts(
-                            relativeX,
-                            relativeY,
-                            relativeZ);
+                            -offsetX,
+                            -offsetY,
+                            -offsetZ);
 
                     blocks |= shape.transitionBlocks(
-                            relativeX,
-                            relativeY,
-                            relativeZ);
+                            -offsetX,
+                            -offsetY,
+                            -offsetZ);
                 }
             }
         }
