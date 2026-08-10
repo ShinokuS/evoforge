@@ -4,6 +4,12 @@ public final class TransitionMask {
 
     public static final int NONE = 0;
 
+    private static final int CENTER = 1 << 13;
+    private static final int RANGE = (1 << 27) - 1;
+
+    public static final int ALL =
+            RANGE & ~CENTER;
+
     private TransitionMask() {
     }
 
@@ -34,5 +40,13 @@ public final class TransitionMask {
             int dz) {
 
         return (mask & of(dx, dy, dz)) != 0;
+    }
+
+    static void requireValid(
+            int mask) {
+
+        if ((mask & ~ALL) != 0) {
+            throw new IllegalArgumentException();
+        }
     }
 }
