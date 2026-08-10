@@ -26,6 +26,10 @@ final class TransitionMaskTest {
         }
 
         assertEquals(
+                TransitionMask.ALL,
+                mask);
+
+        assertEquals(
                 26,
                 Integer.bitCount(mask));
     }
@@ -76,5 +80,19 @@ final class TransitionMaskTest {
                         2,
                         0,
                         0));
+    }
+
+    @Test
+    void rejectsMaskWithCenterBit() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TransitionMask.requireValid(
+                        1 << 13));
+    }
+
+    @Test
+    void acceptsCompleteNeighborMask() {
+        TransitionMask.requireValid(
+                TransitionMask.ALL);
     }
 }
