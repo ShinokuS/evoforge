@@ -177,6 +177,43 @@ final class FullShapeTest {
     }
 
     @Test
+    void blocksDirectVerticalEntryIntoItsCell() {
+        int fromBelow =
+                FullShape.INSTANCE.transitionBlocks(
+                        0,
+                        0,
+                        -1);
+
+        assertEquals(
+                1,
+                Integer.bitCount(fromBelow));
+
+        assertTrue(
+                TransitionMask.contains(
+                        fromBelow,
+                        0,
+                        0,
+                        1));
+
+        int fromAbove =
+                FullShape.INSTANCE.transitionBlocks(
+                        0,
+                        0,
+                        1);
+
+        assertEquals(
+                1,
+                Integer.bitCount(fromAbove));
+
+        assertTrue(
+                TransitionMask.contains(
+                        fromAbove,
+                        0,
+                        0,
+                        -1));
+    }
+
+    @Test
     void returnsNoBlocksOutsideOccupiedLayerNeighborhood() {
         assertEquals(
                 TransitionMask.NONE,

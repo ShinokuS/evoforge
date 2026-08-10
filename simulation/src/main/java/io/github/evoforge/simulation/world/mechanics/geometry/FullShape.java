@@ -16,6 +16,12 @@ public final class FullShape
                     | TransitionMask.of(0, 1, 0)
                     | TransitionMask.of(1, 1, 0);
 
+    private static final int UP =
+            TransitionMask.of(0, 0, 1);
+
+    private static final int DOWN =
+            TransitionMask.of(0, 0, -1);
+
     private static final long TOP_PORTS =
             TransitionPorts.departuresOnly(HORIZONTAL);
 
@@ -50,6 +56,16 @@ public final class FullShape
             int relativeX,
             int relativeY,
             int relativeZ) {
+
+        if (relativeX == 0 && relativeY == 0) {
+            if (relativeZ == -1) {
+                return UP;
+            }
+
+            if (relativeZ == 1) {
+                return DOWN;
+            }
+        }
 
         if (relativeZ != 0
                 || relativeX < -1 || relativeX > 1
