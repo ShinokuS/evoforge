@@ -4,22 +4,25 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 
 import java.util.Arrays;
 
-final class TransformState implements TransformLookup {
+final class TransformState
+        implements TransformLookup {
 
     private static final int INITIAL_CAPACITY = 16;
 
-    private double[] x = new double[INITIAL_CAPACITY];
+    private int[] x = new int[INITIAL_CAPACITY];
 
-    private double[] y = new double[INITIAL_CAPACITY];
+    private int[] y = new int[INITIAL_CAPACITY];
 
-    private double[] z = new double[INITIAL_CAPACITY];
+    private int[] z = new int[INITIAL_CAPACITY];
 
     private int[] generations = new int[INITIAL_CAPACITY];
 
     private boolean[] present = new boolean[INITIAL_CAPACITY];
 
     @Override
-    public boolean has(ObjectId id) {
+    public boolean has(
+            ObjectId id) {
+
         if (id == null) {
             return false;
         }
@@ -32,114 +35,133 @@ final class TransformState implements TransformLookup {
     }
 
     @Override
-    public double x(ObjectId id) {
-        requirePresent(id);
-        return x[id.slot()];
+    public int x(
+            ObjectId id) {
+
+        return x[requirePresent(id)];
     }
 
     @Override
-    public double y(ObjectId id) {
-        requirePresent(id);
-        return y[id.slot()];
+    public int y(
+            ObjectId id) {
+
+        return y[requirePresent(id)];
     }
 
     @Override
-    public double z(ObjectId id) {
-        requirePresent(id);
-        return z[id.slot()];
+    public int z(
+            ObjectId id) {
+
+        return z[requirePresent(id)];
     }
 
     void add(
             ObjectId id,
-            double x,
-            double y,
-            double z) {
+            int x,
+            int y,
+            int z) {
 
-        if (id == null) {
-            throw new IllegalArgumentException(
-                    "id must not be null");
-        }
-
-        requireFinite(x, "x");
-        requireFinite(y, "y");
-        requireFinite(z, "z");
-
-        ensureCapacity(id.slot());
-
-        if (present[id.slot()]) {
-            throw new IllegalStateException(
-                    "transform already exists for slot: "
-                            + id.slot());
-        }
+        requireId(id);
 
         int slot = id.slot();
+
+        ensureCapacity(slot);
+
+        if (present[slot]) {
+            throw new IllegalStateException(
+                    "transform already exists: " + id);
+        }
 
         this.x[slot] = x;
         this.y[slot] = y;
         this.z[slot] = z;
+
         generations[slot] = id.generation();
+
         present[slot] = true;
     }
 
     void move(
             ObjectId id,
-            double x,
-            double y,
-            double z) {
+            int x,
+            int y,
+            int z) {
 
-        requirePresent(id);
-
-        requireFinite(x, "x");
-        requireFinite(y, "y");
-        requireFinite(z, "z");
-
-        int slot = id.slot();
+        int slot = requirePresent(id);
 
         this.x[slot] = x;
         this.y[slot] = y;
         this.z[slot] = z;
     }
 
-    void remove(ObjectId id) {
-        requirePresent(id);
+    void remove(
+            ObjectId id) {
 
-        present[id.slot()] = false;
+        int slot = requirePresent(id);
+
+        present[slot] = false;
     }
 
-    private void requirePresent(ObjectId id) {
-        if (!has(id)) {
+    private int requirePresent(
+            ObjectId id) {
+
+        requireId(id);
+
+        int slot = id.slot();
+
+        if (slot >= present.length
+                || !present[slot]
+                || generations[slot] != id.generation()) {
+
             throw new IllegalStateException(
                     "transform does not exist: " + id);
         }
+
+        return slot;
     }
 
-    private void ensureCapacity(int slot) {
+    private void ensureCapacity(
+            int slot) {
+
         if (slot < present.length) {
             return;
         }
 
-        int capacity = Math.max(
-                slot + 1,
-                present.length * 2);
+        int newLength = present.length;
 
-        x = Arrays.copyOf(x, capacity);
-        y = Arrays.copyOf(y, capacity);
-        z = Arrays.copyOf(z, capacity);
+        while (newLength <= slot) {
+            newLength = Math.max(
+                    newLength * 2,
+                    slot + 1);
+        }
+
+        x = Arrays.copyOf(
+                x,
+                newLength);
+
+        y = Arrays.copyOf(
+                y,
+                newLength);
+
+        z = Arrays.copyOf(
+                z,
+                newLength);
+
         generations = Arrays.copyOf(
                 generations,
-                capacity);
+                newLength);
+
         present = Arrays.copyOf(
                 present,
-                capacity);
+                newLength);
     }
 
-    private static void requireFinite(
-            double value,
-            String name) {
+    private static void requireId(
+            ObjectId id) {
 
-        if (!Double.isFinite(value)) {
+        if (id == null) {
             throw new IllegalArgumentException(
-                    name + " must be finite");
+                    "id must not be null");
         }
     }
 }

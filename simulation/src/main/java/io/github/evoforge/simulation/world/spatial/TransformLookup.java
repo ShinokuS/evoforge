@@ -6,9 +6,9 @@ public interface TransformLookup {
 
     boolean has(ObjectId id);
 
-    double x(ObjectId id);
+    int x(ObjectId id);
 
-    double y(ObjectId id);
+    int y(ObjectId id);
 
-    double z(ObjectId id);
+    int z(ObjectId id);
 }

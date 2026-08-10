@@ -6,12 +6,12 @@ public final class SpatialSystem {
 
     private final TransformState transforms = new TransformState();
 
-    private final SpatialIndex[] indexes;
+    private final ObjectSpatialIndex[] indexes;
 
     private boolean faulted;
 
     public SpatialSystem(
-            SpatialIndex... indexes) {
+            ObjectSpatialIndex... indexes) {
 
         if (indexes == null) {
             throw new IllegalArgumentException(
@@ -20,7 +20,7 @@ public final class SpatialSystem {
 
         this.indexes = indexes.clone();
 
-        for (SpatialIndex index : this.indexes) {
+        for (ObjectSpatialIndex index : this.indexes) {
             if (index == null) {
                 throw new IllegalArgumentException(
                         "index must not be null");
@@ -38,9 +38,9 @@ public final class SpatialSystem {
 
     public void place(
             ObjectId id,
-            double x,
-            double y,
-            double z) {
+            int x,
+            int y,
+            int z) {
 
         requireHealthy();
 
@@ -76,17 +76,17 @@ public final class SpatialSystem {
 
     public void move(
             ObjectId id,
-            double x,
-            double y,
-            double z) {
+            int x,
+            int y,
+            int z) {
 
         requireHealthy();
 
-        double oldX = transforms.x(id);
+        int oldX = transforms.x(id);
 
-        double oldY = transforms.y(id);
+        int oldY = transforms.y(id);
 
-        double oldZ = transforms.z(id);
+        int oldZ = transforms.z(id);
 
         transforms.move(
                 id,
@@ -129,11 +129,11 @@ public final class SpatialSystem {
 
         requireHealthy();
 
-        double x = transforms.x(id);
+        int x = transforms.x(id);
 
-        double y = transforms.y(id);
+        int y = transforms.y(id);
 
-        double z = transforms.z(id);
+        int z = transforms.z(id);
 
         transforms.remove(id);
 
@@ -164,9 +164,9 @@ public final class SpatialSystem {
     private void rollbackPlace(
             int completedIndexes,
             ObjectId id,
-            double x,
-            double y,
-            double z,
+            int x,
+            int y,
+            int z,
             RuntimeException failure) {
 
         for (int i = completedIndexes - 1; i >= 0; i--) {
@@ -196,12 +196,12 @@ public final class SpatialSystem {
     private void rollbackMove(
             int completedIndexes,
             ObjectId id,
-            double oldX,
-            double oldY,
-            double oldZ,
-            double newX,
-            double newY,
-            double newZ,
+            int oldX,
+            int oldY,
+            int oldZ,
+            int newX,
+            int newY,
+            int newZ,
             RuntimeException failure) {
 
         for (int i = completedIndexes - 1; i >= 0; i--) {
@@ -238,9 +238,9 @@ public final class SpatialSystem {
     private void rollbackRemove(
             int completedIndexes,
             ObjectId id,
-            double x,
-            double y,
-            double z,
+            int x,
+            int y,
+            int z,
             RuntimeException failure) {
 
         for (int i = completedIndexes - 1; i >= 0; i--) {

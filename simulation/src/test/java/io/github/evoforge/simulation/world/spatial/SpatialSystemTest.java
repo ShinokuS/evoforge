@@ -241,6 +241,14 @@ class SpatialSystemTest {
                                 4,
                                 spatial.transforms().x(id));
 
+                assertEquals(
+                                5,
+                                spatial.transforms().y(id));
+
+                assertEquals(
+                                6,
+                                spatial.transforms().z(id));
+
                 spatial.remove(id);
 
                 assertFalse(
@@ -252,7 +260,7 @@ class SpatialSystemTest {
                 assertThrows(
                                 IllegalArgumentException.class,
                                 () -> new SpatialSystem(
-                                                (SpatialIndex[]) null));
+                                                (ObjectSpatialIndex[]) null));
         }
 
         @Test
@@ -285,83 +293,6 @@ class SpatialSystemTest {
                                 IllegalStateException.class,
                                 () -> spatial.remove(
                                                 ObjectId.of(0, 0)));
-        }
-
-        private static final class RecordingIndex
-                        implements SpatialIndex {
-
-                private int addCount;
-                private int moveCount;
-                private int removeCount;
-
-                private ObjectId lastId;
-
-                private double x;
-                private double y;
-                private double z;
-
-                private double oldX;
-                private double oldY;
-                private double oldZ;
-
-                private double newX;
-                private double newY;
-                private double newZ;
-
-                @Override
-                public void add(
-                                ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
-
-                        addCount++;
-
-                        lastId = id;
-
-                        this.x = x;
-                        this.y = y;
-                        this.z = z;
-                }
-
-                @Override
-                public void move(
-                                ObjectId id,
-                                double oldX,
-                                double oldY,
-                                double oldZ,
-                                double newX,
-                                double newY,
-                                double newZ) {
-
-                        moveCount++;
-
-                        lastId = id;
-
-                        this.oldX = oldX;
-                        this.oldY = oldY;
-                        this.oldZ = oldZ;
-
-                        this.newX = newX;
-                        this.newY = newY;
-                        this.newZ = newZ;
-                }
-
-                @Override
-                public void remove(
-                                ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
-
-                        removeCount++;
-
-                        lastId = id;
-
-                        this.x = x;
-                        this.y = y;
-                        this.z = z;
-                }
         }
 
         @Test
@@ -651,7 +582,6 @@ class SpatialSystemTest {
                                 20,
                                 3);
 
-                first.failNextMove = false;
                 first.failMoveNumber = 2;
 
                 IllegalStateException failure = assertThrows(
@@ -682,36 +612,110 @@ class SpatialSystemTest {
                                 spatial.transforms().z(id));
         }
 
-        private static final class FailingRollbackIndex
-                        implements SpatialIndex {
+        private static final class RecordingIndex
+                        implements ObjectSpatialIndex {
 
+                private int addCount;
                 private int moveCount;
-                private int failMoveNumber = -1;
-                private boolean failNextMove;
+                private int removeCount;
+
+                private ObjectId lastId;
+
+                private int x;
+                private int y;
+                private int z;
+
+                private int oldX;
+                private int oldY;
+                private int oldZ;
+
+                private int newX;
+                private int newY;
+                private int newZ;
 
                 @Override
                 public void add(
                                 ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
+                                int x,
+                                int y,
+                                int z) {
+
+                        addCount++;
+
+                        lastId = id;
+
+                        this.x = x;
+                        this.y = y;
+                        this.z = z;
                 }
 
                 @Override
                 public void move(
                                 ObjectId id,
-                                double oldX,
-                                double oldY,
-                                double oldZ,
-                                double newX,
-                                double newY,
-                                double newZ) {
+                                int oldX,
+                                int oldY,
+                                int oldZ,
+                                int newX,
+                                int newY,
+                                int newZ) {
 
                         moveCount++;
 
-                        if (failNextMove
-                                        || moveCount == failMoveNumber) {
+                        lastId = id;
 
+                        this.oldX = oldX;
+                        this.oldY = oldY;
+                        this.oldZ = oldZ;
+
+                        this.newX = newX;
+                        this.newY = newY;
+                        this.newZ = newZ;
+                }
+
+                @Override
+                public void remove(
+                                ObjectId id,
+                                int x,
+                                int y,
+                                int z) {
+
+                        removeCount++;
+
+                        lastId = id;
+
+                        this.x = x;
+                        this.y = y;
+                        this.z = z;
+                }
+        }
+
+        private static final class FailingRollbackIndex
+                        implements ObjectSpatialIndex {
+
+                private int moveCount;
+                private int failMoveNumber = -1;
+
+                @Override
+                public void add(
+                                ObjectId id,
+                                int x,
+                                int y,
+                                int z) {
+                }
+
+                @Override
+                public void move(
+                                ObjectId id,
+                                int oldX,
+                                int oldY,
+                                int oldZ,
+                                int newX,
+                                int newY,
+                                int newZ) {
+
+                        moveCount++;
+
+                        if (moveCount == failMoveNumber) {
                                 throw new IllegalStateException(
                                                 "rollback failure");
                         }
@@ -720,14 +724,14 @@ class SpatialSystemTest {
                 @Override
                 public void remove(
                                 ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
+                                int x,
+                                int y,
+                                int z) {
                 }
         }
 
         private static final class FailingIndex
-                        implements SpatialIndex {
+                        implements ObjectSpatialIndex {
 
                 private boolean failAdd;
                 private boolean failMove;
@@ -736,9 +740,9 @@ class SpatialSystemTest {
                 @Override
                 public void add(
                                 ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
+                                int x,
+                                int y,
+                                int z) {
 
                         if (failAdd) {
                                 throw new IllegalStateException(
@@ -749,12 +753,12 @@ class SpatialSystemTest {
                 @Override
                 public void move(
                                 ObjectId id,
-                                double oldX,
-                                double oldY,
-                                double oldZ,
-                                double newX,
-                                double newY,
-                                double newZ) {
+                                int oldX,
+                                int oldY,
+                                int oldZ,
+                                int newX,
+                                int newY,
+                                int newZ) {
 
                         if (failMove) {
                                 throw new IllegalStateException(
@@ -765,9 +769,9 @@ class SpatialSystemTest {
                 @Override
                 public void remove(
                                 ObjectId id,
-                                double x,
-                                double y,
-                                double z) {
+                                int x,
+                                int y,
+                                int z) {
 
                         if (failRemove) {
                                 throw new IllegalStateException(

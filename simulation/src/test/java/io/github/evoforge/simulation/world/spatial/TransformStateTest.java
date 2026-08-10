@@ -18,23 +18,23 @@ class TransformStateTest {
 
                 state.add(
                                 id,
-                                10.5,
-                                20.25,
-                                3.0);
+                                10,
+                                20,
+                                3);
 
                 assertTrue(
                                 state.has(id));
 
                 assertEquals(
-                                10.5,
+                                10,
                                 state.x(id));
 
                 assertEquals(
-                                20.25,
+                                20,
                                 state.y(id));
 
                 assertEquals(
-                                3.0,
+                                3,
                                 state.z(id));
         }
 
@@ -111,6 +111,14 @@ class TransformStateTest {
                 assertThrows(
                                 IllegalStateException.class,
                                 () -> state.x(id));
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> state.y(id));
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> state.z(id));
         }
 
         @Test
@@ -148,6 +156,61 @@ class TransformStateTest {
                 assertEquals(
                                 30,
                                 state.x(newId));
+
+                assertEquals(
+                                40,
+                                state.y(newId));
+
+                assertEquals(
+                                5,
+                                state.z(newId));
+        }
+
+        @Test
+        void staleGenerationCannotMutateCurrentTransform() {
+                TransformState state = new TransformState();
+
+                ObjectId oldId = ObjectId.of(5, 1);
+
+                ObjectId newId = ObjectId.of(5, 2);
+
+                state.add(
+                                oldId,
+                                10,
+                                20,
+                                0);
+
+                state.remove(oldId);
+
+                state.add(
+                                newId,
+                                30,
+                                40,
+                                5);
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> state.move(
+                                                oldId,
+                                                100,
+                                                200,
+                                                300));
+
+                assertThrows(
+                                IllegalStateException.class,
+                                () -> state.remove(oldId));
+
+                assertEquals(
+                                30,
+                                state.x(newId));
+
+                assertEquals(
+                                40,
+                                state.y(newId));
+
+                assertEquals(
+                                5,
+                                state.z(newId));
         }
 
         @Test
@@ -179,6 +242,31 @@ class TransformStateTest {
         }
 
         @Test
+        void supportsFullIntegerCoordinateRange() {
+                TransformState state = new TransformState();
+
+                ObjectId id = ObjectId.of(0, 0);
+
+                state.add(
+                                id,
+                                Integer.MIN_VALUE,
+                                0,
+                                Integer.MAX_VALUE);
+
+                assertEquals(
+                                Integer.MIN_VALUE,
+                                state.x(id));
+
+                assertEquals(
+                                0,
+                                state.y(id));
+
+                assertEquals(
+                                Integer.MAX_VALUE,
+                                state.z(id));
+        }
+
+        @Test
         void rejectsDuplicateTransform() {
                 TransformState state = new TransformState();
 
@@ -197,56 +285,6 @@ class TransformStateTest {
                                                 4,
                                                 5,
                                                 6));
-        }
-
-        @Test
-        void rejectsNonFiniteCoordinatesOnAdd() {
-                TransformState state = new TransformState();
-
-                assertThrows(
-                                IllegalArgumentException.class,
-                                () -> state.add(
-                                                ObjectId.of(0, 0),
-                                                Double.NaN,
-                                                0,
-                                                0));
-
-                assertThrows(
-                                IllegalArgumentException.class,
-                                () -> state.add(
-                                                ObjectId.of(0, 0),
-                                                0,
-                                                Double.POSITIVE_INFINITY,
-                                                0));
-
-                assertThrows(
-                                IllegalArgumentException.class,
-                                () -> state.add(
-                                                ObjectId.of(0, 0),
-                                                0,
-                                                0,
-                                                Double.NEGATIVE_INFINITY));
-        }
-
-        @Test
-        void rejectsNonFiniteCoordinatesOnMove() {
-                TransformState state = new TransformState();
-
-                ObjectId id = ObjectId.of(0, 0);
-
-                state.add(
-                                id,
-                                1,
-                                2,
-                                3);
-
-                assertThrows(
-                                IllegalArgumentException.class,
-                                () -> state.move(
-                                                id,
-                                                Double.NaN,
-                                                2,
-                                                3));
 
                 assertEquals(
                                 1,

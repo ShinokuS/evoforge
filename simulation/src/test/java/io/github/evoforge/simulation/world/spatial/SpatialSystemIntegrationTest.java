@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.spatial;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.spatial.indexes.UniformGridSpatialIndex;
+import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,12 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SpatialSystemIntegrationTest {
 
         @Test
-        void placeSynchronizesTransformAndGrid() {
-                UniformGridSpatialIndex grid = new UniformGridSpatialIndex(10);
+        void placeSynchronizesTransformAndCellIndex() {
+                CellSpatialIndex index = new CellSpatialIndex();
 
-                UniformGridSpatialIndex.Lookup lookup = grid.lookup();
+                CellSpatialIndex.Lookup lookup = index.lookup();
 
-                SpatialSystem spatial = new SpatialSystem(grid);
+                SpatialSystem spatial = new SpatialSystem(index);
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -46,24 +46,26 @@ class SpatialSystemIntegrationTest {
                 assertEquals(
                                 1,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                15,
+                                                25,
+                                                3));
 
                 assertEquals(
                                 id,
                                 lookup.objectAt(
-                                                1,
-                                                2,
+                                                15,
+                                                25,
+                                                3,
                                                 0));
         }
 
         @Test
-        void moveSynchronizesTransformAndGrid() {
-                UniformGridSpatialIndex grid = new UniformGridSpatialIndex(10);
+        void moveSynchronizesTransformAndCellIndex() {
+                CellSpatialIndex index = new CellSpatialIndex();
 
-                UniformGridSpatialIndex.Lookup lookup = grid.lookup();
+                CellSpatialIndex.Lookup lookup = index.lookup();
 
-                SpatialSystem spatial = new SpatialSystem(grid);
+                SpatialSystem spatial = new SpatialSystem(index);
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -96,78 +98,88 @@ class SpatialSystemIntegrationTest {
                 assertEquals(
                                 0,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                15,
+                                                25,
+                                                3));
 
                 assertEquals(
                                 1,
                                 lookup.objectCount(
-                                                3,
-                                                4));
+                                                35,
+                                                45,
+                                                7));
 
                 assertEquals(
                                 id,
                                 lookup.objectAt(
-                                                3,
-                                                4,
+                                                35,
+                                                45,
+                                                7,
                                                 0));
         }
 
         @Test
-        void moveInsideSameCellKeepsGridMembership() {
-                UniformGridSpatialIndex grid = new UniformGridSpatialIndex(10);
+        void differentZLevelsAreDifferentCells() {
+                CellSpatialIndex index = new CellSpatialIndex();
 
-                UniformGridSpatialIndex.Lookup lookup = grid.lookup();
+                CellSpatialIndex.Lookup lookup = index.lookup();
 
-                SpatialSystem spatial = new SpatialSystem(grid);
+                SpatialSystem spatial = new SpatialSystem(index);
 
-                ObjectId id = ObjectId.of(0, 0);
+                ObjectId lower = ObjectId.of(0, 0);
+
+                ObjectId upper = ObjectId.of(1, 0);
 
                 spatial.place(
-                                id,
-                                11,
-                                21,
+                                lower,
+                                10,
+                                20,
                                 0);
 
-                spatial.move(
-                                id,
-                                19,
-                                29,
-                                5);
-
-                assertEquals(
-                                19,
-                                spatial.transforms().x(id));
-
-                assertEquals(
-                                29,
-                                spatial.transforms().y(id));
-
-                assertEquals(
-                                5,
-                                spatial.transforms().z(id));
+                spatial.place(
+                                upper,
+                                10,
+                                20,
+                                1);
 
                 assertEquals(
                                 1,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                10,
+                                                20,
+                                                0));
 
                 assertEquals(
-                                id,
+                                1,
+                                lookup.objectCount(
+                                                10,
+                                                20,
+                                                1));
+
+                assertEquals(
+                                lower,
                                 lookup.objectAt(
+                                                10,
+                                                20,
+                                                0,
+                                                0));
+
+                assertEquals(
+                                upper,
+                                lookup.objectAt(
+                                                10,
+                                                20,
                                                 1,
-                                                2,
                                                 0));
         }
 
         @Test
-        void removeSynchronizesTransformAndGrid() {
-                UniformGridSpatialIndex grid = new UniformGridSpatialIndex(10);
+        void removeSynchronizesTransformAndCellIndex() {
+                CellSpatialIndex index = new CellSpatialIndex();
 
-                UniformGridSpatialIndex.Lookup lookup = grid.lookup();
+                CellSpatialIndex.Lookup lookup = index.lookup();
 
-                SpatialSystem spatial = new SpatialSystem(grid);
+                SpatialSystem spatial = new SpatialSystem(index);
 
                 ObjectId id = ObjectId.of(0, 0);
 
@@ -185,17 +197,18 @@ class SpatialSystemIntegrationTest {
                 assertEquals(
                                 0,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                15,
+                                                25,
+                                                3));
         }
 
         @Test
         void multipleObjectsRemainSynchronized() {
-                UniformGridSpatialIndex grid = new UniformGridSpatialIndex(10);
+                CellSpatialIndex index = new CellSpatialIndex();
 
-                UniformGridSpatialIndex.Lookup lookup = grid.lookup();
+                CellSpatialIndex.Lookup lookup = index.lookup();
 
-                SpatialSystem spatial = new SpatialSystem(grid);
+                SpatialSystem spatial = new SpatialSystem(index);
 
                 ObjectId first = ObjectId.of(0, 0);
 
@@ -203,52 +216,57 @@ class SpatialSystemIntegrationTest {
 
                 spatial.place(
                                 first,
-                                11,
-                                21,
+                                10,
+                                20,
                                 0);
 
                 spatial.place(
                                 second,
-                                12,
-                                22,
+                                10,
+                                20,
                                 0);
 
                 assertEquals(
                                 2,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                10,
+                                                20,
+                                                0));
 
                 spatial.move(
                                 first,
-                                31,
-                                41,
-                                0);
+                                30,
+                                40,
+                                1);
 
                 assertEquals(
                                 1,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                10,
+                                                20,
+                                                0));
 
                 assertEquals(
                                 second,
                                 lookup.objectAt(
-                                                1,
-                                                2,
+                                                10,
+                                                20,
+                                                0,
                                                 0));
 
                 assertEquals(
                                 1,
                                 lookup.objectCount(
-                                                3,
-                                                4));
+                                                30,
+                                                40,
+                                                1));
 
                 assertEquals(
                                 first,
                                 lookup.objectAt(
-                                                3,
-                                                4,
+                                                30,
+                                                40,
+                                                1,
                                                 0));
 
                 spatial.remove(second);
@@ -259,8 +277,9 @@ class SpatialSystemIntegrationTest {
                 assertEquals(
                                 0,
                                 lookup.objectCount(
-                                                1,
-                                                2));
+                                                10,
+                                                20,
+                                                0));
 
                 assertTrue(
                                 spatial.transforms().has(first));
@@ -268,8 +287,9 @@ class SpatialSystemIntegrationTest {
                 assertEquals(
                                 first,
                                 lookup.objectAt(
-                                                3,
-                                                4,
+                                                30,
+                                                40,
+                                                1,
                                                 0));
         }
 }
