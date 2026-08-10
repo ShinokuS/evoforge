@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.world;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
@@ -10,18 +12,29 @@ public final class World {
 
     private final ObjectRepository objects;
     private final ObjectFactory objectFactory;
+    private final TerrainSystem terrainSystem;
 
-    public World(DefinitionCatalog<ObjectDefinitionId> definitions) {
-        if (definitions == null) {
+    public World(
+            DefinitionCatalog<ObjectDefinitionId> objectDefinitions,
+            TerrainSystem terrainSystem) {
+
+        if (objectDefinitions == null) {
             throw new IllegalArgumentException(
-                    "definitions must not be null");
+                    "objectDefinitions must not be null");
+        }
+
+        if (terrainSystem == null) {
+            throw new IllegalArgumentException(
+                    "terrainSystem must not be null");
         }
 
         objects = new ObjectRepository();
 
         objectFactory = new ObjectFactory(
                 objects,
-                definitions);
+                objectDefinitions);
+
+        this.terrainSystem = terrainSystem;
     }
 
     public ObjectLookup objects() {
@@ -30,5 +43,9 @@ public final class World {
 
     public ObjectFactory objectFactory() {
         return objectFactory;
+    }
+
+    public TerrainLookup terrain() {
+        return terrainSystem.lookup();
     }
 }

@@ -6,6 +6,9 @@ import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinition
 import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitions;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
+import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,7 +52,16 @@ class WorldDefinitionIntegrationTest {
 
         DefinitionRegistry<ObjectDefinitionId> definitions = bootstrap.load(directory);
 
-        World world = new World(definitions);
+        DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
+                new DefinitionRegistry<>(
+                        LandscapeDefinitionId::of,
+                        LandscapeDefinitionId::asInt);
+
+        World world = new World(
+                definitions,
+                new TerrainSystem(
+                        new SparseTerrainStorage(),
+                        landscapeDefinitions));
 
         WorldObject apple = world.objectFactory().create(
                 "core:apple");
