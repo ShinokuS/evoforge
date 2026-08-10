@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.world.definition.DefinitionId;
-import io.github.evoforge.simulation.world.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

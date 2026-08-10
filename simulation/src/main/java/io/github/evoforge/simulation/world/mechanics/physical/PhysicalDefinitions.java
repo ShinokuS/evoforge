@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.physical;
 
-import io.github.evoforge.simulation.world.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionId;
 
 public final class PhysicalDefinitions {
 

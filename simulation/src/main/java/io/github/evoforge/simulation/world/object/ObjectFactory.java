@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.object;
 
-import io.github.evoforge.simulation.world.definition.DefinitionId;
-import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
 
 import java.util.function.BiFunction;
 

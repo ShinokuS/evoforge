@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.physical;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.github.evoforge.simulation.world.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

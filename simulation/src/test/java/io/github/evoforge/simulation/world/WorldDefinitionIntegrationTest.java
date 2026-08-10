@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world;
 
-import io.github.evoforge.simulation.world.definition.DefinitionBootstrap;
-import io.github.evoforge.simulation.world.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionBootstrap;
 import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitionCompiler;
 import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitions;
 import io.github.evoforge.simulation.world.object.WorldObject;
@@ -42,7 +42,7 @@ class WorldDefinitionIntegrationTest {
 
         PhysicalDefinitions physical = new PhysicalDefinitions();
 
-        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+        ObjectDefinitionBootstrap bootstrap = new ObjectDefinitionBootstrap(
                 new PhysicalDefinitionCompiler(
                         physical));
 

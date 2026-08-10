@@ -1,4 +1,9 @@
-package io.github.evoforge.simulation.world.definition;
+package io.github.evoforge.simulation.world.object.definition;
+
+import io.github.evoforge.simulation.definition.DefinitionAspectCompiler;
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionRegistry;
 
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;
@@ -13,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class DefinitionBootstrapTest {
+class ObjectDefinitionBootstrapTest {
 
     @TempDir
     Path directory;
@@ -38,7 +43,7 @@ class DefinitionBootstrapTest {
 
         TestCompiler compiler = new TestCompiler();
 
-        DefinitionBootstrap bootstrap = new DefinitionBootstrap(compiler);
+        ObjectDefinitionBootstrap bootstrap = new ObjectDefinitionBootstrap(compiler);
 
         DefinitionRegistry definitions = bootstrap.load(directory);
 
@@ -54,7 +59,7 @@ class DefinitionBootstrapTest {
     void rejectsNullCompilers() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new DefinitionBootstrap(
+                () -> new ObjectDefinitionBootstrap(
                         (DefinitionAspectCompiler[]) null));
     }
 
@@ -97,7 +102,7 @@ class DefinitionBootstrapTest {
                         """,
                 UTF_8);
 
-        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+        ObjectDefinitionBootstrap bootstrap = new ObjectDefinitionBootstrap(
                 new TestCompiler());
 
         bootstrap.load(directory);
@@ -123,7 +128,7 @@ class DefinitionBootstrapTest {
                         """,
                 UTF_8);
 
-        DefinitionBootstrap bootstrap = new DefinitionBootstrap(
+        ObjectDefinitionBootstrap bootstrap = new ObjectDefinitionBootstrap(
                 new TestCompiler());
 
         assertThrows(

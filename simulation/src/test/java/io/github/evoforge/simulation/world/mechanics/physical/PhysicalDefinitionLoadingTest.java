@@ -1,10 +1,10 @@
 package io.github.evoforge.simulation.world.mechanics.physical;
 
 import com.google.gson.JsonObject;
-import io.github.evoforge.simulation.world.definition.DefinitionCompilerRegistry;
-import io.github.evoforge.simulation.world.definition.DefinitionId;
-import io.github.evoforge.simulation.world.definition.DefinitionLoader;
-import io.github.evoforge.simulation.world.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.definition.DefinitionCompilerRegistry;
+import io.github.evoforge.simulation.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionLoader;
+import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

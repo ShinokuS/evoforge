@@ -3,9 +3,9 @@ package io.github.evoforge.simulation.world.mechanics.physical;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import io.github.evoforge.simulation.world.definition.DefinitionAspectCompiler;
-import io.github.evoforge.simulation.world.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.world.definition.DefinitionId;
+import io.github.evoforge.simulation.definition.DefinitionAspectCompiler;
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.definition.DefinitionId;
 
 public final class PhysicalDefinitionCompiler
         implements DefinitionAspectCompiler {

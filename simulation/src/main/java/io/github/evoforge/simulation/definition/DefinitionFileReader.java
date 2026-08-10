@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.definition;
+package io.github.evoforge.simulation.definition;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

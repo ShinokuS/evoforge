@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.definition;
+package io.github.evoforge.simulation.definition;
 
 import java.util.ArrayList;
 import java.util.HashMap;

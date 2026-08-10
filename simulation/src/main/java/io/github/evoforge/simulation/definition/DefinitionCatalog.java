@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.definition;
+package io.github.evoforge.simulation.definition;
 
 public interface DefinitionCatalog {
     DefinitionId resolve(String key);
