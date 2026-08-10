@@ -240,12 +240,12 @@ final class GeometrySystemTest {
             implements Shape {
 
         @Override
-        public int transitionMask(
+        public long transitionPorts(
                 int relativeX,
                 int relativeY,
                 int relativeZ) {
 
-            return TransitionMask.NONE;
+            return TransitionPorts.NONE;
         }
     }
 
