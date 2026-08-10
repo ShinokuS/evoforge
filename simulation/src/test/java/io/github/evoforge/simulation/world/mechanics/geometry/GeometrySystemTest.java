@@ -238,6 +238,15 @@ final class GeometrySystemTest {
     private record TestShape(
             String name)
             implements Shape {
+
+        @Override
+        public long transitionPorts(
+                int relativeX,
+                int relativeY,
+                int relativeZ) {
+
+            return TransitionPorts.NONE;
+        }
     }
 
     private record Cell(
