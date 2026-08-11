@@ -25,6 +25,9 @@
 - [Geometry System](Geometry-System.md)
 - [Movement System](Movement-System.md)
 
+### Presentation
+- [Minimal Z-level Visualizer](Visualizer.md)
+
 ### Development
 - [Testing Strategy](Testing-Strategy.md)
 - [Development Workflow](Development-Workflow.md)

@@ -2,12 +2,21 @@
 eclipse.project.name = appName + '-core'
 
 dependencies {
+  implementation project(':simulation')
+
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
   api "space.earlygrey:shapedrawer:$shapeDrawerVersion"
+
+  testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+}
+
+test {
+  useJUnitPlatform()
 }
 
 jar {
