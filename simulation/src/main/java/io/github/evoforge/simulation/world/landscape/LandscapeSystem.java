@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainPlacementResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRemovalResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainReplacementResult;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
-import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -36,10 +36,11 @@ public final class LandscapeSystem implements LandscapeMutations {
     }
 
     public static LandscapeSystem create(
+            TerrainStorage storage,
             DefinitionCatalog<LandscapeDefinitionId> definitions) {
 
         TerrainSystem terrain = new TerrainSystem(
-                new SparseTerrainStorage(),
+                storage,
                 definitions);
 
         GeometrySystem geometry = new GeometrySystem(
