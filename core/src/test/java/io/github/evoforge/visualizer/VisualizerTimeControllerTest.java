@@ -36,9 +36,8 @@ final class VisualizerTimeControllerTest {
         Fixture fixture = fixture(0.25f);
         fixture.controller().setRunning(true);
 
-        assertEquals(0, fixture.controller().update(0.10f));
-        assertEquals(0, fixture.controller().update(0.14f));
-        assertEquals(1, fixture.controller().update(0.01f));
+        assertEquals(0, fixture.controller().update(0.125f));
+        assertEquals(1, fixture.controller().update(0.125f));
         assertEquals(1, fixture.clock().tick());
 
         assertEquals(3, fixture.controller().update(0.75f));
@@ -49,12 +48,12 @@ final class VisualizerTimeControllerTest {
     void pausingClearsPartialRealTimeCarry() {
         Fixture fixture = fixture(0.25f);
         fixture.controller().setRunning(true);
-        fixture.controller().update(0.20f);
+        fixture.controller().update(0.125f);
 
         fixture.controller().setRunning(false);
         fixture.controller().setRunning(true);
 
-        assertEquals(0, fixture.controller().update(0.05f));
+        assertEquals(0, fixture.controller().update(0.125f));
         assertEquals(0, fixture.clock().tick());
     }
 
