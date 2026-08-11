@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.spatial.indexes;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
+import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.ObjectSpatialIndex;
 
 import java.util.ArrayList;
@@ -11,18 +12,7 @@ import java.util.Map;
 public final class CellSpatialIndex
         implements ObjectSpatialIndex {
 
-    public interface Lookup {
-
-        int objectCount(
-                int x,
-                int y,
-                int z);
-
-        ObjectId objectAt(
-                int x,
-                int y,
-                int z,
-                int index);
+    public interface Lookup extends CellObjectLookup {
     }
 
     private final Map<CellKey, List<ObjectId>> cells = new HashMap<>();
