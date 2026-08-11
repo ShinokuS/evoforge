@@ -16,9 +16,11 @@ If you are new to the project, read these pages in order:
 6. [Transition Algebra](Transition-Algebra.md)
 7. [Navigation](Navigation.md)
 8. [Control Backbone](Control-Backbone.md)
-9. [Testing Strategy](Testing-Strategy.md)
-10. [Development Workflow](Development-Workflow.md)
-11. [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md)
+9. [Movement System](Movement-System.md)
+10. [Time and Scheduler](Time-and-Scheduler.md)
+11. [Testing Strategy](Testing-Strategy.md)
+12. [Development Workflow](Development-Workflow.md)
+13. [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md)
 
 ## Current architecture at a glance
 
@@ -33,7 +35,13 @@ WORLD
 ├── Objects
 │   ├── ObjectRepository        identity / existence
 │   ├── ObjectFactory           definition-backed creation
-│   └── SpatialSystem           ObjectId -> XYZ
+│   ├── SpatialSystem           authoritative ObjectId -> XYZ
+│   └── MovementSystem          timed adjacent execution
+│            │
+│            ├── NavigationLookup        structural permission
+│            ├── TransitionCostLookup    intrinsic edge price
+│            ├── MovementRate            actor rate
+│            └── ProcessScheduler        delayed completion
 │
 └── Landscape
     ├── LandscapeMutations      coordinated write boundary
@@ -44,15 +52,21 @@ WORLD
              │
              ▼
         NavigationSystem        Shape contributions -> structural edges
+
+TIME
+├── SimulationClock
+├── Scheduler
+├── BoundProcessScheduler
+└── SimulationStepper
 ```
 
 The central design rule is ownership: every mutable authoritative fact has one owner. Shared coordinates do not imply shared storage, and a convenient query does not justify moving domain responsibility into the query layer.
 
 Commands carry external intent into the simulation. Internal processes do not need to turn every mutation into a Command; they may use explicitly granted narrow domain write capabilities.
 
-## Geometry and navigation in one picture
+## Geometry, Navigation, cost and Movement
 
-A terrain `Shape` is anchored at a terrain coordinate and contributes local topology. Navigation composes those contributions without knowing concrete shape types.
+A terrain `Shape` is anchored at a terrain coordinate and contributes local topology. Navigation composes those contributions without knowing concrete Shape types.
 
 ```text
 FullShape        RampShape        FullShape
@@ -70,6 +84,21 @@ resolved = departures & arrivals & ~blocks
 
 The edge itself always goes to one of the 26 immediate XYZ neighbors. The resolver may read supporting geometry farther below the source because the Shape that confirms a destination surface can be anchored below that destination.
 
+Once Navigation says a directed edge exists, `TransitionCostCalculator` prices that edge from both supporting landscape cells, directed Shape traversal factors and grid direction length. Movement then divides that cost by the mover's definition-backed `MovementRate`, preserving fractional timing through per-object carry.
+
+Accepted movement remains discrete and timed:
+
+```text
+MoveStepCommand
+    -> MovementAction starts
+    -> source position remains authoritative
+    -> Scheduler wakes completion later
+    -> transition is revalidated
+    -> SpatialSystem.move commits destination
+```
+
+See [Movement System](Movement-System.md) for the full contract and formulas.
+
 ## Stable documentation layers
 
 The project intentionally keeps three documentation levels:
@@ -82,12 +111,24 @@ The Wiki is generated from `docs/wiki/` in the main repository. Do not edit gene
 
 ## Current project phase
 
-The implemented foundation now includes definitions, object identity, scheduling, discrete object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, directed local Navigation, and the first Control Backbone vertical slice with structured command results and `PlaceTerrainCommand`.
+The implemented foundation now includes definitions, object identity, scheduling, production simulation stepping, discrete object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, directed local Navigation, the Control Backbone, deterministic Scenario fixtures, timed adjacent Movement, and the actor-independent TransitionCost model.
 
-The next major step is the Scenario Harness, followed by basic movement, occupancy, pathfinding, and the first agent vertical slice.
+Movement is now a real Scheduler consumer: an accepted `MoveStepCommand` creates an active action, waits a deterministic number of simulation ticks, revalidates the edge at completion, and commits Spatial only if the transition is still valid.
 
-The project deliberately does not pre-build systems without a consumer. Queued command batching semantics, caches, rich movement costs, actor capability overlays, falling, chunk layouts, and advanced pathfinding remain deferred until real workloads define their requirements.
+The transition-cost layer now includes:
+
+```text
+landscape traversal.cost
+source departure Shape factor
+destination arrival Shape factor
+cardinal / double-diagonal / triple-diagonal grid length
+fixed-point deterministic arithmetic
+```
+
+The next required gameplay milestone is the minimal Z-level debug visualization, followed by Occupancy, Pathfinder, the first agent vertical slice, and world generation.
+
+The project still deliberately avoids speculative systems. Actor-specific surface affinity, early movement cancellation, reactive wake-up on landscape mutation, full Occupancy semantics, `MoveTo`, Pathfinder details, final renderer architecture, world chunks/regions and generation algorithms remain deferred until their real milestone provides concrete requirements.
 
 ## Navigation
 
-Use the sidebar for the full documentation map. The [Glossary](Glossary.md) defines project-specific terms such as *authoritative owner*, *terrain anchor*, *standing position*, *departure*, *arrival*, *block*, and *structural edge*.
+Use the sidebar for the full documentation map. The [Glossary](Glossary.md) defines project-specific terms such as *authoritative owner*, *terrain anchor*, *standing position*, *departure*, *arrival*, *block*, *structural edge*, and related simulation concepts.
