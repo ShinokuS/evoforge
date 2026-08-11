@@ -42,6 +42,28 @@ final class RampNavigationHardeningTest {
     }
 
     @Test
+    void lowerDescentRequiresLowerShape() {
+        TestTerrainLookup terrain =
+                new TestTerrainLookup();
+
+        terrain.add(0, 1, 0);
+        terrain.add(0, 2, 0);
+
+        NavigationLookup navigation =
+                navigation(terrain);
+
+        int ramp =
+                navigation.transitions(0, 1, 1);
+
+        assertFalse(
+                TransitionMask.contains(
+                        ramp,
+                        0,
+                        -1,
+                        -1));
+    }
+
+    @Test
     void upperConnectionRequiresUpperShape() {
         TestTerrainLookup terrain =
                 new TestTerrainLookup();
