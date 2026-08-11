@@ -1,19 +1,22 @@
 # EvoForge Technical Reference
 
-This file describes the current implementation. It may change after ordinary pull requests without changing the semantic architecture in `ARCHITECTURE.md`.
+This file describes the **current implementation**. It may change after ordinary pull requests without changing the stable semantic architecture in `ARCHITECTURE.md`.
 
 Baseline: Java 21, libGDX presentation modules plus a pure-Java `simulation` module.
+
+For the long-form timed movement walkthrough, formulas, invariants and extension guidance, see `docs/wiki/Movement-System.md`.
 
 ## 1. Modules
 
 ```text
-core/        libGDX application layer
+core/        libGDX application/presentation layer
 lwjgl3/      desktop launcher
 simulation/  deterministic simulation/domain code without libGDX
 assets/      definitions and presentation assets
+docs/        architecture, technical reference and long-form Wiki source
 ```
 
-The simulation module is the authoritative architecture target. Presentation must not become the owner of simulation state.
+The `simulation` module is the authoritative architecture target. Presentation must not become the owner of simulation state.
 
 ## 2. Implemented simulation areas
 
@@ -23,7 +26,8 @@ io.github.evoforge.simulation
 ├── control/
 │   ├── core/
 │   ├── sync/
-│   └── terrain/
+│   ├── terrain/
+│   └── movement/
 ├── definition/
 ├── time/
 └── world/
@@ -40,7 +44,9 @@ io.github.evoforge.simulation
     │       └── storage/
     ├── mechanics/
     │   ├── physical/
-    │   └── geometry/
+    │   ├── geometry/
+    │   ├── movement/
+    │   └── traversal/
     └── navigation/
 ```
 
@@ -51,13 +57,15 @@ Future packages are not created merely to reserve names.
 Implemented foundation includes:
 
 - `ObjectId` with slot/generation identity semantics;
-- `WorldObject` as a domain object;
+- `WorldObject` as a small domain object containing identity + definition identity;
 - `ObjectRepository` for existence/identity;
-- read-only object lookup;
-- object creation infrastructure;
+- read-only `ObjectLookup`;
+- `ObjectFactory` for definition-backed creation;
 - object definitions compiled separately from mutable runtime state.
 
 `ObjectRepository` is not used as a generic bag of mechanics.
+
+Movement rate, position, active movement state and timing carry are deliberately **not** fields added to `WorldObject`.
 
 ## 4. Definitions
 
@@ -67,21 +75,159 @@ Current conventions:
 
 - source keys use stable string form such as `namespace:name`;
 - runtime systems use typed ids;
-- runtime ids are not persistence identity;
+- runtime numeric ids are not persistence identity;
 - loaders resolve definitions in deterministic startup flow;
 - mechanics own their own compiled definition data;
 - adding content that uses existing mechanics should normally require data only.
 
-Current assets include separate roots for object and landscape definitions.
+Current roots:
+
+```text
+assets/definitions/object/
+assets/definitions/landscape/
+```
+
+### 4.1 Object `movement` aspect
+
+Current ordinary movement capability is definition-backed:
+
+```json
+{
+  "key": "core:walker",
+  "aspects": {
+    "movement": {
+      "rate": 100
+    }
+  }
+}
+```
+
+Implementation:
+
+```text
+MovementDefinitionCompiler
+    -> MovementDefinitions
+    -> ObjectDefinitionId -> MovementRate
+```
+
+`movement.rate` must be a positive integer measured in transition-cost units per simulation tick.
+
+Absence of the aspect means ordinary self-propelled `MoveStep` capability is unavailable.
+
+### 4.2 Landscape `traversal` aspect
+
+Current actor-independent surface price is landscape-definition data:
+
+```json
+{
+  "key": "core:granite",
+  "aspects": {
+    "traversal": {
+      "cost": 1000
+    }
+  }
+}
+```
+
+Implementation:
+
+```text
+LandscapeTraversalDefinitionCompiler
+    -> LandscapeTraversalDefinitions
+    -> LandscapeDefinitionId -> SurfaceTraversalCost
+```
+
+`traversal.cost` must be a positive integer. Current neutral baseline is `1000` units.
+
+Missing traversal data for terrain participating in an otherwise valid Movement edge is treated as broken definition/bootstrap configuration, not as an ordinary rejection with a hidden fallback price.
+
+### 4.3 Definition data versus runtime state
+
+Current ownership examples:
+
+```text
+MovementRate             -> immutable object-definition data
+SurfaceTraversalCost     -> immutable landscape-definition data
+MovementAction           -> mutable Movement runtime state
+per-object timing carry  -> mutable Movement runtime state
+Spatial XYZ              -> mutable Spatial runtime state
+```
 
 ## 5. Time and scheduling
 
-Implemented:
+Current time package includes:
 
-- `SimulationClock`;
-- Scheduler foundation.
+```text
+SimulationTime
+SimulationClock
+SimulationStepper
+Scheduler
+ScheduledTask
+ScheduledHandler
+HandlerId
+HandlerRegistry
+TaskHandle
+ProcessScheduler
+BoundProcessScheduler
+```
 
-Scheduler is infrastructure for activation/time ordering. Domain mechanics do not become scheduler task types in a central enum.
+### 5.1 Clock/read boundary
+
+`SimulationClock` owns mutable simulation tick state.
+
+`SimulationTime` is the read-only capability exposing `tick()` to infrastructure that must observe time without advancing it.
+
+### 5.2 Scheduler
+
+Scheduler owns activation timing and deterministic routing, not domain semantics.
+
+Each scheduled task conceptually carries:
+
+```text
+when
+HandlerId
+processId
+TaskHandle / stable order identity
+```
+
+One registered `ScheduledHandler` serves an entire domain process family. Movement therefore does not allocate one handler per moving object.
+
+### 5.3 Bound process scheduling
+
+`ProcessScheduler` is the narrow domain-facing capability:
+
+```text
+scheduleAfter(delayTicks, processId)
+```
+
+`BoundProcessScheduler` binds it to:
+
+```text
+SimulationTime
+Scheduler
+one HandlerId
+```
+
+Movement therefore does not receive raw `HandlerId` authority and does not calculate its own absolute completion tick.
+
+### 5.4 Production simulation step
+
+`SimulationStepper` owns current one-tick production order:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+One step performs one Scheduler snapshot dispatch batch. Work newly scheduled by a handler for the current tick is not recursively drained in that same batch.
+
+Scenario `advance()` delegates to this production operation; `advanceTicks(n)` loops over it.
+
+### 5.5 Domain identity versus Scheduler identity
+
+`MovementActionId` and `TaskHandle` remain distinct.
+
+Current Movement has no public early cancellation path, so its narrow `ProcessScheduler` does not expose task handles. A future real cancellation consumer will decide eager Scheduler cancellation versus stale wake-up semantics.
 
 ## 6. Object spatial system
 
@@ -90,10 +236,13 @@ Implemented discrete XYZ object positioning:
 - `TransformState`;
 - `TransformLookup`;
 - `SpatialSystem`;
-- `ObjectSpatialIndex`;
-- `CellSpatialIndex`.
+- `ObjectSpatialIndex` implementations.
 
-Spatial stores positions for WorldObjects only. Terrain does not enter `CellSpatialIndex`.
+Spatial stores positions for WorldObjects only. Terrain does not enter object spatial indexes.
+
+`SpatialSystem.move` is the authoritative mutation used by successful Movement completion and updates transform + registered spatial indexes consistently.
+
+While a timed Movement Action is active, Spatial remains at the source coordinate. There is no second authoritative movement coordinate or fractional position.
 
 ## 7. Landscape terrain
 
@@ -116,7 +265,7 @@ Implemented:
 - `LandscapeMutations` coordinated write boundary;
 - `LandscapeSystem` coordinator over Terrain and Geometry lifecycle.
 
-`TerrainLookup.find(x,y,z)` returns `null` for absent terrain. `contains` is derived from that lookup.
+`TerrainLookup.find(x,y,z)` returns `null` for absent terrain.
 
 `TerrainSystem.place/replace/remove` are result-based. Current world-state conflicts do not throw:
 
@@ -126,24 +275,17 @@ replace absent terrain     -> terrain:terrain_absent
 remove absent terrain      -> terrain:terrain_absent
 ```
 
-Null/unknown definitions remain programming/configuration errors and throw `IllegalArgumentException`.
+Null/unknown definitions remain programming/configuration errors.
 
-`LandscapeSystem` implements `LandscapeMutations` and coordinates terrain lifetime with sparse Geometry overrides:
+`LandscapeSystem` coordinates sparse Geometry override lifecycle:
 
 ```text
-placeTerrain  -> successful placement clears any stale override
+placeTerrain   -> successful placement clears stale override
 replaceTerrain -> successful replacement preserves override
-removeTerrain -> successful removal clears override
+removeTerrain  -> successful removal clears override
 ```
 
-Therefore new terrain without an explicit override resolves to `FullShape.INSTANCE`, and an override does not resurrect after remove/re-place.
-
-Internal producers that require success can express that expectation without comparing concrete enum constants:
-
-```java
-OperationResults.requireAccepted(
-        landscape.placeTerrain(...));
-```
+Therefore new terrain without explicit override resolves to `FullShape.INSTANCE`, and an override does not resurrect after remove/re-place.
 
 The current sparse storage is an implementation, not a final chunk model.
 
@@ -155,18 +297,22 @@ Package:
 world/mechanics/geometry/
 ```
 
-Implemented:
+Implemented core types:
 
-- `Shape`;
-- `FullShape`;
-- `RampShape`;
-- `GeometryLookup`;
-- `GeometryState`;
-- `GeometrySystem`;
-- `TransitionMask`;
-- `TransitionPorts`;
-- `TransitionComposition`;
-- package-private `SolidCellBlocking` shared by solid terrain Shapes.
+```text
+Shape
+FullShape
+RampShape
+GeometryLookup
+GeometryState
+GeometrySystem
+TransitionMask
+TransitionPorts
+TransitionComposition
+SolidCellBlocking
+GridTransitionLength
+ShapeTraversalFactor
+```
 
 ### 8.1 Geometry ownership
 
@@ -186,11 +332,11 @@ GeometryLookup.find(XYZ) -> FullShape.INSTANCE
 
 Only non-default Shape overrides are stored in `GeometryState`.
 
-`GeometrySystem.clearShapeOverride(x,y,z)` is the low-level override-lifecycle operation used by the higher `LandscapeSystem` coordinator. `TerrainSystem` does not depend back on Geometry.
+`GeometrySystem.clearShapeOverride(x,y,z)` is the low-level override-lifecycle operation used by `LandscapeSystem`. `TerrainSystem` does not depend back on Geometry.
 
-### 8.2 Shape API
+### 8.2 Current Shape API
 
-Current public Shape contract:
+Current Shape contract includes topology plus actor-independent directed traversal characteristics:
 
 ```java
 long transitionPorts(
@@ -202,24 +348,71 @@ int transitionBlocks(
         int relativeX,
         int relativeY,
         int relativeZ);
+
+int departureTraversalFactor(
+        int relativeX,
+        int relativeY,
+        int relativeZ,
+        int directionX,
+        int directionY,
+        int directionZ);
+
+int arrivalTraversalFactor(
+        int relativeX,
+        int relativeY,
+        int relativeZ,
+        int directionX,
+        int directionY,
+        int directionZ);
 ```
 
 `transitionBlocks` defaults to no blocks.
 
-Relative coordinates describe the current Navigation source position relative to the Shape terrain coordinate.
+Traversal factors default from the same role ownership exposed by `transitionPorts`:
+
+```text
+owned role -> ShapeTraversalFactor.NEUTRAL = 1000
+not owned  -> ShapeTraversalFactor.NONE    = 0
+```
+
+Relative coordinates describe the Navigation source position relative to the Shape terrain coordinate. Direction arguments describe the directed edge from that source.
 
 Shape has no world lookup and receives no neighboring Shape information.
 
-The current production structural Shapes (`FullShape` and all four primitive `RampShape` orientations) expose one supported navigation position at `anchor + (0,0,1)`. Their role convention is:
+### 8.3 Supported-position role law
+
+Current production structural Shapes (`FullShape` and four primitive cardinal `RampShape` orientations) expose one supported navigation position at:
 
 ```text
-departures -> originate from that supported position
-arrivals   -> only confirm transitions ending at that supported position
+anchor + (0,0,1)
 ```
 
-This is tested as the current structural Shape role contract. It is not intended to forbid a future Shape with a genuinely different supported-position model; such a Shape would require an explicit contract/reviewer decision rather than a type-specific Navigation exception.
+Their role convention is:
 
-### 8.3 TransitionMask
+```text
+departures -> originate from supported position
+arrivals   -> confirm transitions ending at supported position
+```
+
+Traversal-factor ownership follows exactly the same law.
+
+For directed edge `A -> B` with `d = B - A`:
+
+```text
+source support Shape:
+    relative source = (0,0,1)
+    query departure factor for d
+
+destination support Shape:
+    relative source = (0,0,1) - d
+    query arrival factor for d
+```
+
+This is covered by the production Shape role-contract sweep.
+
+The supported-position model is current WORKING geometry, not a promise about every future Shape. If it changes, Navigation read envelope and TransitionCost support lookup must be revised together.
+
+### 8.4 TransitionMask
 
 A structural step is one of the 26 non-center offsets in a `3x3x3` direction neighborhood.
 
@@ -232,62 +425,62 @@ TransitionMask.of(dx,dy,dz)
 TransitionMask.contains(mask,dx,dy,dz)
 ```
 
-### 8.4 TransitionPorts
+### 8.5 GridTransitionLength
 
-Departure and arrival masks are packed into one `long` in two non-overlapping 27-bit regions.
-
-Helpers expose:
+`GridTransitionLength` gives an intrinsic fixed-point length to immediate directions:
 
 ```text
-of(departures, arrivals)
-departuresOnly(mask)
-arrivalsOnly(mask)
-departures(ports)
-arrivals(ports)
+1 changed axis   -> 1000  ~= 1
+a2 changed axes  -> 1414  ~= sqrt(2)
+3 changed axes   -> 1732  ~= sqrt(3)
 ```
 
-### 8.5 Composition
+(The second row means two changed axes; `1414` is the current integer approximation.)
 
-Current structural composition:
+Length belongs to the discrete grid direction, not terrain material and not a concrete Shape.
+
+### 8.6 TransitionPorts and composition
+
+Departure and arrival masks are packed into one `long` in two non-overlapping regions.
+
+Current composition:
 
 ```text
 resolved = departures & arrivals & ~blocks
 ```
 
-Navigation OR-accumulates contributions from all relevant Shape instances before calling `TransitionComposition.resolve`.
+Navigation OR-accumulates contributions from all relevant Shape instances before `TransitionComposition.resolve`.
 
-`resolve` additionally masks the result by `TransitionMask.ALL`, so malformed raw port values cannot expose the center bit or any non-neighbor bit through the public Navigation mask.
+For an external edge, one Shape can provide departure and another independently provide arrival. If either contribution is absent, the edge does not exist.
 
-For an external edge, one Shape can provide the departure and another independently provide the arrival. If either contribution is absent, the edge does not exist. No Shape asks another Shape whether that neighbor exists.
+### 8.7 Solid-cell blocking
 
-### 8.6 Solid-cell blocking
+`FullShape` and `RampShape` represent occupied solid terrain coordinates and share package-private `SolidCellBlocking`.
 
-`FullShape` and `RampShape` both represent occupied solid terrain coordinates. Their common blocking behavior is implemented by package-private `SolidCellBlocking`.
+The occupied terrain anchor is not an ordinary navigation position. Concrete solid Shapes reuse this rule without teaching Navigation their types.
 
-The helper prevents Navigation from treating the occupied terrain coordinate as ordinary traversable space and blocks direct transitions into the solid cell from its local neighborhood. Keeping this rule in Geometry lets concrete solid Shapes reuse it without teaching Navigation about concrete Shape types.
+### 8.8 FullShape behavior
 
-### 8.7 FullShape behavior
-
-`FullShape.INSTANCE` is the default shape for present terrain.
+`FullShape.INSTANCE` is the default Shape for present terrain.
 
 Current behavior includes:
 
-- eight horizontal departure candidates from the supported position directly above the Full coordinate;
-- four cardinal `dz=+1` departure candidates used only when another Shape supplies the matching arrival (for example the lower side of a Ramp);
-- arrivals into the supported top position from neighboring same-level source positions;
-- cardinal downward arrivals from a neighboring position one level higher, needed to independently confirm descent back onto the Full-supported position;
-- strict same-level side/corner blocking;
-- direct blocking of any one-step transition whose destination would enter the occupied Full coordinate, including vertical and diagonal-vertical entry.
+- eight horizontal departure candidates from the supported position;
+- cardinal upward candidates that require independent matching arrivals;
+- arrivals into its supported top position;
+- downward arrivals needed to confirm descent onto a Full-supported position;
+- strict side/corner blocking;
+- blocking transitions whose destination enters the solid Full terrain coordinate.
 
-The extra cardinal-up departure candidates do **not** create free Full-to-Full stairs: in a flat Full-only world no matching arrival exists for those candidate edges, so the resolved topology remains exactly eight horizontal transitions.
+Extra upward departure candidates do not create free Full-to-Full stairs because matching arrivals are absent in ordinary flat Full geometry.
 
-The implementation intentionally does not claim a universal continuous line-intersection model.
+Current traversal factor is neutral for every role FullShape actually owns.
 
-### 8.8 RampShape behavior
+### 8.9 RampShape behavior
 
 `RampShape` is the first production Shape that changes Z through ordinary structural Navigation.
 
-It has four shared immutable orientations:
+Orientations:
 
 ```text
 RampShape.POSITIVE_X
@@ -296,66 +489,22 @@ RampShape.POSITIVE_Y
 RampShape.NEGATIVE_Y
 ```
 
-The sign indicates the direction in which the ramp rises.
+The first production model is deliberately primitive: one solid terrain block with a bidirectional structural passage along one cardinal rise axis, no side entry and no XY-diagonal entry.
 
-The first production model is intentionally primitive: the ramp is a solid terrain block with a linear bidirectional structural passage along one cardinal axis. It has no side entry and no XY-diagonal entry.
-
-For `POSITIVE_Y` with terrain coordinate `(0,1,0)`:
-
-```text
-lower supported position = (0,0,0)
-ramp supported position  = (0,1,1)
-upper supported position = (0,2,1)
-```
-
-When the corresponding neighboring Shapes exist, the resolved structural edges are:
-
-```text
-(0,0,0) <-> (0,1,1) <-> (0,2,1)
-```
-
-Entering from the lower side changes both Y and Z in one immediate-neighbor transition:
+For a positive-Y ramp:
 
 ```text
 lower -> ramp = (0,+1,+1)
 ramp -> lower = (0,-1,-1)
-```
-
-The upper connection is horizontal at the raised level:
-
-```text
 ramp -> upper = (0,+1,0)
 upper -> ramp = (0,-1,0)
 ```
 
-`POSITIVE_X`, `NEGATIVE_X` and `NEGATIVE_Y` are rotations/sign reversals of the same topology.
+Ramp owns neither neighboring surface. Neighbor Shapes independently provide the opposite topology role.
 
-Ramp does not own or assert the existence of either neighboring surface. Its ports are role-separated:
+Consecutive ramps can connect successive Z levels through matching directed roles.
 
-- Ramp arrivals confirm valid entry onto its own supported position;
-- Ramp departures describe valid exits from its own supported position;
-- the neighboring Shape must independently provide the other role for an external edge.
-
-Therefore removing the upper platform removes the upper connection, and removing the lower supporting Shape removes both ascent from that side and descent into the missing lower position. Navigation does not reinterpret either case as falling.
-
-A Ramp can also offer a cardinal `dz=+1` departure toward the next Ramp. A directly consecutive Ramp supplies the matching arrival, allowing a continuous multi-level slope without an artificial Full cell between the ramps. If the next Shape is instead a raised Full platform, only the horizontal upper connection is resolved.
-
-Ramp uses `SolidCellBlocking`, so its terrain anchor is not itself a navigation position and cannot be entered through the solid body.
-
-No generic orientation framework, fractional height model, continuous slope geometry or side movement has been introduced.
-
-### 8.9 Shape extension result
-
-The important extension property still holds:
-
-```text
-new Shape implementation
-    -> existing Shape contract
-    -> existing Transition algebra
-    -> generic NavigationSystem
-```
-
-Production Ramp required a generic refinement of the resolver's local Geometry read envelope, but no concrete Shape type appears in Navigation and no Ramp-specific branch was added there.
+Current Ramp traversal factors are neutral for owned roles. No separate arbitrary uphill/downhill multiplier is implemented; the diagonal/elevation displacement is already represented by `GridTransitionLength`.
 
 ## 9. Navigation
 
@@ -381,14 +530,9 @@ int transitions(
 
 ### 9.1 Resolver
 
-Structural transition directions remain the 26 immediate neighbors:
+Structural directions remain the 26 immediate neighbors.
 
-```text
-dx, dy, dz in [-1,1]
-excluding (0,0,0)
-```
-
-For one source XYZ, Navigation currently examines Geometry in the source-relative read envelope:
+For one source XYZ, Navigation currently examines Geometry in:
 
 ```text
 dx in [-1,1]
@@ -396,11 +540,11 @@ dy in [-1,1]
 dz in [-2,1]
 ```
 
-This is at most 36 Geometry lookups.
+at most 36 Geometry lookups.
 
-The additional lower Z layer is not a longer movement edge. It is required so that for a one-step transition with `dz=-1`, the Shape whose terrain anchor supports the destination position can still contribute the matching arrival. Under the current structural Shape model, a supported position is one cell above its terrain anchor; therefore a destination one Z below the source can be supported by an anchor two Z below the source.
+The extra lower Z layer exists so the Shape whose terrain anchor supports a lower destination can contribute its arrival under the one-supported-position role law. It is not a longer movement edge.
 
-For every Shape found in the read envelope:
+For every Shape in the read envelope:
 
 ```text
 relative source = source XYZ - Shape terrain coordinate
@@ -408,11 +552,7 @@ ports  |= shape.transitionPorts(relative source)
 blocks |= shape.transitionBlocks(relative source)
 ```
 
-Then:
-
-```text
-TransitionComposition.resolve(ports, blocks)
-```
+Then `TransitionComposition.resolve(ports, blocks)` produces the final mask.
 
 No concrete Shape type appears in Navigation logic.
 
@@ -420,21 +560,244 @@ No concrete Shape type appears in Navigation logic.
 
 Navigation edges are directed. A forward transition does not generate its reverse automatically.
 
-Bidirectional Full and Ramp behavior comes from the required roles being independently present for both directed edges.
+Bidirectional Full/Ramp behavior comes from independent role support for both directed edges.
 
 ### 9.3 Current cache status
 
-There is **no persistent Navigation cache** in the current implementation.
+There is **no persistent Navigation cache**.
 
-An earlier primitive open-addressing cache prototype was removed during architecture review because there was no Movement/Pathfinder workload yet to justify its representation, lifecycle or memory policy.
+Current topology queries see current Geometry on the next call and require no manual Navigation invalidation.
 
-Current topology queries always see current Geometry on the next call and therefore require no manual Navigation invalidation.
+Caching may return only after representative Movement/Pathfinder workload measurement.
 
-Caching may return later only after representative workload measurement.
+## 10. Traversal / TransitionCost
 
-## 10. Control Backbone
+Package:
 
-Neutral result infrastructure lives in:
+```text
+world/mechanics/traversal/
+```
+
+Implemented:
+
+```text
+SurfaceTraversalCost
+LandscapeTraversalDefinitions
+LandscapeTraversalDefinitionCompiler
+TransitionCost
+TransitionCostLookup
+TransitionCostCalculator
+```
+
+### 10.1 Scope
+
+TransitionCost prices an **already-valid adjacent directed structural edge**. It does not authorize topology and does not know the moving actor.
+
+Movement calls Navigation first; only an accepted structural direction is passed to `TransitionCostLookup`.
+
+### 10.2 Two-cell formula
+
+For `A -> B`, direction `d`:
+
+```text
+localA = surfaceCost(A) * departureFactor(shapeA, d)
+localB = surfaceCost(B) * arrivalFactor(shapeB, d)
+
+TransitionCost(A -> B)
+    = lengthFactor(d)
+      * average(localA, localB)
+```
+
+Current implementation reads the supporting terrain + Shape under A and B using the current standing-position rule.
+
+The model uses both cells rather than destination-only pricing. For neutral cardinal path `A -> B -> C`:
+
+```text
+cost(A->B) = A/2 + B/2
+cost(B->C) = B/2 + C/2
+```
+
+so interior cell B contributes one full surface cost over the two edges.
+
+### 10.3 Fixed-point arithmetic
+
+Current scales:
+
+```text
+surface neutral cost = 1000
+Shape neutral factor = 1000
+grid length scale    = 1000
+```
+
+The calculator combines positive integer contributions with exact checked arithmetic and performs one deterministic half-up rounding at final `TransitionCost` output.
+
+Movement timing then applies its own per-object carry when converting cost units to ticks. Cost rounding and time rounding are intentionally separate boundaries.
+
+### 10.4 Directed Shape contribution
+
+The source support Shape is queried only for its departure factor. The destination support Shape is queried only for its arrival factor.
+
+A custom/new Shape can override its own positive factor without any `instanceof` branch in the calculator.
+
+Current production Full/Ramp factors are neutral. Tests include custom directed factors proving `cost(A->B)` and `cost(B->A)` may differ.
+
+### 10.5 Actor independence
+
+`TransitionCostCalculator` does not receive `ObjectId`, `MovementRate`, species or locomotion mode.
+
+Different movers therefore see the same intrinsic price ordering today. Actor-specific affinity remains deferred.
+
+Future Pathfinder must consume the same `TransitionCostLookup` semantics.
+
+## 11. Timed Movement
+
+Packages:
+
+```text
+simulation/control/movement/
+world/mechanics/movement/
+```
+
+Implemented Control types:
+
+```text
+MoveStepCommand
+MoveStepResult
+MoveStepHandler
+```
+
+Implemented Movement types:
+
+```text
+MovementRate
+MovementDefinitions
+MovementDefinitionCompiler
+MovementStartResult
+MovementActionId
+MovementAction
+MovementStateStore
+MovementSystem
+MovementActionProcessor
+```
+
+### 11.1 Start semantics
+
+`MoveStepCommand(objectId, destinationXYZ)` means:
+
+```text
+start one timed adjacent movement attempt
+```
+
+It does not mean immediate Spatial mutation.
+
+`MovementSystem.startStep` currently checks:
+
+```text
+object exists
+movement capability exists
+object has Spatial transform
+no active MovementAction for object
+destination is immediate neighbor
+Navigation exposes directed edge
+```
+
+Then it obtains `TransitionCost`, derives duration and creates/schedules the action.
+
+Normal current rejections are structured `MovementStartResult` / `MoveStepResult` outcomes. Unknown trusted runtime ids and broken definitions remain exceptional.
+
+### 11.2 Active action state
+
+`MovementAction` stores:
+
+```text
+MovementActionId
+ObjectId
+source XYZ
+destination XYZ
+```
+
+`MovementStateStore` owns:
+
+```text
+MovementActionId -> active MovementAction
+ObjectId -> active action identity
+ObjectId -> fractional timing carry
+```
+
+Presence in the store means active. Completed/interrupted history is not retained there.
+
+`MovementActionId` is monotonic/non-reused and is distinct from Scheduler `TaskHandle`.
+
+### 11.3 Cost-to-tick timing
+
+For cost `c`, rate `r` and persistent per-object remainder `carry`, timing is mathematically equivalent to:
+
+```text
+total = c + carry
+ticks = floor(total / r)
+carry = total mod r
+```
+
+with minimum:
+
+```text
+ticks >= 1
+```
+
+Implementation avoids unsafe arbitrary-long addition while preserving this result for valid state.
+
+Carry persists across separate actions so per-step rounding does not systematically distort long-run speed.
+
+### 11.4 Scheduled completion
+
+After accepted start:
+
+```text
+Spatial remains at source
+MovementAction remains active
+Scheduler owns one future wake-up
+```
+
+At due tick `MovementActionProcessor` revalidates:
+
+```text
+object still exists
+transform still exists
+object still at recorded source
+Navigation still exposes source -> destination
+```
+
+If valid:
+
+```text
+SpatialSystem.move(objectId, destination)
+```
+
+If invalid, Spatial remains at source.
+
+In both cases the active MovementAction is removed.
+
+### 11.5 Dormant interval
+
+Movement does not poll each active mover every tick.
+
+If terrain/geometry changes during the action, current Movement observes the change only at scheduled completion. Reactive wake-up is not implemented yet.
+
+### 11.6 Current known Movement gaps
+
+- no Occupancy/destination reservation;
+- no early cancellation API;
+- no actor-specific surface affinity;
+- no reactive wake-up on world mutation;
+- no Pathfinder / `MoveTo` route lifecycle;
+- no involuntary falling process;
+- no authoritative interpolation between cells.
+
+The planned first visual/debug view is intentionally allowed to display the discrete source position until completion commit.
+
+## 12. Control Backbone
+
+Neutral result infrastructure:
 
 ```text
 simulation/result/
@@ -442,11 +805,11 @@ simulation/result/
 
 Implemented:
 
-- `OperationResult` with `accepted()` and namespaced `ResultCode`;
-- `ResultCode` validation for `domain:code` form;
-- `OperationResults.requireAccepted(...)` for callers whose own invariant requires success.
+- `OperationResult`;
+- validated namespaced `ResultCode`;
+- `OperationResults.requireAccepted(...)`.
 
-Generic Control lives in:
+Generic Control:
 
 ```text
 simulation/control/core/
@@ -455,35 +818,26 @@ simulation/control/core/
 Implemented:
 
 - `Command<R extends CommandResult>`;
-- `CommandResult` extending the neutral result floor;
+- `CommandResult`;
 - typed `CommandHandler<C,R>`;
 - `CommandDispatcher` with exact runtime-class routing.
 
-`CommandDispatcher` stores registrations directly. Registering a second handler for one concrete command class, dispatching an unregistered class, or receiving a null handler result is an `IllegalStateException` because those are bootstrap/programming failures.
-
-The first delivery implementation is:
+Current delivery:
 
 ```text
 simulation/control/sync/SynchronousCommandGateway
 ```
 
-`submit` dispatches immediately. Handler mutations are visible before it returns.
-
-The first concrete use-case lives in:
+Concrete use-cases:
 
 ```text
-simulation/control/terrain/
+control/terrain/   PlaceTerrainCommand/Result/Handler
+control/movement/  MoveStepCommand/Result/Handler
 ```
 
-and contains:
+Synchronous command delivery means the handler executes before `submit` returns. For timed Movement that handler starts an action but final Spatial mutation occurs later through Scheduler, not through another internal Command.
 
-- `PlaceTerrainCommand`;
-- `PlaceTerrainHandler`;
-- `PlaceTerrainResult`.
-
-The handler adapts `LandscapeMutations.placeTerrain` into the command result. An occupied position is a normal `terrain:position_occupied` rejection and does not modify the existing terrain.
-
-Current dependency policy is executable through `ControlDependencyContractTest`:
+Dependency policy remains executable through `ControlDependencyContractTest`:
 
 ```text
 control/core -> no world imports
@@ -491,140 +845,218 @@ control/sync -> no world imports
 world/*      -> no control imports
 ```
 
-Concrete use-case handlers may import the narrow domain APIs they orchestrate.
+Concrete use-case handlers may import narrow domain APIs.
 
-The current Control implementation deliberately does not include queued delivery, EventBus integration, Movement, long-running Action state, replay storage, or a global rejection enum.
+## 13. Scenario fixture
 
-## 11. Navigation and geometry testing
+The deterministic scenario layer is test-only:
 
-Current coverage includes:
+```text
+ScenarioBuilder
+    -> arrange
+    -> register definitions/capabilities
+    -> place terrain/Shapes/objects
+    -> start()
 
-- null dependency and stable lookup;
+ScenarioHarness
+    -> submit production Commands
+    -> advance production SimulationStepper
+    -> read only public lookups
+```
+
+Current builder can assign:
+
+```text
+landscape traversal cost
+object movement rate
+```
+
+and composes real production:
+
+```text
+Terrain -> Geometry -> Navigation
+Objects -> Spatial
+TransitionCostCalculator
+MovementSystem / MovementActionProcessor
+BoundProcessScheduler -> Scheduler
+SimulationStepper
+CommandDispatcher
+```
+
+The running harness does not expose raw authoritative mutation systems.
+
+## 14. Current testing coverage
+
+### 14.1 Geometry/Navigation
+
+Coverage includes:
+
 - no geometry -> no transitions;
 - generic Shape composition without type knowledge;
-- flat Full neighborhood -> exactly eight resolved horizontal transitions;
-- missing flat destination support;
-- strict side blocking and corner crossing;
-- direct Full blocking for vertical and diagonal-vertical entry;
-- local transition-and-lower-support read envelope (`dx/dy [-1,1]`, `dz [-2,1]`, at most 36 lookups);
-- local arithmetic protection against coordinate wrap at implementation boundaries;
+- flat Full neighborhood -> eight horizontal transitions;
+- missing support behavior;
+- strict side/corner blocking;
+- direct solid-cell blocking;
+- current 36-lookup resolver envelope;
+- coordinate wrap protection;
 - Terrain -> Geometry -> Navigation integration;
-- terrain removal visible on the next query;
-- geometry override visible on the next query;
 - directed edge contract;
-- `RampShape` topology for all four orientations;
-- no side or XY-diagonal Ramp entry;
-- Ramp solid terrain coordinate is not navigable;
-- missing upper Shape -> no upper Ramp connection;
-- missing lower Shape -> neither ascent onto Ramp nor descent into the missing lower position;
-- real lower -> ramp -> upper traversal through Geometry + Navigation;
-- reverse Ramp traversal;
-- directly consecutive ramps connecting successive Z levels;
-- Full blocking of a Ramp ascent when the destination terrain cell is occupied;
-- production structural Shape role-contract sweep for `FullShape` and all four Ramp orientations;
-- occupied-terrain navigation sweep in the Ramp hardening scenario;
-- center-bit sanitization in `TransitionComposition`;
-- seeded randomized comparison against a deliberately simpler reference resolver.
+- all four Ramp orientations;
+- no side/XY-diagonal Ramp entry;
+- missing upper/lower support behavior;
+- real lower -> ramp -> upper traversal and reverse;
+- consecutive ramps;
+- role-contract sweep for production Shapes;
+- center-bit sanitization;
+- seeded randomized comparison against an independent reference resolver.
 
-The randomized reference test samples:
+Traversal-factor role tests additionally assert that production Shape factors are neutral exactly where their corresponding departure/arrival role exists and NONE otherwise.
 
-- synthetic table-driven Shapes;
-- `FullShape.INSTANCE`;
-- all four production `RampShape` instances.
+### 14.2 Control/Landscape
 
-Its mutation radius extends beyond Navigation locality, so distant changes are also checked for non-influence. Failure messages include reproducible seed, mutation step and source XYZ.
+Coverage includes:
 
-Control/landscape coverage now additionally includes:
-
-- structured result semantics for terrain place/replace/remove;
+- structured terrain place/replace/remove results;
 - generic `requireAccepted` expectation handling;
-- coordinated Geometry override cleanup on place/remove and preservation on replace;
-- exact command routing and duplicate/missing-registration failures;
-- generic Control dependency-direction contract;
-- synchronous first placement followed by structured occupied-position rejection without state corruption.
+- Geometry override lifecycle through LandscapeMutations;
+- exact command routing;
+- duplicate/missing registration failures;
+- generic Control dependency direction;
+- PlaceTerrain accepted/rejected integration.
 
-## 12. Coordinate implementation note
+### 14.3 Time/Movement
+
+Coverage includes:
+
+- `SimulationTime` / bound relative scheduling;
+- `SimulationStepper` phase order;
+- exact delayed Movement completion;
+- different MovementRate values;
+- cardinal/diagonal timing;
+- persistent fractional carry;
+- minimum one-tick duration;
+- already-moving rejection;
+- missing movement capability;
+- unavailable structural transition;
+- completion-time revalidation after landscape mutation;
+- `advanceTicks(n)` equivalence to `advance()` repeated n times.
+
+### 14.4 TransitionCost
+
+Coverage includes:
+
+- landscape traversal definition compiler validation/freeze;
+- positive/integer cost validation;
+- two-cell surface average;
+- grid length multiplier;
+- directed source departure + destination arrival factor ownership;
+- different reverse cost from directed factors;
+- missing traversal configuration failure;
+- non-adjacent calculator input rejection;
+- scenario-level proof that surface cost changes authoritative Movement duration;
+- scenario-level proof that non-neutral Shape arrival factor changes authoritative Movement duration.
+
+## 15. Coordinate implementation note
 
 Public coordinates currently use signed `int`.
 
-Tests at `Integer.MIN_VALUE`/`Integer.MAX_VALUE` protect local arithmetic from accidental wrap in the current resolver. They do **not** define the valid dimensions of an EvoForge world.
+Tests at integer boundaries protect local arithmetic from accidental wrap. They do **not** define valid EvoForge world dimensions.
 
-World bounds and any packed internal coordinate key remain undecided.
+World bounds and packed coordinate representations remain undecided.
 
-## 13. Current known gaps
+## 16. Current known gaps
 
-### Unloaded versus absent terrain
+### 16.1 Unloaded versus absent terrain
 
 Current read contracts represent terrain absence with `null`. A future chunk/region model must distinguish true absence from not-loaded/not-generated state if those concepts exist.
 
-### Navigation diagnostics
+### 16.2 Navigation diagnostics
 
-`NavigationLookup.transitions` intentionally returns only a primitive mask. It does not explain why a direction is absent.
+`NavigationLookup.transitions` intentionally returns only a primitive mask. Rich diagnostic explanation remains outside the hot read contract until a real visualizer/Pathfinder debugging consumer requires it.
 
-A future diagnostic/Inspector path may expose departures, arrivals, blocks and contributing geometry if a real Movement/Pathfinder debugging need appears. It is not part of the current hot read contract.
+### 16.3 Occupancy
 
-### Queued/asynchronous command delivery
+Current Movement does not reserve/claim a destination. Multi-agent conflict semantics are intentionally deferred to the Occupancy milestone.
 
-Only immediate synchronous submission exists today. A future queued or asynchronous gateway must define deterministic ordering, queue flush point and within-tick state visibility rather than treating delivery as a performance-only replacement.
+### 16.4 Movement cancellation/reactivity
 
-### Movement and costs
+There is no early cancellation operation and no reactive wake-up on terrain/geometry mutation. Current action discovers invalidated topology during completion revalidation.
 
-Navigation currently represents structural topology only. Actor capabilities, occupancy, movement duration and path cost are not implemented.
+### 16.5 Actor-specific traversal policy
 
-### Falling
+TransitionCost is currently actor-independent. Wheels/stairs, swimming, surface affinity and similar interactions are not implemented.
 
-Production vertical topology exists through `RampShape`, but falling is not represented by Navigation.
+### 16.6 Pathfinder
 
-A missing neighboring Shape produces no ordinary structural edge. Whether falling is later modeled as an involuntary Movement process, a separate traversal rule, or another mechanism is intentionally unresolved until Basic Movement is designed. Pathfinder must not gain free-fall routes merely because vertical coordinates exist.
+There is no Pathfinder or multi-step `MoveTo`. Future Pathfinder must consume Navigation plus the same TransitionCost semantics used by Movement.
 
-### Richer ramp semantics
+### 16.7 Falling
 
-Current Ramp behavior is deliberately narrow:
+Production vertical topology exists through RampShape, but falling is not ordinary Navigation. Missing supporting geometry creates no structural edge. Falling remains a future explicit involuntary mechanic/process.
+
+### 16.8 Richer Shape semantics
+
+Current Ramp remains deliberately narrow:
 
 - one cardinal axis;
-- two-way linear passage;
+- bidirectional linear passage;
 - no side entry;
 - no XY-diagonal entry;
 - no fractional surface state;
 - no general stair/orientation framework.
 
-These may be expanded only when a real consumer needs them.
+### 16.9 Queued/asynchronous command delivery
 
-### Caching
+Only synchronous submission exists. A future queued gateway must define ordering, flush point and within-tick visibility explicitly.
 
-No cache policy is selected. Future profiling should decide whether topology reuse is best represented by no cache, chunk-local arrays, bounded maps or another derived structure.
+### 16.10 Caching
 
-## 14. Determinism work to enforce as systems appear
+No Navigation/TransitionCost cache policy is selected. Future Pathfinder profiling should determine whether any derived cache representation is justified.
 
-The stable architecture requires:
+## 17. Determinism status
 
-- explicit simulation RNG seed/state for authoritative randomness;
-- stable tie-break ordering;
-- no authoritative dependence on `HashMap`/`HashSet` iteration order;
-- validation of background results before authoritative application.
-
-There is not yet a general RNG service because no current mechanic requires authoritative randomness. It should be introduced with the first real random consumer rather than as unused infrastructure.
-
-## 15. Performance watch points
-
-Current Geometry/Terrain sparse implementations use object-keyed maps. `GeometryState.find` and `SparseTerrainStorage.find` may allocate temporary cell keys depending on JVM escape analysis.
-
-Do not replace them preemptively. When Pathfinder creates a representative Navigation workload, measure lookup allocation and throughput first; this is a known profiling target.
-
-The current resolver performs at most 36 local Geometry lookups per source query. This is a deliberate correctness envelope derived from the current supported-position/arrival contract, not a performance target that should be reduced by weakening topology semantics.
-
-## 16. Current roadmap
+Current Movement/TransitionCost implementation adds concrete deterministic rules:
 
 ```text
-DONE  Object/Definition/Scheduler/Spatial foundation
-DONE  Landscape terrain core
-DONE  Geometry foundation and transition algebra
-DONE  Local directed Navigation resolver
-DONE  Architecture/test hardening after external review
-DONE  Production primitive RampShape with real Z transitions
-DONE  Final Ramp/Navigation hardening and documentation alignment
-NOW   Control Backbone core + first PlaceTerrain vertical slice
-NEXT  Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
+fixed-point integer transition-cost arithmetic
+one deterministic final cost rounding boundary
+persistent deterministic movement timing carry
+minimum one-tick movement duration
+stable Scheduler ordering
+production tick semantics through SimulationStepper
+no dependency on renderer FPS for authoritative movement
 ```
 
-Before Basic Movement begins, falling ownership must be decided explicitly. Before Pathfinder optimization begins, Navigation/Terrain/Geometry lookup cost should be measured under representative load.
+A general authoritative RNG service still does not exist because no current mechanic requires randomness. It should arrive with the first real random consumer.
+
+## 18. Performance watch points
+
+Current Geometry/Terrain sparse implementations use object-keyed maps. Lookup allocation and throughput should be measured under representative Pathfinder workload before replacing them preemptively.
+
+Navigation performs at most 36 local Geometry lookups per source query under the current Shape role model.
+
+TransitionCost currently performs direct source/destination support lookups after Navigation has already confirmed the edge; it does not repeat Navigation's 36-cell resolver scan.
+
+Movement schedules completion instead of scanning every mover each tick. Representative active-agent profiling should measure Action/state/Scheduler allocation and queue throughput before introducing specialized DOD storage.
+
+## 19. Current roadmap
+
+```text
+DONE  Object / Definition / Scheduler / Spatial foundation
+DONE  Landscape terrain core
+DONE  Geometry foundation and transition algebra
+DONE  Directed local Navigation
+DONE  Production cardinal RampShape + hardening
+DONE  Control Backbone + PlaceTerrain vertical slice
+DONE  deterministic test-only Scenario fixture
+DONE  Timed Basic Movement + first production SimulationStepper
+DONE  ProcessScheduler / BoundProcessScheduler timed-process binding
+DONE  actor-independent TransitionCost model
+NEXT  minimal Z-level visual/debug view
+      Occupancy
+      Pathfinder
+      first agent vertical slice
+      World generation
+```
+
+Before Occupancy is implemented, destination reservation/conflict semantics must be designed from a real multi-agent scenario. Before Pathfinder optimization, Navigation/Geometry/Terrain/TransitionCost throughput and allocation behavior should be measured under representative route-search load.
