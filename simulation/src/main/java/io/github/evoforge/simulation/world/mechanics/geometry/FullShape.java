@@ -9,8 +9,15 @@ public final class FullShape
     private static final int HORIZONTAL =
             SolidCellBlocking.HORIZONTAL;
 
+    private static final int CARDINAL_UP =
+            TransitionMask.of(-1, 0, 1)
+                    | TransitionMask.of(1, 0, 1)
+                    | TransitionMask.of(0, -1, 1)
+                    | TransitionMask.of(0, 1, 1);
+
     private static final long TOP_PORTS =
-            TransitionPorts.departuresOnly(HORIZONTAL);
+            TransitionPorts.departuresOnly(
+                    HORIZONTAL | CARDINAL_UP);
 
     private FullShape() {
     }
