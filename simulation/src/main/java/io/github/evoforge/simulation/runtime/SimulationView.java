@@ -4,8 +4,8 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
+import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 
 /**
  * Read-only capabilities exposed by a started simulation runtime.
@@ -16,7 +16,7 @@ public record SimulationView(
         TerrainLookup terrain,
         GeometryLookup geometry,
         NavigationLookup navigation,
-        CellSpatialIndex.Lookup cells) {
+        CellObjectLookup cells) {
 
     public SimulationView {
         if (objects == null) {
