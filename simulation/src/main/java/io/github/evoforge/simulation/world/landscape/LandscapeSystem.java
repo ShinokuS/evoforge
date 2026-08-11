@@ -1,11 +1,16 @@
 package io.github.evoforge.simulation.world.landscape;
 
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainPlacementResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRemovalResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainReplacementResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 
 public final class LandscapeSystem implements LandscapeMutations {
 
@@ -28,6 +33,42 @@ public final class LandscapeSystem implements LandscapeMutations {
 
         this.terrain = terrain;
         this.geometry = geometry;
+    }
+
+    public static LandscapeSystem create(
+            DefinitionCatalog<LandscapeDefinitionId> definitions) {
+
+        TerrainSystem terrain = new TerrainSystem(
+                new SparseTerrainStorage(),
+                definitions);
+
+        GeometrySystem geometry = new GeometrySystem(
+                terrain.lookup());
+
+        return new LandscapeSystem(
+                terrain,
+                geometry);
+    }
+
+    public TerrainLookup terrain() {
+        return terrain.lookup();
+    }
+
+    public GeometryLookup geometry() {
+        return geometry.lookup();
+    }
+
+    public void setShape(
+            int x,
+            int y,
+            int z,
+            Shape shape) {
+
+        geometry.setShape(
+                x,
+                y,
+                z,
+                shape);
     }
 
     @Override
