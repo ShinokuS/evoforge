@@ -16,6 +16,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCost;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -113,6 +114,8 @@ final class MovementRevalidationIntegrationTest {
                 spatial.transforms(),
                 navigation.lookup(),
                 movementDefinitions,
+                (fromX, fromY, fromZ, toX, toY, toZ) ->
+                        TransitionCost.of(1000),
                 movementState,
                 new BoundProcessScheduler(
                         clock,
