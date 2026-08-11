@@ -18,6 +18,7 @@ public final class RampShape
     private final long lowerPorts;
     private final long rampPorts;
     private final long upperPorts;
+    private final long higherPorts;
 
     private RampShape(
             int riseX,
@@ -61,15 +62,18 @@ public final class RampShape
                         lowerToRamp);
 
         rampPorts =
-                TransitionPorts.of(
+                TransitionPorts.departuresOnly(
                         rampToLower
                                 | rampToUpper
-                                | rampToRamp,
-                        rampToLower);
+                                | rampToRamp);
 
         upperPorts =
                 TransitionPorts.arrivalsOnly(
                         upperToRamp);
+
+        higherPorts =
+                TransitionPorts.arrivalsOnly(
+                        rampToLower);
     }
 
     @Override
@@ -94,6 +98,12 @@ public final class RampShape
                 && relativeY == riseY
                 && relativeZ == 1) {
             return upperPorts;
+        }
+
+        if (relativeX == riseX
+                && relativeY == riseY
+                && relativeZ == 2) {
+            return higherPorts;
         }
 
         return TransitionPorts.NONE;
