@@ -117,7 +117,28 @@ final class FullShapeTest {
     }
 
     @Test
-    void returnsNoPortsOutsideLocalTopNeighborhood() {
+    void exposesCardinalDownArrivalIntoTopFromHigherNeighbor() {
+        int arrivals =
+                TransitionPorts.arrivals(
+                        FullShape.INSTANCE.transitionPorts(
+                                0,
+                                1,
+                                2));
+
+        assertEquals(
+                1,
+                Integer.bitCount(arrivals));
+
+        assertTrue(
+                TransitionMask.contains(
+                        arrivals,
+                        0,
+                        -1,
+                        -1));
+    }
+
+    @Test
+    void returnsNoPortsOutsideSupportedTopNeighborhood() {
         assertEquals(
                 TransitionPorts.NONE,
                 FullShape.INSTANCE.transitionPorts(
@@ -137,6 +158,13 @@ final class FullShapeTest {
                 FullShape.INSTANCE.transitionPorts(
                         0,
                         0,
+                        2));
+
+        assertEquals(
+                TransitionPorts.NONE,
+                FullShape.INSTANCE.transitionPorts(
+                        1,
+                        1,
                         2));
     }
 
