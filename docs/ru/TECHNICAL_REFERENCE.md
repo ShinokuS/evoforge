@@ -21,6 +21,11 @@ assets/      definitions и presentation assets
 
 ```text
 io.github.evoforge.simulation
+├── result/
+├── control/
+│   ├── core/
+│   ├── sync/
+│   └── terrain/
 ├── definition/
 ├── time/
 └── world/
@@ -30,6 +35,8 @@ io.github.evoforge.simulation
     ├── spatial/
     │   └── indexes/
     ├── landscape/
+    │   ├── LandscapeMutations
+    │   ├── LandscapeSystem
     │   ├── definition/
     │   └── terrain/
     │       └── storage/
@@ -104,9 +111,41 @@ XYZ -> LandscapeDefinitionId | absence
 - `TerrainSystem`;
 - `TerrainLookup`;
 - граница `TerrainStorage`;
-- текущий `SparseTerrainStorage`.
+- текущий `SparseTerrainStorage`;
+- `TerrainPlacementResult`;
+- `TerrainReplacementResult`;
+- `TerrainRemovalResult`;
+- согласованная write boundary `LandscapeMutations`;
+- `LandscapeSystem`, координирующий lifecycle Terrain и Geometry.
 
 `TerrainLookup.find(x,y,z)` возвращает `null` для отсутствующего terrain. `contains` выводится из этого lookup.
+
+`TerrainSystem.place/replace/remove` теперь result-based. Конфликты текущего world state не бросают исключения:
+
+```text
+place в занятую позицию -> terrain:position_occupied
+replace отсутствующего terrain -> terrain:terrain_absent
+remove отсутствующего terrain  -> terrain:terrain_absent
+```
+
+Null/unknown definitions остаются programming/configuration errors и приводят к `IllegalArgumentException`.
+
+`LandscapeSystem` реализует `LandscapeMutations` и согласует lifetime terrain со sparse Geometry overrides:
+
+```text
+placeTerrain   -> успешное размещение очищает возможный stale override
+replaceTerrain -> успешная замена сохраняет override
+removeTerrain  -> успешное удаление очищает override
+```
+
+Поэтому новый terrain без явного override разрешается как `FullShape.INSTANCE`, а старый override не воскресает после remove/re-place.
+
+Внутренние producers, для которых success является обязательным инвариантом, могут выразить это без сравнения concrete enum constants:
+
+```java
+OperationResults.requireAccepted(
+        landscape.placeTerrain(...));
+```
 
 Текущее sparse storage — реализация, а не финальная chunk model.
 
@@ -148,6 +187,8 @@ GeometryLookup.find(XYZ) -> FullShape.INSTANCE
 ```
 
 В `GeometryState` хранятся только нестандартные Shape overrides.
+
+`GeometrySystem.clearShapeOverride(x,y,z)` — низкоуровневая lifecycle-операция override, которую использует находящийся выше `LandscapeSystem`. Обратной зависимости `TerrainSystem -> GeometrySystem` нет.
 
 ### 8.2 Shape API
 
@@ -297,7 +338,7 @@ Ramp не владеет и не утверждает существование
 - Ramp departures описывают корректные выходы из неё;
 - соседний Shape должен независимо предоставить вторую роль для внешнего edge.
 
-Поэтому удаление верхней платформы удаляет верхнее соединение, а удаление нижнего supporting Shape удаляет и ascent с этой стороны, и descent в отсутствующую нижнюю позицию. Navigation не интерпретирует эти случаи как falling.
+Поэтому удаление верхней платформы удаляет верхнее соединение, а удаление нижнего supporting Shape удаляет и ascent с этой стороны, и descent в отсутствующую lower position. Navigation не интерпретирует эти случаи как falling.
 
 Ramp также может предложить cardinal `dz=+1` departure к следующему Ramp. Непосредственно следующий Ramp даёт matching arrival, образуя непрерывный многоуровневый slope без искусственной Full-клетки между ramp. Если следующий Shape — поднятая Full-платформа, разрешается только горизонтальное верхнее соединение.
 
@@ -393,7 +434,70 @@ Navigation edges направленные. Forward transition не создаё�
 
 Caching может вернуться только после измерения репрезентативной нагрузки.
 
-## 10. Тестирование Navigation и Geometry
+## 10. Control Backbone
+
+Нейтральная инфраструктура результатов находится в:
+
+```text
+simulation/result/
+```
+
+Реализованы:
+
+- `OperationResult` с `accepted()` и namespaced `ResultCode`;
+- валидация `ResultCode` в форме `domain:code`;
+- `OperationResults.requireAccepted(...)` для callers, чей собственный инвариант требует success.
+
+Generic Control находится в:
+
+```text
+simulation/control/core/
+```
+
+Реализованы:
+
+- `Command<R extends CommandResult>`;
+- `CommandResult`, расширяющий нейтральный result floor;
+- typed `CommandHandler<C,R>`;
+- `CommandDispatcher` с маршрутизацией по точному runtime class.
+
+`CommandDispatcher` хранит registrations напрямую. Повторная регистрация handler для одного concrete command class, dispatch незарегистрированного класса или null result от handler приводят к `IllegalStateException`, потому что это bootstrap/programming failures.
+
+Первая delivery implementation:
+
+```text
+simulation/control/sync/SynchronousCommandGateway
+```
+
+`submit` выполняет dispatch немедленно. Мутации handler видимы до его возврата.
+
+Первый concrete use-case находится в:
+
+```text
+simulation/control/terrain/
+```
+
+и содержит:
+
+- `PlaceTerrainCommand`;
+- `PlaceTerrainHandler`;
+- `PlaceTerrainResult`.
+
+Handler адаптирует `LandscapeMutations.placeTerrain` в command result. Занятая позиция является обычным rejection `terrain:position_occupied` и не изменяет уже существующий terrain.
+
+Текущая dependency policy исполняется через `ControlDependencyContractTest`:
+
+```text
+control/core -> без world imports
+control/sync -> без world imports
+world/*      -> без control imports
+```
+
+Concrete use-case handlers могут импортировать узкие domain API, которые они оркестрируют.
+
+Текущая Control implementation намеренно пока не включает queued delivery, EventBus integration, Movement, long-running Action state, replay storage или глобальный enum причин отказа.
+
+## 11. Тестирование Navigation и Geometry
 
 Текущее покрытие включает:
 
@@ -432,7 +536,16 @@ Randomized reference test использует:
 
 Mutation radius выходит за locality Navigation, поэтому distant changes также проверяются на отсутствие влияния. Failure messages содержат воспроизводимый seed, mutation step и source XYZ.
 
-## 11. Примечание о координатах
+Дополнительное покрытие Control/Landscape включает:
+
+- structured result semantics для terrain place/replace/remove;
+- generic обработку expectation через `requireAccepted`;
+- согласованную очистку Geometry override при place/remove и сохранение при replace;
+- exact command routing и ошибки duplicate/missing registration;
+- dependency-direction contract generic Control;
+- синхронное первое размещение с последующим structured rejection занятой позиции без повреждения state.
+
+## 12. Примечание о координатах
 
 Публичные координаты сейчас используют signed `int`.
 
@@ -440,23 +553,21 @@ Mutation radius выходит за locality Navigation, поэтому distant 
 
 Границы мира и любой packed internal coordinate key остаются нерешёнными.
 
-## 12. Текущие известные пробелы
-
-### Lifecycle geometry override
-
-Нестандартный Geometry override может остаться в `GeometryState`, если terrain удалить, а затем снова разместить на том же XYZ. Политика remove/re-place ещё не принадлежит lifecycle/orchestration boundary.
-
-Не решать это обратной зависимостью `TerrainSystem -> GeometrySystem`.
+## 13. Текущие известные пробелы
 
 ### Unloaded и absent terrain
 
 Текущие read contracts представляют отсутствие terrain как `null`. Будущая chunk/region model должна различать реальное отсутствие и not-loaded/not-generated state, если эти понятия появятся.
 
-### Диагностика
+### Диагностика Navigation
 
 `NavigationLookup.transitions` намеренно возвращает только primitive mask. Он не объясняет, почему направление отсутствует.
 
 Будущий diagnostic/Inspector path может показывать departures, arrivals, blocks и contributing geometry, если реальная отладка Movement/Pathfinder этого потребует. Это не часть текущего hot read contract.
+
+### Queued/asynchronous command delivery
+
+Сегодня существует только immediate synchronous submission. Будущий queued или asynchronous gateway должен определить детерминированный ordering, момент flush очереди и within-tick state visibility, а не рассматриваться как исключительно performance replacement.
 
 ### Movement и costs
 
@@ -485,7 +596,7 @@ Production vertical topology существует через `RampShape`, но f
 
 Cache policy не выбрана. Будущее профилирование должно определить, лучше ли topology reuse представить отсутствием cache, chunk-local arrays, bounded maps или другой derived structure.
 
-## 13. Детерминизм по мере появления систем
+## 14. Детерминизм по мере появления систем
 
 Стабильная архитектура требует:
 
@@ -496,7 +607,7 @@ Cache policy не выбрана. Будущее профилирование д
 
 Общего RNG service пока нет, потому что текущим механикам не нужна авторитетная случайность. Его следует вводить вместе с первым реальным random consumer, а не как неиспользуемую инфраструктуру.
 
-## 14. Точки контроля производительности
+## 15. Точки контроля производительности
 
 Текущие sparse реализации Geometry/Terrain используют maps с object keys. `GeometryState.find` и `SparseTerrainStorage.find` могут аллоцировать временные cell keys в зависимости от JVM escape analysis.
 
@@ -504,7 +615,7 @@ Cache policy не выбрана. Будущее профилирование д
 
 Текущий resolver выполняет максимум 36 локальных Geometry lookups на source query. Это намеренный correctness envelope, выведенный из текущего supported-position/arrival contract, а не performance target, который следует уменьшать ценой ослабления topology semantics.
 
-## 15. Текущая дорожная карта
+## 16. Текущая дорожная карта
 
 ```text
 DONE  Object/Definition/Scheduler/Spatial foundation
@@ -513,9 +624,9 @@ DONE  Geometry foundation and transition algebra
 DONE  Local directed Navigation resolver
 DONE  Architecture/test hardening after external review
 DONE  Production primitive RampShape with real Z transitions
-NOW   Final Ramp/Navigation hardening and documentation alignment
-NEXT  Control Backbone
-LATER Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
+DONE  Final Ramp/Navigation hardening and documentation alignment
+NOW   Control Backbone core + first PlaceTerrain vertical slice
+NEXT  Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
 ```
 
 До начала Basic Movement необходимо явно решить ownership falling. До оптимизации Pathfinder нужно измерить стоимость lookup в Navigation/Terrain/Geometry под репрезентативной нагрузкой.
