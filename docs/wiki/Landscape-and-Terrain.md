@@ -28,9 +28,80 @@ A future loaded/unloaded distinction may require a richer read result, but that 
 
 ## `TerrainSystem`
 
-`TerrainSystem` is the authoritative mutation owner for terrain content. Consumers read through `TerrainLookup`.
+`TerrainSystem` is the authoritative owner of terrain storage and terrain-specific mutation invariants. Consumers read through `TerrainLookup`.
 
 The system delegates storage to a `TerrainStorage` boundary so chunking/packing can change later without changing ordinary terrain consumers.
+
+Its mutation methods are result-based:
+
+```text
+place occupied position -> POSITION_OCCUPIED
+replace absent terrain  -> TERRAIN_ABSENT
+remove absent terrain   -> TERRAIN_ABSENT
+```
+
+Those are ordinary world-state conflicts. Invalid/null definition ids remain programming/configuration errors and throw.
+
+## `LandscapeMutations`
+
+Terrain and Geometry are separate authoritative owners, but the lifetime of one terrain cell has geometry consequences. The public coordinated write capability is `LandscapeMutations`, currently implemented by `LandscapeSystem`.
+
+```text
+external Command handler ─┐
+world generation ─────────┤
+erosion / internal Action ┤
+                          v
+                 LandscapeMutations
+                    /           \
+             TerrainSystem   GeometrySystem
+```
+
+This makes lifecycle semantics identical for external commands and internal producers without forcing every internal mutation through Command.
+
+Current policy:
+
+```text
+placeTerrain
+    -> create only when empty
+    -> clear stale geometry override
+    -> default geometry becomes FullShape
+
+replaceTerrain
+    -> change existing terrain definition
+    -> preserve geometry override
+
+removeTerrain
+    -> remove terrain
+    -> clear geometry override
+```
+
+A custom Shape therefore belongs to the lifetime of the terrain cell. It does not silently survive remove/re-place at the same XYZ.
+
+## Result handling
+
+Terrain mutation results implement the neutral `OperationResult` contract and expose:
+
+```text
+accepted
+namespaced ResultCode
+```
+
+Examples:
+
+```text
+terrain:placed
+terrain:position_occupied
+terrain:terrain_absent
+```
+
+A caller that expects a possible world-state rejection can inspect the typed result. A deterministic internal producer whose own invariant requires success should express that expectation generically:
+
+```java
+OperationResults.requireAccepted(
+        landscape.placeTerrain(...));
+```
+
+It does not need to compare against concrete success constants such as `PLACED`.
 
 ## `TerrainLookup`
 
@@ -72,16 +143,16 @@ TerrainSystem
 GeometrySystem
 ```
 
-Terrain does not depend on Geometry. This prevents base content storage from accumulating every mechanic layered over terrain.
+Terrain does not depend on Geometry. Cross-owner lifecycle coordination is performed above both systems by `LandscapeSystem`, rather than introducing a reverse `TerrainSystem -> GeometrySystem` dependency.
 
 For present terrain without a geometry override, Geometry returns `FullShape.INSTANCE`. For absent terrain, Geometry returns no Shape.
 
 ## Mutation visibility
 
-Because Geometry and Navigation currently have no persistent cache that hides updates, terrain mutation becomes visible through the read chain on the next query:
+Because Geometry and Navigation currently have no persistent cache that hides updates, landscape mutation becomes visible through the read chain on the next query:
 
 ```text
-Terrain mutation
+Landscape mutation
     ↓
 TerrainLookup
     ↓
@@ -133,4 +204,4 @@ That future distinction must be introduced deliberately because treating unloade
 
 ## Testing
 
-Terrain tests cover placement/removal, lookup semantics, storage behavior, definition ids, and integration into World/Geometry/Navigation. Future region storage must pass the same semantic tests even if the data structure changes completely.
+Terrain/Landscape tests cover structured place/replace/remove results, lookup semantics, storage behavior, definition ids, geometry lifecycle, and integration into World/Geometry/Navigation. Future region storage must pass the same semantic tests even if the data structure changes completely.
