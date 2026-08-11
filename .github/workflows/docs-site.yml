@@ -5,6 +5,8 @@ on:
     paths:
       - "docs/**"
       - "scripts/check-docs-i18n.mjs"
+      - "scripts/stamp-docs-i18n.mjs"
+      - "scripts/stamp-docs-i18n.test.mjs"
       - "scripts/prepare-wiki.mjs"
       - "package.json"
       - "package-lock.json"
@@ -15,6 +17,8 @@ on:
     paths:
       - "docs/**"
       - "scripts/check-docs-i18n.mjs"
+      - "scripts/stamp-docs-i18n.mjs"
+      - "scripts/stamp-docs-i18n.test.mjs"
       - "scripts/prepare-wiki.mjs"
       - "package.json"
       - "package-lock.json"
@@ -49,8 +53,11 @@ jobs:
       - name: Install documentation dependencies
         run: npm ci
 
+      - name: Test documentation i18n tooling
+        run: npm run docs:i18n:test
+
       - name: Check documentation locales
-        run: node scripts/check-docs-i18n.mjs
+        run: npm run docs:i18n:check
 
       - name: Validate multilingual Wiki staging
         run: node scripts/prepare-wiki.mjs /tmp/evoforge-wiki-preview
