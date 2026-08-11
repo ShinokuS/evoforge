@@ -8,7 +8,7 @@ Landscape представляет environmental content, адресуемый �
 XYZ -> LandscapeDefinitionId | absence
 ```
 
-Terrain cell хранит landscape definition identity. Absence означает, что terrain по coordinate отсутствует.
+Terrain cell хранит landscape definition identity. Absence означает, что terrain по этой coordinate отсутствует.
 
 ## Absence — не definition
 
@@ -24,13 +24,84 @@ core:open
 
 Если coordinate имеет `LandscapeDefinitionId`, там действительно существует landscape content.
 
-Будущая loaded/unloaded distinction может потребовать richer read result, но это другое, чем “empty terrain material”.
+Будущая loaded/unloaded distinction может потребовать более богатого read result, но это не то же самое, что вводить «empty terrain material».
 
 ## `TerrainSystem`
 
-`TerrainSystem` — authoritative mutation owner terrain content. Consumers читают через `TerrainLookup`.
+`TerrainSystem` — авторитетный владелец terrain storage и terrain-specific инвариантов мутации. Consumers читают через `TerrainLookup`.
 
-Storage делегируется границе `TerrainStorage`, чтобы chunking/packing позже менялись без изменения ordinary terrain consumers.
+Storage делегируется границе `TerrainStorage`, чтобы chunking/packing позже менялись без изменения обычных terrain consumers.
+
+Mutation methods возвращают structured results:
+
+```text
+place в занятую позицию -> POSITION_OCCUPIED
+replace отсутствующего terrain -> TERRAIN_ABSENT
+remove отсутствующего terrain  -> TERRAIN_ABSENT
+```
+
+Это обычные конфликты world state. Invalid/null definition ids остаются programming/configuration errors и приводят к exception.
+
+## `LandscapeMutations`
+
+Terrain и Geometry — отдельные authoritative owners, но lifetime terrain cell имеет последствия для geometry. Публичная согласованная write-capability — `LandscapeMutations`, текущая реализация — `LandscapeSystem`.
+
+```text
+external Command handler ─┐
+world generation ─────────┤
+erosion / internal Action ┤
+                          v
+                 LandscapeMutations
+                    /           \
+             TerrainSystem   GeometrySystem
+```
+
+Так external commands и внутренние producers получают одинаковую lifecycle-семантику, но внутренние мутации не обязаны искусственно проходить через Command.
+
+Текущая политика:
+
+```text
+placeTerrain
+    -> создаёт terrain только в пустой позиции
+    -> очищает stale geometry override
+    -> default geometry становится FullShape
+
+replaceTerrain
+    -> меняет definition существующего terrain
+    -> сохраняет geometry override
+
+removeTerrain
+    -> удаляет terrain
+    -> очищает geometry override
+```
+
+Custom Shape поэтому принадлежит lifetime terrain cell и не переживает молча remove/re-place в том же XYZ.
+
+## Обработка результатов
+
+Результаты terrain mutations реализуют нейтральный `OperationResult` и предоставляют:
+
+```text
+accepted
+namespaced ResultCode
+```
+
+Примеры:
+
+```text
+terrain:placed
+terrain:position_occupied
+terrain:terrain_absent
+```
+
+Caller, для которого world-state rejection является нормальным, анализирует typed result. Детерминированный внутренний producer, чей собственный инвариант требует success, выражает это абстрактно:
+
+```java
+OperationResults.requireAccepted(
+        landscape.placeTerrain(...));
+```
+
+Ему не нужно сравнивать результат с конкретной success-константой вроде `PLACED`.
 
 ## `TerrainLookup`
 
@@ -72,16 +143,16 @@ TerrainSystem
 GeometrySystem
 ```
 
-Terrain не зависит от Geometry, поэтому base content storage не накапливает все mechanics поверх terrain.
+Terrain не зависит от Geometry. Cross-owner lifecycle coordination выполняет стоящий над обеими системами `LandscapeSystem`, поэтому обратной зависимости `TerrainSystem -> GeometrySystem` не возникает.
 
 Present terrain без override -> `FullShape.INSTANCE`; absent terrain -> no Shape.
 
 ## Видимость мутаций
 
-Поскольку Geometry и Navigation сейчас не имеют persistent cache, terrain mutation видна на следующем query:
+Поскольку Geometry и Navigation сейчас не имеют persistent cache, landscape mutation видна на следующем query:
 
 ```text
-Terrain mutation
+Landscape mutation
     ↓
 TerrainLookup
     ↓
@@ -133,4 +204,4 @@ Distinction вводится явно: трактовать unloaded terrain к�
 
 ## Тестирование
 
-Terrain tests покрывают placement/removal, lookup semantics, storage behavior, definition ids и integration в World/Geometry/Navigation. Будущее region storage должно проходить те же semantic tests независимо от data structure.
+Terrain/Landscape tests покрывают structured results place/replace/remove, lookup semantics, storage behavior, definition ids, geometry lifecycle и integration в World/Geometry/Navigation. Будущее region storage должно проходить те же semantic tests независимо от data structure.
