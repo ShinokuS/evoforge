@@ -110,6 +110,27 @@ final class RampNavigationHardeningTest {
     }
 
     @Test
+    void occupiedTerrainCoordinatesAreNotNavigationPositions() {
+        TestTerrainLookup terrain =
+                solidFloor();
+
+        terrain.add(0, 1, 0);
+
+        NavigationLookup navigation =
+                navigation(terrain);
+
+        for (Cell cell : terrain.cells()) {
+            assertEquals(
+                    TransitionMask.NONE,
+                    navigation.transitions(
+                            cell.x(),
+                            cell.y(),
+                            cell.z()),
+                    "terrain cell is navigable: " + cell);
+        }
+    }
+
+    @Test
     void sideNeighborCannotEnterRampTerrainCoordinate() {
         TestTerrainLookup terrain =
                 solidFloor();
@@ -178,6 +199,10 @@ final class RampNavigationHardeningTest {
 
             terrain.add(
                     new Cell(x, y, z));
+        }
+
+        Set<Cell> cells() {
+            return Set.copyOf(terrain);
         }
 
         @Override
