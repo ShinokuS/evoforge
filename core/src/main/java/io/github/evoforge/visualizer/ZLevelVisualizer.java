@@ -11,8 +11,9 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
-import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.simulation.time.SimulationStepper;
+import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
@@ -21,8 +22,8 @@ import io.github.evoforge.simulation.world.object.WorldObject;
 
 /**
  * Minimal debug presentation of one authoritative navigation Z plane plus the
- * immediately lower plane. No presentation state is written back into the
- * simulation.
+ * immediately lower plane. The renderer receives observation capabilities and
+ * time advancement only; it has no command or domain mutation capability.
  */
 public final class ZLevelVisualizer extends InputAdapter {
 
@@ -56,44 +57,42 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final Color TRANSITION_DOWN =
             new Color(0.96f, 0.55f, 0.28f, 1f);
 
-    private final SimulationRuntime runtime;
     private final SimulationView view;
+    private final SimulationTime simulationTime;
     private final VisualizerTimeController time;
 
-    private final OrthographicCamera camera =
-            new OrthographicCamera();
-    private final ShapeRenderer shapes =
-            new ShapeRenderer();
-    private final SpriteBatch batch =
-            new SpriteBatch();
-    private final BitmapFont font =
-            new BitmapFont();
-    private final Vector3 pick =
-            new Vector3();
+    private final OrthographicCamera camera = new OrthographicCamera();
+    private final ShapeRenderer shapes = new ShapeRenderer();
+    private final SpriteBatch batch = new SpriteBatch();
+    private final BitmapFont font = new BitmapFont();
+    private final Vector3 pick = new Vector3();
 
     private int selectedZ;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
     public ZLevelVisualizer(
-            SimulationRuntime runtime) {
+            SimulationView view,
+            SimulationTime simulationTime,
+            SimulationStepper stepper) {
 
-        if (runtime == null) {
+        if (view == null) {
+            throw new IllegalArgumentException("view must not be null");
+        }
+        if (simulationTime == null) {
             throw new IllegalArgumentException(
-                    "runtime must not be null");
+                    "simulationTime must not be null");
+        }
+        if (stepper == null) {
+            throw new IllegalArgumentException("stepper must not be null");
         }
 
-        this.runtime = runtime;
-        view = runtime.view();
-        time = new VisualizerTimeController(
-                runtime.stepper(),
-                0.25f);
+        this.view = view;
+        this.simulationTime = simulationTime;
+        time = new VisualizerTimeController(stepper, 0.25f);
 
         camera.position.set(0f, 0f, 0f);
-        resize(
-                Gdx.graphics.getWidth(),
-                Gdx.graphics.getHeight());
-
+        resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         Gdx.input.setInputProcessor(this);
     }
 
@@ -111,31 +110,18 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         camera.update();
         shapes.setProjectionMatrix(camera.combined);
-
         VisibleRange range = visibleRange();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawTerrainPlane(
-                range,
-                selectedZ - 1,
-                true);
-        drawTerrainPlane(
-                range,
-                selectedZ,
-                false);
+        drawTerrainPlane(range, selectedZ - 1, true);
+        drawTerrainPlane(range, selectedZ, false);
         drawObjects(range);
         shapes.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawGrid(range);
-        drawRampDirections(
-                range,
-                selectedZ - 1,
-                true);
-        drawRampDirections(
-                range,
-                selectedZ,
-                false);
+        drawRampDirections(range, selectedZ - 1, true);
+        drawRampDirections(range, selectedZ, false);
         drawCellSelection();
         drawTransitionOverlay();
         drawSelectedObject();
@@ -228,32 +214,18 @@ public final class ZLevelVisualizer extends InputAdapter {
             return false;
         }
 
-        pick.set(
-                screenX,
-                screenY,
-                0f);
+        pick.set(screenX, screenY, 0f);
         camera.unproject(pick);
 
         int x = MathUtils.floor(pick.x);
         int y = MathUtils.floor(pick.y);
 
-        selectedCell = new CellSelection(
-                x,
-                y,
-                selectedZ);
+        selectedCell = new CellSelection(x, y, selectedZ);
 
-        int count = view.cells().objectCount(
-                x,
-                y,
-                selectedZ);
-
+        int count = view.cells().objectCount(x, y, selectedZ);
         selectedObject = count == 0
                 ? null
-                : view.cells().objectAt(
-                        x,
-                        y,
-                        selectedZ,
-                        0);
+                : view.cells().objectAt(x, y, selectedZ, 0);
 
         return true;
     }
@@ -261,9 +233,7 @@ public final class ZLevelVisualizer extends InputAdapter {
     private void updateCamera(
             float delta) {
 
-        float distance = PAN_SPEED
-                * camera.zoom
-                * delta;
+        float distance = PAN_SPEED * camera.zoom * delta;
 
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
             camera.position.x -= distance;
@@ -280,10 +250,8 @@ public final class ZLevelVisualizer extends InputAdapter {
     }
 
     private VisibleRange visibleRange() {
-        float halfWidth =
-                camera.viewportWidth * camera.zoom * 0.5f;
-        float halfHeight =
-                camera.viewportHeight * camera.zoom * 0.5f;
+        float halfWidth = camera.viewportWidth * camera.zoom * 0.5f;
+        float halfHeight = camera.viewportHeight * camera.zoom * 0.5f;
 
         return new VisibleRange(
                 MathUtils.floor(camera.position.x - halfWidth) - 1,
@@ -301,27 +269,18 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
-                if (!view.terrain().contains(
-                        x,
-                        y,
-                        terrainZ)) {
+                if (!view.terrain().contains(x, y, terrainZ)) {
                     continue;
                 }
 
-                Shape shape = view.geometry().find(
-                        x,
-                        y,
-                        terrainZ);
-
+                Shape shape = view.geometry().find(x, y, terrainZ);
                 Color base = shape instanceof RampShape
                         ? RAMP
                         : shape == null
                                 ? OTHER_SHAPE
                                 : FULL;
 
-                setLayerColor(
-                        base,
-                        dimmed);
+                setLayerColor(base, dimmed);
                 shapes.rect(
                         x + 0.04f,
                         y + 0.04f,
@@ -336,10 +295,7 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
-                int count = view.cells().objectCount(
-                        x,
-                        y,
-                        selectedZ);
+                int count = view.cells().objectCount(x, y, selectedZ);
 
                 for (int index = 0; index < count; index++) {
                     ObjectId id = view.cells().objectAt(
@@ -381,7 +337,6 @@ public final class ZLevelVisualizer extends InputAdapter {
                     x,
                     range.maxY() + 1f);
         }
-
         for (int y = range.minY(); y <= range.maxY() + 1; y++) {
             shapes.line(
                     range.minX(),
@@ -400,18 +355,13 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
-                Shape shape = view.geometry().find(
-                        x,
-                        y,
-                        terrainZ);
+                Shape shape = view.geometry().find(x, y, terrainZ);
 
                 if (!(shape instanceof RampShape)) {
                     continue;
                 }
 
-                setLayerColor(
-                        RAMP_ARROW,
-                        dimmed);
+                setLayerColor(RAMP_ARROW, dimmed);
 
                 if (shape == RampShape.POSITIVE_X) {
                     drawArrow(x, y, 1, 0, 0.34f);
@@ -455,11 +405,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                     if (dx == 0 && dy == 0 && dz == 0) {
                         continue;
                     }
-                    if (!TransitionMask.contains(
-                            mask,
-                            dx,
-                            dy,
-                            dz)) {
+                    if (!TransitionMask.contains(mask, dx, dy, dz)) {
                         continue;
                     }
 
@@ -469,7 +415,6 @@ public final class ZLevelVisualizer extends InputAdapter {
                                     : dz < 0
                                             ? TRANSITION_DOWN
                                             : TRANSITION_FLAT);
-
                     drawTransitionArrow(
                             selectedCell.x(),
                             selectedCell.y(),
@@ -490,29 +435,14 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         float startX = x + 0.5f;
         float startY = y + 0.5f;
-
-        float length = dx == 0 && dy == 0
-                ? 0.18f
-                : 0.38f;
-
-        float magnitude = (float) Math.sqrt(
-                dx * dx + dy * dy);
-
-        float unitX = magnitude == 0f
-                ? 0f
-                : dx / magnitude;
-        float unitY = magnitude == 0f
-                ? 0f
-                : dy / magnitude;
-
+        float length = dx == 0 && dy == 0 ? 0.18f : 0.38f;
+        float magnitude = (float) Math.sqrt(dx * dx + dy * dy);
+        float unitX = magnitude == 0f ? 0f : dx / magnitude;
+        float unitY = magnitude == 0f ? 0f : dy / magnitude;
         float endX = startX + unitX * length;
         float endY = startY + unitY * length;
 
-        shapes.line(
-                startX,
-                startY,
-                endX,
-                endY);
+        shapes.line(startX, startY, endX, endY);
 
         if (magnitude == 0f) {
             shapes.circle(
@@ -541,11 +471,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         int y = view.transforms().y(selectedObject);
 
         shapes.setColor(SELECTED);
-        shapes.circle(
-                x + 0.5f,
-                y + 0.5f,
-                0.31f,
-                20);
+        shapes.circle(x + 0.5f, y + 0.5f, 0.31f, 20);
     }
 
     private void drawHud() {
@@ -556,18 +482,16 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         font.draw(
                 batch,
-                "tick=" + runtime.time().tick()
+                "tick=" + simulationTime.tick()
                         + "   Z=" + selectedZ
                         + "   " + (time.running() ? "RUN x1" : "PAUSED"),
                 12f,
                 top);
-
         font.draw(
                 batch,
                 "Space run/pause | N single tick | PgUp/PgDn Z | WASD pan | wheel zoom",
                 12f,
                 top - 20f);
-
         font.draw(
                 batch,
                 "standing plane Z=" + selectedZ
@@ -586,8 +510,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                     "cell: (" + selectedCell.x()
                             + ", " + selectedCell.y()
                             + ", " + selectedCell.z()
-                            + ") transitions="
-                            + Integer.bitCount(mask),
+                            + ") transitions=" + Integer.bitCount(mask),
                     12f,
                     top - 66f);
         }
@@ -595,8 +518,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         if (selectedObject != null) {
             WorldObject object = view.objects().get(selectedObject);
 
-            if (object != null
-                    && view.transforms().has(selectedObject)) {
+            if (object != null && view.transforms().has(selectedObject)) {
                 font.draw(
                         batch,
                         "object: " + selectedObject,
@@ -635,17 +557,8 @@ public final class ZLevelVisualizer extends InputAdapter {
         float endX = startX + dx * length;
         float endY = startY + dy * length;
 
-        shapes.line(
-                startX,
-                startY,
-                endX,
-                endY);
-        drawArrowHead(
-                endX,
-                endY,
-                dx,
-                dy,
-                0.11f);
+        shapes.line(startX, startY, endX, endY);
+        drawArrowHead(endX, endY, dx, dy, 0.11f);
     }
 
     private void drawArrowHead(
@@ -657,7 +570,6 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         float perpendicularX = -unitY;
         float perpendicularY = unitX;
-
         float backX = endX - unitX * size;
         float backY = endY - unitY * size;
 
@@ -684,9 +596,9 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         float gray = (base.r + base.g + base.b) / 3f;
         shapes.setColor(
-                (base.r * 0.35f + gray * 0.10f),
-                (base.g * 0.35f + gray * 0.10f),
-                (base.b * 0.35f + gray * 0.10f),
+                base.r * 0.35f + gray * 0.10f,
+                base.g * 0.35f + gray * 0.10f,
+                base.b * 0.35f + gray * 0.10f,
                 1f);
     }
 
