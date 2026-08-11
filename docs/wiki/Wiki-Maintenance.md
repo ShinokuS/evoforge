@@ -73,6 +73,50 @@ Changing an English source without reviewing its Russian counterpart therefore f
 
 The manifest is a freshness guard, not machine translation. Human/agent review is still responsible for semantic quality.
 
+## Explicit translation source stamping
+
+Do not edit Git blob SHAs in `docs/ru/.source-blobs.json` by hand.
+
+After the Russian counterpart has actually been reviewed against the changed English source, stamp only the reviewed documents explicitly:
+
+```text
+npm run docs:i18n:stamp -- wiki/Movement-System.md
+
+npm run docs:i18n:stamp -- \
+  wiki/Movement-System.md \
+  wiki/Adding-a-Mechanic.md \
+  wiki/Glossary.md
+```
+
+Keys are relative to the canonical `docs/` root and intentionally match manifest keys. The stamper:
+
+```text
+requires an explicit list of keys
+requires both English and Russian files to exist
+rejects empty or identical Russian counterparts
+computes the real Git blob SHA of each English source
+updates only the explicitly selected manifest entries
+leaves all unrelated freshness markers unchanged
+```
+
+This is deliberately **not** an automatic “stamp everything changed” command. A recorded SHA is a review acknowledgement, so broad automatic stamping would defeat the freshness guard.
+
+Recommended flow:
+
+```text
+edit canonical English page
+        ↓
+review/update Russian counterpart
+        ↓
+npm run docs:i18n:stamp -- <explicit reviewed keys>
+        ↓
+npm run docs:i18n:check
+        ↓
+PR / CI
+```
+
+The stamping helper itself is covered by Node's built-in test runner through `npm run docs:i18n:test`.
+
 ## One source, multiple publication targets
 
 Markdown files under `docs/` are the source. Publication systems are derived views.
@@ -191,6 +235,7 @@ For documentation pull requests it performs, in order:
 
 ```text
 npm ci
+i18n stamping-tool tests
 translation parity/freshness check
 multilingual Wiki staging validation
 VitePress build of both locales
@@ -205,7 +250,9 @@ npm install
 npm run docs:dev
 npm run docs:build
 npm run docs:preview
-node scripts/check-docs-i18n.mjs
+npm run docs:i18n:test
+npm run docs:i18n:check
+npm run docs:i18n:stamp -- wiki/Movement-System.md
 node scripts/prepare-wiki.mjs wiki-stage
 ```
 
@@ -264,7 +311,7 @@ production change
 + TECHNICAL_REFERENCE.md if implementation changed
 + affected English guide pages
 + corresponding Russian translations
-+ translation source manifest refresh
++ explicit translation source stamping for reviewed pages
 ```
 
 When a pull request changes only internal implementation, the guide may need no update unless it contains implementation-specific material.
@@ -289,6 +336,7 @@ Does it describe implementation as if it were persistence identity?
 Does it introduce a future subsystem that does not exist?
 Are diagrams and terminology consistent between locales?
 Was every affected translation reviewed against the new English source?
+Were only explicitly reviewed pages stamped?
 Does the static site build without broken internal links?
 Does multilingual Wiki staging produce both language graphs?
 ```
