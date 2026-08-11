@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.mechanics.geometry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,39 @@ final class RampShapeTest {
                         1));
     }
 
+    @Test
+    void blocksItsSolidTerrainVolume() {
+        int sideBlocks =
+                RampShape.POSITIVE_Y.transitionBlocks(
+                        1,
+                        0,
+                        0);
+
+        assertTrue(
+                TransitionMask.contains(
+                        sideBlocks,
+                        -1,
+                        0,
+                        0));
+
+        int insideBlocks =
+                RampShape.POSITIVE_Y.transitionBlocks(
+                        0,
+                        0,
+                        0);
+
+        assertEquals(
+                8,
+                Integer.bitCount(insideBlocks));
+
+        assertFalse(
+                TransitionMask.contains(
+                        insideBlocks,
+                        0,
+                        0,
+                        1));
+    }
+
     private static void assertOrientation(
             RampShape shape,
             int riseX,
@@ -75,6 +109,7 @@ final class RampShapeTest {
                         -riseX,
                         -riseY,
                         0),
+                lowerToRamp,
                 lowerToRamp);
 
         int rampToLower =
@@ -94,7 +129,8 @@ final class RampShapeTest {
                         0,
                         0,
                         1),
-                rampToLower | rampToUpper);
+                rampToLower | rampToUpper,
+                rampToLower);
 
         int upperToRamp =
                 TransitionMask.of(
@@ -107,22 +143,21 @@ final class RampShapeTest {
                         riseX,
                         riseY,
                         1),
+                TransitionMask.NONE,
                 upperToRamp);
     }
 
     private static void assertPorts(
             long ports,
-            int expected) {
+            int expectedDepartures,
+            int expectedArrivals) {
 
         assertEquals(
-                expected,
+                expectedDepartures,
                 TransitionPorts.departures(ports));
 
         assertEquals(
-                expected,
+                expectedArrivals,
                 TransitionPorts.arrivals(ports));
-
-        assertTrue(
-                Integer.bitCount(expected) > 0);
     }
 }
