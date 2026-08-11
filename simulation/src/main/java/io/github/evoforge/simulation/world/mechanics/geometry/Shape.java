@@ -34,13 +34,9 @@ public interface Shape {
                         relativeY,
                         relativeZ));
 
-        return TransitionMask.contains(
-                departures,
-                directionX,
-                directionY,
-                directionZ)
-                        ? ShapeTraversalFactor.NEUTRAL
-                        : ShapeTraversalFactor.NONE;
+        return (departures & direction) != 0
+                ? ShapeTraversalFactor.NEUTRAL
+                : ShapeTraversalFactor.NONE;
     }
 
     default int arrivalTraversalFactor(
