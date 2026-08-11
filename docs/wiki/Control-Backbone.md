@@ -37,7 +37,7 @@ SynchronousCommandGateway
        domain write API
 ```
 
-World generation, erosion, an already-running mining process, or another internal mechanic does not need to manufacture Commands merely to call another authoritative system.
+World generation, erosion, an already-running Movement Action, a mining process, or another internal mechanic does not need to manufacture Commands merely to call another authoritative system.
 
 This prevents Control from becoming a message bus where every mutation is hidden behind `ApplySomethingCommand` objects.
 
@@ -57,7 +57,9 @@ public interface OperationResult {
 ```text
 terrain:placed
 terrain:position_occupied
-movement:blocked
+movement:started
+movement:already_moving
+movement:transition_unavailable
 ```
 
 There is no project-wide enum of every possible rejection reason.
@@ -81,9 +83,11 @@ invalid programming/configuration input
 Examples of normal structured rejection:
 
 - terrain position is already occupied;
-- required terrain is absent;
-- a future movement transition is blocked;
-- a future construction attempt lacks support.
+- an object has no ordinary movement capability;
+- an object is not placed;
+- an object already has an active Movement Action;
+- the requested destination is not adjacent;
+- Navigation does not expose the requested directed transition.
 
 Examples of programming/configuration errors:
 
@@ -91,7 +95,8 @@ Examples of programming/configuration errors:
 - no handler registered for a command type;
 - duplicate handler registration;
 - handler returns null;
-- unknown runtime `LandscapeDefinitionId` supplied by calling code.
+- unknown trusted runtime definition/object id supplied by calling code;
+- a valid movement edge reaches broken traversal definition/configuration.
 
 ## Internal expectations
 
@@ -106,7 +111,7 @@ OperationResults.requireAccepted(
         landscape.placeTerrain(...));
 ```
 
-They do not compare against concrete success constants such as `result == PLACED` unless the concrete distinction is actually part of their logic.
+They do not compare against concrete success constants unless the concrete distinction is actually part of their logic.
 
 `requireAccepted` does not change the domain operation contract. It only states that this caller considers any rejection unexpected.
 
@@ -133,32 +138,38 @@ Registration is one handler for one concrete command class.
 
 ```text
 PlaceTerrainCommand.class -> PlaceTerrainHandler
+MoveStepCommand.class     -> MoveStepHandler
 ```
 
-The dispatcher does not search superclasses or interfaces for a "closest" handler.
+The dispatcher does not search superclasses or interfaces for a “closest” handler.
 
 Missing or duplicate registration is a bootstrap/programming error, not a domain rejection.
 
 ## Synchronous delivery semantics
 
-The first delivery implementation is:
+The current delivery implementation is:
 
 ```text
 simulation/control/sync/SynchronousCommandGateway
 ```
 
-`submit(command)` dispatches and executes immediately. Authoritative mutations performed by the handler are visible before `submit` returns.
+`submit(command)` dispatches and executes immediately.
 
-Therefore, for deterministic callers:
+For an immediate operation such as accepted terrain placement, the mutation is visible before `submit` returns.
+
+For a timed operation such as Movement, synchronous **command delivery** does not mean synchronous **domain completion**:
 
 ```text
-command A
-    -> world mutation A becomes visible
-command B
-    -> observes the state after A
+submit(MoveStepCommand)
+    -> immediately validates and starts MovementAction
+    -> returns movement:started
+    -> Spatial position still remains at source
+    -> Scheduler completes the action later in simulation time
 ```
 
-The current deterministic order is the deterministic order of calls.
+This distinction is important. Control delivery determines when intent reaches the domain; the domain determines whether accepted work is immediate or long-lived.
+
+For deterministic callers, submitted command order is still the deterministic order of calls.
 
 Future queued/asynchronous gateways may reuse the same Command, Handler and Dispatcher contracts. They must explicitly define queue flush order and state-visibility semantics; switching delivery policy is not assumed to preserve within-tick visibility automatically.
 
@@ -176,34 +187,115 @@ world.*                   -X-> simulation.control.*
 
 Concrete use-case adapters under `simulation/control/<use-case>/` may import the narrow domain APIs they orchestrate.
 
-For example:
+Current examples:
 
 ```text
 control/terrain/PlaceTerrainHandler
         -> LandscapeMutations
+
+control/movement/MoveStepHandler
+        -> MovementSystem
 ```
 
 The reverse dependency is forbidden.
 
-`ControlDependencyContractTest` enforces these package rules.
+`ControlDependencyContractTest` enforces the generic package rules.
 
 ## Command organization
 
-The command surface is kept discoverable under one architectural root:
+The current command surface is:
 
 ```text
 simulation/control/
 ├── core/
 ├── sync/
 ├── terrain/
-├── movement/       # future
-├── construction/   # future
-└── ...
+│   ├── PlaceTerrainCommand
+│   ├── PlaceTerrainResult
+│   └── PlaceTerrainHandler
+└── movement/
+    ├── MoveStepCommand
+    ├── MoveStepResult
+    └── MoveStepHandler
 ```
 
-Concrete commands are grouped by **intent/use-case**, not necessarily by the authoritative system they mutate.
+Concrete commands are grouped by **intent/use-case**, not necessarily by whichever single authoritative system eventually mutates state.
 
 A future `BuildStructureCommand` belongs to construction even if its handler coordinates Inventory, Objects, Spatial and Landscape.
+
+## Terrain placement vertical slice
+
+`PlaceTerrainCommand` validates the immediate synchronous mutation path:
+
+```text
+PlaceTerrainCommand
+        |
+        v
+PlaceTerrainHandler
+        |
+        v
+LandscapeMutations.placeTerrain
+        |
+        v
+TerrainSystem + Geometry lifecycle
+        |
+        v
+PlaceTerrainResult
+```
+
+Expected behavior:
+
+```text
+first placement into an empty position
+    -> ACCEPTED / terrain:placed
+
+second placement into the same position
+    -> REJECTED / terrain:position_occupied
+    -> original terrain remains unchanged
+```
+
+## Timed Movement vertical slice
+
+`MoveStepCommand` validates that a Command may start a long-lived domain process without turning each internal phase into another Command.
+
+```text
+MoveStepCommand
+        |
+        v
+MoveStepHandler
+        |
+        v
+MovementSystem.startStep
+        |
+        +--> validate capability / adjacency / Navigation
+        +--> TransitionCost -> MovementRate -> duration
+        +--> create MovementAction
+        +--> ProcessScheduler.scheduleAfter(...)
+        |
+        v
+MoveStepResult = movement:started
+
+later, through Scheduler rather than Control:
+
+MovementActionProcessor.complete(processId)
+        |
+        +--> revalidate object/source/Navigation
+        |
+        v
+SpatialSystem.move(...) or interrupt
+```
+
+This slice proves several Control boundaries:
+
+```text
+Command carries external start intent only
+accepted does not imply immediate final mutation
+continuing Action is domain state, not a stream of internal Commands
+Scheduler continuation bypasses CommandDispatcher
+Movement completion mutates authoritative systems through domain APIs
+```
+
+See [Movement System](Movement-System.md) for the complete timing and cost semantics.
 
 ## Landscape mutation boundary
 
@@ -236,39 +328,6 @@ removeTerrain
 
 `LandscapeSystem` coordinates `TerrainSystem` and `GeometrySystem`, so every client of `LandscapeMutations` receives the same lifecycle semantics whether the caller is a Command handler, generator, erosion mechanic, or another internal producer.
 
-## First vertical slice
-
-The first concrete command is `PlaceTerrainCommand`.
-
-```text
-PlaceTerrainCommand
-        |
-        v
-PlaceTerrainHandler
-        |
-        v
-LandscapeMutations.placeTerrain
-        |
-        v
-TerrainSystem + Geometry lifecycle
-        |
-        v
-PlaceTerrainResult
-```
-
-Expected behavior:
-
-```text
-first placement into an empty position
-    -> ACCEPTED / terrain:placed
-
-second placement into the same position
-    -> REJECTED / terrain:position_occupied
-    -> original terrain remains unchanged
-```
-
-This slice validates command routing, structured rejection, immediate synchronous visibility and authoritative domain ownership without introducing Movement, Scheduler coupling, EventBus, or long-running Actions.
-
 ## Extension checklist
 
 When adding a new command:
@@ -281,4 +340,5 @@ When adding a new command:
 6. test accepted and rejected world-state paths;
 7. keep invalid programming/configuration inputs as exceptions;
 8. do not teach `CommandDispatcher` the new domain type;
-9. update architecture/reference documentation when a stable contract changes.
+9. if acceptance starts a long-lived process, keep that process in its domain rather than routing its continuation back through Commands;
+10. update architecture/reference documentation when a stable contract changes.
