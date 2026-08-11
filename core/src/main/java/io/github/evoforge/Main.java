@@ -1,6 +1,7 @@
 package io.github.evoforge;
 
 import com.badlogic.gdx.ApplicationAdapter;
+import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.visualizer.VisualizerDemoWorld;
 import io.github.evoforge.visualizer.ZLevelVisualizer;
 
@@ -11,8 +12,12 @@ public final class Main extends ApplicationAdapter {
 
     @Override
     public void create() {
+        SimulationRuntime runtime = VisualizerDemoWorld.create();
+
         visualizer = new ZLevelVisualizer(
-                VisualizerDemoWorld.create());
+                runtime.view(),
+                runtime.time(),
+                runtime.stepper());
     }
 
     @Override
