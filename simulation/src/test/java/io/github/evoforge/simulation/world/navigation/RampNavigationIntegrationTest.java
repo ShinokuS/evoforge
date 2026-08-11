@@ -92,8 +92,16 @@ final class RampNavigationIntegrationTest {
 
         terrain.add(
                 0,
+                0,
+                -1);
+        terrain.add(
+                0,
                 1,
                 0);
+        terrain.add(
+                0,
+                2,
+                1);
         terrain.add(
                 0,
                 3,
@@ -109,7 +117,7 @@ final class RampNavigationIntegrationTest {
                 RampShape.POSITIVE_Y);
         geometry.setShape(
                 0,
-                3,
+                2,
                 1,
                 RampShape.POSITIVE_Y);
 
@@ -117,24 +125,24 @@ final class RampNavigationIntegrationTest {
                 new NavigationSystem(
                         geometry.lookup()).lookup();
 
-        int middle =
+        int firstRamp =
                 navigation.transitions(
                         0,
-                        2,
+                        1,
                         1);
 
         assertEquals(
                 2,
-                Integer.bitCount(middle));
+                Integer.bitCount(firstRamp));
         assertTrue(
                 TransitionMask.contains(
-                        middle,
+                        firstRamp,
                         0,
                         -1,
-                        0));
+                        -1));
         assertTrue(
                 TransitionMask.contains(
-                        middle,
+                        firstRamp,
                         0,
                         1,
                         1));
@@ -142,9 +150,12 @@ final class RampNavigationIntegrationTest {
         int secondRamp =
                 navigation.transitions(
                         0,
-                        3,
+                        2,
                         2);
 
+        assertEquals(
+                2,
+                Integer.bitCount(secondRamp));
         assertTrue(
                 TransitionMask.contains(
                         secondRamp,
