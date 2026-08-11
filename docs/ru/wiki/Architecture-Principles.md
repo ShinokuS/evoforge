@@ -21,11 +21,11 @@ Read-consumer может объединять данные нескольких 
 
 Это предотвращает типичную ошибку, когда одна концепция хранится в нескольких изменяемых местах и каждая мутация требует ручной синхронизации.
 
-## Узкие read-контракты
+## Узкие read- и write-capabilities
 
-Системы открывают узкие read interfaces вместо изменяемых внутренностей.
+Системы открывают узкие contracts вместо изменяемых внутренностей.
 
-Например:
+Примеры read contracts:
 
 ```text
 ObjectLookup
@@ -35,7 +35,9 @@ GeometryLookup
 NavigationLookup
 ```
 
-Consumer должен зависеть от минимального семантического контракта. Это позволяет менять storage и делает направление зависимостей явным.
+Consumer должен зависеть от минимального семантического контракта. То же правило действует для мутаций: write-capability выдаётся явно и должна оставаться у небольшого обозримого числа владельцев.
+
+`LandscapeMutations` — первая согласованная write-capability. Она находится над Terrain и Geometry, когда одна логическая landscape operation должна сохранить lifecycle-семантику обоих owners, не создавая обратной зависимости одного owner на другой.
 
 ## Общие координаты — адреса, а не владение
 
@@ -70,21 +72,52 @@ Scheduler отвечает, *когда* зарегистрированный ha
 
 Это избегает `object.update(dt)`, где неактивные объекты всё равно расходуют CPU и связаны с global frame cadence.
 
-## Commands выражают намерение
+## Commands выражают внешнее намерение
 
-Player input, AI, scripts, tests и scenarios должны сходиться в один control path:
+Player input, AI, scripts, scenarios и другие внешние controllers сходятся в один control path:
 
 ```text
-Controller
+external controller
     ↓
 Command
     ↓
-handler / action
+delivery / dispatcher
     ↓
-authoritative systems
+handler
+    ↓
+authoritative domain APIs
 ```
 
-Command — намерение. Обычная игровая невозможность — structured rejection, а не JVM exception. Exceptions остаются для нарушений programming/configuration contract.
+Command пересекает external-intent boundary. Это не универсальный внутренний RPC.
+
+После принятия intent продолжающиеся Actions/processes и внутренние producers, например будущие world generation или erosion, могут напрямую вызывать узкие domain APIs. Так ownership остаётся видимым, а каждая внутренняя мутация не превращается в сообщение command bus.
+
+Обычная невозможность из-за world state — structured result, а не JVM exception. Некорректный programming/bootstrap/configuration input остаётся исключением.
+
+Все command results имеют маленький общий observation floor:
+
+```text
+accepted
+namespaced result code
+```
+
+Примеры: `terrain:position_occupied` и будущий `movement:blocked`. Глобального enum всех причин rejection нет.
+
+## Generic Control маршрутизирует, domain решает
+
+Generic Control core знает, как регистрировать, dispatch и наблюдать commands, но не знает семантику terrain, movement или construction.
+
+Закон зависимостей:
+
+```text
+simulation.control.core  -X-> world.*
+simulation.control.sync  -X-> world.*
+world.*                   -X-> simulation.control.*
+```
+
+Concrete use-case handlers в `control/<use-case>/` могут зависеть от узких domain APIs. Обратная dependency запрещена.
+
+Текущий synchronous gateway выполняет command немедленно, поэтому успешная мутация видима до возврата из `submit`. Будущий queued/asynchronous gateway может переиспользовать тот же core, но его ordering и within-tick visibility должны быть определены явно.
 
 ## Events — факты после мутации
 
@@ -116,6 +149,8 @@ existing NavigationSystem
 
 Navigation не распознаёт `FullShape`, `RampShape` или будущие классы по типу.
 
+Та же дисциплина действует в Control: новая concrete command не добавляет domain switch в `CommandDispatcher`; для её exact class регистрируется один handler.
+
 ## Не изобретать abstraction до появления consumer
 
 EvoForge намеренно откладывает:
@@ -128,6 +163,7 @@ actor capability model
 falling semantics
 chunk size
 world bounds
+queued command batching semantics
 multithreading model
 ```
 
@@ -146,6 +182,6 @@ Deferred decision — не отсутствие архитектуры. Это �
 
 ## Тестировать архитектурные законы, а не только примеры
 
-Unit tests должны покрывать конкретное поведение, но самые ценные тесты выражают законы: stale ObjectIds остаются dead, отсутствие terrain означает отсутствие geometry, Shape composition не зависит от порядка, тела terrain не являются обычными navigation positions, structural edges не выходят за 26-neighbor transition space.
+Unit tests должны покрывать конкретное поведение, но самые ценные тесты выражают законы: stale ObjectIds остаются dead, отсутствие terrain означает отсутствие geometry, Shape composition не зависит от порядка, тела terrain не являются обычными navigation positions, structural edges не выходят за 26-neighbor transition space, generic Control не зависит от world domains, а world domains не зависят от Control.
 
 Property/reference tests предпочтительны, когда простая независимая реализация может проверять оптимизированный resolver на множестве детерминированных мутаций.
