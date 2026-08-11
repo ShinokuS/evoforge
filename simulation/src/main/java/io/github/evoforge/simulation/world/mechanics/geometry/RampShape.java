@@ -55,17 +55,13 @@ public final class RampShape
                         lowerToRamp,
                         lowerToRamp);
 
-        int rampTransitions =
-                rampToLower | rampToUpper;
-
         rampPorts =
                 TransitionPorts.of(
-                        rampTransitions,
-                        rampTransitions);
+                        rampToLower | rampToUpper,
+                        rampToLower);
 
         upperPorts =
-                TransitionPorts.of(
-                        upperToRamp,
+                TransitionPorts.arrivalsOnly(
                         upperToRamp);
     }
 
@@ -94,5 +90,17 @@ public final class RampShape
         }
 
         return TransitionPorts.NONE;
+    }
+
+    @Override
+    public int transitionBlocks(
+            int relativeX,
+            int relativeY,
+            int relativeZ) {
+
+        return SolidCellBlocking.transitionBlocks(
+                relativeX,
+                relativeY,
+                relativeZ);
     }
 }
