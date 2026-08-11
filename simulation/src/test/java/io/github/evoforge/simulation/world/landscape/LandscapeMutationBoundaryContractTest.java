@@ -1,7 +1,6 @@
 package io.github.evoforge.simulation.world.landscape;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -77,7 +76,7 @@ final class LandscapeMutationBoundaryContractTest {
             return repositoryRelative;
         }
 
-        assertTrue(false, "cannot locate simulation main Java sources");
-        throw new AssertionError();
+        throw new IllegalStateException(
+                "cannot locate simulation main Java sources");
     }
 }
