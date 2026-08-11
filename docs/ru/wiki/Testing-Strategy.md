@@ -1,10 +1,8 @@
 # Стратегия тестирования
 
-EvoForge относится к тестам как к исполняемой архитектуре. Подсистема не считается завершённой только потому, что работают example scenarios: тесты должны кодировать законы, не позволяющие будущим mechanics незаметно нарушать установленные boundaries.
+EvoForge относится к тестам как к executable architecture. Подсистема не считается завершённой только потому, что работают example scenarios: tests должны кодировать laws, не позволяющие future mechanics незаметно нарушать established boundaries.
 
-## Цели тестирования
-
-Suite решает разные задачи:
+## Цели
 
 ```text
 local correctness
@@ -13,156 +11,240 @@ cross-system integration
 regression protection
 reference/property validation
 boundary safety
+deterministic time/process semantics
 ```
 
-Один стиль тестов не заменяет остальные.
+Один test style не заменяет остальные.
 
 ## Unit tests
 
-Unit tests проверяют одну abstraction изолированно.
+Unit tests проверяют abstraction изолированно.
 
-Примеры:
+Current examples:
 
 ```text
-ObjectId slot/generation representation
+ObjectId slot/generation
 DefinitionId validation
-TransitionMask bit mapping
+MovementDefinitionCompiler
+LandscapeTraversalDefinitionCompiler
+TransitionMask mapping
+GridTransitionLength values
 TransitionPorts packing
 TransitionComposition algebra
-FullShape local topology
+FullShape topology
 RampShape orientation symmetry
-TerrainStorage behavior
+TerrainStorage
+BoundProcessScheduler relative scheduling
+SimulationStepper phase order
 ```
 
-Тест должен быть достаточно точным, чтобы broken local contract был понятен без построения целого World.
+Broken local contract должен быть понятен без построения whole World.
 
 ## Integration tests
 
-Integration tests проверяют ownership boundaries и composition systems.
+Integration tests проверяют ownership boundaries и composition:
 
 ```text
-Definition source -> compiled catalog -> ObjectFactory
+Definition -> compiled catalog -> ObjectFactory
 Terrain -> Geometry
 Geometry -> Navigation
-terrain mutation -> next Navigation query
-Shape pairs -> resolved edges
-SpatialSystem -> reverse CellSpatialIndex
+Navigation-valid edge -> TransitionCost
+TransitionCost + MovementRate -> scheduled duration
+Movement completion -> SpatialSystem.move
+terrain mutation during Movement -> completion revalidation
+SpatialSystem -> object spatial indexes
 ```
 
-Особенно ценны случаи, где две systems должны оставаться ignorant concrete implementation друг друга.
+Особенно ценны boundaries, где две systems должны оставаться ignorant concrete implementation друг друга.
 
-## Тесты архитектурных инвариантов
+## Scenario vertical slices
 
-Некоторые behaviors важнее отдельных examples и должны быть reusable invariants.
+Test-only Scenario fixture использует real production paths, но не становится вторым runtime.
 
-Текущие/планируемые:
+Arrange выполняется через controlled setup; после `start()` tests submit-ят production Commands, advance-ят production `SimulationStepper` и читают read-only state.
+
+Current Movement scenarios доказывают:
 
 ```text
-stale ObjectId never resolves to a reused object
-terrain absence never exposes default Full geometry
-solid terrain cells are not normal navigation positions
-Shape role contributions obey the current standing-position contract
-Navigation never emits the center direction
-Navigation never emits directions outside the 26-neighbor mask
-composition is independent of Shape processing order
-missing endpoint support removes the corresponding structural edge
+MoveStepCommand accepted -> action starts, position unchanged
+position changes exactly on completion tick
+different MovementRate -> different completion time
+diagonal length changes duration
+fractional carry persists across steps
+second movement while active rejected
+missing movement capability rejected
+invalid structural edge rejected
+surface traversal cost changes authoritative duration
+Shape traversal factor changes authoritative duration
+advanceTicks(N) == N calls to advance()
 ```
 
-Цель — ловить целый класс ошибок, а не воспроизводить один bug.
+Scenario Harness не должен раскрывать raw runtime mutators ради удобства одного test. Если after-start mutation нужна для focused boundary test, используется отдельный integration fixture с real domain capability.
 
-## Ramp hardening scenarios
+## Architectural invariant tests
 
-Ramp тестируется через полные topology scenarios, потому что role bugs легко пропустить в local Shape tests.
+Reusable laws:
+
+```text
+stale ObjectId never resolves to reused object
+terrain absence never exposes default Full geometry
+solid terrain cells are not normal navigation positions
+Shape topology roles obey standing-position contract
+Shape traversal factor ownership matches topology roles
+Navigation never emits center/out-of-neighborhood direction
+composition independent of Shape processing order
+missing endpoint support removes edge
+at most one ordinary MovementAction active per object
+Movement never commits Spatial before scheduled completion
+```
+
+Цель — ловить class of bugs, а не один исторический case.
+
+## TransitionCost tests
+
+Cost model тестируется по независимым contributions и вместе:
+
+```text
+surface A=1000, B=1600 -> cardinal 1300
+neutral double diagonal -> 1414
+source departure + destination arrival applied independently
+reverse directed edge may have another cost
+missing traversal definition -> loud configuration error
+non-adjacent input rejected
+```
+
+Custom test Shape доказывает extensibility без concrete-type branch в production calculator.
+
+Production Shape role sweep проверяет, что `FullShape` и все cardinal `RampShape` дают NEUTRAL factor ровно там, где соответствующий port-role существует, и NONE в остальных местах.
+
+Это фиксирует единую coordinate/role semantics topology и cost.
+
+## Movement timing tests
+
+Per-step `ceil` не используется. Tests проверяют persistent carry на rate, который не делит cost нацело.
+
+Пример:
+
+```text
+cost = 1000
+rate = 300
+steps = 3, 3, 4 ticks
+```
+
+Simulation time discrete, поэтому individual step не обязан иметь fractional duration. Contract — deterministic long-run precision + minimum one tick.
+
+## Completion revalidation
+
+Dedicated integration test:
+
+```text
+start A -> B
+remove support making edge valid
+advance until due tick
+MovementActionProcessor revalidates
+Navigation no longer exposes edge
+Spatial remains A
+action removed
+```
+
+Это доказывает current semantics: нет immediate reactive wake-up, но и нет stale blind commit.
+
+## Ramp hardening
 
 ```text
 lower Full <-> Ramp <-> upper Full
-missing upper Full -> no upper edge
-missing lower Full -> no lower ascent or descent edge
-consecutive Ramp chain
+missing upper -> no upper edge
+missing lower -> no lower ascent/descent
+consecutive ramps
 side entry blocked
-Ramp terrain body non-navigable
-Full occupying a transition destination blocks ascent
+Ramp body non-navigable
+occupied destination blocks ascent
 ```
 
-Reverse traversal проверяется независимо; bidirectionality не предполагается из forward edge.
+Reverse traversal проверяется отдельно.
 
-## Reference resolver tests
+Current Ramp traversal factor neutral; elevation price приходит из `GridTransitionLength`. Future intrinsic ramp factor потребует отдельных directed factor tests.
 
-`NavigationReferencePropertyTest` сравнивает production resolver с намеренно более простой реализацией на deterministic randomized geometry mutations.
+## Reference resolver
 
-Reference implementation не должна копировать optimized loop line-for-line. Её ценность в независимости: одинаковая structural mistake по одной причине создаёт false confidence.
+`NavigationReferencePropertyTest` сравнивает production resolver с intentionally simpler independent implementation на deterministic randomized mutations.
 
-Reference test включает:
+Samples:
 
 ```text
 FullShape
-all four RampShape orientations
+all Ramp orientations
 synthetic table-driven Shapes
-random departure masks
-random arrival masks
-random block masks
+random departure/arrival/block masks
 near and distant mutations
 ```
 
-Fixed seed делает failure reproducible; message содержит seed, mutation step и source XYZ.
+Fixed seed делает failures reproducible.
 
-## Deterministic tests
+## Determinism
 
-Randomized tests всё равно должны быть deterministic: explicit seeds и stable iteration/tie-breaking. Тест, который “обычно проходит”, не является доказательством deterministic simulation.
+Randomized tests используют explicit seeds/stable ordering.
+
+Для timed mechanics:
+
+```text
+same initial state
++ same commands
++ same simulation ticks
+= same authoritative result
+```
+
+Caller batching (`advanceTicks` vs repeated `advance`) не меняет semantics. Presentation FPS отсутствует из authoritative tests.
 
 ## Negative-space tests
 
-Нужно проверять не только существующее, но и то, чего **не должно** быть:
+Нужно проверять то, чего не должно происходить:
 
 ```text
 no free Full-to-Full vertical step
-no edge into an unsupported void
+no unsupported-void edge
 no Ramp side entry
 no walk through solid terrain
 no false edge after endpoint removal
-no coordinate wrap neighbor
+no coordinate-wrap neighbor
+no immediate Spatial move after accepted MoveStepCommand
+no second active ordinary movement
+no silent fallback traversal cost
+no central Shape branch required for custom factor
 ```
-
-Это особенно важно в compositional systems, где OR-accumulation может случайно собрать valid-looking pair bits из unrelated contributors.
 
 ## Boundary tests
 
-Public coordinates — `int`. Local arithmetic рядом с integer extremes тестируется против wrap. Это implementation-safety, а не world-size requirement.
+Coordinates — `int`; local arithmetic у integer extremes защищён от wrap.
 
-Future chunk/region boundaries получат такие же edge tests после фиксации semantics.
+TransitionCost validates adjacency до support lookup, а fixed-point multiplication использует checked arithmetic: unsupported overflow fails loudly.
 
 ## Test-first hardening workflow
 
-При подозрении на архитектурный defect:
-
 ```text
-1. выразить ожидаемую семантику минимальным failing test;
-2. запустить его на current production code;
-3. подтвердить реальную причину failure;
-4. внести минимальное production change по контракту;
-5. после каждой role/topology правки прогнать соседние regressions;
-6. перед merge прогнать полный simulation suite.
+1. выразить expected semantics минимальным failing test;
+2. запустить на current production code;
+3. подтвердить actual failure mechanism;
+4. внести smallest production change;
+5. прогнать nearby regression tests;
+6. перед merge прогнать full simulation suite.
 ```
 
-Так architecture не “чинится” одной интуицией.
+## Что не делать permanent invariant слишком рано
 
-## Что не стоит слишком рано делать permanent invariant
+Current one-standing-position Shape model достаточно strong для tests, Navigation read window и TransitionCost support owners, но не должна навечно запрещать future geometry.
 
-Полезная текущая convention не обязательно forever-contract.
+Current actor-independent TransitionCost также не означает, что все future actors обязаны одинаково оценивать поверхности.
 
-Например, production Shapes сейчас имеют одну standing position `anchor + (0,0,1)`. Это достаточно сильно для current tests и вывода Navigation read window, но не должно запрещать любую будущую geometry без consumer evidence.
-
-Тесты должны различать:
+Различаем:
 
 ```text
 FIXED semantic invariant
-CURRENT production-shape contract
+CURRENT production-model contract
 implementation detail
 ```
 
-## Запуск тестов
-
-Полный simulation suite:
+## Запуск
 
 ```bash
 ./gradlew :simulation:test --rerun-tasks --console=plain
@@ -174,4 +256,4 @@ Windows:
 .\gradlew.bat :simulation:test --rerun-tasks --console=plain
 ```
 
-Для focused development используйте Gradle `--tests`, затем перед final review возвращайтесь к полному module suite.
+Для focused development используйте `--tests`, затем возвращайтесь к full suite перед final review.
