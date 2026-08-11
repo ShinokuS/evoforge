@@ -17,9 +17,6 @@ import io.github.evoforge.simulation.time.SimulationClock;
 import io.github.evoforge.simulation.time.SimulationStepper;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
-import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
@@ -55,8 +52,6 @@ public final class SimulationAssembly {
     private final DefinitionRegistry<ObjectDefinitionId>
             objectDefinitions;
     private final MovementDefinitions movementDefinitions;
-    private final TerrainSystem terrain;
-    private final GeometrySystem geometry;
     private final LandscapeSystem landscape;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
@@ -80,19 +75,11 @@ public final class SimulationAssembly {
 
         movementDefinitions = new MovementDefinitions();
 
-        terrain = new TerrainSystem(
-                new SparseTerrainStorage(),
+        landscape = LandscapeSystem.create(
                 landscapeDefinitions);
 
-        geometry = new GeometrySystem(
-                terrain.lookup());
-
-        landscape = new LandscapeSystem(
-                terrain,
-                geometry);
-
         navigation = new NavigationSystem(
-                geometry.lookup());
+                landscape.geometry());
 
         objects = new ObjectRepository();
         objectFactory = new ObjectFactory(
@@ -217,7 +204,7 @@ public final class SimulationAssembly {
 
         requireNotStarted();
 
-        geometry.setShape(
+        landscape.setShape(
                 x,
                 y,
                 z,
@@ -266,8 +253,8 @@ public final class SimulationAssembly {
 
         TransitionCostCalculator transitionCosts =
                 new TransitionCostCalculator(
-                        terrain.lookup(),
-                        geometry.lookup(),
+                        landscape.terrain(),
+                        landscape.geometry(),
                         landscapeTraversalDefinitions);
 
         MovementSystem movement =
@@ -294,8 +281,8 @@ public final class SimulationAssembly {
         SimulationView view = new SimulationView(
                 objects,
                 spatial.transforms(),
-                terrain.lookup(),
-                geometry.lookup(),
+                landscape.terrain(),
+                landscape.geometry(),
                 navigation.lookup(),
                 cells.lookup());
 
