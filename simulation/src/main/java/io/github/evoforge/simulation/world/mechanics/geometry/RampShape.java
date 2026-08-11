@@ -44,6 +44,12 @@ public final class RampShape
                         riseY,
                         0);
 
+        int rampToRamp =
+                TransitionMask.of(
+                        riseX,
+                        riseY,
+                        1);
+
         int upperToRamp =
                 TransitionMask.of(
                         -riseX,
@@ -56,7 +62,9 @@ public final class RampShape
 
         rampPorts =
                 TransitionPorts.of(
-                        rampToLower | rampToUpper,
+                        rampToLower
+                                | rampToUpper
+                                | rampToRamp,
                         rampToLower);
 
         upperPorts =
