@@ -62,7 +62,7 @@ final class WorldLandscapeIntegrationTest {
         World world =
                 new World(
                         objectDefinitions,
-                        terrainSystem);
+                        terrainSystem.lookup());
 
         terrainSystem.place(
                 10,

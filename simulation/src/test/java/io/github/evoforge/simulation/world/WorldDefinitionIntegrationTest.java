@@ -57,11 +57,14 @@ class WorldDefinitionIntegrationTest {
                         LandscapeDefinitionId::of,
                         LandscapeDefinitionId::asInt);
 
-        World world = new World(
-                definitions,
+        TerrainSystem terrainSystem =
                 new TerrainSystem(
                         new SparseTerrainStorage(),
-                        landscapeDefinitions));
+                        landscapeDefinitions);
+
+        World world = new World(
+                definitions,
+                terrainSystem.lookup());
 
         WorldObject apple = world.objectFactory().create(
                 "core:apple");
