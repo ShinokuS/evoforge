@@ -25,6 +25,12 @@ gradle-app.setting
 hs_err_pid*
 *.attach_pid*
 
+## Documentation / Node.js:
+
+/node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
+
 ## Android:
 
 /android/libs/armeabi-v7a/

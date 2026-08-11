@@ -28,4 +28,4 @@
 - [Development Workflow](Development-Workflow.md)
 - [Adding a Mechanic](Adding-a-Mechanic.md)
 - [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md)
-- [Wiki Maintenance](Wiki-Maintenance.md)
+- [Documentation Maintenance](Wiki-Maintenance.md)
