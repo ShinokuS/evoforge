@@ -103,9 +103,9 @@ Presence without a geometry override means `FullShape.INSTANCE`. Sparse geometry
 - Shape does not query World, neighbors, Navigation, ObjectId or pathfinding;
 - Shape receives only the current source position relative to its own terrain anchor.
 
-A new Shape that fits the contract is added as a new implementation plus tests, without modifying `NavigationSystem` or existing Shape implementations.
+A new Shape that fits the contract is added as a new implementation plus tests, without modifying `NavigationSystem` or existing Shape implementations merely to recognize its concrete type.
 
-## 8. Structural transition algebra [FIXED]
+## 8. Structural transition algebra [FIXED ALGEBRA / WORKING SHAPE MODEL]
 
 A structural transition connects one source XYZ to exactly one of its 26 immediate three-dimensional neighbors.
 
@@ -129,7 +129,22 @@ The public resolved mask is always restricted to the 26 valid neighbor direction
 
 Contributions are accumulated by OR before resolution. Composition therefore does not depend on concrete Shape type or processing order.
 
-Departure and arrival are independent roles. A Shape may provide one role for an external connection, while another Shape supplies the other role. A Shape may provide both roles for an edge that belongs entirely to its own local topology.
+Departure and arrival are independent roles. For an external connection, one Shape may declare that a transition can depart from its supported surface while another independently confirms arrival at its own supported surface. Missing confirmation from either side means that structural edge does not exist. Shapes do not query one another to make this decision.
+
+The **current production structural Shape model** (`FullShape` and the primitive cardinal `RampShape`) uses one supported navigation position at:
+
+```text
+anchor + (0, 0, 1)
+```
+
+Within this current model:
+
+- departures originate only from that supported position;
+- arrivals only confirm directions whose destination is that supported position;
+- a Shape does not assert the existence of a neighboring Shape or foreign supported surface;
+- occupied solid terrain coordinates are not ordinary navigation positions.
+
+This one-supported-position rule is **WORKING**, not a permanent restriction on every future Shape. If a real future Shape requires multiple supported positions or a different local representation, its contract and the resolver read envelope must be revised together rather than bypassed with type-specific Navigation logic.
 
 ## 9. Navigation topology [FIXED]
 
@@ -151,7 +166,23 @@ Navigation:
 - does not perform pathfinding;
 - does not mutate world state.
 
-For one source XYZ, the base resolver reads only the local `3x3x3` geometry neighborhood.
+Transition **distance** and Geometry **read distance** are different concepts. Structural edges remain limited to the 26 immediate neighbors:
+
+```text
+dx, dy, dz in [-1, 1]
+```
+
+For one source XYZ, the current resolver reads Geometry at source-relative offsets:
+
+```text
+dx in [-1, 1]
+dy in [-1, 1]
+dz in [-2, 1]
+```
+
+This is at most `3 * 3 * 4 = 36` local Geometry lookups. The extra lower Z layer is required by the current one-supported-position Shape model: for a one-step transition with `dz = -1`, the Shape supporting the destination position may have its terrain anchor one additional cell below that destination. Reading that anchor lets it contribute the destination-side arrival without either Shape learning about its neighbor or Navigation learning a concrete Shape type.
+
+The read envelope is therefore derived from the current Shape role contract, not from path length. If the structural Shape model changes, the required local read envelope must be re-derived and tested with it.
 
 Structural topology is genuinely three-dimensional: a Shape may expose elevation-changing neighbor edges without Navigation learning any Shape-specific rule.
 
@@ -262,7 +293,7 @@ Add its own owner/system instead of expanding Terrain into a universal environme
 
 ### New Shape
 
-Add a new Shape implementation and topology/composition tests. Do not modify Navigation to recognize the type.
+Add a new Shape implementation and topology/composition tests. Do not modify Navigation to recognize the type. If the Shape no longer fits the current one-supported-position structural model, revise the general Shape contract and resolver envelope explicitly rather than adding a concrete-type exception.
 
 ### New spatial query
 
