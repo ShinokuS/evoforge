@@ -51,8 +51,7 @@ public final class RampShape
                         0);
 
         lowerPorts =
-                TransitionPorts.of(
-                        lowerToRamp,
+                TransitionPorts.arrivalsOnly(
                         lowerToRamp);
 
         rampPorts =
