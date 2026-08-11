@@ -20,7 +20,8 @@ EvoForge is intentionally not built as:
 - a universal `WorldCell` object containing every environmental mechanic;
 - a system where every object receives `update(dt)` every frame;
 - a universal physics engine whose abstractions dictate all gameplay;
-- a central type switch that knows every object, terrain type, or Shape;
+- a central type switch that knows every object, terrain type, Shape, or Command;
+- a command bus through which every internal mutation must be routed;
 - a framework that pre-implements speculative infrastructure before a real consumer exists.
 
 Selective data-oriented design is allowed and expected in measured hot paths, but it is an implementation technique rather than the domain model.
@@ -47,13 +48,16 @@ OO domain model
 + immutable composition-driven definitions
 + specialized mutable state owners
 + scheduler/event-driven execution
-+ Controller -> Command boundary
++ external-intent Command boundary
++ narrow coordinated domain write capabilities
 + deterministic authoritative mutation
 + indexed spatial/world queries
 + selective DOD after profiling
 ```
 
 Objects are real domain objects with stable identity, but mutable mechanics are not accumulated inside `WorldObject`. Definitions describe immutable composition. Systems own authoritative runtime properties. The scheduler controls when work occurs but does not own domain semantics.
+
+External Player/AI/script/scenario intent converges on Control Commands. Internal simulation processes are not forced back through Command and may use explicitly granted narrow domain APIs directly.
 
 ## World decomposition
 
@@ -68,6 +72,7 @@ WORLD
 │
 └── Landscape
     ├── terrain material/content
+    ├── coordinated LandscapeMutations boundary
     └── mechanics layered over terrain
 ```
 
@@ -76,6 +81,8 @@ Both domains use the same integer XYZ address space. That does not mean they sha
 ## Determinism
 
 For the same authoritative initial state, submitted command sequence, and authoritative random state, the simulation must produce the same supported result. This means authoritative behavior cannot depend on unspecified `HashMap` iteration order, uncontrolled random sources, thread timing, or worker threads mutating the world directly.
+
+The current synchronous Control delivery executes one submitted command immediately, so later calls observe earlier mutations. Any future queued delivery must specify its own deterministic ordering and visibility semantics explicitly.
 
 Cross-platform bit-identical floating-point semantics are not currently promised. A stricter numeric contract will be introduced only if a mechanic actually requires it.
 
@@ -87,6 +94,8 @@ If existing mechanics already express a new object or landscape type, add defini
 
 The same rule applies to geometry: a new Shape is a new `Shape` implementation. Navigation must not gain `instanceof RampShape` or a switch over known shape types.
 
+For external intent, a new Command adds a typed command/result/handler under the appropriate Control use-case. `CommandDispatcher` does not gain a central domain switch. Internal mechanics should not invent Commands merely to call another system.
+
 ## Current state
 
 Completed foundations include:
@@ -97,13 +106,16 @@ Definition loading and aspect compilation
 Simulation clock and scheduler
 Discrete XYZ object positioning and spatial index
 Landscape definitions and terrain storage
+Coordinated LandscapeMutations lifecycle boundary
 Geometry abstraction and Shape contract
 TransitionMask / TransitionPorts / TransitionComposition
 FullShape
 Cardinal RampShape
 Directed structural Navigation resolver
+Control Backbone core and synchronous delivery
+PlaceTerrainCommand vertical slice
 ```
 
-The next major consumer is the Control Backbone. Later phases will introduce scenario execution, basic movement, occupancy, pathfinding, and the first agent vertical slice.
+The next major consumer is the Scenario Harness. Later phases will introduce basic movement, occupancy, pathfinding, and the first agent vertical slice.
 
-See [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md) for the deliberate gaps that remain open.
+See [Control Backbone](Control-Backbone.md) for the command model and [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md) for the deliberate gaps that remain open.

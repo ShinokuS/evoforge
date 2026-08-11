@@ -15,17 +15,19 @@ If you are new to the project, read these pages in order:
 5. [Shape Contract](Shape-Contract.md)
 6. [Transition Algebra](Transition-Algebra.md)
 7. [Navigation](Navigation.md)
-8. [Testing Strategy](Testing-Strategy.md)
-9. [Development Workflow](Development-Workflow.md)
-10. [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md)
+8. [Control Backbone](Control-Backbone.md)
+9. [Testing Strategy](Testing-Strategy.md)
+10. [Development Workflow](Development-Workflow.md)
+11. [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md)
 
 ## Current architecture at a glance
 
 ```text
-Definitions
-    │
-    ├── Object definitions
-    └── Landscape definitions
+External intent
+    ↓
+Control Backbone
+    ↓
+authoritative domain APIs
 
 WORLD
 ├── Objects
@@ -34,6 +36,7 @@ WORLD
 │   └── SpatialSystem           ObjectId -> XYZ
 │
 └── Landscape
+    ├── LandscapeMutations      coordinated write boundary
     └── TerrainSystem           XYZ -> LandscapeDefinitionId | absence
              │
              ▼
@@ -44,6 +47,8 @@ WORLD
 ```
 
 The central design rule is ownership: every mutable authoritative fact has one owner. Shared coordinates do not imply shared storage, and a convenient query does not justify moving domain responsibility into the query layer.
+
+Commands carry external intent into the simulation. Internal processes do not need to turn every mutation into a Command; they may use explicitly granted narrow domain write capabilities.
 
 ## Geometry and navigation in one picture
 
@@ -77,9 +82,11 @@ The Wiki is generated from `docs/wiki/` in the main repository. Do not edit gene
 
 ## Current project phase
 
-The implemented foundation includes definitions, object identity, scheduling, discrete object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, and directed local navigation. The next architectural consumer is the Control Backbone, followed later by scenario execution, basic movement, occupancy, pathfinding, and the first agent vertical slice.
+The implemented foundation now includes definitions, object identity, scheduling, discrete object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, directed local Navigation, and the first Control Backbone vertical slice with structured command results and `PlaceTerrainCommand`.
 
-The project deliberately does not pre-build systems without a consumer. Caches, rich movement costs, actor capability overlays, falling, chunk layouts, and advanced pathfinding remain deferred until real workloads define their requirements.
+The next major step is the Scenario Harness, followed by basic movement, occupancy, pathfinding, and the first agent vertical slice.
+
+The project deliberately does not pre-build systems without a consumer. Queued command batching semantics, caches, rich movement costs, actor capability overlays, falling, chunk layouts, and advanced pathfinding remain deferred until real workloads define their requirements.
 
 ## Navigation
 

@@ -10,9 +10,9 @@ DONE  Landscape terrain core
 DONE  Geometry foundation and transition algebra
 DONE  Directed structural Navigation
 DONE  Production cardinal RampShape
-NOW   Final geometry/navigation hardening and documentation
-NEXT  Control Backbone
-LATER Scenario Harness
+DONE  Final geometry/navigation hardening and documentation
+NOW   Control Backbone core + first PlaceTerrain vertical slice
+NEXT  Scenario Harness
       Basic Movement
       Occupancy
       Pathfinder
@@ -23,19 +23,29 @@ The sequence can change when a real dependency requires it, but new infrastructu
 
 ## Control Backbone
 
-The next narrow architectural step is the external control path:
+The current narrow control foundation establishes one external-intent path for Player, AI, scripts, scenarios and future adapters:
 
 ```text
-Controller
+external intent
     ↓
-Command submission
+Command
     ↓
-handler / action
+delivery
+    ↓
+CommandDispatcher
+    ↓
+handler
+    ↓
+authoritative domain APIs
     ↓
 structured result
 ```
 
-This should establish one path for player input, AI, scripts, and scenarios without yet inventing Movement, AI planning, or a giant command registry.
+The first delivery is synchronous and the first concrete vertical slice is `PlaceTerrainCommand`.
+
+Command is not an internal RPC requirement. Once intent has been accepted, internal processes such as future world generation, erosion or continuing Actions may work directly through narrow domain write APIs.
+
+Queued/asynchronous delivery remains deferred. It may reuse the same Command/Handler/Dispatcher contracts but must define deterministic ordering, flush point and within-tick state visibility explicitly.
 
 ## Scenario Harness
 
@@ -121,17 +131,24 @@ general orientation framework
 
 If a future geometry genuinely needs multiple standing positions, the Shape role law and Navigation read-window derivation must be reconsidered together rather than patched with one-off exceptions.
 
-## Known geometry lifecycle gap
+## Landscape lifecycle decision
 
-A non-default geometry override can remain stored after terrain removal and become visible if terrain is later placed again at the same coordinate.
+The former geometry-override lifecycle gap is now resolved by the coordinated `LandscapeMutations` boundary:
 
-The policy belongs to future lifecycle/orchestration logic. Do not solve it by making TerrainSystem depend directly on GeometrySystem.
+```text
+placeTerrain  -> clear stale override
+replaceTerrain -> preserve override
+removeTerrain -> clear override
+```
+
+`TerrainSystem` still does not depend on `GeometrySystem`; `LandscapeSystem` coordinates both owners from above.
 
 ## Deferred simulation infrastructure
 
 ```text
 final EventBus implementation
 full object lifecycle orchestration
+queued/asynchronous command batching and within-tick visibility policy
 multithreading beyond one authoritative mutation thread
 final RNG service before a real random consumer exists
 AI planner family

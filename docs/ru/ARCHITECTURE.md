@@ -44,6 +44,8 @@ EvoForge — не чистый ECS, не универсальный физиче
 | I-10 | Публичные семантические контракты должны переживать замену внутреннего хранилища/алгоритма. |
 | I-11 | Горячие пути избегают лишних сканирований, аллокаций, boxing и временных коллекций после подтверждения, что путь действительно горячий. |
 | I-12 | Новые фундаментальные системы появляются вместе с headless-тестами корректности и диагностической стратегией. |
+| I-13 | Command пересекает границу внешнего намерения; продолжающиеся внутренние процессы и внутренние producers состояния используют узкие domain API напрямую, а не превращают Command во внутренний RPC. |
+| I-14 | Generic Control маршрутизирует и наблюдает команды, но не зависит от типов world-domain; world-domain не зависят от Control. |
 
 ## 4. Координаты мира [FIXED REPRESENTATION / DEFERRED BOUNDS]
 
@@ -87,7 +89,32 @@ XYZ -> LandscapeDefinitionId | absence
 
 Отсутствие не является definition вроде `core:open`.
 
-`TerrainSystem` владеет мутацией terrain. Конкретное terrain storage заменяемо.
+`TerrainSystem` владеет terrain storage и terrain-specific инвариантами мутации. Конкретное terrain storage заменяемо. Обычные конфликты, вызванные текущим состоянием terrain, возвращаются как structured results; некорректные definitions и другие нарушения programming/configuration contract остаются исключениями.
+
+Terrain и Geometry остаются отдельными авторитетными областями. `TerrainSystem` не должен зависеть от `GeometrySystem` только ради координации lifecycle.
+
+Публичная согласованная write-capability для landscape — `LandscapeMutations`. Она владеет семантикой операции, когда одна логическая мутация landscape должна синхронно поддержать согласованность нескольких владельцев состояния.
+
+Текущая политика lifecycle terrain:
+
+```text
+placeTerrain
+    -> создаёт terrain только в пустой позиции
+    -> очищает возможный stale geometry override
+    -> существующий terrain поэтому получает default FullShape
+
+replaceTerrain
+    -> меняет definition существующего terrain
+    -> сохраняет текущий geometry override
+
+removeTerrain
+    -> удаляет существующий terrain
+    -> удаляет его geometry override
+```
+
+Следовательно, нестандартный Shape не переживает удаление terrain и последующее повторное размещение в том же XYZ. Shape принадлежит lifetime конкретной terrain cell, а не координате навсегда.
+
+Внутренние producers, например будущие world generation, erosion или продолжающиеся Actions, могут вызывать узкую landscape/domain write-capability напрямую. Им не требуется создавать Commands. Write-capabilities выдаются явно при bootstrap/composition и должны оставаться у небольшого обозримого числа владельцев.
 
 Новая механика среды обычно получает собственного специализированного владельца состояния, а не новые поля универсальной landscape-клетки.
 
@@ -236,15 +263,49 @@ Transition/path costs остаются **DEFERRED**, пока первый ре�
 4. Background workers могут вычислять read-only результаты, но никогда не изменяют авторитетный World напрямую. Возвращённый результат проверяется перед применением.
 5. Floating-point не запрещён глобально, но авторитетные ветвления не должны случайно зависеть от нестабильного порядка итерации/редукции. Более строгая cross-platform bit-identical numeric policy остаётся **DEFERRED**, пока не понадобится конкретной механике.
 
-## 12. Control boundary [FIXED PRINCIPLE / WORKING IMPLEMENTATION]
+## 12. Control boundary [FIXED PRINCIPLE / WORKING DELIVERY]
 
-Player, AI, scripts и scenarios сходятся к одному внешнему пути управления:
+Player, AI, scripts, scenarios и другие внешние controllers сходятся к одному command path:
 
 ```text
-Controller -> Command -> handler/action -> authoritative systems
+external intent -> Command -> delivery -> dispatcher -> handler -> authoritative domain APIs
 ```
 
-Command — намерение. Продолжающийся Action — runtime-состояние процесса. Обычный отказ — структурированные данные.
+Command — immutable intent. Продолжающийся Action/process — runtime state и не представляется потоком внутренних Commands только потому, что позже изменяет системы.
+
+Таким образом, Command — **граница внешнего намерения**, а не универсальный внутренний RPC. Внутренние producers состояния и уже принятые процессы используют узкие domain API авторитетных владельцев напрямую.
+
+Обычная невозможность из-за world state — structured data. Некорректное programming/bootstrap/configuration state остаётся исключением.
+
+Все результаты операций имеют минимальный нейтральный observation floor:
+
+```text
+accepted
+namespaced result code
+```
+
+Namespaced codes имеют вид:
+
+```text
+terrain:position_occupied
+movement:blocked
+```
+
+Глобального enum со всеми причинами rejection в проекте нет. Конкретные домены могут возвращать более богатые typed results, а generic Control видит только общий observation floor.
+
+Generic Control не знает world-domain. Закон зависимостей:
+
+```text
+simulation.control.core  -X-> world.*
+simulation.control.sync  -X-> world.*
+world.*                   -X-> simulation.control.*
+```
+
+Concrete adapters в `simulation/control/<use-case>/` могут зависеть от узких domain API, нужных конкретному use-case. Команды группируются по intent/use-case, а не по одной системе, которую они случайно изменяют.
+
+Текущая delivery-модель синхронная: submit немедленно выполняет dispatch и handler, а авторитетные мутации видимы до возврата из `submit`. Для детерминированного вызывающего порядок команд равен детерминированному порядку вызовов.
+
+Будущая queued/asynchronous delivery может переиспользовать те же Command/Handler/Dispatcher contracts, но обязана явно определить порядок очереди, момент flush и semantics видимости состояния. Смена delivery policy не считается автоматически сохраняющей within-tick visibility.
 
 Player-only shortcut не может напрямую мутировать внутренности механик.
 
@@ -305,6 +366,10 @@ simultaneously active agents:   ~10,000
 
 Добавляйте заменяемую реализацию за существующей семантической границей, а не меняйте владение миром.
 
+### Новая Command
+
+Добавляйте concrete immutable Command, typed CommandResult и один handler в подходящей области `control/<use-case>/`. Handler может зависеть от узких domain API; generic Control не должен узнавать новый domain type. Не создавайте Command для внутренней мутации только ради маршрутизации вызовов между системами.
+
 ## 16. Явно отложенные решения
 
 Архитектура намеренно пока не фиксирует:
@@ -325,6 +390,7 @@ simultaneously active agents:   ~10,000
 - полный lifecycle объектов;
 - формат persistence и границы сохранения регионов;
 - финальную реализацию EventBus;
+- queued/asynchronous command batching и within-tick visibility policy;
 - multithreading architecture сверх одного авторитетного mutation thread;
 - точное семейство AI planner;
 - финальный renderer/Z-level UX.

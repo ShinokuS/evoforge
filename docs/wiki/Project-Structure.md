@@ -11,6 +11,7 @@ EvoForge/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── TECHNICAL_REFERENCE.md
+│   ├── ru/
 │   └── wiki/
 ├── lwjgl3/
 ├── simulation/
@@ -30,6 +31,11 @@ Current package structure:
 
 ```text
 io.github.evoforge.simulation
+├── result/
+├── control/
+│   ├── core/
+│   ├── sync/
+│   └── terrain/
 ├── definition/
 ├── time/
 └── world/
@@ -39,6 +45,8 @@ io.github.evoforge.simulation
     ├── spatial/
     │   └── indexes/
     ├── landscape/
+    │   ├── LandscapeMutations
+    │   ├── LandscapeSystem
     │   ├── definition/
     │   └── terrain/
     │       └── storage/
@@ -52,7 +60,7 @@ The package tree grows only when a real subsystem exists. Empty packages are not
 
 ## `core`
 
-`core` is the shared libGDX application/presentation layer. It may read simulation state through public contracts and submit commands through the future control boundary, but it must not become the owner of simulation state.
+`core` is the shared libGDX application/presentation layer. It may read simulation state through public contracts and submit external intent through the Control boundary, but it must not become the owner of simulation state.
 
 A useful rule is: closing the game window must not be conceptually equivalent to destroying the authoritative World model. Presentation is a client of the simulation.
 
@@ -81,7 +89,36 @@ Documentation has three roles.
 
 `TECHNICAL_REFERENCE.md` tracks the current implementation and may change frequently as code evolves.
 
-`docs/wiki/` contains the long-form Wiki source. The GitHub Wiki is generated from these files by GitHub Actions after documentation changes reach `main`.
+`docs/wiki/` contains the long-form Wiki source. `docs/ru/` contains maintained Russian counterparts. GitHub Wiki and VitePress are generated from repository sources after documentation changes reach `main`.
+
+## `result`
+
+`simulation/result` is neutral infrastructure shared by domain operations and Control.
+
+Current types:
+
+```text
+OperationResult
+ResultCode
+OperationResults
+```
+
+It defines only the minimal accepted/rejected observation floor and namespaced result code. It does not own domain semantics.
+
+## `control`
+
+The Control surface is discoverable under one root:
+
+```text
+control/
+├── core/
+├── sync/
+└── terrain/
+```
+
+`core` contains generic Command/Handler/Dispatcher contracts and does not import world-domain types. `sync` contains the current immediate delivery implementation. Concrete commands are grouped by intent/use-case; the first example is the terrain placement slice.
+
+World packages do not depend on Control. Internal mechanics may call narrow domain APIs directly rather than manufacturing Commands as internal RPC.
 
 ## `definition`
 
@@ -108,6 +145,8 @@ Landscape is not represented as millions of `WorldObject` instances. Terrain con
 ```text
 XYZ -> LandscapeDefinitionId | absence
 ```
+
+`TerrainSystem` owns terrain storage and terrain-specific invariants. `LandscapeMutations`, implemented by `LandscapeSystem`, is the coordinated write capability used when terrain lifetime must remain coherent with Geometry.
 
 The current storage is sparse and replaceable.
 
@@ -139,6 +178,8 @@ It does not know ObjectId, actor abilities, path cost, concrete Shape types, or 
 ## Tests
 
 Simulation tests mirror domain areas under `simulation/src/test/java`. Unit tests validate local contracts; integration tests cross subsystem boundaries; property/reference tests validate generic laws against an independent resolver.
+
+Control adds an explicit dependency-contract test so package-direction rules are executable architecture rather than documentation only.
 
 Run the full simulation suite with:
 

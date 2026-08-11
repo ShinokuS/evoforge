@@ -32,7 +32,7 @@ public final class TerrainSystem {
         return lookup;
     }
 
-    public void place(
+    public TerrainPlacementResult place(
             int x,
             int y,
             int z,
@@ -41,14 +41,14 @@ public final class TerrainSystem {
         requireKnownDefinition(definitionId);
 
         if (storage.find(x, y, z) != null) {
-            throw new IllegalStateException(
-                    "terrain already exists at " + position(x, y, z));
+            return TerrainPlacementResult.POSITION_OCCUPIED;
         }
 
         storage.put(x, y, z, definitionId);
+        return TerrainPlacementResult.PLACED;
     }
 
-    public void replace(
+    public TerrainReplacementResult replace(
             int x,
             int y,
             int z,
@@ -57,20 +57,24 @@ public final class TerrainSystem {
         requireKnownDefinition(definitionId);
 
         if (storage.find(x, y, z) == null) {
-            throw new IllegalStateException(
-                    "terrain does not exist at " + position(x, y, z));
+            return TerrainReplacementResult.TERRAIN_ABSENT;
         }
 
         storage.put(x, y, z, definitionId);
+        return TerrainReplacementResult.REPLACED;
     }
 
-    public void remove(int x, int y, int z) {
+    public TerrainRemovalResult remove(
+            int x,
+            int y,
+            int z) {
+
         if (storage.find(x, y, z) == null) {
-            throw new IllegalStateException(
-                    "terrain does not exist at " + position(x, y, z));
+            return TerrainRemovalResult.TERRAIN_ABSENT;
         }
 
         storage.remove(x, y, z);
+        return TerrainRemovalResult.REMOVED;
     }
 
     private void requireKnownDefinition(
@@ -85,9 +89,5 @@ public final class TerrainSystem {
             throw new IllegalArgumentException(
                     "unknown landscape definition: " + definitionId);
         }
-    }
-
-    private static String position(int x, int y, int z) {
-        return "(" + x + ", " + y + ", " + z + ")";
     }
 }

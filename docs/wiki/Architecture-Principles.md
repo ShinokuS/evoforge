@@ -21,11 +21,11 @@ A read consumer can combine data from several owners, but it must not become a s
 
 This prevents a common failure mode where the same concept exists in several mutable places and every mutation must keep them synchronized manually.
 
-## Narrow read contracts
+## Narrow read and write capabilities
 
-Systems expose narrow read interfaces instead of exposing mutable internals.
+Systems expose narrow contracts instead of mutable internals.
 
-Examples include:
+Read examples include:
 
 ```text
 ObjectLookup
@@ -35,7 +35,9 @@ GeometryLookup
 NavigationLookup
 ```
 
-A consumer should depend on the smallest semantic contract it needs. This keeps replacement of internal storage possible and makes dependency direction visible.
+A consumer should depend on the smallest semantic contract it needs. The same rule applies to mutation: write capability is supplied explicitly and should remain narrowly held and reviewable.
+
+`LandscapeMutations` is the first coordinated write capability. It sits above Terrain and Geometry when one logical landscape operation must preserve both owners' lifecycle semantics, without making either owner depend back on the other.
 
 ## Shared coordinates are addresses, not ownership
 
@@ -70,21 +72,52 @@ The scheduler answers *when* a registered handler runs. It does not contain an e
 
 This avoids the `object.update(dt)` model in which inactive objects still consume CPU and every object is coupled to the global frame cadence.
 
-## Commands express intent
+## Commands express external intent
 
-Player input, AI, scripts, tests, and scenarios should converge on the same control path:
+Player input, AI, scripts, scenarios and other external controllers converge on one control path:
 
 ```text
-Controller
+external controller
     ↓
 Command
     ↓
-handler / action
+delivery / dispatcher
     ↓
-authoritative systems
+handler
+    ↓
+authoritative domain APIs
 ```
 
-A command is intent. Normal gameplay impossibility is represented as structured rejection, not as a JVM exception. Exceptions remain for programming/configuration contract violations.
+A Command crosses the external-intent boundary. It is not a universal internal RPC mechanism.
+
+Once intent has been accepted, continuing Actions/processes and internal producers such as future world generation or erosion can call narrow domain APIs directly. This keeps ownership visible instead of routing every internal mutation through a command bus.
+
+Normal world-state impossibility is a structured result, not a JVM exception. Invalid programming/bootstrap/configuration input remains exceptional.
+
+All command results share a tiny observable floor:
+
+```text
+accepted
+namespaced result code
+```
+
+Examples are `terrain:position_occupied` and a future `movement:blocked`. There is no global enum of every rejection reason.
+
+## Generic Control routes, domains decide
+
+The generic Control core knows how to register, dispatch and observe commands, but not what terrain, movement or construction mean.
+
+The dependency law is:
+
+```text
+simulation.control.core  -X-> world.*
+simulation.control.sync  -X-> world.*
+world.*                   -X-> simulation.control.*
+```
+
+Concrete use-case handlers under `control/<use-case>/` may depend on narrow domain APIs. The reverse dependency is forbidden.
+
+The current synchronous gateway executes immediately, so a successful mutation is visible before `submit` returns. A future queued/asynchronous gateway can reuse the same core, but its ordering and within-tick visibility must be specified explicitly.
 
 ## Events are facts after mutation
 
@@ -116,6 +149,8 @@ existing NavigationSystem
 
 Navigation does not recognize `FullShape`, `RampShape`, or future shape classes by type.
 
+The same discipline applies to Control: adding a concrete command does not add a domain switch to `CommandDispatcher`; it registers one exact command class with one handler.
+
 ## Do not invent abstractions before a consumer exists
 
 EvoForge deliberately defers decisions such as:
@@ -128,6 +163,7 @@ actor capability model
 falling semantics
 chunk size
 world bounds
+queued command batching semantics
 multithreading model
 ```
 
@@ -148,6 +184,6 @@ A custom low-level structure is not automatically better than a clear object rep
 
 ## Test architectural laws, not only examples
 
-Unit tests should cover concrete behavior, but the highest-value tests express laws that every valid implementation must obey: stale ObjectIds remain dead, terrain absence means no geometry, Shape composition is order-independent, terrain bodies are not ordinary navigation positions, and structural edges never escape the 26-neighbor transition space.
+Unit tests should cover concrete behavior, but the highest-value tests express laws that every valid implementation must obey: stale ObjectIds remain dead, terrain absence means no geometry, Shape composition is order-independent, terrain bodies are not ordinary navigation positions, structural edges never escape the 26-neighbor transition space, generic Control never depends on world domains, and world domains never depend on Control.
 
 Property/reference tests are preferred when a simple independent implementation can validate a more optimized resolver over many deterministic mutations.

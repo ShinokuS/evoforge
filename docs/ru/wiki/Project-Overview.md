@@ -20,7 +20,8 @@ EvoForge не строится как:
 - универсальный `WorldCell` со всеми environmental mechanics;
 - система, где каждый объект получает `update(dt)` каждый frame;
 - универсальный physics engine, диктующий abstractions всему gameplay;
-- центральный type switch, знающий каждый object, terrain type или Shape;
+- центральный type switch, знающий каждый object, terrain type, Shape или Command;
+- command bus, через который обязана проходить каждая внутренняя мутация;
 - framework, заранее реализующий speculative infrastructure без реального consumer.
 
 Выборочный data-oriented design допустим и ожидается в измеренных hot paths, но это техника реализации, а не доменная модель.
@@ -47,13 +48,16 @@ OO domain model
 + immutable composition-driven definitions
 + specialized mutable state owners
 + scheduler/event-driven execution
-+ Controller -> Command boundary
++ external-intent Command boundary
++ narrow coordinated domain write capabilities
 + deterministic authoritative mutation
 + indexed spatial/world queries
 + selective DOD after profiling
 ```
 
 Объекты — реальные доменные объекты со стабильной идентичностью, но изменяемые механики не накапливаются внутри `WorldObject`. Definitions описывают неизменяемую композицию. Systems владеют авторитетными runtime-свойствами. Scheduler управляет временем работы, но не доменной семантикой.
+
+Внешнее намерение Player/AI/script/scenario сходится к Control Commands. Внутренние simulation processes не обязаны снова проходить через Command и могут напрямую использовать явно выданные узкие domain APIs.
 
 ## Декомпозиция мира
 
@@ -68,6 +72,7 @@ WORLD
 │
 └── Landscape
     ├── terrain material/content
+    ├── coordinated LandscapeMutations boundary
     └── mechanics layered over terrain
 ```
 
@@ -76,6 +81,8 @@ WORLD
 ## Детерминизм
 
 При одинаковом авторитетном initial state, sequence submitted commands и authoritative random state симуляция должна выдавать одинаковый поддерживаемый результат. Поэтому поведение не может зависеть от неопределённого порядка `HashMap`, неконтролируемой случайности, thread timing или прямой мутации мира worker threads.
+
+Текущая synchronous Control delivery выполняет каждую submitted command немедленно, поэтому последующие вызовы видят мутации предыдущих. Будущая queued delivery должна отдельно определить deterministic ordering и semantics видимости.
 
 Cross-platform bit-identical floating-point semantics пока не обещаются. Более строгий numeric contract появится только при реальной потребности механики.
 
@@ -87,6 +94,8 @@ Cross-platform bit-identical floating-point semantics пока не обещаю
 
 То же относится к geometry: новый Shape — новая реализация `Shape`. Navigation не должна получать `instanceof RampShape` или switch по известным shape types.
 
+Для внешнего intent новая Command добавляет typed command/result/handler в подходящий Control use-case. `CommandDispatcher` не получает центральный domain switch. Внутренние mechanics не должны изобретать Commands только ради вызова другой системы.
+
 ## Текущее состояние
 
 Завершённый фундамент:
@@ -97,13 +106,16 @@ Definition loading and aspect compilation
 Simulation clock and scheduler
 Discrete XYZ object positioning and spatial index
 Landscape definitions and terrain storage
+Coordinated LandscapeMutations lifecycle boundary
 Geometry abstraction and Shape contract
 TransitionMask / TransitionPorts / TransitionComposition
 FullShape
 Cardinal RampShape
 Directed structural Navigation resolver
+Control Backbone core and synchronous delivery
+PlaceTerrainCommand vertical slice
 ```
 
-Следующий крупный consumer — Control Backbone. Дальше: scenario execution, basic movement, occupancy, pathfinding и первый agent vertical slice.
+Следующий крупный consumer — Scenario Harness. Далее появятся basic movement, occupancy, pathfinding и первый agent vertical slice.
 
-См. [Дорожную карту и отложенные решения](Roadmap-and-Deferred-Decisions.md).
+См. [Control Backbone](Control-Backbone.md) для command model и [Дорожную карту и отложенные решения](Roadmap-and-Deferred-Decisions.md) для оставшихся намеренно открытых решений.

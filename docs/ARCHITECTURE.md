@@ -42,6 +42,8 @@ EvoForge is not a pure ECS, a universal physics engine, a giant `WorldCell` mode
 | I-10 | Public semantic contracts must survive replacement of internal storage/algorithms. |
 | I-11 | Hot paths avoid unnecessary scans, allocations, boxing and temporary collections once the path is proven hot. |
 | I-12 | New fundamental systems arrive with headless correctness tests and a diagnostic strategy. |
+| I-13 | Command crosses the external-intent boundary; continuing internal processes and internal state producers use narrow domain APIs directly rather than turning Command into internal RPC. |
+| I-14 | Generic Control routes and observes commands but does not depend on world-domain types; world domains do not depend on Control. |
 
 ## 4. World coordinates [FIXED REPRESENTATION / DEFERRED BOUNDS]
 
@@ -85,7 +87,32 @@ XYZ -> LandscapeDefinitionId | absence
 
 Absence is not a definition such as `core:open`.
 
-`TerrainSystem` owns terrain mutation. Concrete terrain storage is replaceable.
+`TerrainSystem` owns terrain storage and terrain-specific mutation invariants. Concrete terrain storage is replaceable. Normal conflicts caused by current terrain state are structured results; invalid definitions or other broken programming/configuration inputs remain exceptions.
+
+Terrain and Geometry remain separate authoritative concerns. `TerrainSystem` must not depend on `GeometrySystem` merely to coordinate lifecycle.
+
+The public coordinated landscape write capability is `LandscapeMutations`. It owns the semantic operation when one logical landscape mutation must keep multiple owners coherent.
+
+Current terrain lifecycle policy is:
+
+```text
+placeTerrain
+    -> create terrain only when the position is empty
+    -> clear any stale geometry override
+    -> present terrain therefore resolves to default FullShape
+
+replaceTerrain
+    -> change the definition of existing terrain
+    -> preserve the existing geometry override
+
+removeTerrain
+    -> remove existing terrain
+    -> remove its geometry override
+```
+
+Therefore a non-default Shape does not survive terrain removal and later re-placement at the same XYZ. Shape belongs to the lifetime of the terrain cell, not permanently to the coordinate.
+
+Internal producers such as future world generation, erosion or continuing Actions may call the narrow landscape/domain write capability directly. They are not required to manufacture Commands. Write-capabilities are supplied explicitly during bootstrap/composition and should remain narrowly held and reviewable.
 
 A new environmental mechanic normally adds a new specialized state owner rather than fields to a universal landscape cell.
 
@@ -234,15 +261,49 @@ Rules:
 4. Background workers may compute read-only results but never directly mutate the authoritative World. Returned work must be validated before application.
 5. Floating-point values are not globally forbidden, but authoritative branching must not accidentally depend on unstable iteration/reduction order. A stricter cross-platform bit-identical numeric policy is **DEFERRED** until a mechanic requires it.
 
-## 12. Control boundary [FIXED PRINCIPLE / WORKING IMPLEMENTATION]
+## 12. Control boundary [FIXED PRINCIPLE / WORKING DELIVERY]
 
-Player, AI, scripts and scenarios converge on the same external control path:
+Player, AI, scripts, scenarios and other external controllers converge on the same command path:
 
 ```text
-Controller -> Command -> handler/action -> authoritative systems
+external intent -> Command -> delivery -> dispatcher -> handler -> authoritative domain APIs
 ```
 
-A Command is intent. A continuing Action is runtime process state. Normal rejection is structured data.
+A Command is immutable intent. A continuing Action/process is runtime state and is not represented as a stream of internal Commands merely because it later mutates systems.
+
+Command is therefore an **external-intent boundary**, not a universal internal RPC mechanism. Internal state producers and already accepted processes use the narrow domain APIs of authoritative owners directly.
+
+Normal world-state impossibility is structured data. Invalid programming/bootstrap/configuration state remains exceptional.
+
+All operation outcomes expose a minimal neutral observation floor:
+
+```text
+accepted
+namespaced result code
+```
+
+Namespaced codes use forms such as:
+
+```text
+terrain:position_occupied
+movement:blocked
+```
+
+There is no global enum of every project rejection reason. Concrete domains may expose richer typed results while generic Control sees only the common observation floor.
+
+Generic Control has no world-domain knowledge. The dependency law is:
+
+```text
+simulation.control.core  -X-> world.*
+simulation.control.sync  -X-> world.*
+world.*                   -X-> simulation.control.*
+```
+
+Concrete adapters under `simulation/control/<use-case>/` may depend on the narrow domain APIs required by that use-case. Commands are grouped by intent/use-case rather than by whichever single system happens to be mutated.
+
+The current delivery is synchronous: submission dispatches and executes immediately, and authoritative mutations are visible before `submit` returns. For deterministic callers, command order is the deterministic order of calls.
+
+A future queued/asynchronous delivery may reuse the same Command/Handler/Dispatcher contracts, but it must explicitly define queue order, flush point and state-visibility semantics. Changing delivery policy is not assumed to preserve within-tick visibility automatically.
 
 No player-only shortcut may mutate mechanics internals directly.
 
@@ -303,6 +364,10 @@ If it depends only on object position, add an appropriate specialized object spa
 
 Add a replacement implementation behind the existing semantic boundary rather than changing world ownership.
 
+### New Command
+
+Add a concrete immutable Command, typed CommandResult and one handler under the appropriate `control/<use-case>/` area. The handler may depend on narrow domain APIs; generic Control must not learn the new domain type. Do not create a Command for an internal mutation merely to route calls between systems.
+
 ## 16. Explicitly deferred decisions
 
 The architecture intentionally does not yet fix:
@@ -323,6 +388,7 @@ The architecture intentionally does not yet fix:
 - full object lifecycle orchestration;
 - persistence format and region save boundaries;
 - final EventBus implementation;
+- queued/asynchronous command batching and within-tick visibility policy;
 - multithreading architecture beyond the single authoritative mutation thread;
 - exact AI planner family;
 - final renderer/Z-level UX.
