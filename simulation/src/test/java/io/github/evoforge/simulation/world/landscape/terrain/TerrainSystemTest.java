@@ -28,7 +28,9 @@ final class TerrainSystemTest {
     void lookupReturnsTerrainAndReportsEmptyPositions() {
         TerrainSystem terrain = createTerrain();
 
-        terrain.place(10, 20, -3, GRANITE);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(10, 20, -3, GRANITE));
 
         assertEquals(GRANITE, terrain.lookup().find(10, 20, -3));
         assertTrue(terrain.lookup().contains(10, 20, -3));
@@ -45,45 +47,55 @@ final class TerrainSystemTest {
     @Test
     void placeRejectsOccupiedPositionWithoutChangingIt() {
         TerrainSystem terrain = createTerrain();
-        terrain.place(1, 2, 3, GRANITE);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 2, 3, GRANITE));
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> terrain.place(1, 2, 3, SOIL));
+        assertEquals(
+                TerrainPlacementResult.POSITION_OCCUPIED,
+                terrain.place(1, 2, 3, SOIL));
         assertEquals(GRANITE, terrain.lookup().find(1, 2, 3));
     }
 
     @Test
     void replaceChangesExistingTerrain() {
         TerrainSystem terrain = createTerrain();
-        terrain.place(1, 2, 3, GRANITE);
-        terrain.replace(1, 2, 3, SOIL);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 2, 3, GRANITE));
+        assertEquals(
+                TerrainReplacementResult.REPLACED,
+                terrain.replace(1, 2, 3, SOIL));
         assertEquals(SOIL, terrain.lookup().find(1, 2, 3));
     }
 
     @Test
     void replaceRejectsEmptyPosition() {
         TerrainSystem terrain = createTerrain();
-        assertThrows(
-                IllegalStateException.class,
-                () -> terrain.replace(1, 2, 3, SOIL));
+        assertEquals(
+                TerrainReplacementResult.TERRAIN_ABSENT,
+                terrain.replace(1, 2, 3, SOIL));
         assertNull(terrain.lookup().find(1, 2, 3));
     }
 
     @Test
     void removeRemovesExistingTerrain() {
         TerrainSystem terrain = createTerrain();
-        terrain.place(1, 2, 3, GRANITE);
-        terrain.remove(1, 2, 3);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 2, 3, GRANITE));
+        assertEquals(
+                TerrainRemovalResult.REMOVED,
+                terrain.remove(1, 2, 3));
         assertNull(terrain.lookup().find(1, 2, 3));
     }
 
     @Test
     void removeRejectsEmptyPosition() {
         TerrainSystem terrain = createTerrain();
-        assertThrows(
-                IllegalStateException.class,
-                () -> terrain.remove(1, 2, 3));
+        assertEquals(
+                TerrainRemovalResult.TERRAIN_ABSENT,
+                terrain.remove(1, 2, 3));
     }
 
     @Test
@@ -97,7 +109,9 @@ final class TerrainSystemTest {
                 IllegalArgumentException.class,
                 () -> terrain.place(1, 2, 3, UNKNOWN));
 
-        terrain.place(1, 2, 3, GRANITE);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 2, 3, GRANITE));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> terrain.replace(1, 2, 3, null));
@@ -110,11 +124,13 @@ final class TerrainSystemTest {
     @Test
     void supportsFullIntCoordinateRange() {
         TerrainSystem terrain = createTerrain();
-        terrain.place(
-                Integer.MIN_VALUE,
-                Integer.MAX_VALUE,
-                Integer.MIN_VALUE,
-                GRANITE);
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(
+                        Integer.MIN_VALUE,
+                        Integer.MAX_VALUE,
+                        Integer.MIN_VALUE,
+                        GRANITE));
         assertEquals(
                 GRANITE,
                 terrain.lookup().find(
