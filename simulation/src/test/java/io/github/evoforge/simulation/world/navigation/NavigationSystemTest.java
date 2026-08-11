@@ -218,7 +218,7 @@ final class NavigationSystemTest {
     }
 
     @Test
-    void readsOnlyLocalThreeByThreeByThreeNeighborhood() {
+    void readsOnlyLocalTransitionAndLowerSupportNeighborhood() {
         TrackingGeometryLookup geometry =
                 new TrackingGeometryLookup(
                         10,
@@ -234,11 +234,11 @@ final class NavigationSystemTest {
                 30);
 
         assertEquals(
-                27,
+                36,
                 geometry.calls);
 
         assertEquals(
-                1,
+                2,
                 geometry.maxDistance);
     }
 

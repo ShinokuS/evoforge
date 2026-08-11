@@ -18,6 +18,7 @@ public final class RampShape
     private final long lowerPorts;
     private final long rampPorts;
     private final long upperPorts;
+    private final long higherPorts;
 
     private RampShape(
             int riseX,
@@ -44,6 +45,12 @@ public final class RampShape
                         riseY,
                         0);
 
+        int rampToRamp =
+                TransitionMask.of(
+                        riseX,
+                        riseY,
+                        1);
+
         int upperToRamp =
                 TransitionMask.of(
                         -riseX,
@@ -51,22 +58,22 @@ public final class RampShape
                         0);
 
         lowerPorts =
-                TransitionPorts.of(
-                        lowerToRamp,
+                TransitionPorts.arrivalsOnly(
                         lowerToRamp);
 
-        int rampTransitions =
-                rampToLower | rampToUpper;
-
         rampPorts =
-                TransitionPorts.of(
-                        rampTransitions,
-                        rampTransitions);
+                TransitionPorts.departuresOnly(
+                        rampToLower
+                                | rampToUpper
+                                | rampToRamp);
 
         upperPorts =
-                TransitionPorts.of(
-                        upperToRamp,
+                TransitionPorts.arrivalsOnly(
                         upperToRamp);
+
+        higherPorts =
+                TransitionPorts.arrivalsOnly(
+                        rampToLower);
     }
 
     @Override
@@ -93,6 +100,24 @@ public final class RampShape
             return upperPorts;
         }
 
+        if (relativeX == riseX
+                && relativeY == riseY
+                && relativeZ == 2) {
+            return higherPorts;
+        }
+
         return TransitionPorts.NONE;
+    }
+
+    @Override
+    public int transitionBlocks(
+            int relativeX,
+            int relativeY,
+            int relativeZ) {
+
+        return SolidCellBlocking.transitionBlocks(
+                relativeX,
+                relativeY,
+                relativeZ);
     }
 }

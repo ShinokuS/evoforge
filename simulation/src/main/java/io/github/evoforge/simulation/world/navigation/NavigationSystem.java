@@ -36,7 +36,12 @@ public final class NavigationSystem {
         int maxOffsetX = x == Integer.MAX_VALUE ? 0 : 1;
         int minOffsetY = y == Integer.MIN_VALUE ? 0 : -1;
         int maxOffsetY = y == Integer.MAX_VALUE ? 0 : 1;
-        int minOffsetZ = z == Integer.MIN_VALUE ? 0 : -1;
+        int minOffsetZ =
+                z == Integer.MIN_VALUE
+                        ? 0
+                        : z == Integer.MIN_VALUE + 1
+                                ? -1
+                                : -2;
         int maxOffsetZ = z == Integer.MAX_VALUE ? 0 : 1;
 
         long ports = TransitionPorts.NONE;

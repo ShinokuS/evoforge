@@ -180,7 +180,8 @@ final class NavigationReferencePropertyTest {
 
             if (Math.abs(offsetX) > 1
                     || Math.abs(offsetY) > 1
-                    || Math.abs(offsetZ) > 1) {
+                    || offsetZ < -2
+                    || offsetZ > 1) {
                 continue;
             }
 

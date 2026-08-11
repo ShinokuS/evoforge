@@ -7,17 +7,17 @@ public final class FullShape
             new FullShape();
 
     private static final int HORIZONTAL =
-            TransitionMask.of(-1, -1, 0)
-                    | TransitionMask.of(0, -1, 0)
-                    | TransitionMask.of(1, -1, 0)
-                    | TransitionMask.of(-1, 0, 0)
-                    | TransitionMask.of(1, 0, 0)
-                    | TransitionMask.of(-1, 1, 0)
-                    | TransitionMask.of(0, 1, 0)
-                    | TransitionMask.of(1, 1, 0);
+            SolidCellBlocking.HORIZONTAL;
+
+    private static final int CARDINAL_UP =
+            TransitionMask.of(-1, 0, 1)
+                    | TransitionMask.of(1, 0, 1)
+                    | TransitionMask.of(0, -1, 1)
+                    | TransitionMask.of(0, 1, 1);
 
     private static final long TOP_PORTS =
-            TransitionPorts.departuresOnly(HORIZONTAL);
+            TransitionPorts.departuresOnly(
+                    HORIZONTAL | CARDINAL_UP);
 
     private FullShape() {
     }
@@ -27,6 +27,15 @@ public final class FullShape
             int relativeX,
             int relativeY,
             int relativeZ) {
+
+        if (relativeZ == 2
+                && Math.abs(relativeX) + Math.abs(relativeY) == 1) {
+            return TransitionPorts.arrivalsOnly(
+                    TransitionMask.of(
+                            -relativeX,
+                            -relativeY,
+                            -1));
+        }
 
         if (relativeZ != 1
                 || relativeX < -1 || relativeX > 1
@@ -51,41 +60,9 @@ public final class FullShape
             int relativeY,
             int relativeZ) {
 
-        if (relativeX < -1 || relativeX > 1
-                || relativeY < -1 || relativeY > 1
-                || relativeZ < -1 || relativeZ > 1) {
-            return TransitionMask.NONE;
-        }
-
-        if (relativeX == 0
-                && relativeY == 0
-                && relativeZ == 0) {
-            return HORIZONTAL;
-        }
-
-        int towardX = -relativeX;
-        int towardY = -relativeY;
-        int towardZ = -relativeZ;
-
-        int blocks =
-                TransitionMask.of(
-                        towardX,
-                        towardY,
-                        towardZ);
-
-        if (relativeZ != 0
-                || towardX != 0 && towardY != 0) {
-            return blocks;
-        }
-
-        if (towardX != 0) {
-            blocks |= TransitionMask.of(towardX, -1, 0);
-            blocks |= TransitionMask.of(towardX, 1, 0);
-        } else {
-            blocks |= TransitionMask.of(-1, towardY, 0);
-            blocks |= TransitionMask.of(1, towardY, 0);
-        }
-
-        return blocks;
+        return SolidCellBlocking.transitionBlocks(
+                relativeX,
+                relativeY,
+                relativeZ);
     }
 }

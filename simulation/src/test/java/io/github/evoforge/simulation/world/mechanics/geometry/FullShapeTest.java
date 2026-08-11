@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 final class FullShapeTest {
 
     @Test
-    void exposesEightHorizontalDeparturesFromTop() {
+    void exposesHorizontalAndCardinalUpDeparturesFromTop() {
         long ports =
                 FullShape.INSTANCE.transitionPorts(
                         0,
@@ -20,7 +20,7 @@ final class FullShapeTest {
                 TransitionPorts.departures(ports);
 
         assertEquals(
-                8,
+                12,
                 Integer.bitCount(departures));
 
         assertEquals(
@@ -41,6 +41,31 @@ final class FullShapeTest {
                                 0));
             }
         }
+
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        -1,
+                        0,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        1,
+                        0,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        0,
+                        -1,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        0,
+                        1,
+                        1));
     }
 
     @Test
@@ -92,7 +117,28 @@ final class FullShapeTest {
     }
 
     @Test
-    void returnsNoPortsOutsideLocalTopNeighborhood() {
+    void exposesCardinalDownArrivalIntoTopFromHigherNeighbor() {
+        int arrivals =
+                TransitionPorts.arrivals(
+                        FullShape.INSTANCE.transitionPorts(
+                                0,
+                                1,
+                                2));
+
+        assertEquals(
+                1,
+                Integer.bitCount(arrivals));
+
+        assertTrue(
+                TransitionMask.contains(
+                        arrivals,
+                        0,
+                        -1,
+                        -1));
+    }
+
+    @Test
+    void returnsNoPortsOutsideSupportedTopNeighborhood() {
         assertEquals(
                 TransitionPorts.NONE,
                 FullShape.INSTANCE.transitionPorts(
@@ -112,6 +158,13 @@ final class FullShapeTest {
                 FullShape.INSTANCE.transitionPorts(
                         0,
                         0,
+                        2));
+
+        assertEquals(
+                TransitionPorts.NONE,
+                FullShape.INSTANCE.transitionPorts(
+                        1,
+                        1,
                         2));
     }
 
