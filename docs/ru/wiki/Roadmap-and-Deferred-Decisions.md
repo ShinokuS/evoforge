@@ -11,8 +11,8 @@ DONE  Geometry foundation and transition algebra
 DONE  Directed structural Navigation
 DONE  Production cardinal RampShape
 DONE  Final geometry/navigation hardening and documentation
-NEXT  Control Backbone
-LATER Scenario Harness
+NOW   Control Backbone core + first PlaceTerrain vertical slice
+NEXT  Scenario Harness
       Basic Movement
       Occupancy
       Pathfinder
@@ -23,19 +23,29 @@ LATER Scenario Harness
 
 ## Control Backbone
 
-Следующий узкий архитектурный шаг — внешний control path:
+Текущий узкий фундамент Control создаёт один external-intent path для Player, AI, scripts, scenarios и будущих adapters:
 
 ```text
-Controller
+external intent
     ↓
-Command submission
+Command
     ↓
-handler / action
+delivery
+    ↓
+CommandDispatcher
+    ↓
+handler
+    ↓
+authoritative domain APIs
     ↓
 structured result
 ```
 
-Он должен дать единый путь player input, AI, scripts и scenarios, не изобретая ещё Movement, AI planning или giant command registry.
+Первая delivery implementation синхронная, а первый concrete vertical slice — `PlaceTerrainCommand`.
+
+Command не является обязательным внутренним RPC. После принятия intent внутренние процессы, например будущая world generation, erosion или продолжающиеся Actions, могут работать напрямую через узкие domain write APIs.
+
+Queued/asynchronous delivery остаётся deferred. Она может переиспользовать те же Command/Handler/Dispatcher contracts, но должна явно определить deterministic ordering, момент flush и within-tick state visibility.
 
 ## Scenario Harness
 
@@ -119,17 +129,24 @@ general orientation framework
 
 Если будущая geometry потребует multiple standing positions, role law Shape и вывод Navigation read-window пересматриваются вместе.
 
-## Known geometry lifecycle gap
+## Решение lifecycle Landscape
 
-Non-default geometry override может остаться после terrain removal и проявиться после re-place на той же coordinate.
+Прежний geometry-override lifecycle gap теперь закрыт согласованной границей `LandscapeMutations`:
 
-Policy принадлежит future lifecycle/orchestration logic. Не решать direct `TerrainSystem -> GeometrySystem` dependency.
+```text
+placeTerrain   -> очищает stale override
+replaceTerrain -> сохраняет override
+removeTerrain  -> очищает override
+```
+
+`TerrainSystem` по-прежнему не зависит от `GeometrySystem`; `LandscapeSystem` координирует обоих owners сверху.
 
 ## Deferred simulation infrastructure
 
 ```text
 final EventBus implementation
 full object lifecycle orchestration
+queued/asynchronous command batching and within-tick visibility policy
 multithreading beyond one authoritative mutation thread
 final RNG service before a real random consumer exists
 AI planner family
