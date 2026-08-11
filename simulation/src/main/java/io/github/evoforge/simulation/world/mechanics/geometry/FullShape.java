@@ -28,6 +28,15 @@ public final class FullShape
             int relativeY,
             int relativeZ) {
 
+        if (relativeZ == 2
+                && Math.abs(relativeX) + Math.abs(relativeY) == 1) {
+            return TransitionPorts.arrivalsOnly(
+                    TransitionMask.of(
+                            -relativeX,
+                            -relativeY,
+                            -1));
+        }
+
         if (relativeZ != 1
                 || relativeX < -1 || relativeX > 1
                 || relativeY < -1 || relativeY > 1) {
