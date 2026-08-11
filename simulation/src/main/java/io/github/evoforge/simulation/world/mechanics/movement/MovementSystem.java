@@ -1,8 +1,8 @@
 package io.github.evoforge.simulation.world.mechanics.movement;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
-import io.github.evoforge.simulation.world.mechanics.geometry.GridTransitionLength;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
@@ -15,6 +15,7 @@ public final class MovementSystem {
     private final TransformLookup transforms;
     private final NavigationLookup navigation;
     private final MovementDefinitions definitions;
+    private final TransitionCostLookup transitionCosts;
     private final MovementStateStore state;
     private final ProcessScheduler scheduler;
 
@@ -23,6 +24,7 @@ public final class MovementSystem {
             TransformLookup transforms,
             NavigationLookup navigation,
             MovementDefinitions definitions,
+            TransitionCostLookup transitionCosts,
             MovementStateStore state,
             ProcessScheduler scheduler) {
 
@@ -42,6 +44,10 @@ public final class MovementSystem {
             throw new IllegalArgumentException(
                     "definitions must not be null");
         }
+        if (transitionCosts == null) {
+            throw new IllegalArgumentException(
+                    "transitionCosts must not be null");
+        }
         if (state == null) {
             throw new IllegalArgumentException(
                     "state must not be null");
@@ -55,6 +61,7 @@ public final class MovementSystem {
         this.transforms = transforms;
         this.navigation = navigation;
         this.definitions = definitions;
+        this.transitionCosts = transitionCosts;
         this.state = state;
         this.scheduler = scheduler;
     }
@@ -130,11 +137,17 @@ public final class MovementSystem {
                     "movement carry must be less than rate");
         }
 
+        long cost = transitionCosts.cost(
+                fromX,
+                fromY,
+                fromZ,
+                toX,
+                toY,
+                toZ)
+                .units();
+
         Timing timing = timing(
-                GridTransitionLength.units(
-                        dx,
-                        dy,
-                        dz),
+                cost,
                 rate,
                 carry);
 
