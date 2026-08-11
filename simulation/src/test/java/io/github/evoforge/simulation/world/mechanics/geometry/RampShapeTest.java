@@ -135,10 +135,8 @@ final class RampShapeTest {
                         0,
                         0,
                         1),
-                rampToLower
-                        | rampToUpper
-                        | rampToRamp,
-                rampToLower);
+                rampToLower | rampToUpper | rampToRamp,
+                TransitionMask.NONE);
 
         int upperToRamp =
                 TransitionMask.of(
@@ -153,6 +151,14 @@ final class RampShapeTest {
                         1),
                 TransitionMask.NONE,
                 upperToRamp);
+
+        assertPorts(
+                shape.transitionPorts(
+                        riseX,
+                        riseY,
+                        2),
+                TransitionMask.NONE,
+                rampToLower);
     }
 
     private static void assertPorts(
