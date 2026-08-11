@@ -17,6 +17,7 @@ import io.github.evoforge.simulation.time.SimulationClock;
 import io.github.evoforge.simulation.time.SimulationStepper;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
@@ -76,6 +77,7 @@ public final class SimulationAssembly {
         movementDefinitions = new MovementDefinitions();
 
         landscape = LandscapeSystem.create(
+                new SparseTerrainStorage(),
                 landscapeDefinitions);
 
         navigation = new NavigationSystem(
