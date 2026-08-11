@@ -32,7 +32,8 @@ const englishSidebar = [
       { text: 'Control Backbone', link: '/wiki/Control-Backbone' },
       { text: 'Spatial System', link: '/wiki/Spatial-System' },
       { text: 'Landscape and Terrain', link: '/wiki/Landscape-and-Terrain' },
-      { text: 'Geometry System', link: '/wiki/Geometry-System' }
+      { text: 'Geometry System', link: '/wiki/Geometry-System' },
+      { text: 'Movement System', link: '/wiki/Movement-System' }
     ]
   },
   {
@@ -79,7 +80,8 @@ const russianSidebar = [
       { text: 'Control Backbone', link: '/ru/wiki/Control-Backbone' },
       { text: 'Spatial System', link: '/ru/wiki/Spatial-System' },
       { text: 'Landscape и Terrain', link: '/ru/wiki/Landscape-and-Terrain' },
-      { text: 'Geometry System', link: '/ru/wiki/Geometry-System' }
+      { text: 'Geometry System', link: '/ru/wiki/Geometry-System' },
+      { text: 'Movement System', link: '/ru/wiki/Movement-System' }
     ]
   },
   {
