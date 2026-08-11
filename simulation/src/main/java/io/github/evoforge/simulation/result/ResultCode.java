@@ -36,4 +36,9 @@ public record ResultCode(String value) {
 
         return new ResultCode(domain + ":" + code);
     }
+
+    @Override
+    public String toString() {
+        return value;
+    }
 }
