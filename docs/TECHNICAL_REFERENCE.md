@@ -19,6 +19,11 @@ The simulation module is the authoritative architecture target. Presentation mus
 
 ```text
 io.github.evoforge.simulation
+├── result/
+├── control/
+│   ├── core/
+│   ├── sync/
+│   └── terrain/
 ├── definition/
 ├── time/
 └── world/
@@ -28,6 +33,8 @@ io.github.evoforge.simulation
     ├── spatial/
     │   └── indexes/
     ├── landscape/
+    │   ├── LandscapeMutations
+    │   ├── LandscapeSystem
     │   ├── definition/
     │   └── terrain/
     │       └── storage/
@@ -102,9 +109,41 @@ Implemented:
 - `TerrainSystem`;
 - `TerrainLookup`;
 - `TerrainStorage` boundary;
-- current `SparseTerrainStorage`.
+- current `SparseTerrainStorage`;
+- `TerrainPlacementResult`;
+- `TerrainReplacementResult`;
+- `TerrainRemovalResult`;
+- `LandscapeMutations` coordinated write boundary;
+- `LandscapeSystem` coordinator over Terrain and Geometry lifecycle.
 
 `TerrainLookup.find(x,y,z)` returns `null` for absent terrain. `contains` is derived from that lookup.
+
+`TerrainSystem.place/replace/remove` are result-based. Current world-state conflicts do not throw:
+
+```text
+place on occupied position -> terrain:position_occupied
+replace absent terrain     -> terrain:terrain_absent
+remove absent terrain      -> terrain:terrain_absent
+```
+
+Null/unknown definitions remain programming/configuration errors and throw `IllegalArgumentException`.
+
+`LandscapeSystem` implements `LandscapeMutations` and coordinates terrain lifetime with sparse Geometry overrides:
+
+```text
+placeTerrain  -> successful placement clears any stale override
+replaceTerrain -> successful replacement preserves override
+removeTerrain -> successful removal clears override
+```
+
+Therefore new terrain without an explicit override resolves to `FullShape.INSTANCE`, and an override does not resurrect after remove/re-place.
+
+Internal producers that require success can express that expectation without comparing concrete enum constants:
+
+```java
+OperationResults.requireAccepted(
+        landscape.placeTerrain(...));
+```
 
 The current sparse storage is an implementation, not a final chunk model.
 
@@ -146,6 +185,8 @@ GeometryLookup.find(XYZ) -> FullShape.INSTANCE
 ```
 
 Only non-default Shape overrides are stored in `GeometryState`.
+
+`GeometrySystem.clearShapeOverride(x,y,z)` is the low-level override-lifecycle operation used by the higher `LandscapeSystem` coordinator. `TerrainSystem` does not depend back on Geometry.
 
 ### 8.2 Shape API
 
@@ -391,7 +432,70 @@ Current topology queries always see current Geometry on the next call and theref
 
 Caching may return later only after representative workload measurement.
 
-## 10. Navigation and geometry testing
+## 10. Control Backbone
+
+Neutral result infrastructure lives in:
+
+```text
+simulation/result/
+```
+
+Implemented:
+
+- `OperationResult` with `accepted()` and namespaced `ResultCode`;
+- `ResultCode` validation for `domain:code` form;
+- `OperationResults.requireAccepted(...)` for callers whose own invariant requires success.
+
+Generic Control lives in:
+
+```text
+simulation/control/core/
+```
+
+Implemented:
+
+- `Command<R extends CommandResult>`;
+- `CommandResult` extending the neutral result floor;
+- typed `CommandHandler<C,R>`;
+- `CommandDispatcher` with exact runtime-class routing.
+
+`CommandDispatcher` stores registrations directly. Registering a second handler for one concrete command class, dispatching an unregistered class, or receiving a null handler result is an `IllegalStateException` because those are bootstrap/programming failures.
+
+The first delivery implementation is:
+
+```text
+simulation/control/sync/SynchronousCommandGateway
+```
+
+`submit` dispatches immediately. Handler mutations are visible before it returns.
+
+The first concrete use-case lives in:
+
+```text
+simulation/control/terrain/
+```
+
+and contains:
+
+- `PlaceTerrainCommand`;
+- `PlaceTerrainHandler`;
+- `PlaceTerrainResult`.
+
+The handler adapts `LandscapeMutations.placeTerrain` into the command result. An occupied position is a normal `terrain:position_occupied` rejection and does not modify the existing terrain.
+
+Current dependency policy is executable through `ControlDependencyContractTest`:
+
+```text
+control/core -> no world imports
+control/sync -> no world imports
+world/*      -> no control imports
+```
+
+Concrete use-case handlers may import the narrow domain APIs they orchestrate.
+
+The current Control implementation deliberately does not include queued delivery, EventBus integration, Movement, long-running Action state, replay storage, or a global rejection enum.
+
+## 11. Navigation and geometry testing
 
 Current coverage includes:
 
@@ -430,7 +534,16 @@ The randomized reference test samples:
 
 Its mutation radius extends beyond Navigation locality, so distant changes are also checked for non-influence. Failure messages include reproducible seed, mutation step and source XYZ.
 
-## 11. Coordinate implementation note
+Control/landscape coverage now additionally includes:
+
+- structured result semantics for terrain place/replace/remove;
+- generic `requireAccepted` expectation handling;
+- coordinated Geometry override cleanup on place/remove and preservation on replace;
+- exact command routing and duplicate/missing-registration failures;
+- generic Control dependency-direction contract;
+- synchronous first placement followed by structured occupied-position rejection without state corruption.
+
+## 12. Coordinate implementation note
 
 Public coordinates currently use signed `int`.
 
@@ -438,23 +551,21 @@ Tests at `Integer.MIN_VALUE`/`Integer.MAX_VALUE` protect local arithmetic from a
 
 World bounds and any packed internal coordinate key remain undecided.
 
-## 12. Current known gaps
-
-### Geometry override lifecycle
-
-A non-default Geometry override may remain in `GeometryState` if terrain is removed and later placed again at the same XYZ. The policy for remove/re-place is not yet owned by a lifecycle/orchestration boundary.
-
-Do not solve this by introducing a reverse `TerrainSystem -> GeometrySystem` dependency.
+## 13. Current known gaps
 
 ### Unloaded versus absent terrain
 
 Current read contracts represent terrain absence with `null`. A future chunk/region model must distinguish true absence from not-loaded/not-generated state if those concepts exist.
 
-### Diagnostics
+### Navigation diagnostics
 
 `NavigationLookup.transitions` intentionally returns only a primitive mask. It does not explain why a direction is absent.
 
 A future diagnostic/Inspector path may expose departures, arrivals, blocks and contributing geometry if a real Movement/Pathfinder debugging need appears. It is not part of the current hot read contract.
+
+### Queued/asynchronous command delivery
+
+Only immediate synchronous submission exists today. A future queued or asynchronous gateway must define deterministic ordering, queue flush point and within-tick state visibility rather than treating delivery as a performance-only replacement.
 
 ### Movement and costs
 
@@ -483,7 +594,7 @@ These may be expanded only when a real consumer needs them.
 
 No cache policy is selected. Future profiling should decide whether topology reuse is best represented by no cache, chunk-local arrays, bounded maps or another derived structure.
 
-## 13. Determinism work to enforce as systems appear
+## 14. Determinism work to enforce as systems appear
 
 The stable architecture requires:
 
@@ -494,7 +605,7 @@ The stable architecture requires:
 
 There is not yet a general RNG service because no current mechanic requires authoritative randomness. It should be introduced with the first real random consumer rather than as unused infrastructure.
 
-## 14. Performance watch points
+## 15. Performance watch points
 
 Current Geometry/Terrain sparse implementations use object-keyed maps. `GeometryState.find` and `SparseTerrainStorage.find` may allocate temporary cell keys depending on JVM escape analysis.
 
@@ -502,7 +613,7 @@ Do not replace them preemptively. When Pathfinder creates a representative Navig
 
 The current resolver performs at most 36 local Geometry lookups per source query. This is a deliberate correctness envelope derived from the current supported-position/arrival contract, not a performance target that should be reduced by weakening topology semantics.
 
-## 15. Current roadmap
+## 16. Current roadmap
 
 ```text
 DONE  Object/Definition/Scheduler/Spatial foundation
@@ -511,9 +622,9 @@ DONE  Geometry foundation and transition algebra
 DONE  Local directed Navigation resolver
 DONE  Architecture/test hardening after external review
 DONE  Production primitive RampShape with real Z transitions
-NOW   Final Ramp/Navigation hardening and documentation alignment
-NEXT  Control Backbone
-LATER Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
+DONE  Final Ramp/Navigation hardening and documentation alignment
+NOW   Control Backbone core + first PlaceTerrain vertical slice
+NEXT  Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
 ```
 
 Before Basic Movement begins, falling ownership must be decided explicitly. Before Pathfinder optimization begins, Navigation/Terrain/Geometry lookup cost should be measured under representative load.
