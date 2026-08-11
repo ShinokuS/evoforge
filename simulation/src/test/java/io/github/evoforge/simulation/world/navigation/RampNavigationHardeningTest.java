@@ -20,7 +20,7 @@ final class RampNavigationHardeningTest {
             LandscapeDefinitionId.of(0);
 
     @Test
-    void lowerConnectionRequiresLowerShape() {
+    void lowerAscentRequiresLowerShape() {
         TestTerrainLookup terrain =
                 new TestTerrainLookup();
 
@@ -32,8 +32,6 @@ final class RampNavigationHardeningTest {
 
         int lower =
                 navigation.transitions(0, 0, 0);
-        int ramp =
-                navigation.transitions(0, 1, 1);
 
         assertFalse(
                 TransitionMask.contains(
@@ -41,6 +39,21 @@ final class RampNavigationHardeningTest {
                         0,
                         1,
                         1));
+    }
+
+    @Test
+    void lowerDescentRequiresLowerShape() {
+        TestTerrainLookup terrain =
+                new TestTerrainLookup();
+
+        terrain.add(0, 1, 0);
+        terrain.add(0, 2, 0);
+
+        NavigationLookup navigation =
+                navigation(terrain);
+
+        int ramp =
+                navigation.transitions(0, 1, 1);
 
         assertFalse(
                 TransitionMask.contains(
