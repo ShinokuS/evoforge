@@ -31,6 +31,11 @@ EvoForge/
 
 ```text
 io.github.evoforge.simulation
+├── result/
+├── control/
+│   ├── core/
+│   ├── sync/
+│   └── terrain/
 ├── definition/
 ├── time/
 └── world/
@@ -40,6 +45,8 @@ io.github.evoforge.simulation
     ├── spatial/
     │   └── indexes/
     ├── landscape/
+    │   ├── LandscapeMutations
+    │   ├── LandscapeSystem
     │   ├── definition/
     │   └── terrain/
     │       └── storage/
@@ -53,7 +60,7 @@ Package tree растёт только при появлении реально�
 
 ## `core`
 
-`core` — общий application/presentation layer libGDX. Он может читать simulation state через public contracts и отправлять commands через будущую control boundary, но не становится владельцем simulation state.
+`core` — общий application/presentation layer libGDX. Он может читать simulation state через public contracts и отправлять внешнее намерение через Control boundary, но не становится владельцем simulation state.
 
 Полезное правило: закрытие окна игры концептуально не равно уничтожению авторитетной модели World. Presentation — клиент simulation.
 
@@ -82,7 +89,36 @@ Definitions используют stable keys, а не filenames или runtime i
 
 `TECHNICAL_REFERENCE.md` отслеживает текущую реализацию и меняется чаще.
 
-`docs/wiki/` содержит long-form Wiki source. `docs/ru/` содержит русские переводы тех же уровней. GitHub Wiki и VitePress публикуются автоматически после попадания изменений в `main`.
+`docs/wiki/` содержит long-form Wiki source. `docs/ru/` содержит поддерживаемые русские counterparts. GitHub Wiki и VitePress генерируются из repository sources после попадания изменений в `main`.
+
+## `result`
+
+`simulation/result` — нейтральная инфраструктура, общая для domain operations и Control.
+
+Текущие типы:
+
+```text
+OperationResult
+ResultCode
+OperationResults
+```
+
+Этот пакет задаёт только минимальный observation floor accepted/rejected и namespaced result code. Domain semantics ему не принадлежат.
+
+## `control`
+
+Command surface собрана под одним обозримым корнем:
+
+```text
+control/
+├── core/
+├── sync/
+└── terrain/
+```
+
+`core` содержит generic Command/Handler/Dispatcher contracts и не импортирует world-domain types. `sync` содержит текущую immediate delivery implementation. Concrete commands группируются по intent/use-case; первый пример — terrain placement slice.
+
+World packages не зависят от Control. Внутренние mechanics могут напрямую вызывать узкие domain APIs, а не создавать Commands как внутренний RPC.
 
 ## `definition`
 
@@ -109,6 +145,8 @@ Landscape не представляется миллионами `WorldObject`:
 ```text
 XYZ -> LandscapeDefinitionId | absence
 ```
+
+`TerrainSystem` владеет terrain storage и terrain-specific invariants. `LandscapeMutations`, реализованный `LandscapeSystem`, — согласованная write-capability для операций, где lifetime terrain должен оставаться согласованным с Geometry.
 
 Текущее storage sparse и заменяемо.
 
@@ -138,6 +176,8 @@ Navigation потребляет только `GeometryLookup` и предост�
 ## Тесты
 
 Simulation tests зеркалят domains под `simulation/src/test/java`. Unit tests проверяют локальные contracts, integration tests — границы подсистем, property/reference tests — общие законы против независимого resolver.
+
+Control добавляет явный dependency-contract test, поэтому правила направления packages становятся исполняемой архитектурой, а не только документацией.
 
 Полный suite:
 
