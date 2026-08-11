@@ -124,12 +124,20 @@ final class RampShapeTest {
                         riseY,
                         0);
 
+        int rampToRamp =
+                TransitionMask.of(
+                        riseX,
+                        riseY,
+                        1);
+
         assertPorts(
                 shape.transitionPorts(
                         0,
                         0,
                         1),
-                rampToLower | rampToUpper,
+                rampToLower
+                        | rampToUpper
+                        | rampToRamp,
                 rampToLower);
 
         int upperToRamp =
