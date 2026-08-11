@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      - "scripts/check-docs-i18n.mjs"
+      - "scripts/prepare-wiki.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs-site.yml"
@@ -12,6 +14,8 @@ on:
       - main
     paths:
       - "docs/**"
+      - "scripts/check-docs-i18n.mjs"
+      - "scripts/prepare-wiki.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs-site.yml"
@@ -44,6 +48,12 @@ jobs:
 
       - name: Install documentation dependencies
         run: npm ci
+
+      - name: Check documentation locales
+        run: node scripts/check-docs-i18n.mjs
+
+      - name: Validate multilingual Wiki staging
+        run: node scripts/prepare-wiki.mjs /tmp/evoforge-wiki-preview
 
       - name: Build VitePress site
         run: npm run docs:build

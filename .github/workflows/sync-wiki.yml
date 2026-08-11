@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "docs/wiki/**"
+      - "docs/ru/wiki/**"
+      - "scripts/prepare-wiki.mjs"
       - ".github/workflows/sync-wiki.yml"
   workflow_dispatch:
 
@@ -18,14 +20,22 @@ concurrency:
 
 jobs:
   sync:
-    name: Publish docs/wiki to GitHub Wiki
+    name: Publish multilingual docs to GitHub Wiki
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Prepare multilingual Wiki tree
+        run: node scripts/prepare-wiki.mjs wiki-stage
 
       - name: Clone wiki repository
         env:
@@ -36,10 +46,10 @@ jobs:
             exit 1
           fi
 
-      - name: Replace wiki contents from source
+      - name: Replace wiki contents from generated tree
         run: |
           find wiki -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a docs/wiki/. wiki/
+          cp -a wiki-stage/. wiki/
 
       - name: Commit and push wiki
         working-directory: wiki
@@ -53,5 +63,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "docs: sync wiki from ${GITHUB_SHA::7}"
+          git commit -m "docs: sync multilingual wiki from ${GITHUB_SHA::7}"
           git push origin HEAD
