@@ -17,17 +17,19 @@ EvoForge — проект детерминированной эмерджент�
 5. [Контракт Shape](Shape-Contract.md)
 6. [Алгебра переходов](Transition-Algebra.md)
 7. [Navigation](Navigation.md)
-8. [Стратегия тестирования](Testing-Strategy.md)
-9. [Процесс разработки](Development-Workflow.md)
-10. [Дорожная карта и отложенные решения](Roadmap-and-Deferred-Decisions.md)
+8. [Control Backbone](Control-Backbone.md)
+9. [Стратегия тестирования](Testing-Strategy.md)
+10. [Процесс разработки](Development-Workflow.md)
+11. [Дорожная карта и отложенные решения](Roadmap-and-Deferred-Decisions.md)
 
 ## Текущая архитектура в одном взгляде
 
 ```text
-Definitions
-    │
-    ├── Object definitions
-    └── Landscape definitions
+External intent
+    ↓
+Control Backbone
+    ↓
+authoritative domain APIs
 
 WORLD
 ├── Objects
@@ -36,6 +38,7 @@ WORLD
 │   └── SpatialSystem           ObjectId -> XYZ
 │
 └── Landscape
+    ├── LandscapeMutations      coordinated write boundary
     └── TerrainSystem           XYZ -> LandscapeDefinitionId | absence
              │
              ▼
@@ -46,6 +49,8 @@ WORLD
 ```
 
 Центральное правило дизайна — владение: у каждого изменяемого авторитетного факта один владелец. Общие координаты не означают общего хранилища, а удобство запроса не является основанием переносить доменную ответственность в query-layer.
+
+Commands переносят внешнее намерение в симуляцию. Внутренние процессы не обязаны превращать каждую мутацию в Command и могут использовать явно выданные узкие domain write-capabilities.
 
 ## Geometry и Navigation в одной схеме
 
@@ -79,9 +84,11 @@ resolved = departures & arrivals & ~blocks
 
 ## Текущая фаза проекта
 
-Реализованный фундамент включает definitions, object identity, scheduling, дискретное object spatial state, landscape terrain, geometry, структурную transition algebra, `FullShape`, cardinal `RampShape` и направленную локальную Navigation. Следующий архитектурный consumer — Control Backbone; позже идут scenario execution, basic movement, occupancy, pathfinding и первый agent vertical slice.
+Реализованный фундамент теперь включает definitions, object identity, scheduling, дискретное object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, направленную локальную Navigation и первый vertical slice Control Backbone со structured command results и `PlaceTerrainCommand`.
 
-Проект намеренно не строит системы до появления потребителя. Caches, богатые movement costs, actor capability overlays, falling, chunk layouts и advanced pathfinding остаются deferred до появления реальной нагрузки.
+Следующий крупный шаг — Scenario Harness; далее идут basic movement, occupancy, pathfinding и первый agent vertical slice.
+
+Проект намеренно не строит системы до появления потребителя. Queued command batching semantics, caches, богатые movement costs, actor capability overlays, falling, chunk layouts и advanced pathfinding остаются deferred до появления реальной нагрузки.
 
 ## Навигация по документации
 
