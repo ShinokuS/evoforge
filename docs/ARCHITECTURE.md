@@ -44,6 +44,9 @@ EvoForge is not a pure ECS, a universal physics engine, a giant `WorldCell` mode
 | I-12 | New fundamental systems arrive with headless correctness tests and a diagnostic strategy. |
 | I-13 | Command crosses the external-intent boundary; continuing internal processes and internal state producers use narrow domain APIs directly rather than turning Command into internal RPC. |
 | I-14 | Generic Control routes and observes commands but does not depend on world-domain types; world domains do not depend on Control. |
+| I-15 | Structural Navigation decides edge existence; actor-independent TransitionCost prices an already-valid directed edge; Movement converts that price into timed execution. |
+| I-16 | Timed Movement does not create a second authoritative position: Spatial remains at the source until completion-time revalidation authorizes `SpatialSystem.move`. |
+| I-17 | Scheduler process identity/routing is infrastructure; domain Action/process identity and state remain owned by the domain mechanic. |
 
 ## 4. World coordinates [FIXED REPRESENTATION / DEFERRED BOUNDS]
 
@@ -76,6 +79,8 @@ ObjectId -> XYZ
 Landscape, terrain, water, temperature and other environmental state do not become `WorldObject` instances and do not enter object spatial indexes merely because they also use XYZ addresses.
 
 Shared XYZ is an address, not a shared owner of all cell state.
+
+A timed Movement Action does not own an interpolated or alternate authoritative coordinate. Until completion succeeds, Spatial remains at the action source; after completion succeeds, Spatial atomically owns the destination.
 
 ## 6. Landscape and terrain [FIXED]
 
@@ -112,6 +117,8 @@ removeTerrain
 
 Therefore a non-default Shape does not survive terrain removal and later re-placement at the same XYZ. Shape belongs to the lifetime of the terrain cell, not permanently to the coordinate.
 
+Landscape definitions may provide mechanic-specific immutable data such as actor-independent `traversal.cost`. The terrain cell still stores only `LandscapeDefinitionId`; traversal configuration is compiled into a mechanic-owned definition store.
+
 Internal producers such as future world generation, erosion or continuing Actions may call the narrow landscape/domain write capability directly. They are not required to manufacture Commands. Write-capabilities are supplied explicitly during bootstrap/composition and should remain narrowly held and reviewable.
 
 A new environmental mechanic normally adds a new specialized state owner rather than fields to a universal landscape cell.
@@ -122,15 +129,29 @@ Geometry is a separate mechanic over present terrain. It does not own material i
 
 Presence without a geometry override means `FullShape.INSTANCE`. Sparse geometry state stores only non-default Shape overrides.
 
-`Shape` is an open declarative local-topology contract:
+`Shape` is an open declarative local-geometry contract:
 
 - no enum of all shapes;
 - no central Shape catalog required for runtime composition;
-- no `instanceof`/`switch` on concrete Shape inside Navigation;
+- no `instanceof`/`switch` on concrete Shape inside Navigation or TransitionCost calculation;
 - Shape does not query World, neighbors, Navigation, ObjectId or pathfinding;
-- Shape receives only the current source position relative to its own terrain anchor.
+- Shape receives only the current source position relative to its own terrain anchor plus a local direction when a directed traversal characteristic is requested.
 
-A new Shape that fits the contract is added as a new implementation plus tests, without modifying `NavigationSystem` or existing Shape implementations merely to recognize its concrete type.
+Shape owns two related but distinct local contributions:
+
+```text
+structural topology roles
+    -> departures / arrivals / blocks
+
+intrinsic traversal geometry
+    -> departureTraversalFactor / arrivalTraversalFactor
+```
+
+Traversal factors follow the **same departure/arrival role ownership and relative-coordinate law** as topology. A Shape contributes only its own source-side departure factor or destination-side arrival factor; it does not calculate the neighboring Shape's contribution.
+
+Current traversal factors use fixed-point scale `1000 = 1.0`. `0` means that the Shape does not own the requested traversal role. Current `FullShape` and cardinal `RampShape` use neutral factors for the roles their topology exposes; no arbitrary additional ramp penalty is part of the current contract.
+
+A new Shape that fits the contract is added as a new implementation plus tests, without modifying `NavigationSystem`, `TransitionCostCalculator` or existing Shape implementations merely to recognize its concrete type.
 
 ## 8. Structural transition algebra [FIXED ALGEBRA / WORKING SHAPE MODEL]
 
@@ -171,7 +192,9 @@ Within this current model:
 - a Shape does not assert the existence of a neighboring Shape or foreign supported surface;
 - occupied solid terrain coordinates are not ordinary navigation positions.
 
-This one-supported-position rule is **WORKING**, not a permanent restriction on every future Shape. If a real future Shape requires multiple supported positions or a different local representation, its contract and the resolver read envelope must be revised together rather than bypassed with type-specific Navigation logic.
+The same supported-position relationship is used by current TransitionCost support-owner lookup. For a directed edge `A -> B`, source support is `A - (0,0,1)` and destination support is `B - (0,0,1)`; the source Shape is queried for departure role and the destination Shape for arrival role.
+
+This one-supported-position rule is **WORKING**, not a permanent restriction on every future Shape. If a real future Shape requires multiple supported positions or a different local representation, its contract, Navigation read envelope and TransitionCost support-owner lookup must be revised together rather than bypassed with type-specific logic.
 
 ## 9. Navigation topology [FIXED]
 
@@ -189,7 +212,7 @@ Navigation:
 - does not know concrete Shape types;
 - does not know ObjectId;
 - does not know mover abilities;
-- does not assign path cost;
+- does not assign transition/path cost;
 - does not perform pathfinding;
 - does not mutate world state.
 
@@ -221,6 +244,8 @@ If `transitions(A)` contains direction `d`, it does not imply that `transitions(
 
 Symmetric movement emerges only when both directed edges are independently supported. Shapes may expose bidirectional or asymmetric topology as their semantics require.
 
+TransitionCost is likewise directed: different departure/arrival factors may make `cost(A -> B)` differ from `cost(B -> A)` even when both structural edges exist.
+
 ### 9.2 Caching [DEFERRED IMPLEMENTATION]
 
 There is currently no persistent Navigation cache contract.
@@ -237,17 +262,113 @@ Any cache is derived state and must remain invisible behind the stable Navigatio
 
 ## 10. Movement, traversal and pathfinding boundaries [FIXED BOUNDARIES / WORKING DETAILS]
 
-Navigation answers structural adjacency.
+The current semantic chain is:
 
-Movement decides whether and how a concrete actor performs a transition. Actor capabilities, occupancy, speed and movement semantics do not belong in Shape merely to make basic Navigation work.
+```text
+Navigation
+    -> does directed adjacent structural edge A -> B exist?
 
-`SpatialSystem` applies an already-authorized object position mutation; it does not decide whether terrain/path/collision permits movement.
+TransitionCost
+    -> what is the actor-independent intrinsic price of that valid edge?
 
-Pathfinding is a replaceable consumer of Navigation. A*, Dijkstra, hierarchical search, flow fields or other algorithms are implementation choices, not project-wide architecture.
+MovementRate + Movement timing state
+    -> how many simulation ticks does this mover require?
 
-Transition/path costs remain **DEFERRED** until the first real Pathfinder/Movement consumer demonstrates what information is required.
+MovementAction
+    -> start, sleep, completion-time revalidation, Spatial commit or interruption
 
-Involuntary movement such as falling is not yet assigned to Navigation or Movement semantics. That ownership remains **DEFERRED** until Basic Movement is designed; it must not be inferred merely from the existence of vertical Shape edges.
+Pathfinder (future)
+    -> choose among valid edges using the SAME TransitionCost semantics
+```
+
+### 10.1 Timed adjacent Movement [FIXED CURRENT SEMANTICS]
+
+`MoveStepCommand` starts one adjacent timed attempt; acceptance does not immediately mutate Spatial.
+
+Movement validates object capability, placement, adjacency and Navigation before starting an Action. At most one ordinary Movement Action may be active per object.
+
+While the Action is active:
+
+```text
+authoritative Spatial position = source
+```
+
+The Action schedules one future completion through a narrow `ProcessScheduler`. On completion, Movement revalidates that the object still exists, is still at the recorded source and that Navigation still exposes the directed edge. Only then may it call `SpatialSystem.move`; otherwise the Action is interrupted and removed without changing position.
+
+Between start and scheduled completion the current Action is dormant. It does not subscribe to terrain/geometry mutation notifications yet; changed topology is observed at completion-time revalidation.
+
+Every ordinary Movement transition lasts at least one simulation tick. There is no authoritative fractional/interpolated position between cells.
+
+### 10.2 Movement capability and timing [FIXED CURRENT SEMANTICS]
+
+Ordinary self-propelled Movement capability is definition-backed:
+
+```text
+ObjectDefinitionId -> MovementRate
+```
+
+`MovementRate` is a positive integer in traversal-cost units per simulation tick. Absence of the movement aspect means the current ordinary movement capability is unavailable.
+
+Transition-cost units are converted to ticks using deterministic per-object fractional carry. The carry persists across separate adjacent steps so repeated rounding does not systematically distort fast movers or diagonal travel.
+
+Current timed Movement is independent of wall-clock/render FPS. Presentation speed may control how quickly simulation ticks are advanced in real time; it does not redefine `MovementRate`, `TransitionCost` or simulation-tick ordering.
+
+### 10.3 Actor-independent TransitionCost [FIXED CURRENT MODEL]
+
+TransitionCost is calculated only after Navigation has established a valid adjacent directed edge.
+
+For edge `A -> B` with direction `d`, the conceptual model is:
+
+```text
+localA = surfaceCost(A) * departureFactor(shapeA, d)
+localB = surfaceCost(B) * arrivalFactor(shapeB, d)
+
+TransitionCost(A -> B)
+    = lengthFactor(d)
+      * average(localA, localB)
+```
+
+The current model uses both supporting landscape cells.
+
+Ownership:
+
+- `LandscapeDefinitionId` mechanic data provides positive actor-independent `SurfaceTraversalCost`;
+- source Shape provides only its directed departure factor;
+- destination Shape provides only its directed arrival factor;
+- grid direction provides cardinal/double-diagonal/triple-diagonal length;
+- Movement does not branch on concrete Shape type;
+- `MovementRate` is applied after TransitionCost and does not redefine the edge price.
+
+Authoritative cost arithmetic is fixed-point integer arithmetic. Current neutral scales are `1000` for surface cost, Shape factor and grid-length scale; current grid lengths are `1000`, `1414`, `1732`. The combined TransitionCost is rounded deterministically once at its output boundary, then Movement timing carry handles cost-to-tick remainder separately.
+
+The current TransitionCost is **actor-independent**. Different movers with different rates see the same intrinsic edge ranking. Actor/surface interactions such as wheels versus stairs or swamp affinity remain **DEFERRED** until a real capability consumer requires them.
+
+### 10.4 Scheduler/process boundary [FIXED]
+
+Scheduler knows activation time, handler and opaque process id; it does not own domain Action state.
+
+Domain process identity (for example `MovementActionId`) is distinct from infrastructure `TaskHandle`.
+
+A timed mechanic normally receives a narrow `ProcessScheduler` already bound to its registered handler instead of raw authority over `Scheduler + HandlerId + SimulationClock`.
+
+The current production simulation step is:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+owned by `SimulationStepper`. Scenario fixtures and future presentation drive this production contract rather than inventing their own tick semantics.
+
+### 10.5 Occupancy and pathfinding [DEFERRED DETAILS]
+
+Occupancy remains separate from structural Navigation. Current Movement does not reserve destinations, so multi-agent conflict semantics are not yet fixed.
+
+Pathfinding is a replaceable consumer of Navigation and `TransitionCost`. A*, Dijkstra, hierarchical search, flow fields or other algorithms are implementation choices, not project-wide architecture.
+
+Future Pathfinder must not maintain a second independent edge-price model that disagrees with authoritative Movement.
+
+Early Movement cancellation, actor-specific surface affinity, multi-step `MoveTo`, climbing/swimming/flying overlays and involuntary falling remain deferred until real consumers establish their requirements.
 
 ## 11. Determinism [FIXED PRINCIPLE]
 
@@ -259,7 +380,8 @@ Rules:
 2. Authoritative behavior must not depend on unspecified iteration order of `HashMap`, `HashSet` or equivalent containers.
 3. When several valid choices exist and order affects the result, the system uses an explicit stable tie-break rule such as sequence number, stable id or defined ordering.
 4. Background workers may compute read-only results but never directly mutate the authoritative World. Returned work must be validated before application.
-5. Floating-point values are not globally forbidden, but authoritative branching must not accidentally depend on unstable iteration/reduction order. A stricter cross-platform bit-identical numeric policy is **DEFERRED** until a mechanic requires it.
+5. Floating-point values are not globally forbidden, but authoritative branching must not accidentally depend on unstable iteration/reduction order. Current Movement/TransitionCost arithmetic deliberately uses integer/fixed-point arithmetic; a stricter project-wide cross-platform bit-identical numeric policy remains **DEFERRED** until another mechanic requires it.
+6. Advancing the same number of production simulation ticks through different caller batching must not change authoritative results; presentation FPS is not simulation semantics.
 
 ## 12. Control boundary [FIXED PRINCIPLE / WORKING DELIVERY]
 
@@ -286,7 +408,8 @@ Namespaced codes use forms such as:
 
 ```text
 terrain:position_occupied
-movement:blocked
+movement:already_moving
+movement:transition_unavailable
 ```
 
 There is no global enum of every project rejection reason. Concrete domains may expose richer typed results while generic Control sees only the common observation floor.
@@ -301,7 +424,9 @@ world.*                   -X-> simulation.control.*
 
 Concrete adapters under `simulation/control/<use-case>/` may depend on the narrow domain APIs required by that use-case. Commands are grouped by intent/use-case rather than by whichever single system happens to be mutated.
 
-The current delivery is synchronous: submission dispatches and executes immediately, and authoritative mutations are visible before `submit` returns. For deterministic callers, command order is the deterministic order of calls.
+The current delivery is synchronous: submission dispatches and executes the handler immediately. This does **not** require every accepted domain operation to finish immediately. For example, accepted `MoveStepCommand` synchronously starts a Movement Action and returns while Spatial remains at the source; Scheduler later resumes the domain Action directly, without routing continuation through Control.
+
+For deterministic callers, submitted command order is the deterministic order of calls.
 
 A future queued/asynchronous delivery may reuse the same Command/Handler/Dispatcher contracts, but it must explicitly define queue order, flush point and state-visibility semantics. Changing delivery policy is not assumed to preserve within-tick visibility automatically.
 
@@ -319,6 +444,8 @@ Optimization priority:
 6. consider SIMD/parallelism only after the previous steps and profiling.
 
 A custom low-level structure is not justified merely because a future workload might exist.
+
+Timed Movement follows the event-driven model: an active step schedules completion instead of requiring every mover to execute an `update` on every tick.
 
 ## 14. Working scale envelope [WORKING]
 
@@ -344,6 +471,8 @@ Scale numbers may be revised when representative scenarios and benchmarks exist;
 
 Add definition data only when the existing aspect/mechanic combination already expresses the content.
 
+For example, a new ordinary landscape material may define another positive `traversal.cost` without changing Movement or TransitionCost code.
+
 ### New object mechanic
 
 Add a specialized definition compiler/store if needed, a runtime owner/system, tests and explicit bootstrap registration. Do not add a giant central runtime state map.
@@ -354,7 +483,9 @@ Add its own owner/system instead of expanding Terrain into a universal environme
 
 ### New Shape
 
-Add a new Shape implementation and topology/composition tests. Do not modify Navigation to recognize the type. If the Shape no longer fits the current one-supported-position structural model, revise the general Shape contract and resolver envelope explicitly rather than adding a concrete-type exception.
+Add a new Shape implementation and topology/composition tests. Do not modify Navigation or TransitionCostCalculator to recognize the concrete type. If intrinsic geometry requires a non-neutral traversal factor, override only the Shape-owned departure/arrival contribution under the same role law.
+
+If the Shape no longer fits the current one-supported-position structural model, revise the general Shape contract, resolver envelope and cost support-owner lookup explicitly rather than adding a concrete-type exception.
 
 ### New spatial query
 
@@ -362,7 +493,11 @@ If it depends only on object position, add an appropriate specialized object spa
 
 ### New Pathfinder or AI algorithm
 
-Add a replacement implementation behind the existing semantic boundary rather than changing world ownership.
+Add a replacement implementation behind the existing semantic boundary rather than changing world ownership. Pathfinder consumes Navigation and the shared TransitionCost semantics; it does not become an authoritative Movement mutator.
+
+### New timed mechanic
+
+Keep domain process state in the domain. Register one scheduled handler for the process family and give the start system a narrow bound scheduling capability. Do not add a global Scheduler switch or universal Action framework merely because multiple mechanics use time.
 
 ### New Command
 
@@ -375,15 +510,16 @@ The architecture intentionally does not yet fix:
 - exact world coordinate bounds;
 - chunk/region dimensions and terrain packing;
 - unloaded/not-generated versus absent terrain semantics;
-- world generation;
+- world generation algorithms and persistence integration;
 - water/temperature/weather simulation details;
-- occupancy representation and collision precision;
-- mover-specific capability model;
+- occupancy/reservation representation and collision precision;
+- richer mover-specific capability model and actor-specific surface affinity;
+- early Movement cancellation/reactive wake-up semantics;
+- multi-step `MoveTo`/route-execution lifecycle;
 - richer ramp/stair topology beyond the current primitive cardinal ramp;
 - involuntary falling semantics;
 - Navigation caching and cache lifecycle;
 - pathfinding algorithm, hierarchy and path cache;
-- path cost representation;
 - background pathfinding revision/snapshot mechanism;
 - full object lifecycle orchestration;
 - persistence format and region save boundaries;
@@ -391,6 +527,6 @@ The architecture intentionally does not yet fix:
 - queued/asynchronous command batching and within-tick visibility policy;
 - multithreading architecture beyond the single authoritative mutation thread;
 - exact AI planner family;
-- final renderer/Z-level UX.
+- final renderer/Z-level UX and art pipeline.
 
 A deferred choice is successful only if it can later be implemented without destroying the fixed ownership and semantic boundaries above.
