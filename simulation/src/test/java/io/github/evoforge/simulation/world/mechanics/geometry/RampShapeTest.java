@@ -109,7 +109,7 @@ final class RampShapeTest {
                         -riseX,
                         -riseY,
                         0),
-                lowerToRamp,
+                TransitionMask.NONE,
                 lowerToRamp);
 
         int rampToLower =
