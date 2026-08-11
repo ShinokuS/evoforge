@@ -13,8 +13,9 @@ DONE  Production cardinal RampShape
 DONE  Final geometry/navigation hardening and documentation
 DONE  Control Backbone core + first PlaceTerrain vertical slice
 DONE  Test-only Scenario fixture: arrange -> start -> submit/read
-NEXT  Basic Movement: один соседний structural step
-      first production simulation-step owner + Action/Scheduler consumer
+DONE  Timed Basic Movement: один соседний structural transition
+DONE  first production SimulationStepper + Scheduler process binding
+NEXT  TransitionCost model: terrain + Shape traversal + grid length
       minimal visualization / Z-level debug view
       Occupancy
       Pathfinder
@@ -44,73 +45,136 @@ authoritative domain APIs
 structured result
 ```
 
-Первая delivery implementation синхронная, а первый concrete vertical slice — `PlaceTerrainCommand`.
+Первая delivery implementation синхронная. Concrete vertical slices теперь включают `PlaceTerrainCommand` и `MoveStepCommand`.
 
-Command не является обязательным внутренним RPC. После принятия intent внутренние процессы, например будущая world generation, erosion или продолжающиеся Actions, могут работать напрямую через узкие domain write APIs.
+Command не является обязательным внутренним RPC. После принятия intent внутренние процессы, например продолжающиеся Movement Actions, будущая world generation или erosion, могут работать напрямую через узкие domain write APIs.
 
 Queued/asynchronous delivery остаётся deferred. Она может переиспользовать те же Command/Handler/Dispatcher contracts, но должна явно определить deterministic ordering, момент flush и within-tick state visibility.
 
 ## Scenario fixture
 
-Первая scenario-layer намеренно является **test-only deterministic fixture**, а не simulation runtime.
+Scenario-layer по-прежнему намеренно является **test-only deterministic fixture**, а не simulation runtime.
 
 Она разделяет две стадии:
 
 ```text
 ScenarioBuilder
-    -> вручную собирает маленький мир через контролируемые write-capabilities
+    -> вручную собирает маленький мир через controlled write-capabilities
     -> регистрирует test definitions
+    -> создаёт и размещает test objects
     -> start()
 
 ScenarioHarness
     -> отправляет production Commands
-    -> наблюдает read-only Terrain / Geometry / Navigation state
+    -> двигает production SimulationStepper
+    -> наблюдает read-only Object / Transform / Terrain / Geometry / Navigation state
 ```
 
 `start()` закрывает arrange-фазу. Запущенный harness не раскрывает raw authoritative mutators.
 
-В первой версии специально **нет `advanceTicks()` и Scheduler orchestration**. Сейчас ни одна production-механика не планирует работу, поэтому определять tick/dispatch semantics в тестовом коде было бы преждевременно и сделало бы fixture владельцем simulation-step contract.
+Movement создал первый реальный timed Scheduler consumer, поэтому harness теперь имеет `advance()` и `advanceTicks(n)`. Эти методы не вводят test-only time semantics: они делегируют production `SimulationStepper`.
 
-Когда Movement создаст первый реальный timed Action/Scheduler consumer, в production должен появиться небольшой владелец шага симуляции, который определит продвижение часов и порядок фаз. Harness затем будет только вызывать этот production API, а не самостоятельно трактовать, что такое tick.
+Scenario-миры остаются маленькими и рукотворными, потому что тест заранее знает правильный результат. Procedural world generation решает другие задачи: масштаб, устойчивость и будущую проверку gameplay/world-generation.
 
-Scenario-миры маленькие и рукотворные, потому что тест заранее знает правильный результат. Procedural world generation решает другие задачи: масштаб, устойчивость и будущую проверку gameplay/world-generation.
+## Timed Basic Movement
 
-## Basic Movement
+Первый Movement slice теперь concrete и намеренно узкий: object с compiled `movement.rate` capability может начать один соседний structural transition через `MoveStepCommand`. Pathfinder не участвует.
 
-Movement — следующий gameplay-милстоун и первый consumer structural Navigation.
-
-Первый slice должен быть намеренно маленьким: concrete actor пытается выполнить один соседний structural transition через Command boundary. **Pathfinder для этого не нужен.**
-
-Movement должен впервые дать реальные требования к:
+Lifecycle:
 
 ```text
-actor movement capability
-Spatial integration
-MoveCommand / result semantics
-transition revalidation
-first Action, если движение занимает simulation time
-first Scheduler consumer
-production simulation-step ordering
-movement diagnostics при отклонённом переходе
+MoveStepCommand
+    ↓
+validate object capability / placement / adjacency / Navigation
+    ↓
+create MovementAction
+    ↓
+schedule completion after deterministic duration
+    ↓
+object authoritative остаётся в source
+    ↓
+completion-time revalidation
+    ↓
+SpatialSystem.move(...) or interrupt
+    ↓
+remove active MovementAction
 ```
 
-Shape и Navigation продолжают описывать structural topology и не должны поглощать actor-specific movement policy.
+Movement Actions существуют только пока active; история completed/interrupted внутри Movement не хранится.
 
-## Production simulation step и timed Actions
+Первая duration model использует neutral grid transition length (`1`, `sqrt(2)`, `sqrt(3)` в fixed-point), делённую на `MovementRate`. Fractional timing сохраняется через deterministic per-object carry вместо per-step ceiling, а любой movement transition занимает минимум один simulation tick.
 
-В проекте уже существуют `SimulationClock` и `Scheduler`, но ни одна production-механика пока не планирует работу.
+`MoveStepResult` и domain `MovementStartResult` используют уже существующий structured result floor. Unknown/stale trusted `ObjectId` остаётся programming/configuration error, а не normal domain rejection.
 
-Если Basic Movement потребует длительности, он станет первым consumer, который обоснует production-владельца шага симуляции. Название этого класса пока намеренно не фиксируется. Именно он должен в одном месте определять порядок фаз, например продвижение clock и Scheduler dispatch.
+### Известные границы первого slice
 
-Scenario fixture и будущий GUI должны управлять этим production contract, но не определять его каждый по-своему.
+- пока нет Occupancy или destination reservation: несколько objects теоретически могут выбрать одну cell;
+- нет early movement cancellation: Action заканчивается только при scheduled completion;
+- пока нет terrain/Shape-specific transition cost;
+- нет Pathfinder или multi-step `MoveTo`;
+- нет continuous/interpolated authoritative position между клетками.
 
-Точная политика same-tick rescheduling остаётся deferred до появления первого timed Action, который покажет требуемое поведение.
+Это explicit boundaries, а не случайное скрытое поведение.
+
+## Timed process integration
+
+Movement — первый production consumer общего timed-process pattern:
+
+```text
+domain system starts process
+    ↓
+domain-owned process state
+    ↓
+ProcessScheduler.scheduleAfter(delay, processId)
+    ↓
+BoundProcessScheduler binds one HandlerId
+    ↓
+Scheduler
+    ↓
+domain process processor resumes processId
+```
+
+Scheduler знает только **когда**, **какой handler** и **какой process id**. Domain владеет смыслом process.
+
+`MovementActionId` не является `TaskHandle`. Один зарегистрированный Movement handler обслуживает все Movement Actions; будущие timed mechanics должны использовать тот же узкий binding pattern, а не central Scheduler switch или universal Action framework.
+
+## Production simulation step
+
+`SimulationStepper` теперь владеет первым production-определением одного simulation tick:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+Один tick выполняет один Scheduler snapshot batch. Работа, поставленная handler-ом на тот же tick во время dispatch, не дренируется рекурсивно в этом batch. Movement никогда не schedule-ит zero-duration completion и не зависит от same-tick recursive execution.
+
+Scenario и будущий presentation-код управляют этим production contract, а не определяют собственный ordering. Tests фиксируют, что `advanceTicks(n)` эквивалентен `n` отдельным вызовам production step.
+
+## TransitionCost model — следующий этап
+
+Следующий Movement milestone заменяет neutral grid length как единственный transition cost уже согласованной directed `TransitionCost` model.
+
+Архитектурные правила:
+
+```text
+Navigation decides POSSIBILITY
+TransitionCost decides PRICE
+MovementRate converts PRICE to TIME
+Pathfinder later consumes the SAME PRICE
+```
+
+Первая cost model должна учитывать обе клетки перехода `A -> B`, а не выбирать произвольный destination-only terrain value. Landscape definitions дают base surface cost; Shape даёт собственную traversal characteristic по тому же departure/arrival role law, который уже используется structural topology; grid direction добавляет cardinal/double-diagonal/triple-diagonal length.
+
+Movement не должен содержать `instanceof RampShape` или растущий switch по concrete Shapes. Новый Shape владеет только своим local directed traversal contribution.
+
+Actor-specific surface affinity — например болотное существо, предпочитающее грязь дороге, — намеренно deferred. Первая TransitionCost остаётся actor-independent; `MovementRate` меняет общую скорость, но не ranking маршрутов.
 
 ## Минимальная визуализация
 
-Первая visual/debug view — обязательный этап после Movement, но это ещё не проект финального renderer.
+Первая visual/debug view — обязательный этап после TransitionCost slice, но это ещё не проект финального renderer.
 
-Её задача — сделать уже существующее spatial/navigation поведение наблюдаемым человеком. Начальный scope должен быть небольшим:
+Её задача — сделать уже существующее spatial/navigation/movement поведение наблюдаемым человеком. Начальный scope должен быть небольшим:
 
 ```text
 отрисовка одного Z-level
@@ -119,8 +183,10 @@ terrain / ramp geometry
 позиции объектов
 клик или инспекция клетки
 structural transition mask / базовая диагностика
-наблюдение за движением агента
+наблюдение discrete cell-to-cell movement
 ```
+
+Smooth movement interpolation в первой версии не нужен. Object может оставаться отображённым в source cell до commit Movement Action, поэтому более быстрые objects просто меняют клетку на более ранних simulation ticks.
 
 Это development-инструмент. Финальная rendering architecture, art pipeline и полноценный Z-level UX остаются поздними задачами.
 
@@ -128,13 +194,13 @@ structural transition mask / базовая диагностика
 
 Occupancy намеренно отделена от structural terrain topology. Navigation может считать две positions structurally adjacent, даже если destination временно занята другим object.
 
-Точное representation остаётся deferred до тех пор, пока Movement не покажет необходимые queries и mutation semantics.
+Точное occupancy/reservation representation остаётся deferred до первого реального multi-agent Movement scenario, который докажет необходимые semantics.
 
 ## Pathfinder
 
-Pathfinding — обязательный более поздний milestone, но он идёт после Basic Movement, потому что именно движение является его первым реальным consumer.
+Pathfinding — обязательный более поздний milestone, но он идёт после Basic Movement, TransitionCost и Occupancy, потому что именно Movement формирует contracts, которые Pathfinder должен потреблять.
 
-Pathfinding потребляет Navigation, а не определяет terrain topology. Его API должен формироваться из реальных требований Movement: нужен ли полный route или следующий step, как выражаются unreachable/partial paths, а позже — как участвуют dynamic occupancy и costs.
+Pathfinding потребляет Navigation, а не определяет terrain topology, и использует тот же directed TransitionCost, что authoritative Movement. Его API должен формироваться из реальных требований Movement: нужен ли полный route или следующий step, как выражаются unreachable/partial paths и как участвует dynamic occupancy.
 
 Первый Pathfinder также создаст representative workload для измерения Navigation/Geometry/Terrain lookup throughput и allocations.
 
@@ -142,7 +208,7 @@ Pathfinding потребляет Navigation, а не определяет terrai
 
 ## Первый agent vertical slice
 
-После появления Basic Movement и Pathfinder первый agent slice сможет связать реальное object/controller intent с повторяющимся движением через structural Navigation.
+После появления Movement и Pathfinder первый agent slice сможет связать реальное object/controller intent с повторяющимся движением через structural Navigation.
 
 Этот slice должен доказать end-to-end путь до проектирования широкого семейства AI planners.
 
@@ -182,9 +248,9 @@ persistence format
 
 ```text
 full actor capability model
-final occupancy representation
-movement duration semantics beyond the first real Action
-transition/path costs
+actor-specific terrain/surface affinity
+final occupancy/reservation representation
+early cancelled MovementAction semantics
 involuntary falling
 climbing/jumping/swimming/flying overlays
 ```
@@ -196,14 +262,13 @@ Falling требует особой осторожности: empty space сей
 ```text
 cache policy
 cache invalidation lifecycle
-path cost API
-diagnostic explanation API beyond the first real Movement need
+diagnostic explanation API beyond real Movement/Pathfinder needs
 hierarchical pathfinding
 path cache
 background pathfinding snapshot/revision model
 ```
 
-Текущий primitive `int transitions(x,y,z)` contract намеренно мал и не расширяется без consumer evidence.
+Текущий primitive `int transitions(x,y,z)` contract остаётся намеренно мал и не расширяется без consumer evidence.
 
 ## Deferred geometry decisions
 
@@ -223,7 +288,7 @@ general orientation framework
 
 ## Решение lifecycle Landscape
 
-Прежний geometry-override lifecycle gap теперь закрыт согласованной границей `LandscapeMutations`:
+Прежний geometry-override lifecycle gap закрыт согласованной границей `LandscapeMutations`:
 
 ```text
 placeTerrain   -> очищает stale override
