@@ -27,7 +27,7 @@ final class WorldTest {
 
         World world = new World(
                 objectDefinitions,
-                createTerrainSystem());
+                createTerrainSystem().lookup());
 
         assertNotNull(world.objects());
         assertNotNull(world.objectFactory());
@@ -44,7 +44,7 @@ final class WorldTest {
 
         World world = new World(
                 objectDefinitions,
-                createTerrainSystem());
+                createTerrainSystem().lookup());
 
         WorldObject object =
                 world.objectFactory().create("core:test");
@@ -69,7 +69,7 @@ final class WorldTest {
 
         World world = new World(
                 createObjectDefinitions(),
-                terrainSystem);
+                terrainSystem.lookup());
 
         assertEquals(
                 GRANITE,
@@ -82,11 +82,11 @@ final class WorldTest {
                 IllegalArgumentException.class,
                 () -> new World(
                         null,
-                        createTerrainSystem()));
+                        createTerrainSystem().lookup()));
     }
 
     @Test
-    void rejectsNullTerrainSystem() {
+    void rejectsNullTerrainLookup() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new World(
