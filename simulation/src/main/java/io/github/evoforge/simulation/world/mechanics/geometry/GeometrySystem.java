@@ -43,7 +43,7 @@ public final class GeometrySystem {
         }
 
         if (shape == FullShape.INSTANCE) {
-            state.remove(
+            clearShapeOverride(
                     x,
                     y,
                     z);
@@ -55,6 +55,16 @@ public final class GeometrySystem {
                 y,
                 z,
                 shape);
+    }
+
+    public void clearShapeOverride(
+            int x,
+            int y,
+            int z) {
+        state.remove(
+                x,
+                y,
+                z);
     }
 
     private Shape find(
