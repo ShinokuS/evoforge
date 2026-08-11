@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 final class FullShapeTest {
 
     @Test
-    void exposesEightHorizontalDeparturesFromTop() {
+    void exposesHorizontalAndCardinalUpDeparturesFromTop() {
         long ports =
                 FullShape.INSTANCE.transitionPorts(
                         0,
@@ -20,7 +20,7 @@ final class FullShapeTest {
                 TransitionPorts.departures(ports);
 
         assertEquals(
-                8,
+                12,
                 Integer.bitCount(departures));
 
         assertEquals(
@@ -41,6 +41,31 @@ final class FullShapeTest {
                                 0));
             }
         }
+
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        -1,
+                        0,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        1,
+                        0,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        0,
+                        -1,
+                        1));
+        assertTrue(
+                TransitionMask.contains(
+                        departures,
+                        0,
+                        1,
+                        1));
     }
 
     @Test
