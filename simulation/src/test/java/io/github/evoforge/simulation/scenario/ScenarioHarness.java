@@ -2,9 +2,7 @@ package io.github.evoforge.simulation.scenario;
 
 import io.github.evoforge.simulation.control.core.Command;
 import io.github.evoforge.simulation.control.core.CommandResult;
-import io.github.evoforge.simulation.control.sync.SynchronousCommandGateway;
-import io.github.evoforge.simulation.time.SimulationStepper;
-import io.github.evoforge.simulation.time.SimulationTime;
+import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
@@ -13,75 +11,26 @@ import io.github.evoforge.simulation.world.spatial.TransformLookup;
 
 public final class ScenarioHarness {
 
-    private final SynchronousCommandGateway commands;
-    private final SimulationTime time;
-    private final SimulationStepper stepper;
-    private final ObjectLookup objects;
-    private final TransformLookup transforms;
-    private final TerrainLookup terrain;
-    private final GeometryLookup geometry;
-    private final NavigationLookup navigation;
+    private final SimulationRuntime runtime;
 
     ScenarioHarness(
-            SynchronousCommandGateway commands,
-            SimulationTime time,
-            SimulationStepper stepper,
-            ObjectLookup objects,
-            TransformLookup transforms,
-            TerrainLookup terrain,
-            GeometryLookup geometry,
-            NavigationLookup navigation) {
+            SimulationRuntime runtime) {
 
-        if (commands == null) {
+        if (runtime == null) {
             throw new IllegalArgumentException(
-                    "commands must not be null");
-        }
-        if (time == null) {
-            throw new IllegalArgumentException(
-                    "time must not be null");
-        }
-        if (stepper == null) {
-            throw new IllegalArgumentException(
-                    "stepper must not be null");
-        }
-        if (objects == null) {
-            throw new IllegalArgumentException(
-                    "objects must not be null");
-        }
-        if (transforms == null) {
-            throw new IllegalArgumentException(
-                    "transforms must not be null");
-        }
-        if (terrain == null) {
-            throw new IllegalArgumentException(
-                    "terrain must not be null");
-        }
-        if (geometry == null) {
-            throw new IllegalArgumentException(
-                    "geometry must not be null");
-        }
-        if (navigation == null) {
-            throw new IllegalArgumentException(
-                    "navigation must not be null");
+                    "runtime must not be null");
         }
 
-        this.commands = commands;
-        this.time = time;
-        this.stepper = stepper;
-        this.objects = objects;
-        this.transforms = transforms;
-        this.terrain = terrain;
-        this.geometry = geometry;
-        this.navigation = navigation;
+        this.runtime = runtime;
     }
 
     public <R extends CommandResult> R submit(
             Command<R> command) {
-        return commands.submit(command);
+        return runtime.submit(command);
     }
 
     public void advance() {
-        stepper.advance();
+        runtime.stepper().advance();
     }
 
     public void advanceTicks(
@@ -98,26 +47,26 @@ public final class ScenarioHarness {
     }
 
     public long tick() {
-        return time.tick();
+        return runtime.time().tick();
     }
 
     public ObjectLookup objects() {
-        return objects;
+        return runtime.view().objects();
     }
 
     public TransformLookup transforms() {
-        return transforms;
+        return runtime.view().transforms();
     }
 
     public TerrainLookup terrain() {
-        return terrain;
+        return runtime.view().terrain();
     }
 
     public GeometryLookup geometry() {
-        return geometry;
+        return runtime.view().geometry();
     }
 
     public NavigationLookup navigation() {
-        return navigation;
+        return runtime.view().navigation();
     }
 }
