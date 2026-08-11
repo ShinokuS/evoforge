@@ -1,0 +1,28 @@
+name: Verify Ramp Hardening
+
+on:
+  push:
+    branches:
+      - feature/ramp-hardening
+
+permissions:
+  contents: read
+
+jobs:
+  simulation-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Run simulation tests
+        run: ./gradlew :simulation:test --rerun-tasks --console=plain
