@@ -2,6 +2,8 @@
 
 `RampShape` is the first production Shape that creates ordinary structural Navigation edges with a Z change. It represents a solid terrain cell whose supported surface connects lower and higher neighboring positions along one cardinal axis.
 
+Ramp topology is consumed by current timed Movement exactly like any other structural Shape. Ramp does not contain Movement code and is not special-cased by `MovementSystem`, `NavigationSystem`, or `TransitionCostCalculator`.
+
 ## Orientations
 
 Four immutable shared instances exist:
@@ -52,7 +54,7 @@ The Ramp terrain body itself occupies:
 
 and is not a navigation position.
 
-Translating every coordinate by the same vector changes nothing. `RampShape` is context-free and only sees relative source coordinates.
+Translating every coordinate by the same vector changes nothing. `RampShape` is context-free and only sees relative source coordinates plus the local direction requested for traversal characteristics.
 
 ## Structural edges
 
@@ -73,6 +75,8 @@ upper -> ramp  = (0,-1,0)
 ```
 
 Every edge remains within the 26 immediate-neighbor directions.
+
+The lower connection changes two axes and therefore has current `GridTransitionLength = 1414`; the upper horizontal connection changes one axis and has length `1000`.
 
 ## Role ownership
 
@@ -174,15 +178,75 @@ The Ramp terrain coordinate is solid. `RampShape.transitionBlocks` delegates to 
 
 This prevents the bug where a Ramp's terrain body behaves like empty space while its upper topology exists above it.
 
-## No actor semantics
+## Traversal-cost role
 
-Ramp does not know whether the moving object can walk, climb, crawl, fly, or fit physically.
+Ramp participates in the current actor-independent `TransitionCost` through the same local departure/arrival law as every other Shape.
 
-The Shape says only that the terrain geometry structurally connects positions. Future Movement/capability logic decides whether a particular actor can use the structural edge.
+The Shape API provides:
+
+```text
+departureTraversalFactor(...)
+arrivalTraversalFactor(...)
+```
+
+Current `RampShape` does **not** override them. It inherits the default behavior:
+
+```text
+owned topology role -> ShapeTraversalFactor.NEUTRAL = 1000
+not owned           -> ShapeTraversalFactor.NONE    = 0
+```
+
+This is deliberate. The ramp's current geometric displacement is already represented by the actual directed transition and `GridTransitionLength`. A lower/ramp edge such as `(0,+1,+1)` is longer than a horizontal `(0,+1,0)` edge without inventing an arbitrary additional uphill/downhill multiplier.
+
+For a valid Ramp-related edge, `TransitionCostCalculator` combines:
+
+```text
+source landscape traversal.cost
+source Shape departure factor
+
+destination landscape traversal.cost
+destination Shape arrival factor
+
+grid direction length
+```
+
+Neither Movement nor the calculator contains `instanceof RampShape`.
+
+If future evidence shows an intrinsic actor-independent geometry penalty that distance alone cannot express, Ramp may override only its own directed factor. Actor-specific rules such as a wheeled object struggling on a ramp are a separate future mover/geometry capability interaction and must not be encoded as universal Ramp geometry by default.
+
+See [Movement System](Movement-System.md) for the complete formula.
+
+## Current Movement semantics on ramps
+
+A `MoveStepCommand` targeting a structurally valid Ramp-related neighbor starts the same timed `MovementAction` as a flat edge:
+
+```text
+Navigation confirms the directed edge
+    ↓
+TransitionCost prices it
+    ↓
+MovementRate + carry derive duration
+    ↓
+MovementAction sleeps until scheduled completion
+    ↓
+Navigation is revalidated
+    ↓
+SpatialSystem.move commits destination if still valid
+```
+
+The object's authoritative position remains at the source standing position during the action. There is no special continuous slope coordinate or per-tick ramp interpolation in simulation state.
+
+The planned first visual/debug view may therefore show the object jumping discretely from one standing cell to the next when the action completes.
+
+## No actor semantics inside Ramp
+
+Ramp does not know whether the moving object can walk, climb, crawl, fly, fit physically, or has a particular `MovementRate`.
+
+Shape says what local terrain geometry structurally supports and what intrinsic local traversal characteristic it contributes. Movement capability and future actor-specific policy remain outside Shape.
 
 ## No world lookup
 
-Ramp never asks whether Full terrain, another Ramp, or anything else exists at its mouths. It declares only its own source departures, destination arrivals, and solid blocks. Navigation obtains other Shapes independently and composes the result.
+Ramp never asks whether Full terrain, another Ramp, or anything else exists at its mouths. It declares only its own source departures, destination arrivals, solid blocks, and local traversal factors. Navigation/TransitionCost obtain the other owners independently.
 
 ## Testing
 
@@ -199,6 +263,10 @@ missing lower endpoint for ascent and descent
 consecutive Ramp chains
 reverse traversal
 occupied transition destination blocking
+production role-contract sweep
+traversal factor == NEUTRAL exactly for owned departure/arrival roles
 ```
 
 The missing-lower-descent test is especially important: it ensures Ramp cannot create a normal descent into unsupported empty space by itself.
+
+TransitionCost tests separately prove that non-neutral custom Shape factors can alter directed cost without teaching central code concrete Shape types. Current Ramp remains neutral by design.

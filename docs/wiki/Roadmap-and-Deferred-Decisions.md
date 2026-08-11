@@ -15,8 +15,8 @@ DONE  Control Backbone core + first PlaceTerrain vertical slice
 DONE  Test-only Scenario fixture: arrange -> start -> submit/read
 DONE  Timed Basic Movement: one adjacent structural transition
 DONE  first production SimulationStepper + Scheduler process binding
-NEXT  TransitionCost model: terrain + Shape traversal + grid length
-      minimal visualization / Z-level debug view
+DONE  TransitionCost: landscape surface cost + Shape roles + grid length
+NEXT  minimal visualization / Z-level debug view
       Occupancy
       Pathfinder
       first agent vertical slice
@@ -61,6 +61,7 @@ It separates two phases:
 ScenarioBuilder
     -> arrange a small hand-authored world through controlled write capabilities
     -> register test definitions
+    -> assign movement rate and landscape traversal cost
     -> create/place test objects
     -> start()
 
@@ -78,7 +79,7 @@ Scenario worlds remain small and hand-authored so tests know the expected answer
 
 ## Timed Basic Movement
 
-The first Movement slice is now concrete and deliberately narrow: an object with a compiled `movement.rate` capability may start one adjacent structural transition through `MoveStepCommand`. Pathfinder is not involved.
+The first Movement slice is concrete and deliberately narrow: an object with a compiled `movement.rate` capability may start one adjacent structural transition through `MoveStepCommand`. Pathfinder is not involved.
 
 The lifecycle is:
 
@@ -86,6 +87,10 @@ The lifecycle is:
 MoveStepCommand
     ↓
 validate object capability / placement / adjacency / Navigation
+    ↓
+calculate actor-independent TransitionCost
+    ↓
+convert cost to duration with MovementRate + per-object carry
     ↓
 create MovementAction
     ↓
@@ -102,19 +107,22 @@ remove active MovementAction
 
 Movement Actions exist only while active; completed/interrupted history is not retained inside Movement.
 
-The first duration model uses neutral grid transition length (`1`, `sqrt(2)`, `sqrt(3)` represented in fixed-point) divided by `MovementRate`. Fractional timing is preserved with deterministic per-object carry rather than per-step ceiling, and every movement transition takes at least one simulation tick.
+Fractional timing is preserved with deterministic per-object carry rather than per-step ceiling, and every movement transition takes at least one simulation tick.
 
 `MoveStepResult` and domain `MovementStartResult` use the existing structured result floor. Unknown/stale trusted `ObjectId` values remain programming/configuration errors rather than normal domain rejection.
 
-### Known gaps of the first slice
+### Known gaps of the current slice
 
 - no Occupancy or destination reservation: multiple objects can currently target the same cell;
-- no early movement cancellation: Actions end only when their scheduled completion runs;
-- no terrain/Shape-specific transition cost yet;
+- no early movement cancellation: Actions normally end when their scheduled completion runs;
+- no actor-specific surface affinity or locomotion-mode interaction;
+- no reactive wake-up when terrain/geometry changes during a sleeping action;
 - no Pathfinder or multi-step `MoveTo`;
-- no continuous/interpolated authoritative position between cells.
+- no continuous authoritative position between cells.
 
 These are explicit boundaries, not accidental hidden behavior.
+
+See [Movement System](Movement-System.md) for the full implemented contract.
 
 ## Timed process integration
 
@@ -140,7 +148,7 @@ The Scheduler knows only **when**, **which handler**, and **which process id**. 
 
 ## Production simulation step
 
-`SimulationStepper` now owns the first production definition of one simulation tick:
+`SimulationStepper` owns the current production definition of one simulation tick:
 
 ```text
 clock.advance()
@@ -151,28 +159,45 @@ One tick performs one Scheduler snapshot batch. Work scheduled during a handler 
 
 Scenario and future presentation code drive this production contract rather than define their own ordering. Tests assert that `advanceTicks(n)` is equivalent to invoking the production step `n` times individually.
 
-## TransitionCost model — next
+## TransitionCost model
 
-The next Movement milestone replaces neutral grid length as the only transition cost with the already-agreed directed `TransitionCost` model.
+The actor-independent directed TransitionCost model is now implemented and is consumed by authoritative Movement.
 
-The design constraints are:
+The ownership law is:
 
 ```text
 Navigation decides POSSIBILITY
-TransitionCost decides PRICE
+TransitionCost decides intrinsic PRICE
 MovementRate converts PRICE to TIME
 Pathfinder later consumes the SAME PRICE
 ```
 
-The first cost model should combine both cells of `A -> B`, not choose an arbitrary destination-only terrain value. Landscape definitions provide base surface cost; Shape contributes its own traversal characteristic under the same departure/arrival role law used by structural topology; grid direction contributes cardinal/double-diagonal/triple-diagonal length.
+For a valid directed edge `A -> B` with direction `d`:
 
-Movement must not contain `instanceof RampShape` or a growing switch over concrete Shapes. A new Shape owns only its local directed traversal contribution.
+```text
+localA = surfaceCost(A) * departureFactor(shapeA, d)
+localB = surfaceCost(B) * arrivalFactor(shapeB, d)
 
-Actor-specific surface affinity (for example a swamp creature preferring mud while a human prefers road) is deliberately deferred. The first TransitionCost remains actor-independent; `MovementRate` changes overall speed but not route ranking.
+TransitionCost(A -> B)
+    = lengthFactor(d)
+      * average(localA, localB)
+```
+
+The implementation uses fixed-point integer arithmetic and one deterministic final rounding boundary.
+
+Landscape definitions provide `traversal.cost`. Shape contributes an intrinsic directed traversal factor under the same departure/arrival role law already used by topology. Direction length comes from `GridTransitionLength` (`1`, `sqrt(2)`, `sqrt(3)` represented as `1000`, `1414`, `1732`).
+
+`FullShape` and the current cardinal `RampShape` use neutral traversal factors for their owned roles. No arbitrary extra ramp penalty is invented; grid direction already accounts for current discrete elevation displacement.
+
+Movement and the calculator contain no `instanceof RampShape` or growing switch over concrete Shapes. A new Shape owns only its local directed traversal contribution.
+
+Actor-specific surface affinity (for example a swamp creature preferring mud while a human prefers road) remains deliberately deferred. Current TransitionCost is actor-independent; `MovementRate` changes execution time but not route ranking.
+
+Future Pathfinder must consume the same `TransitionCostLookup` semantics rather than invent a second cost table.
 
 ## Minimal visualization
 
-A first visual/debug view is a required milestone after the TransitionCost slice, not a final renderer project.
+A first visual/debug view is now the next required milestone, not a final renderer project.
 
 Its purpose is to make the already-existing spatial/navigation/movement behavior observable by a human. The initial scope should stay small:
 
@@ -188,6 +213,8 @@ watch discrete cell-to-cell movement
 
 The first view does **not** need smooth movement interpolation. An object may remain displayed in its source cell until its Movement Action commits the destination, so faster objects simply change cells on earlier simulation ticks.
 
+The visualizer should read simulation state and drive the production simulation-step contract; it must not become an authoritative owner of movement or world time.
+
 This is intended as a development instrument. Final rendering architecture, art pipeline and polished Z-level UX remain later concerns.
 
 ## Occupancy
@@ -196,19 +223,21 @@ Occupancy is intentionally separate from structural terrain topology. Navigation
 
 The exact occupancy/reservation representation remains deferred until the first real multi-agent Movement scenario proves the required semantics.
 
+Likely questions include whether a moving actor reserves its destination, occupies source and destination simultaneously, or resolves conflicts only at completion. None of those policies is hidden in current Movement.
+
 ## Pathfinder
 
 Pathfinding is a required later milestone, but it comes after Basic Movement, TransitionCost and Occupancy because movement itself defines the contracts it must consume.
 
-Pathfinding will consume Navigation rather than define terrain topology and will use the same directed TransitionCost used by authoritative Movement. Its API should be shaped by real movement needs: whether callers need a full route or next step, how unreachable or partial paths are represented, and how dynamic occupancy participates.
+Pathfinding will consume Navigation rather than define terrain topology and will use the same directed `TransitionCostLookup` used by authoritative Movement. Its API should be shaped by real movement needs: whether callers need a full route or next step, how unreachable or partial paths are represented, and how dynamic occupancy participates.
 
-The first Pathfinder will also provide the first representative workload for measuring Navigation/Geometry/Terrain lookup throughput and allocation behavior.
+The first Pathfinder will also provide the first representative workload for measuring Navigation/Geometry/Terrain/TransitionCost lookup throughput and allocation behavior.
 
 Only then should the project decide whether topology caching, packed coordinate keys, chunk-local arrays, hierarchical search or other low-level optimizations are justified.
 
 ## First agent vertical slice
 
-Once Movement and Pathfinder exist, the first agent slice can connect an actual object/controller intent to repeated movement through real structural navigation.
+Once Movement, Occupancy and Pathfinder exist, the first agent slice can connect an actual object/controller intent to repeated movement through real structural navigation.
 
 That slice should prove the end-to-end path before broader AI planner families are designed.
 
@@ -251,8 +280,10 @@ full actor capability model
 actor-specific terrain/surface affinity
 final occupancy/reservation representation
 early cancelled MovementAction semantics
+reactive wake-up on world mutation
 involuntary falling
 climbing/jumping/swimming/flying overlays
+multi-step MoveTo ownership and route lifecycle
 ```
 
 Falling deserves special care: ordinary Navigation currently never treats empty space as a valid structural edge. If falling is introduced, it should be an explicit involuntary mechanic/process rather than a hidden interpretation of missing terrain.
@@ -284,7 +315,7 @@ bridge-specific Shape types
 general orientation framework
 ```
 
-If a future geometry genuinely needs multiple standing positions, the Shape role law and Navigation read-window derivation must be reconsidered together rather than patched with one-off exceptions.
+If a future geometry genuinely needs multiple standing positions, the Shape role law, Navigation read-window derivation and TransitionCost support-owner lookup must be reconsidered together rather than patched with one-off exceptions.
 
 ## Landscape lifecycle decision
 

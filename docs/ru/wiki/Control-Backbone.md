@@ -1,22 +1,22 @@
 # Control Backbone
 
-Control Backbone — единая граница, через которую внешнее намерение попадает в авторитетную логику симуляции.
+Control Backbone — единая граница, через которую external intent попадает в authoritative simulation logic.
 
-Этот слой намеренно остаётся маленьким. Он не является EventBus, внутренним RPC, заменой Scheduler и не требует представлять каждую мутацию мира в виде Command.
+Этот слой намеренно остаётся маленьким. Он не является EventBus, internal RPC, заменой Scheduler и не требует представлять каждую world mutation в виде Command.
 
 ## Основной принцип
 
-Command пересекает **границу внешнего намерения**.
+Command пересекает **external intent boundary**.
 
 Типичные источники:
 
-- ввод игрока;
-- AI-контроллеры;
-- скрипты и сценарии;
-- сетевые адаптеры;
-- debug/admin-инструменты.
+- player input;
+- AI controllers;
+- scripts и scenarios;
+- network adapters;
+- debug/admin tools.
 
-После принятия намерения продолжающиеся внутренние процессы и внутренние производители состояния работают напрямую через узкие domain API авторитетных систем.
+После принятия intent продолжающиеся internal processes и internal state producers работают напрямую через narrow domain APIs authoritative systems.
 
 ```text
 Player / AI / Script / Network
@@ -37,13 +37,13 @@ SynchronousCommandGateway
        domain write API
 ```
 
-World generation, erosion, уже запущенный процесс mining или другая внутренняя механика не обязаны создавать Commands только ради вызова другой авторитетной системы.
+World generation, erosion, уже запущенный Movement Action, mining process или другая internal mechanic не обязаны создавать Commands только ради вызова другой authoritative system.
 
-Это не даёт Control превратиться в шину сообщений, где каждая мутация скрыта за `ApplySomethingCommand`.
+Это не даёт Control превратиться в message bus, где каждая mutation скрыта за `ApplySomethingCommand`.
 
 ## Модель результатов
 
-Все результаты операций имеют минимальный нейтральный контракт:
+Все operation results имеют минимальный neutral contract:
 
 ```java
 public interface OperationResult {
@@ -52,63 +52,68 @@ public interface OperationResult {
 }
 ```
 
-`ResultCode` имеет namespace, например:
+`ResultCode` namespaced, например:
 
 ```text
 terrain:placed
 terrain:position_occupied
-movement:blocked
+movement:started
+movement:already_moving
+movement:transition_unavailable
 ```
 
-Глобального enum со всеми возможными причинами отказа нет.
+Global enum со всеми причинами отказа нет.
 
-`CommandResult` расширяет `OperationResult`, поэтому generic Control может зафиксировать, была ли команда принята и какой namespaced result code получен, не зная доменной семантики.
+`CommandResult` расширяет `OperationResult`, поэтому generic Control может видеть accepted/rejected и namespaced code без знания domain semantics.
 
-Конкретные домены при этом могут иметь более богатые типизированные результаты с дополнительными данными.
+Concrete domains при этом могут иметь richer typed results.
 
 ## Отказ или исключение
 
 Граница фиксирована:
 
 ```text
-конфликт из-за текущего состояния мира
+conflict из-за current world state
     -> structured result
 
-некорректный программный/configuration input
+invalid programming/configuration input
     -> exception
 ```
 
-Примеры нормального structured rejection:
+Normal structured rejection:
 
-- terrain-позиция уже занята;
-- требуемый terrain отсутствует;
-- будущий movement transition заблокирован;
-- будущая попытка строительства не имеет опоры.
+- terrain position уже занята;
+- у object нет ordinary movement capability;
+- object не размещён;
+- у object уже есть active Movement Action;
+- requested destination не adjacent;
+- Navigation не содержит requested directed transition.
 
-Примеры ошибок программы или конфигурации:
+Programming/configuration errors:
 
-- null command или dependency;
-- handler для типа команды не зарегистрирован;
-- повторная регистрация handler;
+- null command/dependency;
+- handler для command type не зарегистрирован;
+- duplicate handler registration;
 - handler вернул null;
-- вызывающий код передал неизвестный runtime `LandscapeDefinitionId`.
+- вызывающий передал unknown trusted runtime definition/object id;
+- valid movement edge пришёл к broken traversal definition/configuration.
 
 ## Ожидания внутренних producers
 
-Один и тот же domain result может быть нормальным отказом для одного клиента и нарушением инварианта для другого.
+Один domain result может быть normal rejection для одного caller и invariant failure для другого.
 
-Команда размещения игрока может штатно получить `terrain:position_occupied`. Детерминированный world generator, напротив, может требовать, чтобы генерируемая позиция была свободна.
+Player placement может штатно получить `terrain:position_occupied`. Deterministic world generator может, наоборот, требовать free position.
 
-Внутренние producers выражают такое ожидание абстрактно:
+Internal producers выражают expectation generically:
 
 ```java
 OperationResults.requireAccepted(
         landscape.placeTerrain(...));
 ```
 
-Они не сравнивают результат с конкретной success-константой вроде `result == PLACED`, если различие конкретных вариантов действительно не является частью их логики.
+Они не сравнивают результат с concrete success constant, если конкретное различие не входит в их logic.
 
-`requireAccepted` не меняет контракт domain operation. Он лишь говорит, что данный вызывающий считает любой rejection неожиданным.
+`requireAccepted` не меняет contract domain operation; он только фиксирует expectation caller.
 
 ## Generic Command core
 
@@ -118,55 +123,61 @@ Generic-часть находится в:
 simulation/control/core/
 ```
 
-Текущие типы:
+Current types:
 
-- `Command<R extends CommandResult>` — маркер неизменяемого intent;
-- `CommandResult` — минимальный наблюдаемый результат;
-- `CommandHandler<C,R>` — типизированная граница выполнения;
-- `CommandDispatcher` — регистрация и dispatch по точному runtime-классу.
+- `Command<R extends CommandResult>` — immutable intent marker;
+- `CommandResult` — minimal observable result;
+- `CommandHandler<C,R>` — typed execution boundary;
+- `CommandDispatcher` — registration/dispatch по exact runtime class.
 
-Dispatcher сам хранит небольшую карту регистраций. Отдельный registry не вводится, пока для него не появится реальная необходимость.
+Dispatcher сам хранит небольшую registration map. Separate registry не вводится без реального requirement.
 
 ### Правило точного типа
 
-Для одного concrete command class существует один handler.
+Один concrete command class имеет один handler.
 
 ```text
 PlaceTerrainCommand.class -> PlaceTerrainHandler
+MoveStepCommand.class     -> MoveStepHandler
 ```
 
-Dispatcher не ищет handler по superclass или интерфейсам.
+Dispatcher не ищет “ближайший” handler по superclass/interface.
 
-Отсутствующая или дублирующая регистрация — bootstrap/programming error, а не domain rejection.
+Missing/duplicate registration — bootstrap/programming error, а не domain rejection.
 
-## Семантика синхронной доставки
+## Семантика synchronous delivery
 
-Первая реализация доставки:
+Current delivery implementation:
 
 ```text
 simulation/control/sync/SynchronousCommandGateway
 ```
 
-`submit(command)` немедленно выполняет dispatch и handler. Авторитетные мутации, выполненные handler, видимы до возврата из `submit`.
+`submit(command)` немедленно dispatch-ит и вызывает handler.
 
-Для детерминированного вызывающего это означает:
+Для immediate operation вроде accepted terrain placement mutation видна до возврата `submit`.
+
+Для timed operation вроде Movement synchronous **command delivery** не означает synchronous **domain completion**:
 
 ```text
-command A
-    -> mutation A становится видимой
-command B
-    -> видит состояние после A
+submit(MoveStepCommand)
+    -> immediately validates and starts MovementAction
+    -> returns movement:started
+    -> Spatial position всё ещё source
+    -> Scheduler завершает action позже в simulation time
 ```
 
-Текущий детерминированный порядок равен детерминированному порядку вызовов.
+Это важное разделение: Control delivery определяет, когда intent достигает domain, а domain определяет, завершается ли принятая работа сразу или становится long-lived process.
 
-Будущие queued/asynchronous gateways смогут переиспользовать те же Command, Handler и Dispatcher. Но они обязаны отдельно определить порядок flush очереди и семантику видимости состояния; смена delivery policy не считается автоматически сохраняющей within-tick semantics.
+Порядок submitted Commands для deterministic caller остаётся порядком вызовов.
+
+Future queued/asynchronous gateways смогут переиспользовать Command/Handler/Dispatcher, но обязаны явно определить queue order, flush point и state visibility.
 
 ## Закон зависимостей
 
-Generic Control маршрутизирует команды, но не знает world domains.
+Generic Control маршрутизирует commands, но не знает world domains.
 
-Направление зависимостей является исполняемым архитектурным правилом:
+Dependency direction:
 
 ```text
 simulation.control.core  -X-> world.*
@@ -174,71 +185,47 @@ simulation.control.sync  -X-> world.*
 world.*                   -X-> simulation.control.*
 ```
 
-Конкретные use-case adapters в `simulation/control/<use-case>/` могут импортировать узкие domain API, которые они оркестрируют.
+Concrete use-case adapters под `simulation/control/<use-case>/` могут импортировать narrow domain APIs, которые оркестрируют.
 
-Например:
+Current examples:
 
 ```text
 control/terrain/PlaceTerrainHandler
         -> LandscapeMutations
+
+control/movement/MoveStepHandler
+        -> MovementSystem
 ```
 
-Обратная зависимость запрещена.
+Reverse dependency запрещена.
 
-Это проверяет `ControlDependencyContractTest`.
+`ControlDependencyContractTest` проверяет generic package rules.
 
 ## Организация команд
 
-Command surface остаётся обозримой под одним архитектурным корнем:
+Current command surface:
 
 ```text
 simulation/control/
 ├── core/
 ├── sync/
 ├── terrain/
-├── movement/       # в будущем
-├── construction/   # в будущем
-└── ...
+│   ├── PlaceTerrainCommand
+│   ├── PlaceTerrainResult
+│   └── PlaceTerrainHandler
+└── movement/
+    ├── MoveStepCommand
+    ├── MoveStepResult
+    └── MoveStepHandler
 ```
 
-Concrete commands группируются по **намерению/use-case**, а не обязательно по авторитетной системе, которую они изменяют.
+Concrete commands группируются по **intent/use-case**, а не обязательно по authoritative system, которую в итоге mutate-ят.
 
-Будущий `BuildStructureCommand` относится к construction, даже если его handler координирует Inventory, Objects, Spatial и Landscape.
+Future `BuildStructureCommand` относится к construction, даже если handler координирует Inventory, Objects, Spatial и Landscape.
 
-## Граница мутаций Landscape
+## Terrain placement vertical slice
 
-Terrain state и Geometry state — отдельные авторитетные области, но некоторые lifecycle-операции landscape должны поддерживать их согласованность.
-
-Публичная согласованная write-capability:
-
-```text
-LandscapeMutations
-```
-
-Текущая политика lifecycle terrain:
-
-```text
-placeTerrain
-    новая terrain cell
-    -> старый orphan geometry override очищается
-    -> geometry по умолчанию = FullShape
-
-replaceTerrain
-    definition существующей terrain cell меняется
-    -> geometry override сохраняется
-
-removeTerrain
-    terrain cell исчезает
-    -> geometry override очищается
-```
-
-`TerrainSystem` остаётся владельцем terrain storage и terrain-инвариантов и не зависит от Geometry.
-
-`LandscapeSystem` координирует `TerrainSystem` и `GeometrySystem`, поэтому любой клиент `LandscapeMutations` получает одинаковую lifecycle-семантику: Command handler, generator, erosion mechanic или другой внутренний producer.
-
-## Первый вертикальный срез
-
-Первая concrete command — `PlaceTerrainCommand`.
+`PlaceTerrainCommand` проверяет immediate synchronous mutation path:
 
 ```text
 PlaceTerrainCommand
@@ -256,29 +243,99 @@ TerrainSystem + Geometry lifecycle
 PlaceTerrainResult
 ```
 
-Ожидаемое поведение:
+Expected behavior:
 
 ```text
-первая установка в пустую позицию
+first placement into empty position
     -> ACCEPTED / terrain:placed
 
-повторная установка в ту же позицию
+second placement into same position
     -> REJECTED / terrain:position_occupied
-    -> исходный terrain не изменён
+    -> original terrain unchanged
 ```
 
-Этот slice проверяет маршрутизацию команд, structured rejection, немедленную синхронную видимость и авторитетное владение domain-state без введения Movement, связи со Scheduler, EventBus или долгоживущих Actions.
+## Timed Movement vertical slice
+
+`MoveStepCommand` доказывает, что Command может запустить long-lived domain process, не превращая каждую внутреннюю phase в новую Command.
+
+```text
+MoveStepCommand
+        |
+        v
+MoveStepHandler
+        |
+        v
+MovementSystem.startStep
+        |
+        +--> validate capability / adjacency / Navigation
+        +--> TransitionCost -> MovementRate -> duration
+        +--> create MovementAction
+        +--> ProcessScheduler.scheduleAfter(...)
+        |
+        v
+MoveStepResult = movement:started
+
+later, через Scheduler, а не Control:
+
+MovementActionProcessor.complete(processId)
+        |
+        +--> revalidate object/source/Navigation
+        |
+        v
+SpatialSystem.move(...) or interrupt
+```
+
+Этот slice фиксирует важные Control boundaries:
+
+```text
+Command несёт external start intent
+accepted не означает immediate final mutation
+continuing Action — domain state, а не поток internal Commands
+Scheduler continuation обходит CommandDispatcher
+Movement completion mutate-ит authoritative systems через domain APIs
+```
+
+Полная timing/cost semantics — в [Movement System](Movement-System.md).
+
+## Граница мутаций Landscape
+
+Terrain state и Geometry state — separate authoritative concerns, но некоторые lifecycle operations должны поддерживать coherence.
+
+Public coordinated write capability:
+
+```text
+LandscapeMutations
+```
+
+Current terrain lifecycle:
+
+```text
+placeTerrain
+    -> stale geometry override cleared
+    -> default geometry FullShape
+
+replaceTerrain
+    -> geometry override preserved
+
+removeTerrain
+    -> geometry override cleared
+```
+
+`TerrainSystem` остаётся owner terrain storage/invariants и не зависит от Geometry.
+
+`LandscapeSystem` координирует `TerrainSystem` и `GeometrySystem`, поэтому любой client `LandscapeMutations` получает одинаковую lifecycle semantics.
 
 ## Чек-лист новой команды
 
-При добавлении новой команды:
+При добавлении новой Command:
 
 1. убедиться, что она действительно пересекает external intent boundary;
 2. создать immutable command в подходящем `control/<use-case>/`;
-3. определить типизированный `CommandResult` с наблюдаемыми `accepted` и namespaced `code`;
-4. реализовать один typed handler через узкие domain API;
+3. определить typed `CommandResult` с observable `accepted` и namespaced `code`;
+4. реализовать один typed handler через narrow domain APIs;
 5. зарегистрировать ровно один handler для concrete command class;
-6. протестировать accepted и rejected world-state paths;
-7. некорректные programming/configuration inputs оставлять исключениями;
+6. протестировать accepted/rejected world-state paths;
+7. invalid programming/configuration inputs оставлять exceptions;
 8. не обучать `CommandDispatcher` новому domain type;
-9. при изменении стабильного контракта обновлять architecture/reference документацию.
+9. если acceptance запускает long-lived process, хранить continuation в domain, а не возвращать её в Commands;
+10. при изменении stable contract обновлять architecture/reference documentation.

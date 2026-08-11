@@ -1,4 +1,8 @@
 {
     "key": "core:granite",
-    "aspects": {}
+    "aspects": {
+        "traversal": {
+            "cost": 1000
+        }
+    }
 }

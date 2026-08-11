@@ -124,14 +124,51 @@ The current implementation is `SparseTerrainStorage`, appropriate for the presen
 
 Terrain stores typed `LandscapeDefinitionId` values compiled from composition-driven landscape definitions.
 
-Material identity and geometry are intentionally separate:
+Material identity, geometry and mechanic-specific material properties are intentionally separate:
 
 ```text
-LandscapeDefinitionId  -> what terrain content/material this is
-Shape                  -> what local geometry/topology it has
+LandscapeDefinitionId
+    -> stable content/material identity
+
+Shape
+    -> local geometry/topology + intrinsic local traversal factor
+
+LandscapeTraversalDefinitions
+    -> actor-independent SurfaceTraversalCost for the material
 ```
 
 Two landscape definitions can use the same geometry. A terrain material can later be represented with a custom geometry override without changing its material identity.
+
+### `traversal` aspect
+
+Current Movement pricing consumes a landscape definition aspect:
+
+```json
+{
+  "key": "core:granite",
+  "aspects": {
+    "traversal": {
+      "cost": 1000
+    }
+  }
+}
+```
+
+Compilation produces:
+
+```text
+LandscapeDefinitionId -> SurfaceTraversalCost
+```
+
+`traversal.cost` is a positive integer. `1000` is the current neutral baseline.
+
+This cost is **not** stored separately on every terrain cell; the cell already references `LandscapeDefinitionId`, and `TransitionCostCalculator` resolves mechanic data through the compiled traversal definitions.
+
+The value is actor-independent intrinsic surface price. It does not determine whether a structural edge exists and does not encode species/locomotion affinity.
+
+For a valid directed Movement edge, TransitionCost combines both source and destination supporting terrain costs with their Shape departure/arrival factors and grid direction length. Missing traversal data for a supporting terrain definition is treated as broken configuration, not silently replaced with a default.
+
+See [Definitions](Definitions.md) and [Movement System](Movement-System.md).
 
 ## Geometry dependency direction
 
@@ -147,6 +184,34 @@ Terrain does not depend on Geometry. Cross-owner lifecycle coordination is perfo
 
 For present terrain without a geometry override, Geometry returns `FullShape.INSTANCE`. For absent terrain, Geometry returns no Shape.
 
+## Landscape, Navigation and Movement
+
+Terrain identity is not Navigation topology. Current read/use flow is:
+
+```text
+TerrainLookup
+    ↓
+GeometryLookup
+    ↓
+NavigationLookup
+        structural edge exists?
+
+TerrainLookup + GeometryLookup
+    ↓
+TransitionCostLookup
+        intrinsic price of already-valid edge
+
+Movement
+    ↓
+MovementRate + timing carry
+    ↓
+Scheduler
+    ↓
+completion revalidation
+```
+
+Navigation intentionally does not import landscape material costs. Conversely, a low traversal cost cannot create a missing structural edge.
+
 ## Mutation visibility
 
 Because Geometry and Navigation currently have no persistent cache that hides updates, landscape mutation becomes visible through the read chain on the next query:
@@ -161,7 +226,9 @@ GeometryLookup
 NavigationLookup
 ```
 
-Future caches must preserve the same semantic visibility through correct invalidation/revision handling.
+A sleeping Movement Action does not currently wake immediately on the mutation. Its `MovementActionProcessor` sees the changed Navigation result when scheduled completion performs revalidation.
+
+Future caches/events must preserve the same semantic correctness even if they change when work is recomputed.
 
 ## Landscape is not `WorldObject`
 
@@ -200,8 +267,12 @@ ABSENT
 UNLOADED / UNKNOWN
 ```
 
-That future distinction must be introduced deliberately because treating unloaded terrain as true empty space could create incorrect geometry/navigation results.
+That future distinction must be introduced deliberately because treating unloaded terrain as true empty space could create incorrect geometry/navigation/movement results.
 
 ## Testing
 
-Terrain/Landscape tests cover structured place/replace/remove results, lookup semantics, storage behavior, definition ids, geometry lifecycle, and integration into World/Geometry/Navigation. Future region storage must pass the same semantic tests even if the data structure changes completely.
+Terrain/Landscape tests cover structured place/replace/remove results, lookup semantics, storage behavior, definition ids, geometry lifecycle, and integration into World/Geometry/Navigation.
+
+Movement/Traversal tests additionally verify that supporting landscape definitions contribute `traversal.cost` to real authoritative movement duration and that removal of supporting terrain during a timed action prevents stale completion commit.
+
+Future region storage must pass the same semantic tests even if its internal representation changes completely.

@@ -9,138 +9,159 @@
 ## 1. Словарь статусов
 
 - **FIXED** — семантический контракт. Внутренняя реализация может меняться без изменения поведения для потребителей.
-- **WORKING** — текущее направление проектирования. Оно может быть пересмотрено, когда реальный вертикальный срез даст более убедительные основания.
+- **WORKING** — текущее направление проектирования. Оно может быть пересмотрено, когда реальный vertical slice даст более убедительные основания.
 - **DEFERRED** — решение намеренно отложено. Существующие контракты должны оставлять пространство для последующего выбора.
 
 ## 2. Модель проекта
 
-EvoForge — детерминированная эмерджентная симуляция, построенная вокруг:
+EvoForge — deterministic emergent simulation, построенная вокруг:
 
-- объектно-ориентированной доменной модели;
-- неизменяемых определений, собираемых композицией;
-- специализированных владельцев авторитетного состояния;
-- исполнения через события/планировщик вместо `update(dt)` у каждого объекта;
-- дискретных трёхмерных координат мира;
-- общей границы Controller/Command для игрока, AI, скриптов и сценариев;
-- локальной структурной навигации со сменными алгоритмами поиска пути и политиками движения;
-- headless-сценариев и тестов инвариантов;
-- выборочной data-oriented оптимизации только после появления данных о нагрузке.
+- object-oriented domain model;
+- immutable definitions, собираемых композицией;
+- специализированных owners authoritative state;
+- event/scheduler-driven execution вместо `update(dt)` у каждого объекта;
+- discrete three-dimensional world coordinates;
+- общей Controller/Command boundary для Player, AI, scripts и scenarios;
+- local structural Navigation со сменными pathfinding/movement policies;
+- headless scenarios и invariant tests;
+- selective data-oriented optimization только после workload evidence.
 
-EvoForge — не чистый ECS, не универсальный физический движок, не гигантская модель `WorldCell` и не архитектура, где каждый объект исполняется каждый тик.
+EvoForge — не pure ECS, не universal physics engine, не giant `WorldCell` model и не архитектура, где каждый object выполняется каждый tick.
 
 ## 3. Базовые инварианты [FIXED]
 
 | ID | Инвариант |
 |---|---|
-| I-01 | Каждый индивидуальный runtime-объект имеет стабильную идентичность `ObjectId`. |
-| I-02 | `ObjectRepository` владеет только идентичностью/существованием; механики там не накапливаются. |
-| I-03 | Definitions — неизменяемые runtime-описания, скомпилированные из композиционных исходных данных. |
-| I-04 | У каждого изменяемого авторитетного свойства ровно один владелец. |
-| I-05 | Системы зависят от узких read-контрактов, а не от изменяемых внутренностей других систем. |
-| I-06 | Обычная невозможность игрового действия — структурированный domain rejection, а не JVM exception. |
-| I-07 | Events описывают факты после авторитетной мутации; это не скрытые команды. |
-| I-08 | Авторитетная мутация симуляции выполняется в simulation thread, пока контракт явно не пересмотрен. |
-| I-09 | Scheduler управляет временем/порядком активации и не знает доменную семантику. |
-| I-10 | Публичные семантические контракты должны переживать замену внутреннего хранилища/алгоритма. |
-| I-11 | Горячие пути избегают лишних сканирований, аллокаций, boxing и временных коллекций после подтверждения, что путь действительно горячий. |
-| I-12 | Новые фундаментальные системы появляются вместе с headless-тестами корректности и диагностической стратегией. |
-| I-13 | Command пересекает границу внешнего намерения; продолжающиеся внутренние процессы и внутренние producers состояния используют узкие domain API напрямую, а не превращают Command во внутренний RPC. |
-| I-14 | Generic Control маршрутизирует и наблюдает команды, но не зависит от типов world-domain; world-domain не зависят от Control. |
+| I-01 | Каждый individual runtime object имеет stable `ObjectId` identity. |
+| I-02 | `ObjectRepository` владеет только identity/existence; mechanics там не накапливаются. |
+| I-03 | Definitions — immutable runtime descriptions, compiled из composition-driven source data. |
+| I-04 | У каждого mutable authoritative property ровно один owner. |
+| I-05 | Systems зависят от narrow read contracts, а не от mutable internals других systems. |
+| I-06 | Normal gameplay impossibility — structured domain rejection, а не JVM exception. |
+| I-07 | Events описывают факты после authoritative mutation; это не hidden commands. |
+| I-08 | Authoritative simulation mutation выполняется на simulation thread, пока contract явно не пересмотрен. |
+| I-09 | Scheduler управляет time/order activation и не знает domain semantics. |
+| I-10 | Public semantic contracts должны переживать replacement internal storage/algorithms. |
+| I-11 | Hot paths избегают unnecessary scans, allocations, boxing и temporary collections после подтверждения нагрузки. |
+| I-12 | Новые fundamental systems появляются вместе с headless correctness tests и diagnostic strategy. |
+| I-13 | Command пересекает external-intent boundary; continuing internal processes и internal state producers используют narrow domain APIs напрямую, а не превращают Command в internal RPC. |
+| I-14 | Generic Control routes/observes commands, но не зависит от world-domain types; world domains не зависят от Control. |
+| I-15 | Structural Navigation решает существование edge; actor-independent TransitionCost оценивает уже valid directed edge; Movement переводит эту цену в timed execution. |
+| I-16 | Timed Movement не создаёт вторую authoritative position: Spatial остаётся в source до completion-time revalidation и разрешённого `SpatialSystem.move`. |
+| I-17 | Scheduler process identity/routing — infrastructure; domain Action/process identity и state остаются owned соответствующей domain mechanic. |
 
 ## 4. Координаты мира [FIXED REPRESENTATION / DEFERRED BOUNDS]
 
-Авторитетные позиции мира представлены как:
+Authoritative world positions представлены как:
 
 ```text
 (int x, int y, int z)
 ```
 
-`int` — публичное представление координаты. Это **не** обещание, что каждое значение от `Integer.MIN_VALUE` до `Integer.MAX_VALUE` является допустимой координатой мира.
+`int` — public representation координаты. Это **не** обещание, что каждое значение от `Integer.MIN_VALUE` до `Integer.MAX_VALUE` является valid world coordinate.
 
-Допустимые границы мира — отдельная политика мира/хранилища и остаются **DEFERRED**, пока не появятся конкретные требования к регионам, чанкам и генерации мира.
+Valid world bounds — отдельная world/storage policy и остаются **DEFERRED**, пока не появятся concrete region/chunk/world-generation requirements.
 
 Следствия:
 
-- локальные алгоритмы не должны молча переполнять координаты рядом с поддерживаемыми границами;
-- будущие внутренние packed keys допустимы, если политика границ сделает их полезными;
-- переход к packed/chunk storage не должен заставлять обычных потребителей менять `int x, int y, int z`.
+- local algorithms не должны silently wrap координаты у supported bounds;
+- future internal packed keys допустимы, если bounds policy сделает их полезными;
+- выбор packed/chunk storage не должен менять normal coordinate consumer API `int x, int y, int z`.
 
-## 5. Владение пространственным состоянием объектов [FIXED]
+## 5. Владение spatial state объектов [FIXED]
 
-`SpatialSystem` владеет только позициями экземпляров `WorldObject`.
+`SpatialSystem` владеет позициями только `WorldObject` instances.
 
 ```text
 ObjectId -> XYZ
 ```
 
-`ObjectSpatialIndex` содержит только индексы, производные от позиции объекта.
+`ObjectSpatialIndex` содержит только indexes, derived от object position.
 
-Landscape, terrain, water, temperature и другое состояние среды не становятся `WorldObject` и не попадают в пространственные индексы объектов только потому, что тоже используют XYZ.
+Landscape, terrain, water, temperature и другое environmental state не становятся `WorldObject` и не входят в object spatial indexes только потому, что используют XYZ.
 
-Общий XYZ — это адрес, а не общий владелец всего состояния клетки.
+Shared XYZ — address, а не shared owner всего cell state.
+
+Timed Movement Action не владеет interpolated или alternate authoritative coordinate. До successful completion Spatial остаётся в source; после completion Spatial atomically владеет destination.
 
 ## 6. Landscape и terrain [FIXED]
 
-Базовое содержимое landscape хранится отдельно:
+Base landscape content хранится отдельно:
 
 ```text
 XYZ -> LandscapeDefinitionId | absence
 ```
 
-Отсутствие не является definition вроде `core:open`.
+Absence не является definition вроде `core:open`.
 
-`TerrainSystem` владеет terrain storage и terrain-specific инвариантами мутации. Конкретное terrain storage заменяемо. Обычные конфликты, вызванные текущим состоянием terrain, возвращаются как structured results; некорректные definitions и другие нарушения programming/configuration contract остаются исключениями.
+`TerrainSystem` владеет terrain storage и terrain-specific mutation invariants. Concrete terrain storage replaceable. Normal conflicts, вызванные current terrain state, возвращаются structured results; invalid definitions и broken programming/configuration inputs остаются exceptions.
 
-Terrain и Geometry остаются отдельными авторитетными областями. `TerrainSystem` не должен зависеть от `GeometrySystem` только ради координации lifecycle.
+Terrain и Geometry остаются separate authoritative concerns. `TerrainSystem` не должен зависеть от `GeometrySystem` только ради lifecycle coordination.
 
-Публичная согласованная write-capability для landscape — `LandscapeMutations`. Она владеет семантикой операции, когда одна логическая мутация landscape должна синхронно поддержать согласованность нескольких владельцев состояния.
+Public coordinated landscape write capability — `LandscapeMutations`. Она владеет semantic operation, когда одна logical landscape mutation должна сохранять coherence нескольких owners.
 
-Текущая политика lifecycle terrain:
+Current terrain lifecycle:
 
 ```text
 placeTerrain
-    -> создаёт terrain только в пустой позиции
-    -> очищает возможный stale geometry override
-    -> существующий terrain поэтому получает default FullShape
+    -> create terrain only when position empty
+    -> clear stale geometry override
+    -> present terrain resolves to default FullShape
 
 replaceTerrain
-    -> меняет definition существующего terrain
-    -> сохраняет текущий geometry override
+    -> change definition of existing terrain
+    -> preserve geometry override
 
 removeTerrain
-    -> удаляет существующий terrain
-    -> удаляет его geometry override
+    -> remove terrain
+    -> remove geometry override
 ```
 
-Следовательно, нестандартный Shape не переживает удаление terrain и последующее повторное размещение в том же XYZ. Shape принадлежит lifetime конкретной terrain cell, а не координате навсегда.
+Non-default Shape не переживает remove + later re-place в том же XYZ. Shape принадлежит lifetime конкретной terrain cell, а не координате навсегда.
 
-Внутренние producers, например будущие world generation, erosion или продолжающиеся Actions, могут вызывать узкую landscape/domain write-capability напрямую. Им не требуется создавать Commands. Write-capabilities выдаются явно при bootstrap/composition и должны оставаться у небольшого обозримого числа владельцев.
+Landscape definitions могут иметь mechanic-specific immutable data, например actor-independent `traversal.cost`. Terrain cell по-прежнему хранит только `LandscapeDefinitionId`; traversal configuration компилируется в mechanic-owned definition store.
 
-Новая механика среды обычно получает собственного специализированного владельца состояния, а не новые поля универсальной landscape-клетки.
+Internal producers — future world generation, erosion, continuing Actions — могут вызывать narrow landscape/domain write capability напрямую и не обязаны создавать Commands. Write capabilities выдаются explicit при bootstrap/composition и должны оставаться narrow/reviewable.
+
+Новая environmental mechanic обычно получает specialized state owner вместо полей universal landscape cell.
 
 ## 7. Geometry [FIXED]
 
-Geometry — отдельная механика поверх существующего terrain. Она не владеет идентичностью материала.
+Geometry — separate mechanic поверх present terrain. Она не владеет material identity.
 
-Наличие terrain без geometry override означает `FullShape.INSTANCE`. Разреженное geometry state хранит только нестандартные Shape overrides.
+Terrain без geometry override означает `FullShape.INSTANCE`. Sparse geometry state хранит только non-default Shape overrides.
 
-`Shape` — открытый декларативный контракт локальной топологии:
+`Shape` — open declarative local-geometry contract:
 
-- нет enum со всеми Shape;
-- центральный Shape catalog не требуется для runtime-композиции;
-- в Navigation нет `instanceof`/`switch` по конкретным Shape;
-- Shape не запрашивает World, соседей, Navigation, ObjectId или pathfinding;
-- Shape получает только текущую исходную позицию относительно собственного terrain anchor.
+- нет enum всех shapes;
+- central Shape catalog не нужен для runtime composition;
+- нет `instanceof`/`switch` по concrete Shape внутри Navigation или TransitionCost calculation;
+- Shape не запрашивает World, neighbors, Navigation, ObjectId или pathfinding;
+- Shape получает только source position относительно собственного terrain anchor и local direction при запросе directed traversal characteristic.
 
-Новый Shape, укладывающийся в контракт, добавляется как новая реализация плюс тесты — без изменения `NavigationSystem` или существующих Shape только ради распознавания его типа.
+Shape владеет двумя связанными, но отдельными contributions:
 
-## 8. Алгебра структурных переходов [FIXED ALGEBRA / WORKING SHAPE MODEL]
+```text
+structural topology roles
+    -> departures / arrivals / blocks
 
-Структурный переход соединяет одну исходную XYZ-позицию ровно с одним из 26 непосредственных трёхмерных соседей.
+intrinsic traversal geometry
+    -> departureTraversalFactor / arrivalTraversalFactor
+```
 
-Поэтому один структурный edge может одновременно менять X, Y и Z, пока каждая дельта находится в `[-1, 1]`, а общая дельта не равна `(0,0,0)`.
+Traversal factors используют **тот же departure/arrival role ownership и relative-coordinate law**, что topology. Shape вносит только source-side departure factor или destination-side arrival factor и не рассчитывает contribution соседнего Shape.
 
-Shape вносит три независимых факта для локальных направлений:
+Current traversal factors используют fixed-point scale `1000 = 1.0`. `0` означает, что Shape не владеет requested traversal role. Current `FullShape` и cardinal `RampShape` используют neutral factors для topology roles; arbitrary extra ramp penalty не является частью current contract.
+
+Новый Shape добавляется implementation + tests без изменений `NavigationSystem`, `TransitionCostCalculator` или existing Shapes только ради распознавания concrete type.
+
+## 8. Алгебра structural transitions [FIXED ALGEBRA / WORKING SHAPE MODEL]
+
+Structural transition соединяет source XYZ ровно с одним из 26 immediate three-dimensional neighbors.
+
+Один structural edge может одновременно менять X, Y и Z, пока каждая delta в `[-1, 1]`, а total delta не `(0,0,0)`.
+
+Shape вносит три independent facts:
 
 ```text
 departures
@@ -148,60 +169,62 @@ arrivals
 blocks
 ```
 
-Вклады нескольких Shape композиционно разрешаются единым правилом:
+Contributions нескольких Shapes разрешаются generically:
 
 ```text
 resolved = departures & arrivals & ~blocks
 ```
 
-Публичная итоговая маска всегда ограничена 26 допустимыми направлениями к соседям.
+Public resolved mask всегда ограничена 26 valid directions.
 
-Перед разрешением вклады накапливаются через OR. Поэтому композиция не зависит от конкретного типа Shape или порядка обработки.
+Contributions OR-ятся до resolution, поэтому composition не зависит от concrete Shape type или processing order.
 
-Departure и arrival — независимые роли. Для внешнего соединения один Shape может заявить возможность выхода со своей поддерживаемой поверхности, а другой независимо подтверждает прибытие на собственную поддерживаемую поверхность. Отсутствие любого подтверждения означает, что структурного edge нет. Shape не опрашивают друг друга.
+Departure и arrival — independent roles. Один Shape может предложить departure со своей supported surface, другой independently подтвердить arrival на своей supported surface. Missing confirmation с любой стороны означает отсутствие structural edge. Shapes не query друг друга.
 
-**Текущая production-модель структурных Shape** (`FullShape` и примитивный cardinal `RampShape`) использует одну поддерживаемую navigation-позицию:
+**Current production structural Shape model** (`FullShape` и primitive cardinal `RampShape`) использует одну supported navigation position:
 
 ```text
 anchor + (0, 0, 1)
 ```
 
-В этой модели:
+В этой model:
 
-- departures исходят только из этой поддерживаемой позиции;
-- arrivals подтверждают только направления, чья destination — эта позиция;
-- Shape не утверждает существование соседнего Shape или чужой поддерживаемой поверхности;
-- занятые твёрдым terrain координаты не являются обычными navigation-позициями.
+- departures originate only from supported position;
+- arrivals confirm only directions whose destination is that position;
+- Shape не утверждает existence neighboring Shape или foreign supported surface;
+- occupied solid terrain coordinates не являются ordinary navigation positions.
 
-Правило одной поддерживаемой позиции — **WORKING**, а не вечное ограничение для всех будущих Shape. Если реальный будущий Shape потребует нескольких поддерживаемых позиций или иной локальной модели, его контракт и read envelope resolver должны быть пересмотрены вместе, а не обойдены type-specific логикой Navigation.
+Та же supported-position relationship используется current TransitionCost support-owner lookup. Для directed edge `A -> B` source support = `A - (0,0,1)`, destination support = `B - (0,0,1)`; source Shape query-ится за departure role, destination Shape — за arrival role.
+
+One-supported-position rule — **WORKING**, не вечное ограничение. Если real future Shape потребует multiple supported positions или другой local representation, его contract, Navigation read envelope и TransitionCost support-owner lookup пересматриваются вместе, а не обходятся type-specific logic.
 
 ## 9. Топология Navigation [FIXED]
 
-Navigation предоставляет только структурную смежность.
+Navigation предоставляет только structural adjacency:
 
 ```java
 int transitions(int x, int y, int z)
 ```
 
-Результат — 26-битная маска соседей.
+Result — 26-bit neighbor mask.
 
 Navigation:
 
 - читает только Geometry;
-- не знает конкретные типы Shape;
+- не знает concrete Shape types;
 - не знает ObjectId;
-- не знает способности mover;
-- не назначает стоимость пути;
+- не знает mover abilities;
+- не назначает transition/path cost;
 - не выполняет pathfinding;
-- не изменяет состояние мира.
+- не mutate-ит world state.
 
-**Дистанция перехода** и **дистанция чтения Geometry** — разные понятия. Структурные edges остаются ограничены 26 непосредственными соседями:
+Transition **distance** и Geometry **read distance** — разные concepts. Structural edges ограничены 26 immediate neighbors:
 
 ```text
 dx, dy, dz in [-1, 1]
 ```
 
-Для одного source XYZ текущий resolver читает Geometry на source-relative offsets:
+Для одного source XYZ current resolver читает Geometry на source-relative offsets:
 
 ```text
 dx in [-1, 1]
@@ -209,91 +232,191 @@ dy in [-1, 1]
 dz in [-2, 1]
 ```
 
-Это максимум `3 * 3 * 4 = 36` локальных Geometry lookup. Дополнительный нижний Z-слой требуется текущей модели с одной поддерживаемой позицией: для одношагового перехода с `dz = -1` Shape, поддерживающий destination, может иметь terrain anchor ещё на одну клетку ниже destination. Чтение этого anchor позволяет ему внести destination-side arrival, не заставляя Shape знать соседа, а Navigation — конкретный тип Shape.
+Это максимум `3 * 3 * 4 = 36` local Geometry lookups. Extra lower Z layer нужен current one-supported-position Shape model: для transition с `dz = -1` Shape, supporting destination, может иметь terrain anchor ещё на одну cell ниже destination. Чтение anchor позволяет внести destination-side arrival без neighbor knowledge внутри Shape и concrete Shape logic внутри Navigation.
 
-Таким образом, read envelope выводится из текущего контракта ролей Shape, а не из длины пути. При изменении структурной модели Shape необходимое окно чтения должно быть заново выведено и протестировано вместе с ней.
+Read envelope derived из Shape role contract, а не path length. При изменении structural Shape model envelope заново выводится и тестируется.
 
-Структурная топология действительно трёхмерна: Shape может открывать edges с изменением высоты без Shape-specific правил в Navigation.
+Structural topology truly 3D: Shape может expose elevation-changing neighbor edges без Shape-specific Navigation rules.
 
-### 9.1 Ориентированный граф [FIXED]
+### 9.1 Directed graph [FIXED]
 
-Структурная Navigation — **ориентированный граф**.
+Structural Navigation — **directed graph**.
 
-Если `transitions(A)` содержит направление `d`, это не означает, что `transitions(A + d)` содержит `-d`.
+Если `transitions(A)` содержит `d`, это не означает, что `transitions(A + d)` содержит `-d`.
 
-Симметричное движение возникает только тогда, когда оба направленных edge независимо поддержаны. Shape могут задавать двунаправленную или асимметричную топологию.
+Symmetric movement возникает только если оба directed edges independently supported.
 
-### 9.2 Кэширование [DEFERRED IMPLEMENTATION]
+TransitionCost тоже directed: разные departure/arrival factors могут дать `cost(A -> B) != cost(B -> A)` даже если оба edges существуют.
 
-Постоянного контракта Navigation cache сейчас нет.
+### 9.2 Caching [DEFERRED IMPLEMENTATION]
 
-Возможные будущие реализации:
+Persistent Navigation cache contract пока отсутствует.
 
-- без cache;
+Possible future implementations:
+
+- no cache;
 - bounded cache;
 - chunk-local topology;
 - region-derived topology;
-- другое представление, оправданное профилированием.
+- другой representation по profiling evidence.
 
-Любой cache — производное состояние и должен оставаться невидимым за стабильным read-контрактом Navigation. Lifecycle и invalidation cache проектируются вместе с реальной нагрузкой и lifecycle регионов мира, которые этого потребуют.
+Cache — derived state и остаётся invisible за stable Navigation read contract. Lifecycle/invalidation проектируются вместе с workload/world-region lifecycle, который реально этого потребует.
 
 ## 10. Границы Movement, traversal и pathfinding [FIXED BOUNDARIES / WORKING DETAILS]
 
-Navigation отвечает за структурную смежность.
+Current semantic chain:
 
-Movement решает, может ли и как конкретный actor выполнить переход. Возможности actor, occupancy, speed и семантика движения не принадлежат Shape только ради работы базовой Navigation.
+```text
+Navigation
+    -> существует ли directed adjacent structural edge A -> B?
 
-`SpatialSystem` применяет уже разрешённую мутацию позиции объекта; он не решает, разрешают ли terrain/path/collision движение.
+TransitionCost
+    -> какова actor-independent intrinsic price valid edge?
 
-Pathfinding — заменяемый потребитель Navigation. A*, Dijkstra, hierarchical search, flow fields и другие алгоритмы — выбор реализации, а не архитектура всего проекта.
+MovementRate + Movement timing state
+    -> сколько simulation ticks требуется mover?
 
-Transition/path costs остаются **DEFERRED**, пока первый реальный Pathfinder/Movement consumer не покажет, какая информация нужна.
+MovementAction
+    -> start, sleep, completion-time revalidation, Spatial commit или interruption
 
-Непроизвольное движение, например падение, пока не назначено семантике Navigation или Movement. Владение остаётся **DEFERRED** до проектирования Basic Movement; его нельзя вывести лишь из наличия вертикальных Shape edges.
+Pathfinder (future)
+    -> выбирает среди valid edges, используя ТУ ЖЕ TransitionCost semantics
+```
+
+### 10.1 Timed adjacent Movement [FIXED CURRENT SEMANTICS]
+
+`MoveStepCommand` запускает one adjacent timed attempt; acceptance не мутирует Spatial немедленно.
+
+Movement проверяет object capability, placement, adjacency и Navigation до start Action. У object может быть максимум один ordinary Movement Action.
+
+Пока Action active:
+
+```text
+authoritative Spatial position = source
+```
+
+Action plan-ит future completion через narrow `ProcessScheduler`. На completion Movement revalidate-ит, что object ещё существует, всё ещё в recorded source и Navigation всё ещё содержит directed edge. Только после этого можно вызвать `SpatialSystem.move`; иначе Action interrupted и удаляется без изменения position.
+
+Между start и scheduled completion current Action dormant. Он пока не подписан на terrain/geometry mutation notifications; changed topology обнаруживается completion-time revalidation.
+
+Каждый ordinary Movement transition длится минимум один simulation tick. Authoritative fractional/interpolated position между cells отсутствует.
+
+### 10.2 Movement capability и timing [FIXED CURRENT SEMANTICS]
+
+Ordinary self-propelled Movement capability definition-backed:
+
+```text
+ObjectDefinitionId -> MovementRate
+```
+
+`MovementRate` — positive integer в traversal-cost units per simulation tick. Absence movement aspect означает unavailable current ordinary movement capability.
+
+Transition-cost units переводятся в ticks через deterministic per-object fractional carry. Carry сохраняется между adjacent steps, чтобы repeated rounding не искажал fast movers или diagonal travel.
+
+Current timed Movement independent от wall-clock/render FPS. Presentation speed может менять, как быстро simulation ticks проходят в real time; она не переопределяет `MovementRate`, `TransitionCost` или simulation tick ordering.
+
+### 10.3 Actor-independent TransitionCost [FIXED CURRENT MODEL]
+
+TransitionCost считается только после того, как Navigation подтвердил valid adjacent directed edge.
+
+Для edge `A -> B` с direction `d` conceptual model:
+
+```text
+localA = surfaceCost(A) * departureFactor(shapeA, d)
+localB = surfaceCost(B) * arrivalFactor(shapeB, d)
+
+TransitionCost(A -> B)
+    = lengthFactor(d)
+      * average(localA, localB)
+```
+
+Current model использует обе supporting landscape cells.
+
+Ownership:
+
+- `LandscapeDefinitionId` mechanic data даёт positive actor-independent `SurfaceTraversalCost`;
+- source Shape даёт только directed departure factor;
+- destination Shape даёт только directed arrival factor;
+- grid direction даёт cardinal/double-diagonal/triple-diagonal length;
+- Movement не branch-ится по concrete Shape type;
+- `MovementRate` применяется после TransitionCost и не определяет edge price.
+
+Authoritative cost arithmetic — fixed-point integer arithmetic. Current neutral scales `1000` для surface cost, Shape factor и grid-length scale; grid lengths `1000`, `1414`, `1732`. Combined TransitionCost round-ится deterministic один раз на output boundary, затем Movement carry отдельно обрабатывает cost-to-tick remainder.
+
+Current TransitionCost **actor-independent**. Movers с разными rates видят одинаковое intrinsic edge ranking. Actor/surface interactions вроде wheels vs stairs или swamp affinity остаются **DEFERRED** до real capability consumer.
+
+### 10.4 Scheduler/process boundary [FIXED]
+
+Scheduler знает activation time, handler и opaque process id; domain Action state ему не принадлежит.
+
+Domain process identity (`MovementActionId`) отличается от infrastructure `TaskHandle`.
+
+Timed mechanic обычно получает narrow `ProcessScheduler`, already bound к registered handler, вместо raw authority над `Scheduler + HandlerId + SimulationClock`.
+
+Current production simulation step:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+owned by `SimulationStepper`. Scenario fixture и future presentation вызывают этот production contract, а не создают отдельную tick semantics.
+
+### 10.5 Occupancy и pathfinding [DEFERRED DETAILS]
+
+Occupancy остаётся separate от structural Navigation. Current Movement не reserve-ит destination, поэтому multi-agent conflict semantics пока не fixed.
+
+Pathfinding — replaceable consumer Navigation и TransitionCost. A*, Dijkstra, hierarchical search, flow fields — implementation choices, а не global architecture.
+
+Future Pathfinder не должен иметь second independent edge-price model, расходящуюся с authoritative Movement.
+
+Early Movement cancellation, actor-specific surface affinity, multi-step `MoveTo`, climbing/swimming/flying overlays и involuntary falling остаются deferred до real consumers.
 
 ## 11. Детерминизм [FIXED PRINCIPLE]
 
-При одинаковом начальном авторитетном состоянии, одинаковой последовательности отправленных команд и одинаковом состоянии/seed симуляционного RNG EvoForge должен выдавать одинаковый авторитетный результат в рамках поддерживаемого runtime-контракта.
+При одинаковом initial authoritative state, одинаковой submitted command sequence и одинаковом simulation RNG seed/state EvoForge должен выдавать одинаковый authoritative result в supported runtime contract.
 
-Правила:
+Rules:
 
-1. Авторитетная случайность берётся из явно принадлежащего симуляции RNG state с воспроизводимым seed/state. `Math.random()` и `ThreadLocalRandom` не являются источниками авторитетной случайности.
-2. Авторитетное поведение не должно зависеть от неоговорённого порядка итерации `HashMap`, `HashSet` и аналогичных контейнеров.
-3. Если существует несколько допустимых вариантов и порядок влияет на результат, используется явное стабильное правило выбора: sequence number, stable id или заданная сортировка.
-4. Background workers могут вычислять read-only результаты, но никогда не изменяют авторитетный World напрямую. Возвращённый результат проверяется перед применением.
-5. Floating-point не запрещён глобально, но авторитетные ветвления не должны случайно зависеть от нестабильного порядка итерации/редукции. Более строгая cross-platform bit-identical numeric policy остаётся **DEFERRED**, пока не понадобится конкретной механике.
+1. Authoritative randomness берётся из explicitly owned simulation RNG state с reproducible seed/state. `Math.random()` и `ThreadLocalRandom` не authoritative sources.
+2. Authoritative behavior не зависит от unspecified iteration order `HashMap`, `HashSet` и аналогичных containers.
+3. Если несколько valid choices и order влияет на result, используется explicit stable tie-break: sequence number, stable id или defined ordering.
+4. Background workers могут вычислять read-only results, но не mutate authoritative World напрямую. Returned work validate-ится перед application.
+5. Floating-point глобально не запрещён, но authoritative branching не должен accidentally зависеть от unstable iteration/reduction order. Current Movement/TransitionCost deliberately uses integer/fixed-point arithmetic; stricter project-wide bit-identical numeric policy остаётся **DEFERRED** до другой реальной mechanic.
+6. Одинаковое число production simulation ticks должно давать одинаковый authoritative result независимо от caller batching; presentation FPS не является simulation semantics.
 
 ## 12. Control boundary [FIXED PRINCIPLE / WORKING DELIVERY]
 
-Player, AI, scripts, scenarios и другие внешние controllers сходятся к одному command path:
+Player, AI, scripts, scenarios и other external controllers сходятся к одному command path:
 
 ```text
 external intent -> Command -> delivery -> dispatcher -> handler -> authoritative domain APIs
 ```
 
-Command — immutable intent. Продолжающийся Action/process — runtime state и не представляется потоком внутренних Commands только потому, что позже изменяет системы.
+Command — immutable intent. Continuing Action/process — runtime state и не представляется stream internal Commands только потому, что позднее mutate-ит systems.
 
-Таким образом, Command — **граница внешнего намерения**, а не универсальный внутренний RPC. Внутренние producers состояния и уже принятые процессы используют узкие domain API авторитетных владельцев напрямую.
+Command — **external-intent boundary**, не universal internal RPC. Internal state producers и accepted processes используют narrow domain APIs authoritative owners напрямую.
 
-Обычная невозможность из-за world state — structured data. Некорректное programming/bootstrap/configuration state остаётся исключением.
+Normal world-state impossibility — structured data. Invalid programming/bootstrap/configuration state остаётся exceptional.
 
-Все результаты операций имеют минимальный нейтральный observation floor:
+All operation outcomes имеют minimal neutral observation floor:
 
 ```text
 accepted
 namespaced result code
 ```
 
-Namespaced codes имеют вид:
+Codes, например:
 
 ```text
 terrain:position_occupied
-movement:blocked
+movement:already_moving
+movement:transition_unavailable
 ```
 
-Глобального enum со всеми причинами rejection в проекте нет. Конкретные домены могут возвращать более богатые typed results, а generic Control видит только общий observation floor.
+Global enum rejection reasons нет. Concrete domains могут иметь richer typed results, generic Control видит common floor.
 
-Generic Control не знает world-domain. Закон зависимостей:
+Generic Control не знает world-domain. Dependency law:
 
 ```text
 simulation.control.core  -X-> world.*
@@ -301,30 +424,34 @@ simulation.control.sync  -X-> world.*
 world.*                   -X-> simulation.control.*
 ```
 
-Concrete adapters в `simulation/control/<use-case>/` могут зависеть от узких domain API, нужных конкретному use-case. Команды группируются по intent/use-case, а не по одной системе, которую они случайно изменяют.
+Concrete adapters под `simulation/control/<use-case>/` могут зависеть от narrow domain APIs нужного use-case. Commands группируются по intent/use-case.
 
-Текущая delivery-модель синхронная: submit немедленно выполняет dispatch и handler, а авторитетные мутации видимы до возврата из `submit`. Для детерминированного вызывающего порядок команд равен детерминированному порядку вызовов.
+Current delivery synchronous: submission немедленно dispatch-ит и выполняет handler. Это **не** значит, что accepted domain operation обязана сразу завершиться. `MoveStepCommand` synchronously запускает Movement Action и возвращает result, пока Spatial остаётся в source; Scheduler позже продолжает domain Action напрямую, не возвращая continuation через Control.
 
-Будущая queued/asynchronous delivery может переиспользовать те же Command/Handler/Dispatcher contracts, но обязана явно определить порядок очереди, момент flush и semantics видимости состояния. Смена delivery policy не считается автоматически сохраняющей within-tick visibility.
+Для deterministic callers submitted command order равен call order.
 
-Player-only shortcut не может напрямую мутировать внутренности механик.
+Future queued/asynchronous delivery может переиспользовать Command/Handler/Dispatcher, но обязана explicit определить queue order, flush point и state visibility. Changing delivery policy не предполагает automatic preservation within-tick visibility.
+
+Player-only shortcut не может напрямую mutate mechanics internals.
 
 ## 13. Модель производительности [FIXED PRINCIPLE]
 
-Приоритет оптимизации:
+Optimization priority:
 
-1. не выполнять лишнюю работу;
-2. ограничивать поиск locality/indexes;
-3. переиспользовать производные результаты, когда реальная нагрузка это оправдывает;
-4. убирать аллокации/boxing на hot path;
-5. вводить специализированные primitive/DOD structures только для стабильных измеренных hot paths;
-6. рассматривать SIMD/parallelism только после предыдущих шагов и профилирования.
+1. не делать unnecessary work;
+2. bound search locality/indexes;
+3. reuse derived results при real workload benefit;
+4. убрать hot-path allocations/boxing;
+5. вводить specialized primitive/DOD structures только для stable measured hot paths;
+6. рассматривать SIMD/parallelism после предыдущих шагов и profiling.
 
-Низкоуровневая структура не оправдана лишь тем, что потенциальная будущая нагрузка когда-нибудь может возникнуть.
+Low-level structure не justified только hypothetical future workload.
+
+Timed Movement следует event-driven model: active step schedule-ит completion, а не требует `update` каждого mover каждый tick.
 
 ## 14. Рабочий масштаб [WORKING]
 
-Текущий проектный диапазон, используемый для отбрасывания заведомо немасштабируемой архитектуры:
+Current design envelope:
 
 ```text
 total persistent objects:       ~1,000,000
@@ -332,67 +459,76 @@ positioned world objects:       ~100,000+
 simultaneously active agents:   ~10,000
 ```
 
-Это архитектурные цели масштаба, а не обещания FPS или latency.
+Это architecture scale targets, не FPS/latency promises.
 
-Поэтому дизайн должен избегать обязательной O(total objects) работы каждый tick и обязательных global scans для обычных игровых операций.
+Design избегает mandatory per-tick O(total objects) work и global scans для common operations.
 
-Точные количества загруженных terrain cells, размеры регионов и чанков остаются **DEFERRED**, пока не появится модель chunk/world generation.
+Exact loaded terrain-cell counts, region/chunk sizes остаются **DEFERRED** до chunk/world-generation model.
 
-Числа масштаба могут быть пересмотрены после появления репрезентативных сценариев и benchmark; это не переопределяет молча семантические контракты владения выше.
+Scale numbers могут быть revised по representative scenarios/benchmarks без silent redefinition semantic ownership contracts.
 
 ## 15. Правила расширения [FIXED]
 
-### Существующая механика, новый контент
+### Existing mechanic, new content
 
-Добавляйте только definition data, если существующая комбинация aspect/mechanic уже выражает этот контент.
+Добавляйте definition data, если existing aspect/mechanic уже выражает content.
 
-### Новая объектная механика
+Например новый ordinary landscape material может задать другое positive `traversal.cost` без изменений Movement или TransitionCost code.
 
-При необходимости добавьте специализированный definition compiler/store, runtime owner/system, тесты и явную bootstrap-регистрацию. Не добавляйте гигантскую центральную runtime state map.
+### New object mechanic
 
-### Новая landscape-механика
+При необходимости добавляйте specialized definition compiler/store, runtime owner/system, tests и explicit bootstrap registration. Не создавайте giant central runtime state map.
 
-Добавляйте собственного owner/system вместо превращения Terrain в универсальную структуру среды.
+### New landscape mechanic
 
-### Новый Shape
+Добавляйте собственный owner/system вместо превращения Terrain в universal environment structure.
 
-Добавляйте новую реализацию Shape и тесты topology/composition. Не меняйте Navigation ради распознавания типа. Если Shape больше не укладывается в текущую модель одной поддерживаемой позиции, явно пересмотрите общий Shape contract и resolver envelope вместо concrete-type исключения.
+### New Shape
 
-### Новый spatial query
+Добавляйте Shape implementation + topology/composition tests. Не меняйте Navigation или `TransitionCostCalculator` для recognition concrete type. Если intrinsic geometry требует non-neutral traversal factor, override только Shape-owned departure/arrival contribution по тому же role law.
 
-Если он зависит только от позиции объекта, добавьте подходящий специализированный object spatial index. Если он зависит от доменных механик, он принадлежит этой механике.
+Если Shape больше не fits one-supported-position model, explicitly revise Shape contract, resolver envelope и cost support-owner lookup вместо concrete-type exception.
 
-### Новый Pathfinder или AI algorithm
+### New spatial query
 
-Добавляйте заменяемую реализацию за существующей семантической границей, а не меняйте владение миром.
+Если query зависит только от object position, добавьте specialized object spatial index. Если от domain mechanics — query belongs этой mechanic.
 
-### Новая Command
+### New Pathfinder или AI algorithm
 
-Добавляйте concrete immutable Command, typed CommandResult и один handler в подходящей области `control/<use-case>/`. Handler может зависеть от узких domain API; generic Control не должен узнавать новый domain type. Не создавайте Command для внутренней мутации только ради маршрутизации вызовов между системами.
+Добавляйте replaceable implementation за existing semantic boundary. Pathfinder consumes Navigation + shared TransitionCost semantics и не становится authoritative Movement mutator.
+
+### New timed mechanic
+
+Domain process state остаётся в domain. Регистрируется один scheduled handler на process family, а start system получает narrow bound scheduling capability. Не добавляйте global Scheduler switch или universal Action framework только из-за shared time infrastructure.
+
+### New Command
+
+Добавляйте concrete immutable Command, typed CommandResult и один handler в appropriate `control/<use-case>/`. Handler может зависеть от narrow domain APIs; generic Control не знает new domain type. Не создавайте Command для internal mutation только ради routing system calls.
 
 ## 16. Явно отложенные решения
 
-Архитектура намеренно пока не фиксирует:
+Architecture намеренно пока не фиксирует:
 
-- точные границы координат мира;
-- размеры chunk/region и упаковку terrain;
-- семантику unloaded/not-generated против absent terrain;
-- генерацию мира;
-- детали water/temperature/weather simulation;
-- представление occupancy и точность collision;
-- mover-specific capability model;
-- более богатую ramp/stair topology сверх текущей примитивной cardinal ramp;
-- семантику непроизвольного падения;
-- Navigation caching и lifecycle cache;
-- алгоритм pathfinding, hierarchy и path cache;
-- представление path cost;
-- snapshot/revision-механизм background pathfinding;
-- полный lifecycle объектов;
-- формат persistence и границы сохранения регионов;
-- финальную реализацию EventBus;
+- exact world coordinate bounds;
+- chunk/region dimensions и terrain packing;
+- unloaded/not-generated vs absent terrain semantics;
+- world generation algorithms и persistence integration;
+- water/temperature/weather details;
+- occupancy/reservation representation и collision precision;
+- richer mover-specific capability model и actor-specific surface affinity;
+- early Movement cancellation/reactive wake-up semantics;
+- multi-step `MoveTo`/route-execution lifecycle;
+- richer ramp/stair topology beyond current primitive cardinal ramp;
+- involuntary falling semantics;
+- Navigation caching/cache lifecycle;
+- pathfinding algorithm, hierarchy и path cache;
+- background pathfinding revision/snapshot mechanism;
+- full object lifecycle orchestration;
+- persistence format и region save boundaries;
+- final EventBus implementation;
 - queued/asynchronous command batching и within-tick visibility policy;
-- multithreading architecture сверх одного авторитетного mutation thread;
-- точное семейство AI planner;
-- финальный renderer/Z-level UX.
+- multithreading architecture beyond one authoritative mutation thread;
+- exact AI planner family;
+- final renderer/Z-level UX и art pipeline.
 
-Отложенное решение успешно только тогда, когда его впоследствии можно реализовать, не разрушая зафиксированные выше границы владения и семантики.
+Deferred choice successful только если позже может быть implemented без разрушения fixed ownership/semantic boundaries выше.

@@ -26,6 +26,9 @@ import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinition
 import io.github.evoforge.simulation.world.mechanics.movement.MovementRate;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementStateStore;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
+import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
+import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -38,6 +41,8 @@ public final class ScenarioBuilder {
 
     private final DefinitionRegistry<LandscapeDefinitionId>
             landscapeDefinitions;
+    private final LandscapeTraversalDefinitions
+            landscapeTraversalDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId>
             objectDefinitions;
     private final MovementDefinitions movementDefinitions;
@@ -56,6 +61,8 @@ public final class ScenarioBuilder {
         landscapeDefinitions = new DefinitionRegistry<>(
                 LandscapeDefinitionId::of,
                 LandscapeDefinitionId::asInt);
+        landscapeTraversalDefinitions =
+                new LandscapeTraversalDefinitions();
 
         objectDefinitions = new DefinitionRegistry<>(
                 ObjectDefinitionId::of,
@@ -92,8 +99,26 @@ public final class ScenarioBuilder {
     public LandscapeDefinitionId landscapeDefinition(
             String key) {
 
+        return landscapeDefinition(
+                key,
+                SurfaceTraversalCost.NEUTRAL_UNITS);
+    }
+
+    public LandscapeDefinitionId landscapeDefinition(
+            String key,
+            long traversalCostUnits) {
+
         requireNotStarted();
-        return landscapeDefinitions.register(key);
+
+        LandscapeDefinitionId definitionId =
+                landscapeDefinitions.register(key);
+
+        landscapeTraversalDefinitions.put(
+                definitionId,
+                SurfaceTraversalCost.of(
+                        traversalCostUnits));
+
+        return definitionId;
     }
 
     public ObjectDefinitionId objectDefinition(
@@ -192,6 +217,7 @@ public final class ScenarioBuilder {
         started = true;
 
         landscapeDefinitions.freeze();
+        landscapeTraversalDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
 
@@ -224,12 +250,19 @@ public final class ScenarioBuilder {
                         scheduler,
                         movementHandlerId);
 
+        TransitionCostCalculator transitionCosts =
+                new TransitionCostCalculator(
+                        terrain.lookup(),
+                        geometry.lookup(),
+                        landscapeTraversalDefinitions);
+
         MovementSystem movement =
                 new MovementSystem(
                         objects,
                         spatial.transforms(),
                         navigation.lookup(),
                         movementDefinitions,
+                        transitionCosts,
                         movementState,
                         movementScheduler);
 

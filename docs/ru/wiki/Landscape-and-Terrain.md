@@ -1,6 +1,6 @@
 # Landscape и Terrain
 
-Landscape представляет environmental content, адресуемый координатами мира. Terrain — текущий реализованный base landscape owner.
+Landscape представляет environmental content, адресуемый координатами мира. Terrain — current implemented base landscape owner.
 
 ## Базовое представление
 
@@ -8,43 +8,35 @@ Landscape представляет environmental content, адресуемый �
 XYZ -> LandscapeDefinitionId | absence
 ```
 
-Terrain cell хранит landscape definition identity. Absence означает, что terrain по этой coordinate отсутствует.
+Terrain cell хранит landscape definition identity. Absence означает, что terrain по coordinate отсутствует.
 
 ## Absence — не definition
 
-EvoForge намеренно не использует специальные content definitions:
-
-```text
-core:air
-core:empty
-core:open
-```
-
-для обычного отсутствия.
+EvoForge намеренно не использует специальные content definitions `core:air`, `core:empty` или `core:open` для ordinary absence.
 
 Если coordinate имеет `LandscapeDefinitionId`, там действительно существует landscape content.
 
-Будущая loaded/unloaded distinction может потребовать более богатого read result, но это не то же самое, что вводить «empty terrain material».
+Future loaded/unloaded distinction может потребовать richer read result, но это не то же самое, что вводить «empty terrain material».
 
 ## `TerrainSystem`
 
-`TerrainSystem` — авторитетный владелец terrain storage и terrain-specific инвариантов мутации. Consumers читают через `TerrainLookup`.
+`TerrainSystem` — authoritative owner terrain storage и terrain-specific mutation invariants. Consumers читают через `TerrainLookup`.
 
-Storage делегируется границе `TerrainStorage`, чтобы chunking/packing позже менялись без изменения обычных terrain consumers.
+Storage делегируется `TerrainStorage`, чтобы chunking/packing позже менялись без изменения ordinary consumers.
 
 Mutation methods возвращают structured results:
 
 ```text
-place в занятую позицию -> POSITION_OCCUPIED
-replace отсутствующего terrain -> TERRAIN_ABSENT
-remove отсутствующего terrain  -> TERRAIN_ABSENT
+place occupied -> POSITION_OCCUPIED
+replace absent -> TERRAIN_ABSENT
+remove absent  -> TERRAIN_ABSENT
 ```
 
-Это обычные конфликты world state. Invalid/null definition ids остаются programming/configuration errors и приводят к exception.
+Это normal world-state conflicts. Invalid/null definition ids остаются programming/configuration errors.
 
 ## `LandscapeMutations`
 
-Terrain и Geometry — отдельные authoritative owners, но lifetime terrain cell имеет последствия для geometry. Публичная согласованная write-capability — `LandscapeMutations`, текущая реализация — `LandscapeSystem`.
+Terrain и Geometry — separate authoritative owners, но lifetime terrain cell имеет geometry consequences. Public coordinated write capability — `LandscapeMutations`, current implementation — `LandscapeSystem`.
 
 ```text
 external Command handler ─┐
@@ -56,30 +48,30 @@ erosion / internal Action ┤
              TerrainSystem   GeometrySystem
 ```
 
-Так external commands и внутренние producers получают одинаковую lifecycle-семантику, но внутренние мутации не обязаны искусственно проходить через Command.
+Так external commands и internal producers получают одинаковую lifecycle semantics без forced internal Commands.
 
-Текущая политика:
+Current policy:
 
 ```text
 placeTerrain
-    -> создаёт terrain только в пустой позиции
-    -> очищает stale geometry override
-    -> default geometry становится FullShape
+    -> create only when empty
+    -> clear stale geometry override
+    -> default geometry FullShape
 
 replaceTerrain
-    -> меняет definition существующего terrain
-    -> сохраняет geometry override
+    -> change existing definition
+    -> preserve geometry override
 
 removeTerrain
-    -> удаляет terrain
-    -> очищает geometry override
+    -> remove terrain
+    -> clear geometry override
 ```
 
-Custom Shape поэтому принадлежит lifetime terrain cell и не переживает молча remove/re-place в том же XYZ.
+Custom Shape принадлежит lifetime terrain cell и не переживает remove/re-place в том же XYZ.
 
-## Обработка результатов
+## Structured results
 
-Результаты terrain mutations реализуют нейтральный `OperationResult` и предоставляют:
+Terrain results реализуют `OperationResult`:
 
 ```text
 accepted
@@ -94,48 +86,75 @@ terrain:position_occupied
 terrain:terrain_absent
 ```
 
-Caller, для которого world-state rejection является нормальным, анализирует typed result. Детерминированный внутренний producer, чей собственный инвариант требует success, выражает это абстрактно:
+Internal producer, для которого rejection нарушает его собственный invariant, использует:
 
 ```java
 OperationResults.requireAccepted(
         landscape.placeTerrain(...));
 ```
 
-Ему не нужно сравнивать результат с конкретной success-константой вроде `PLACED`.
+## `TerrainLookup` и storage
 
-## `TerrainLookup`
-
-Текущая семантика:
+Current lookup:
 
 ```text
 LandscapeDefinitionId   terrain present
 null                    terrain absent
 ```
 
-`contains` выводится из `find`, а не является вторым source of state.
-
-## `TerrainStorage`
-
-`TerrainStorage` — implementation boundary, не domain promise о представлении terrain.
-
-Текущий `SparseTerrainStorage` подходит для фундамента и tests. Region/chunk storage заменит его, когда появятся world-generation/persistence requirements.
+`TerrainStorage` — implementation boundary. Current `SparseTerrainStorage` подходит для foundation/tests; future chunk/region storage может заменить его без изменения semantic contract.
 
 ## Landscape definitions
 
-Terrain хранит typed `LandscapeDefinitionId`, скомпилированные из composition-driven landscape definitions.
-
-Material identity и geometry разделены:
+Terrain cell хранит только `LandscapeDefinitionId`. Material identity, geometry и mechanic-specific material data разделены:
 
 ```text
-LandscapeDefinitionId  -> что это за terrain content/material
-Shape                  -> какая у него local geometry/topology
+LandscapeDefinitionId
+    -> content/material identity
+
+Shape
+    -> local geometry/topology + intrinsic local traversal factor
+
+LandscapeTraversalDefinitions
+    -> actor-independent SurfaceTraversalCost material
 ```
 
-Разные landscape definitions могут иметь одинаковую geometry. Material может получить custom geometry override без изменения identity.
+Одинаковая Shape может использоваться разными materials, а geometry override не меняет material identity.
 
-## Направление dependency Geometry
+### Aspect `traversal`
 
-`GeometrySystem` читает `TerrainLookup`.
+Current Movement pricing использует landscape aspect:
+
+```json
+{
+  "key": "core:granite",
+  "aspects": {
+    "traversal": {
+      "cost": 1000
+    }
+  }
+}
+```
+
+Compilation:
+
+```text
+LandscapeDefinitionId -> SurfaceTraversalCost
+```
+
+`traversal.cost` — positive integer; `1000` — current neutral baseline.
+
+Cost не дублируется per-cell: terrain cell уже ссылается на definition, а `TransitionCostCalculator` читает compiled traversal data.
+
+Это actor-independent intrinsic surface price. Он не создаёт structural edge и не кодирует species/locomotion affinity.
+
+Для valid directed Movement edge cost-model объединяет обе supporting terrain cells, departure/arrival factors их Shapes и grid direction length. Missing traversal data для support definition — broken configuration, а не silent fallback.
+
+Подробнее: [Definitions](Definitions.md) и [Movement System](Movement-System.md).
+
+## Dependency Geometry
+
+`GeometrySystem` читает `TerrainLookup`:
 
 ```text
 TerrainSystem
@@ -143,56 +162,63 @@ TerrainSystem
 GeometrySystem
 ```
 
-Terrain не зависит от Geometry. Cross-owner lifecycle coordination выполняет стоящий над обеими системами `LandscapeSystem`, поэтому обратной зависимости `TerrainSystem -> GeometrySystem` не возникает.
+Terrain не зависит от Geometry. Cross-owner lifecycle coordination выполняет `LandscapeSystem` сверху.
 
 Present terrain без override -> `FullShape.INSTANCE`; absent terrain -> no Shape.
 
-## Видимость мутаций
+## Landscape, Navigation и Movement
 
-Поскольку Geometry и Navigation сейчас не имеют persistent cache, landscape mutation видна на следующем query:
+Current chain:
 
 ```text
-Landscape mutation
-    ↓
 TerrainLookup
     ↓
 GeometryLookup
     ↓
 NavigationLookup
+        structural edge exists?
+
+TerrainLookup + GeometryLookup
+    ↓
+TransitionCostLookup
+        intrinsic price of already-valid edge
+
+Movement
+    ↓
+MovementRate + timing carry
+    ↓
+Scheduler
+    ↓
+completion revalidation
 ```
 
-Будущие caches должны сохранить ту же semantic visibility через correct invalidation/revision handling.
+Navigation намеренно не знает material cost. Low traversal cost не способен создать missing topology.
+
+## Видимость mutations
+
+Поскольку Geometry/Navigation current implementation не скрывают state за persistent cache, landscape mutation видна на next query.
+
+Sleeping Movement Action при mutation не просыпается immediately; `MovementActionProcessor` увидит changed Navigation на scheduled completion и не выполнит stale Spatial commit.
+
+Future caches/events должны сохранить semantic correctness, даже если recomputation станет другой.
 
 ## Landscape — не `WorldObject`
 
-Миллионы terrain coordinates как `WorldObject` навязали бы object identity/lifetime overhead и загрязнили object spatial indexes.
+Terrain coordinates не превращаются в миллионы `WorldObject`: это навязало бы object identity/lifetime overhead и загрязнило Spatial indexes.
 
-Landscape остаётся отдельным domain, несмотря на общий XYZ.
+Landscape остаётся separate domain при общем XYZ address space.
 
-## Будущие environmental mechanics
+## Future environmental mechanics
 
-Water, temperature, weather, soil moisture, light, contamination и другое состояние обычно получают собственных specialized owners, а не поля universal terrain cell.
+Water, temperature, weather, soil moisture, light, contamination и другие environment properties обычно получают specialized owners, а не поля universal terrain cell.
 
-Физическое storage нескольких mechanics позже может быть co-located ради performance, но semantic ownership остаётся раздельным.
+Physical storage позже может быть co-located ради performance, но semantic ownership остаётся отдельным.
 
-## Chunking и regions
+## Chunking / regions / loaded state
 
-Chunk dimensions пока не зафиксированы. Chunk/region concepts позже обслужат:
+Chunk dimensions пока не fixed. Chunk/region concepts позже будут связаны со storage, generation, loading, persistence, activation и cache locality и должны проектироваться вместе.
 
-```text
-spatial storage
-world generation
-loading/unloading
-persistence boundaries
-activation boundaries
-cache locality
-```
-
-Их надо проектировать вместе, а не выбирать chunk size сейчас ради одной sparse map.
-
-## Loaded и absent
-
-Текущий `null` означает absent terrain. Streaming world может потребовать:
+Current `null` означает absent terrain. Streaming world может потребовать:
 
 ```text
 PRESENT
@@ -200,8 +226,12 @@ ABSENT
 UNLOADED / UNKNOWN
 ```
 
-Distinction вводится явно: трактовать unloaded terrain как true empty space опасно для geometry/navigation.
+Нельзя автоматически трактовать unloaded как empty space, иначе Geometry/Navigation/Movement могут получать false semantics.
 
 ## Тестирование
 
-Terrain/Landscape tests покрывают structured results place/replace/remove, lookup semantics, storage behavior, definition ids, geometry lifecycle и integration в World/Geometry/Navigation. Будущее region storage должно проходить те же semantic tests независимо от data structure.
+Terrain/Landscape tests покрывают structured mutations, lookup/storage, definition ids, geometry lifecycle и World/Geometry/Navigation integration.
+
+Movement/Traversal tests дополнительно проверяют, что `traversal.cost` supporting landscape definitions реально меняет authoritative movement duration, а removal support terrain во время timed action предотвращает stale completion commit.
+
+Future region storage обязано проходить те же semantic tests независимо от internal data structure.

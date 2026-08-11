@@ -1,21 +1,24 @@
 # Технический справочник EvoForge
 
-> Русский перевод для чтения. Канонический источник текущей реализации — [английская версия](../TECHNICAL_REFERENCE.md). При расхождении формулировок приоритет имеет английский документ.
+> Русский перевод для чтения. Канонический источник current implementation — [английская версия](../TECHNICAL_REFERENCE.md). При расхождении формулировок приоритет имеет английский документ.
 
-Этот файл описывает текущую реализацию. Она может меняться после обычных pull request без изменения семантической архитектуры в `ARCHITECTURE.md`.
+Этот файл описывает **текущую реализацию**. Она может меняться после ordinary pull requests без изменения stable semantic architecture из `ARCHITECTURE.md`.
 
-Базовая платформа: Java 21, presentation-модули libGDX и чистый Java-модуль `simulation`.
+Baseline: Java 21, presentation-модули libGDX и pure-Java module `simulation`.
+
+Для подробного walkthrough timed Movement, формул, invariants и extension guidance см. `docs/ru/wiki/Movement-System.md`.
 
 ## 1. Модули
 
 ```text
-core/        слой приложения libGDX
+core/        libGDX application/presentation layer
 lwjgl3/      desktop launcher
-simulation/  детерминированный simulation/domain код без libGDX
-assets/      definitions и presentation assets
+simulation/  deterministic simulation/domain code without libGDX
+assets/      definitions and presentation assets
+docs/        architecture, technical reference and Wiki source
 ```
 
-Модуль simulation — главный авторитетный архитектурный target. Presentation не должен становиться владельцем состояния симуляции.
+`simulation` — authoritative architecture target. Presentation не становится owner simulation state.
 
 ## 2. Реализованные области simulation
 
@@ -25,7 +28,8 @@ io.github.evoforge.simulation
 ├── control/
 │   ├── core/
 │   ├── sync/
-│   └── terrain/
+│   ├── terrain/
+│   └── movement/
 ├── definition/
 ├── time/
 └── world/
@@ -42,355 +46,413 @@ io.github.evoforge.simulation
     │       └── storage/
     ├── mechanics/
     │   ├── physical/
-    │   └── geometry/
+    │   ├── geometry/
+    │   ├── movement/
+    │   └── traversal/
     └── navigation/
 ```
 
-Будущие пакеты не создаются только ради резервирования имён.
+Future packages не создаются только ради reservation names.
 
-## 3. Объекты и идентичность
+## 3. Objects и identity
 
-Реализованный фундамент включает:
+Implemented foundation:
 
-- `ObjectId` с семантикой slot/generation;
-- `WorldObject` как доменный объект;
-- `ObjectRepository` для существования/идентичности;
-- read-only object lookup;
-- инфраструктуру создания объектов;
-- object definitions, компилируемые отдельно от изменяемого runtime state.
+- `ObjectId` со slot/generation semantics;
+- `WorldObject` как небольшой domain object identity + definition identity;
+- `ObjectRepository` для existence/identity;
+- read-only `ObjectLookup`;
+- `ObjectFactory` для definition-backed creation;
+- object definitions отдельно от mutable runtime state.
 
-`ObjectRepository` не используется как универсальный контейнер механик.
+`ObjectRepository` не используется как generic bag mechanics.
+
+Movement rate, position, active action и timing carry намеренно не добавляются полями в `WorldObject`.
 
 ## 4. Definitions
 
-Definitions строятся композицией и компилируются при bootstrap.
+Definitions composition-driven и compile-ятся при bootstrap.
 
-Текущие соглашения:
+Current conventions:
 
-- source keys имеют стабильную строковую форму вроде `namespace:name`;
+- source keys — stable `namespace:name`;
 - runtime systems используют typed ids;
-- runtime ids не являются persistence identity;
-- loaders разрешают definitions в детерминированном startup flow;
-- механики владеют собственными compiled definition data;
-- добавление контента поверх существующих механик обычно должно требовать только данных.
+- runtime numeric ids не persistence identity;
+- loaders дают deterministic startup flow;
+- mechanics владеют собственными compiled definition data;
+- новый content на existing mechanics обычно требует только data.
 
-В assets сейчас есть отдельные roots для object и landscape definitions.
+Current roots:
 
-## 5. Время и планирование
+```text
+assets/definitions/object/
+assets/definitions/landscape/
+```
 
-Реализованы:
+### 4.1 Object aspect `movement`
 
-- `SimulationClock`;
-- фундамент Scheduler.
+Ordinary self-propelled capability:
 
-Scheduler — инфраструктура порядка времени/активации. Доменные механики не превращаются в типы scheduler task в центральном enum.
+```json
+{
+  "key": "core:walker",
+  "aspects": {
+    "movement": {
+      "rate": 100
+    }
+  }
+}
+```
 
-## 6. Spatial system объектов
+Implementation:
 
-Реализовано дискретное XYZ-позиционирование объектов:
+```text
+MovementDefinitionCompiler
+    -> MovementDefinitions
+    -> ObjectDefinitionId -> MovementRate
+```
+
+`movement.rate` — positive integer в transition-cost units per simulation tick.
+
+Absence aspect означает отсутствие current ordinary `MoveStep` capability.
+
+### 4.2 Landscape aspect `traversal`
+
+Actor-independent base surface price:
+
+```json
+{
+  "key": "core:granite",
+  "aspects": {
+    "traversal": {
+      "cost": 1000
+    }
+  }
+}
+```
+
+Implementation:
+
+```text
+LandscapeTraversalDefinitionCompiler
+    -> LandscapeTraversalDefinitions
+    -> LandscapeDefinitionId -> SurfaceTraversalCost
+```
+
+`traversal.cost` — positive integer. Current neutral baseline = `1000`.
+
+Если otherwise-valid Movement edge опирается на terrain без compiled traversal data, это broken definition/bootstrap configuration, а не normal rejection с silent fallback price.
+
+### 4.3 Definition data и runtime state
+
+```text
+MovementRate             -> immutable object-definition data
+SurfaceTraversalCost     -> immutable landscape-definition data
+MovementAction           -> mutable Movement runtime state
+per-object timing carry  -> mutable Movement runtime state
+Spatial XYZ              -> mutable Spatial runtime state
+```
+
+## 5. Time и scheduling
+
+Current types:
+
+```text
+SimulationTime
+SimulationClock
+SimulationStepper
+Scheduler
+ScheduledTask
+ScheduledHandler
+HandlerId
+HandlerRegistry
+TaskHandle
+ProcessScheduler
+BoundProcessScheduler
+```
+
+### 5.1 Clock/read boundary
+
+`SimulationClock` владеет mutable simulation tick.
+
+`SimulationTime` — read-only capability `tick()` для infrastructure, которой не нужно право advance.
+
+### 5.2 Scheduler
+
+Scheduler владеет activation timing/routing, но не domain meaning.
+
+Scheduled task концептуально несёт:
+
+```text
+when
+HandlerId
+processId
+TaskHandle / stable order identity
+```
+
+Один registered handler обслуживает целое process family. Тысяча movers не создаёт тысячу handlers.
+
+### 5.3 Bound process scheduling
+
+`ProcessScheduler` — narrow domain-facing capability:
+
+```text
+scheduleAfter(delayTicks, processId)
+```
+
+`BoundProcessScheduler` связывает её с:
+
+```text
+SimulationTime
+Scheduler
+one HandlerId
+```
+
+Movement поэтому не получает raw `HandlerId` authority и не рассчитывает absolute completion tick самостоятельно.
+
+### 5.4 Production simulation step
+
+`SimulationStepper` владеет current one-tick order:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+Один step выполняет один Scheduler snapshot batch. Новая task, scheduled handler-ом на current tick, не дренируется recursive в том же batch.
+
+Scenario `advance()` вызывает production operation; `advanceTicks(n)` только повторяет её.
+
+### 5.5 Domain identity и Scheduler identity
+
+`MovementActionId` отличается от `TaskHandle`.
+
+Current Movement не имеет public early cancellation, поэтому narrow `ProcessScheduler` не возвращает/не хранит task handle. Когда появится реальный cancellation consumer, будет отдельно выбрана eager cancellation или stale wake-up semantics.
+
+## 6. Object Spatial
+
+Implemented discrete XYZ positioning:
 
 - `TransformState`;
 - `TransformLookup`;
 - `SpatialSystem`;
-- `ObjectSpatialIndex`;
-- `CellSpatialIndex`.
+- `ObjectSpatialIndex` implementations.
 
-Spatial хранит позиции только для WorldObject. Terrain не входит в `CellSpatialIndex`.
+Spatial хранит position только WorldObjects. Terrain не входит в object spatial indexes.
+
+`SpatialSystem.move` — authoritative mutation successful Movement completion и согласованно обновляет transform + registered indexes.
+
+Пока Movement Action active, Spatial остаётся в source. Второй authoritative coordinate или fractional position отсутствует.
 
 ## 7. Landscape terrain
 
-Базовое представление:
+Core representation:
 
 ```text
 XYZ -> LandscapeDefinitionId | absence
 ```
 
-Реализованы:
-
-- `LandscapeDefinitionId`;
-- `TerrainSystem`;
-- `TerrainLookup`;
-- граница `TerrainStorage`;
-- текущий `SparseTerrainStorage`;
-- `TerrainPlacementResult`;
-- `TerrainReplacementResult`;
-- `TerrainRemovalResult`;
-- согласованная write boundary `LandscapeMutations`;
-- `LandscapeSystem`, координирующий lifecycle Terrain и Geometry.
-
-`TerrainLookup.find(x,y,z)` возвращает `null` для отсутствующего terrain. `contains` выводится из этого lookup.
-
-`TerrainSystem.place/replace/remove` теперь result-based. Конфликты текущего world state не бросают исключения:
+Implemented:
 
 ```text
-place в занятую позицию -> terrain:position_occupied
-replace отсутствующего terrain -> terrain:terrain_absent
-remove отсутствующего terrain  -> terrain:terrain_absent
+LandscapeDefinitionId
+TerrainSystem
+TerrainLookup
+TerrainStorage
+SparseTerrainStorage
+TerrainPlacementResult
+TerrainReplacementResult
+TerrainRemovalResult
+LandscapeMutations
+LandscapeSystem
 ```
 
-Null/unknown definitions остаются programming/configuration errors и приводят к `IllegalArgumentException`.
+`TerrainLookup.find` возвращает `null` для absence.
 
-`LandscapeSystem` реализует `LandscapeMutations` и согласует lifetime terrain со sparse Geometry overrides:
+Current world-state conflicts — structured results:
 
 ```text
-placeTerrain   -> успешное размещение очищает возможный stale override
-replaceTerrain -> успешная замена сохраняет override
-removeTerrain  -> успешное удаление очищает override
+place occupied -> terrain:position_occupied
+replace absent -> terrain:terrain_absent
+remove absent  -> terrain:terrain_absent
 ```
 
-Поэтому новый terrain без явного override разрешается как `FullShape.INSTANCE`, а старый override не воскресает после remove/re-place.
+Unknown/null definitions — programming/configuration errors.
 
-Внутренние producers, для которых success является обязательным инвариантом, могут выразить это без сравнения concrete enum constants:
+Landscape lifecycle:
 
-```java
-OperationResults.requireAccepted(
-        landscape.placeTerrain(...));
+```text
+placeTerrain   -> clear stale Geometry override
+replaceTerrain -> preserve Geometry override
+removeTerrain  -> clear Geometry override
 ```
 
-Текущее sparse storage — реализация, а не финальная chunk model.
+Sparse storage — current implementation, не final chunk model.
 
 ## 8. Geometry
 
-Пакет:
+Package:
 
 ```text
 world/mechanics/geometry/
 ```
 
-Реализованы:
+Current core types:
 
-- `Shape`;
-- `FullShape`;
-- `RampShape`;
-- `GeometryLookup`;
-- `GeometryState`;
-- `GeometrySystem`;
-- `TransitionMask`;
-- `TransitionPorts`;
-- `TransitionComposition`;
-- package-private `SolidCellBlocking`, общий для твёрдых terrain Shapes.
+```text
+Shape
+FullShape
+RampShape
+GeometryLookup
+GeometryState
+GeometrySystem
+TransitionMask
+TransitionPorts
+TransitionComposition
+SolidCellBlocking
+GridTransitionLength
+ShapeTraversalFactor
+```
 
-### 8.1 Владение Geometry
+### 8.1 Geometry ownership
 
-`GeometrySystem` читает `TerrainLookup`.
-
-Для отсутствующего terrain:
+Absent terrain:
 
 ```text
 GeometryLookup.find(XYZ) -> null
 ```
 
-Для существующего terrain без override:
+Present terrain without override:
 
 ```text
 GeometryLookup.find(XYZ) -> FullShape.INSTANCE
 ```
 
-В `GeometryState` хранятся только нестандартные Shape overrides.
-
-`GeometrySystem.clearShapeOverride(x,y,z)` — низкоуровневая lifecycle-операция override, которую использует находящийся выше `LandscapeSystem`. Обратной зависимости `TerrainSystem -> GeometrySystem` нет.
+`GeometryState` хранит только non-default overrides.
 
 ### 8.2 Shape API
 
-Текущий публичный контракт Shape:
+Current Shape contract:
 
 ```java
-long transitionPorts(
-        int relativeX,
-        int relativeY,
-        int relativeZ);
-
-int transitionBlocks(
-        int relativeX,
-        int relativeY,
-        int relativeZ);
+long transitionPorts(...);
+int transitionBlocks(...);
+int departureTraversalFactor(..., directionX, directionY, directionZ);
+int arrivalTraversalFactor(..., directionX, directionY, directionZ);
 ```
 
-По умолчанию `transitionBlocks` не возвращает блокировок.
-
-Относительные координаты описывают текущую source-позицию Navigation относительно terrain-coordinate Shape.
-
-Shape не имеет world lookup и не получает информацию о соседних Shape.
-
-Текущие production structural Shapes (`FullShape` и все четыре ориентации примитивного `RampShape`) открывают одну поддерживаемую navigation-позицию в `anchor + (0,0,1)`. Соглашение ролей:
+Traversal factor defaults выводятся из same role ownership topology:
 
 ```text
-departures -> исходят из этой поддерживаемой позиции
-arrivals   -> подтверждают только переходы, заканчивающиеся в этой позиции
+owned role -> NEUTRAL = 1000
+not owned  -> NONE    = 0
 ```
 
-Это тестируется как текущий structural Shape role contract. Он не запрещает будущий Shape с действительно иной моделью поддерживаемых позиций; такой Shape потребует явного пересмотра контракта/review, а не type-specific исключения в Navigation.
+Shape не получает World/neighbor lookup.
 
-### 8.3 TransitionMask
+### 8.3 Supported-position role law
 
-Структурный шаг — один из 26 нецентральных offsets в `3x3x3` окрестности направлений.
-
-`TransitionMask` отображает эти offsets в биты `int`; центральный бит исключён из `ALL`.
-
-Основные операции primitive и allocation-free:
+Current production Shapes (`FullShape`, four cardinal `RampShape`) имеют one supported position:
 
 ```text
-TransitionMask.of(dx,dy,dz)
-TransitionMask.contains(mask,dx,dy,dz)
+anchor + (0,0,1)
 ```
 
-### 8.4 TransitionPorts
-
-Departure и arrival masks упакованы в один `long` в двух непересекающихся 27-битных областях.
-
-Helpers:
+Topology и traversal factors используют один role law:
 
 ```text
-of(departures, arrivals)
-departuresOnly(mask)
-arrivalsOnly(mask)
-departures(ports)
-arrivals(ports)
+departure -> source support owner
+arrival   -> destination support owner
 ```
 
-### 8.5 Композиция
+Для `A -> B`, `d = B-A`:
 
-Текущая структурная композиция:
+```text
+source Shape:      rel = (0,0,1), query departure(d)
+destination Shape: rel = (0,0,1)-d, query arrival(d)
+```
+
+Это покрыто production role-contract tests.
+
+Если будущая Shape model откажется от one-supported-position assumption, Navigation envelope и TransitionCost support lookup пересматриваются вместе.
+
+### 8.4 TransitionMask / Ports / composition
+
+Structural step — один из 26 non-center offsets в `3x3x3`.
+
+Current algebra:
 
 ```text
 resolved = departures & arrivals & ~blocks
 ```
 
-Navigation OR-накапливает вклады всех релевантных Shape перед вызовом `TransitionComposition.resolve`.
+Contributions OR-ятся generically. Concrete Shape types Navigation не знает.
 
-`resolve` дополнительно маскирует результат через `TransitionMask.ALL`, поэтому некорректные raw ports не могут вывести центральный или не-соседний бит в публичную Navigation mask.
+### 8.5 GridTransitionLength
 
-Для внешнего edge один Shape может дать departure, а другой независимо arrival. Если одного вклада нет, edge не существует. Ни один Shape не спрашивает другой Shape о существовании соседа.
-
-### 8.6 Блокировка твёрдой клетки
-
-`FullShape` и `RampShape` оба представляют занятые твёрдым terrain координаты. Их общее blocking-поведение реализовано package-private `SolidCellBlocking`.
-
-Helper не позволяет Navigation считать занятую terrain coordinate обычным проходимым пространством и блокирует прямые переходы в твёрдую клетку из локальной окрестности. Это правило живёт в Geometry, чтобы разные solid Shapes переиспользовали его без знания конкретных типов в Navigation.
-
-### 8.7 Поведение FullShape
-
-`FullShape.INSTANCE` — Shape по умолчанию для существующего terrain.
-
-Текущее поведение включает:
-
-- восемь горизонтальных departure candidates из поддерживаемой позиции прямо над Full coordinate;
-- четыре cardinal `dz=+1` departure candidates, используемых только когда другой Shape даёт совпадающий arrival (например нижняя сторона Ramp);
-- arrivals в верхнюю поддерживаемую позицию из соседних source-позиций того же уровня;
-- cardinal downward arrivals из соседней позиции уровнем выше для независимого подтверждения спуска обратно на Full-supported position;
-- строгий same-level side/corner blocking;
-- прямую блокировку любого одношагового перехода, чья destination входит в занятую Full coordinate, включая vertical и diagonal-vertical entry.
-
-Дополнительные cardinal-up departures **не** создают бесплатные Full-to-Full ступени: в плоском мире только из Full отсутствует совпадающий arrival, поэтому итоговая топология остаётся ровно из восьми горизонтальных переходов.
-
-Реализация намеренно не заявляет универсальную модель непрерывного пересечения линий.
-
-### 8.8 Поведение RampShape
-
-`RampShape` — первый production Shape, меняющий Z через обычную структурную Navigation.
-
-Есть четыре общих неизменяемых ориентации:
+Fixed-point lengths:
 
 ```text
-RampShape.POSITIVE_X
-RampShape.NEGATIVE_X
-RampShape.POSITIVE_Y
-RampShape.NEGATIVE_Y
+1 changed axis  -> 1000 ~= 1
+2 changed axes -> 1414 ~= sqrt(2)
+3 changed axes -> 1732 ~= sqrt(3)
 ```
 
-Знак показывает направление подъёма ramp.
+Length принадлежит direction, не terrain material и не Shape.
 
-Первая production-модель намеренно примитивна: ramp — твёрдый terrain block с линейным двунаправленным структурным проходом по одной cardinal axis. Side entry и XY-diagonal entry отсутствуют.
+### 8.6 FullShape
 
-Для `POSITIVE_Y` с terrain coordinate `(0,1,0)`:
+`FullShape.INSTANCE` — default present-terrain geometry.
+
+Он поддерживает обычную top surface, horizontal adjacency и дополнительные role contributions, необходимые для generic connection с ramps/elevation edges. Solid-cell blocking не позволяет входить внутрь terrain body.
+
+Current traversal factors neutral для всех owned roles.
+
+### 8.7 RampShape
+
+Production orientations:
 
 ```text
-lower supported position = (0,0,0)
-ramp supported position  = (0,1,1)
-upper supported position = (0,2,1)
+POSITIVE_X
+NEGATIVE_X
+POSITIVE_Y
+NEGATIVE_Y
 ```
 
-При наличии соответствующих соседних Shape разрешаются edges:
+Ramp — primitive solid cardinal slope без side/XY-diagonal entry.
 
-```text
-(0,0,0) <-> (0,1,1) <-> (0,2,1)
-```
-
-Вход снизу меняет и Y, и Z одним immediate-neighbor переходом:
+Пример positive-Y:
 
 ```text
 lower -> ramp = (0,+1,+1)
 ramp -> lower = (0,-1,-1)
-```
-
-Верхнее соединение горизонтально на поднятом уровне:
-
-```text
 ramp -> upper = (0,+1,0)
 upper -> ramp = (0,-1,0)
 ```
 
-`POSITIVE_X`, `NEGATIVE_X` и `NEGATIVE_Y` — повороты/смены знака той же топологии.
+Neighbors independently provide opposite topology role. Consecutive ramps могут соединять successive Z levels.
 
-Ramp не владеет и не утверждает существование соседних поверхностей. Его ports разделены по ролям:
-
-- Ramp arrivals подтверждают корректный вход на его поддерживаемую позицию;
-- Ramp departures описывают корректные выходы из неё;
-- соседний Shape должен независимо предоставить вторую роль для внешнего edge.
-
-Поэтому удаление верхней платформы удаляет верхнее соединение, а удаление нижнего supporting Shape удаляет и ascent с этой стороны, и descent в отсутствующую lower position. Navigation не интерпретирует эти случаи как falling.
-
-Ramp также может предложить cardinal `dz=+1` departure к следующему Ramp. Непосредственно следующий Ramp даёт matching arrival, образуя непрерывный многоуровневый slope без искусственной Full-клетки между ramp. Если следующий Shape — поднятая Full-платформа, разрешается только горизонтальное верхнее соединение.
-
-Ramp использует `SolidCellBlocking`, поэтому его terrain anchor сам не является navigation position и в него нельзя войти через твёрдое тело.
-
-Общий orientation framework, fractional heights, continuous slope geometry и side movement не вводились.
-
-### 8.9 Результат расширяемости Shape
-
-Ключевое свойство остаётся:
-
-```text
-new Shape implementation
-    -> existing Shape contract
-    -> existing Transition algebra
-    -> generic NavigationSystem
-```
-
-Production Ramp потребовал общего уточнения локального Geometry read envelope resolver, но конкретный тип Shape не появился в Navigation и Ramp-specific branch там не добавлялся.
+Current Ramp traversal factors neutral. Additional arbitrary uphill/downhill multiplier не введён: current displacement уже участвует через `GridTransitionLength`.
 
 ## 9. Navigation
 
-Пакет:
+Package:
 
 ```text
 world/navigation/
 ```
 
-Реализованы:
-
-- `NavigationLookup`;
-- `NavigationSystem`.
-
-Публичная read boundary:
+Public boundary:
 
 ```java
-int transitions(
-        int x,
-        int y,
-        int z);
+int transitions(int x, int y, int z);
 ```
 
-### 9.1 Resolver
+Navigation structural-only: не знает ObjectId, mover abilities, TransitionCost, Pathfinder algorithm или concrete Shape types.
 
-Направления структурных переходов остаются 26 непосредственными соседями:
+### 9.1 Resolver envelope
 
-```text
-dx, dy, dz in [-1,1]
-excluding (0,0,0)
-```
-
-Для одного source XYZ Navigation сейчас рассматривает Geometry в source-relative read envelope:
+Для source XYZ:
 
 ```text
 dx in [-1,1]
@@ -398,235 +460,408 @@ dy in [-1,1]
 dz in [-2,1]
 ```
 
-Это максимум 36 Geometry lookups.
+максимум 36 Geometry lookups.
 
-Дополнительный нижний Z-слой не является более длинным movement edge. Он нужен, чтобы для одношагового перехода с `dz=-1` Shape, чей terrain anchor поддерживает destination, всё ещё мог внести matching arrival. В текущей structural Shape model поддерживаемая позиция находится на одну клетку выше terrain anchor; поэтому destination на один Z ниже source может поддерживаться anchor на два Z ниже source.
+Extra lower layer нужен для destination support Shape under current role law, а не для longer movement edge.
 
-Для каждого Shape в read envelope:
+### 9.2 Directed graph
+
+Forward edge не создаёт reverse автоматически. Symmetry возникает только из independent support обоих directions.
+
+### 9.3 Cache
+
+Persistent Navigation cache сейчас нет. Следующий query видит current Geometry.
+
+Caching вернётся только при representative Pathfinder workload evidence.
+
+## 10. Traversal / TransitionCost
+
+Package:
 
 ```text
-relative source = source XYZ - Shape terrain coordinate
-ports  |= shape.transitionPorts(relative source)
-blocks |= shape.transitionBlocks(relative source)
+world/mechanics/traversal/
 ```
 
-Затем:
+Implemented:
 
 ```text
-TransitionComposition.resolve(ports, blocks)
+SurfaceTraversalCost
+LandscapeTraversalDefinitions
+LandscapeTraversalDefinitionCompiler
+TransitionCost
+TransitionCostLookup
+TransitionCostCalculator
 ```
 
-В логике Navigation нет конкретных типов Shape.
+### 10.1 Scope
 
-### 9.2 Ориентированная топология
+TransitionCost оценивает **уже valid adjacent directed structural edge**. Он не создаёт topology и не знает mover.
 
-Navigation edges направленные. Forward transition не создаёт reverse автоматически.
+Movement сначала спрашивает Navigation и только затем TransitionCost.
 
-Двунаправленное поведение Full и Ramp получается из независимого наличия требуемых ролей для обоих directed edges.
+### 10.2 Формула двух cells
 
-### 9.3 Текущее состояние cache
-
-В текущей реализации **нет постоянного Navigation cache**.
-
-Ранний prototype примитивного open-addressing cache был удалён во время architecture review, потому что ещё не было Movement/Pathfinder workload, оправдывающего его представление, lifecycle и memory policy.
-
-Текущие topology queries видят актуальную Geometry на следующем вызове и не требуют ручной Navigation invalidation.
-
-Caching может вернуться только после измерения репрезентативной нагрузки.
-
-## 10. Control Backbone
-
-Нейтральная инфраструктура результатов находится в:
+Для `A -> B`, direction `d`:
 
 ```text
-simulation/result/
+localA = surfaceCost(A) * departureFactor(shapeA, d)
+localB = surfaceCost(B) * arrivalFactor(shapeB, d)
+
+TransitionCost(A -> B)
+    = lengthFactor(d)
+      * average(localA, localB)
 ```
 
-Реализованы:
+Current calculator читает source/destination support terrain + Shape по one-standing-position model.
 
-- `OperationResult` с `accepted()` и namespaced `ResultCode`;
-- валидация `ResultCode` в форме `domain:code`;
-- `OperationResults.requireAccepted(...)` для callers, чей собственный инвариант требует success.
-
-Generic Control находится в:
+Модель использует обе cells. Для neutral cardinal path:
 
 ```text
-simulation/control/core/
+A -> B -> C
+
+cost(A->B) = A/2 + B/2
+cost(B->C) = B/2 + C/2
 ```
 
-Реализованы:
+Interior B суммарно вносит full surface cost.
 
-- `Command<R extends CommandResult>`;
-- `CommandResult`, расширяющий нейтральный result floor;
-- typed `CommandHandler<C,R>`;
-- `CommandDispatcher` с маршрутизацией по точному runtime class.
+### 10.3 Fixed-point arithmetic
 
-`CommandDispatcher` хранит registrations напрямую. Повторная регистрация handler для одного concrete command class, dispatch незарегистрированного класса или null result от handler приводят к `IllegalStateException`, потому что это bootstrap/programming failures.
-
-Первая delivery implementation:
+Scales:
 
 ```text
-simulation/control/sync/SynchronousCommandGateway
+surface neutral = 1000
+Shape neutral   = 1000
+grid scale      = 1000
 ```
 
-`submit` выполняет dispatch немедленно. Мутации handler видимы до его возврата.
+Calculator использует checked integer arithmetic и одну deterministic half-up rounding на final TransitionCost boundary.
 
-Первый concrete use-case находится в:
+Movement carry отдельно решает cost-to-tick fractional remainder.
+
+### 10.4 Directed Shape contribution
+
+Source support Shape даёт только departure factor. Destination support Shape — только arrival factor.
+
+New Shape может override собственный factor без central `instanceof`.
+
+Custom tests доказывают, что directed factors могут дать `cost(A->B) != cost(B->A)`.
+
+### 10.5 Actor independence
+
+Calculator не получает ObjectId/MovementRate/species/locomotion mode.
+
+Разные movers пока одинаково rank-ят intrinsic edges. Actor-specific affinity deferred.
+
+Future Pathfinder обязан использовать ту же `TransitionCostLookup` semantics.
+
+## 11. Timed Movement
+
+Packages:
 
 ```text
-simulation/control/terrain/
+simulation/control/movement/
+world/mechanics/movement/
 ```
 
-и содержит:
-
-- `PlaceTerrainCommand`;
-- `PlaceTerrainHandler`;
-- `PlaceTerrainResult`.
-
-Handler адаптирует `LandscapeMutations.placeTerrain` в command result. Занятая позиция является обычным rejection `terrain:position_occupied` и не изменяет уже существующий terrain.
-
-Текущая dependency policy исполняется через `ControlDependencyContractTest`:
+Control:
 
 ```text
-control/core -> без world imports
-control/sync -> без world imports
-world/*      -> без control imports
+MoveStepCommand
+MoveStepResult
+MoveStepHandler
 ```
 
-Concrete use-case handlers могут импортировать узкие domain API, которые они оркестрируют.
-
-Текущая Control implementation намеренно пока не включает queued delivery, EventBus integration, Movement, long-running Action state, replay storage или глобальный enum причин отказа.
-
-## 11. Тестирование Navigation и Geometry
-
-Текущее покрытие включает:
-
-- null dependency и стабильный lookup;
-- нет geometry -> нет transitions;
-- generic Shape composition без знания типов;
-- плоская Full-окрестность -> ровно восемь resolved horizontal transitions;
-- отсутствие поддержки плоской destination;
-- строгий side blocking и corner crossing;
-- direct Full blocking vertical и diagonal-vertical entry;
-- локальное transition-and-lower-support read envelope (`dx/dy [-1,1]`, `dz [-2,1]`, максимум 36 lookups);
-- защиту локальной арифметики от coordinate wrap на границах реализации;
-- интеграцию Terrain -> Geometry -> Navigation;
-- видимость удаления terrain на следующем query;
-- видимость geometry override на следующем query;
-- contract directed edge;
-- topology `RampShape` для всех четырёх ориентаций;
-- отсутствие side/XY-diagonal Ramp entry;
-- solid terrain coordinate Ramp не navigable;
-- missing upper Shape -> нет upper Ramp connection;
-- missing lower Shape -> нет ни ascent onto Ramp, ни descent в отсутствующую lower position;
-- реальный lower -> ramp -> upper traversal через Geometry + Navigation;
-- reverse Ramp traversal;
-- непосредственно последовательные ramps, соединяющие следующие Z-levels;
-- Full blocking ascent на Ramp, когда destination terrain cell занята;
-- sweep production structural Shape role-contract для `FullShape` и всех четырёх Ramp orientations;
-- occupied-terrain navigation sweep в Ramp hardening scenario;
-- sanitization center bit в `TransitionComposition`;
-- seeded randomized comparison с намеренно более простым reference resolver.
-
-Randomized reference test использует:
-
-- synthetic table-driven Shapes;
-- `FullShape.INSTANCE`;
-- все четыре production `RampShape`.
-
-Mutation radius выходит за locality Navigation, поэтому distant changes также проверяются на отсутствие влияния. Failure messages содержат воспроизводимый seed, mutation step и source XYZ.
-
-Дополнительное покрытие Control/Landscape включает:
-
-- structured result semantics для terrain place/replace/remove;
-- generic обработку expectation через `requireAccepted`;
-- согласованную очистку Geometry override при place/remove и сохранение при replace;
-- exact command routing и ошибки duplicate/missing registration;
-- dependency-direction contract generic Control;
-- синхронное первое размещение с последующим structured rejection занятой позиции без повреждения state.
-
-## 12. Примечание о координатах
-
-Публичные координаты сейчас используют signed `int`.
-
-Тесты на `Integer.MIN_VALUE`/`Integer.MAX_VALUE` защищают локальную арифметику от случайного wrap в текущем resolver. Они **не** задают допустимые размеры мира EvoForge.
-
-Границы мира и любой packed internal coordinate key остаются нерешёнными.
-
-## 13. Текущие известные пробелы
-
-### Unloaded и absent terrain
-
-Текущие read contracts представляют отсутствие terrain как `null`. Будущая chunk/region model должна различать реальное отсутствие и not-loaded/not-generated state, если эти понятия появятся.
-
-### Диагностика Navigation
-
-`NavigationLookup.transitions` намеренно возвращает только primitive mask. Он не объясняет, почему направление отсутствует.
-
-Будущий diagnostic/Inspector path может показывать departures, arrivals, blocks и contributing geometry, если реальная отладка Movement/Pathfinder этого потребует. Это не часть текущего hot read contract.
-
-### Queued/asynchronous command delivery
-
-Сегодня существует только immediate synchronous submission. Будущий queued или asynchronous gateway должен определить детерминированный ordering, момент flush очереди и within-tick state visibility, а не рассматриваться как исключительно performance replacement.
-
-### Movement и costs
-
-Navigation сейчас представляет только структурную топологию. Actor capabilities, occupancy, movement duration и path cost не реализованы.
-
-### Falling
-
-Production vertical topology существует через `RampShape`, но falling не представлен Navigation.
-
-Отсутствующий соседний Shape не создаёт обычного structural edge. Будет ли falling моделироваться как involuntary Movement process, отдельное traversal rule или иной механизм — намеренно не решено до Basic Movement. Pathfinder не должен получать free-fall routes только из факта существования вертикальных координат.
-
-### Более богатая семантика ramp
-
-Текущее поведение Ramp намеренно узкое:
-
-- одна cardinal axis;
-- двунаправленный линейный passage;
-- нет side entry;
-- нет XY-diagonal entry;
-- нет fractional surface state;
-- нет общего stair/orientation framework.
-
-Расширять это следует только по требованию реального consumer.
-
-### Caching
-
-Cache policy не выбрана. Будущее профилирование должно определить, лучше ли topology reuse представить отсутствием cache, chunk-local arrays, bounded maps или другой derived structure.
-
-## 14. Детерминизм по мере появления систем
-
-Стабильная архитектура требует:
-
-- явный simulation RNG seed/state для авторитетной случайности;
-- стабильный tie-break ordering;
-- отсутствие авторитетной зависимости от порядка итерации `HashMap`/`HashSet`;
-- проверку background results перед авторитетным применением.
-
-Общего RNG service пока нет, потому что текущим механикам не нужна авторитетная случайность. Его следует вводить вместе с первым реальным random consumer, а не как неиспользуемую инфраструктуру.
-
-## 15. Точки контроля производительности
-
-Текущие sparse реализации Geometry/Terrain используют maps с object keys. `GeometryState.find` и `SparseTerrainStorage.find` могут аллоцировать временные cell keys в зависимости от JVM escape analysis.
-
-Не заменять их заранее. Когда Pathfinder создаст репрезентативную Navigation workload, сначала измерить lookup allocation и throughput; это известная цель профилирования.
-
-Текущий resolver выполняет максимум 36 локальных Geometry lookups на source query. Это намеренный correctness envelope, выведенный из текущего supported-position/arrival contract, а не performance target, который следует уменьшать ценой ослабления topology semantics.
-
-## 16. Текущая дорожная карта
+Movement:
 
 ```text
-DONE  Object/Definition/Scheduler/Spatial foundation
+MovementRate
+MovementDefinitions
+MovementDefinitionCompiler
+MovementStartResult
+MovementActionId
+MovementAction
+MovementStateStore
+MovementSystem
+MovementActionProcessor
+```
+
+### 11.1 Start semantics
+
+`MoveStepCommand(objectId, destinationXYZ)` означает:
+
+```text
+start one timed adjacent movement attempt
+```
+
+не immediate Spatial mutation.
+
+Current validation:
+
+```text
+object exists
+movement capability exists
+object placed in Spatial
+no active MovementAction
+destination immediate neighbor
+Navigation exposes directed edge
+```
+
+После этого Movement получает TransitionCost, вычисляет duration, создаёт action и schedule-ит completion.
+
+Normal impossibilities — structured results. Unknown trusted ids/broken definitions — exceptions.
+
+### 11.2 Active state
+
+`MovementAction` хранит:
+
+```text
+MovementActionId
+ObjectId
+source XYZ
+destination XYZ
+```
+
+`MovementStateStore` владеет:
+
+```text
+ActionId -> active MovementAction
+ObjectId -> active action id
+ObjectId -> timing carry
+```
+
+Presence = active. Completed/interrupted history там не хранится.
+
+`MovementActionId` monotonic/non-reused и не равен `TaskHandle`.
+
+### 11.3 Cost -> ticks
+
+Математически:
+
+```text
+total = cost + carry
+ticks = floor(total / rate)
+carry = total mod rate
+```
+
+с:
+
+```text
+ticks >= 1
+```
+
+Implementation избегает unsafe arbitrary-long addition, сохраняя equivalent valid result.
+
+Carry живёт per object между steps и убирает systematic per-step rounding bias.
+
+### 11.4 Scheduled completion
+
+После accepted start:
+
+```text
+Spatial = source
+MovementAction active
+Scheduler owns future wake-up
+```
+
+На due tick `MovementActionProcessor` revalidate-ит:
+
+```text
+object alive
+transform exists
+object still at source
+Navigation still exposes source -> destination
+```
+
+Если valid — `SpatialSystem.move`; если invalid — object остаётся source. В обоих случаях action удаляется.
+
+### 11.5 Dormant interval
+
+Movement не poll-ит mover каждый tick. World change во время sleep обнаруживается current implementation на completion revalidation.
+
+### 11.6 Current gaps
+
+- Occupancy/destination reservation отсутствует;
+- early cancellation отсутствует;
+- actor-specific surface affinity отсутствует;
+- reactive wake-up on world mutation отсутствует;
+- Pathfinder/`MoveTo` отсутствует;
+- falling process отсутствует;
+- authoritative interpolation между cells отсутствует.
+
+## 12. Control Backbone
+
+Neutral result floor:
+
+```text
+OperationResult
+ResultCode
+OperationResults
+```
+
+Generic Control:
+
+```text
+Command
+CommandResult
+CommandHandler
+CommandDispatcher
+```
+
+Delivery:
+
+```text
+SynchronousCommandGateway
+```
+
+Current use-cases:
+
+```text
+control/terrain/   PlaceTerrain...
+control/movement/  MoveStep...
+```
+
+Synchronous submission означает immediate handler execution, но не обязательно immediate final domain completion. Timed Movement continuation идёт через Scheduler напрямую, а не через internal Commands.
+
+Dependency contract:
+
+```text
+control/core -> no world imports
+control/sync -> no world imports
+world/*      -> no control imports
+```
+
+## 13. Scenario fixture
+
+Test-only deterministic layer:
+
+```text
+ScenarioBuilder
+    -> arrange definitions/capabilities/terrain/Shapes/objects
+    -> start()
+
+ScenarioHarness
+    -> submit production Commands
+    -> advance production SimulationStepper
+    -> read public lookups
+```
+
+Builder умеет задавать landscape traversal cost и object MovementRate.
+
+Composition использует real production Terrain/Geometry/Navigation, Objects/Spatial, TransitionCostCalculator, Movement, Scheduler/BoundProcessScheduler и SimulationStepper.
+
+Running harness не раскрывает raw authoritative mutators.
+
+## 14. Current testing coverage
+
+### Geometry / Navigation
+
+Покрываются generic composition, Full flat topology, missing support, solid blocking, current 36-lookup envelope, integer-boundary arithmetic, all Ramp orientations, no side entry, upper/lower support loss, consecutive ramps, directed roles, production role-contract sweep, center-bit sanitization и randomized independent reference comparison.
+
+Traversal-factor contract дополнительно проверяет alignment factor ownership с departure/arrival topology roles.
+
+### Control / Landscape
+
+Покрываются structured terrain results, `requireAccepted`, geometry override lifecycle, exact command routing, dependency direction и PlaceTerrain integration.
+
+### Time / Movement
+
+Покрываются:
+
+```text
+BoundProcessScheduler relative scheduling
+SimulationStepper phase order
+exact delayed completion
+different MovementRate values
+diagonal timing
+persistent carry
+minimum one tick
+already-moving rejection
+missing movement capability
+unavailable structural edge
+completion revalidation
+aadvanceTicks(n) == repeated advance()
+```
+
+### TransitionCost
+
+Покрываются:
+
+```text
+traversal definition compiler validation/freeze
+two-cell average
+grid length multiplier
+directed departure/arrival factors
+reverse directed cost difference
+missing traversal config failure
+non-adjacent input rejection
+surface cost -> actual Movement duration
+Shape factor -> actual Movement duration
+```
+
+## 15. Coordinate implementation note
+
+Public coordinates — signed `int`. Boundary tests защищают local arithmetic от wrap, но не определяют world dimensions.
+
+World bounds/packed coordinate representation deferred.
+
+## 16. Current known gaps
+
+- unloaded/not-generated vs absent terrain semantics;
+- richer Navigation diagnostics;
+- Occupancy/reservation;
+- Movement early cancellation/reactive wake-up;
+- actor-specific traversal policy;
+- Pathfinder / `MoveTo`;
+- falling;
+- richer Shape/ramp semantics;
+- queued/asynchronous command delivery;
+- Navigation/TransitionCost caching.
+
+## 17. Determinism status
+
+Current Movement/TransitionCost добавляет concrete rules:
+
+```text
+fixed-point integer transition cost
+one deterministic final cost rounding boundary
+persistent movement timing carry
+minimum one-tick movement duration
+stable Scheduler ordering
+production tick semantics through SimulationStepper
+no renderer-FPS dependency for authoritative movement
+```
+
+General authoritative RNG service пока нет, потому что current mechanics не требуют randomness.
+
+## 18. Performance watch points
+
+Sparse Geometry/Terrain пока используют object-keyed maps. Lookup allocation/throughput нужно измерять под representative Pathfinder workload до premature replacement.
+
+Navigation делает максимум 36 local Geometry lookups per source under current Shape model.
+
+TransitionCost после Navigation читает direct source/destination supports и не повторяет 36-cell resolver scan.
+
+Movement schedule-ит completion вместо per-tick scan movers. Active-agent profiling должен измерить Action/state/Scheduler allocation/throughput прежде чем вводить specialized DOD storage.
+
+## 19. Current roadmap
+
+```text
+DONE  Object / Definition / Scheduler / Spatial foundation
 DONE  Landscape terrain core
-DONE  Geometry foundation and transition algebra
-DONE  Local directed Navigation resolver
-DONE  Architecture/test hardening after external review
-DONE  Production primitive RampShape with real Z transitions
-DONE  Final Ramp/Navigation hardening and documentation alignment
-NOW   Control Backbone core + first PlaceTerrain vertical slice
-NEXT  Scenario Harness -> Basic Movement -> Occupancy -> Pathfinder -> first agent vertical slice
+DONE  Geometry + transition algebra
+DONE  Directed Navigation
+DONE  cardinal RampShape + hardening
+DONE  Control Backbone + PlaceTerrain
+DONE  deterministic Scenario fixture
+DONE  Timed Basic Movement + SimulationStepper
+DONE  ProcessScheduler / BoundProcessScheduler
+DONE  actor-independent TransitionCost
+NEXT  minimal Z-level visual/debug view
+      Occupancy
+      Pathfinder
+      first agent vertical slice
+      World generation
 ```
 
-До начала Basic Movement необходимо явно решить ownership falling. До оптимизации Pathfinder нужно измерить стоимость lookup в Navigation/Terrain/Geometry под репрезентативной нагрузкой.
+До Occupancy нужно определить destination reservation/conflict semantics из real multi-agent scenario. До Pathfinder optimization нужно измерить Navigation/Geometry/Terrain/TransitionCost throughput и allocations на representative route-search workload.

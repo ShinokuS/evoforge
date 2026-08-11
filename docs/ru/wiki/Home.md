@@ -18,9 +18,11 @@ EvoForge — проект детерминированной эмерджент�
 6. [Алгебра переходов](Transition-Algebra.md)
 7. [Navigation](Navigation.md)
 8. [Control Backbone](Control-Backbone.md)
-9. [Стратегия тестирования](Testing-Strategy.md)
-10. [Процесс разработки](Development-Workflow.md)
-11. [Дорожная карта и отложенные решения](Roadmap-and-Deferred-Decisions.md)
+9. [Movement System](Movement-System.md)
+10. [Время и Scheduler](Time-and-Scheduler.md)
+11. [Стратегия тестирования](Testing-Strategy.md)
+12. [Процесс разработки](Development-Workflow.md)
+13. [Дорожная карта и отложенные решения](Roadmap-and-Deferred-Decisions.md)
 
 ## Текущая архитектура в одном взгляде
 
@@ -35,7 +37,13 @@ WORLD
 ├── Objects
 │   ├── ObjectRepository        identity / existence
 │   ├── ObjectFactory           definition-backed creation
-│   └── SpatialSystem           ObjectId -> XYZ
+│   ├── SpatialSystem           authoritative ObjectId -> XYZ
+│   └── MovementSystem          timed adjacent execution
+│            │
+│            ├── NavigationLookup        structural permission
+│            ├── TransitionCostLookup    intrinsic edge price
+│            ├── MovementRate            actor rate
+│            └── ProcessScheduler        delayed completion
 │
 └── Landscape
     ├── LandscapeMutations      coordinated write boundary
@@ -46,15 +54,21 @@ WORLD
              │
              ▼
         NavigationSystem        Shape contributions -> structural edges
+
+TIME
+├── SimulationClock
+├── Scheduler
+├── BoundProcessScheduler
+└── SimulationStepper
 ```
 
 Центральное правило дизайна — владение: у каждого изменяемого авторитетного факта один владелец. Общие координаты не означают общего хранилища, а удобство запроса не является основанием переносить доменную ответственность в query-layer.
 
 Commands переносят внешнее намерение в симуляцию. Внутренние процессы не обязаны превращать каждую мутацию в Command и могут использовать явно выданные узкие domain write-capabilities.
 
-## Geometry и Navigation в одной схеме
+## Geometry, Navigation, cost и Movement
 
-Terrain `Shape` привязан к terrain-coordinate и вносит вклад в локальную топологию. Navigation композиционно объединяет эти вклады, не зная конкретных типов Shape.
+Terrain `Shape` привязан к terrain-coordinate и вносит вклад в локальную topology. Navigation композиционно объединяет эти вклады, не зная concrete Shape types.
 
 ```text
 FullShape        RampShape        FullShape
@@ -64,13 +78,28 @@ FullShape        RampShape        FullShape
 lower position  <-> ramp position <-> upper position
 ```
 
-Структурный edge существует только тогда, когда его разрешает общая алгебра:
+Structural edge существует только тогда, когда его разрешает общая algebra:
 
 ```text
 resolved = departures & arrivals & ~blocks
 ```
 
 Сам edge всегда ведёт к одному из 26 непосредственных XYZ-соседей. Resolver может читать supporting geometry ниже source, потому что Shape, подтверждающий destination surface, может быть anchored ниже этой destination.
+
+После того как Navigation подтвердил directed edge, `TransitionCostCalculator` вычисляет его цену из двух supporting landscape cells, directed traversal factors обоих Shape и grid direction length. Затем Movement переводит cost во время через definition-backed `MovementRate`, сохраняя дробную точность через per-object carry.
+
+Принятое движение остаётся дискретным и timed:
+
+```text
+MoveStepCommand
+    -> MovementAction starts
+    -> source position остаётся authoritative
+    -> Scheduler позже будит completion
+    -> transition повторно проверяется
+    -> SpatialSystem.move коммитит destination
+```
+
+Полный контракт и формулы — в [Movement System](Movement-System.md).
 
 ## Стабильные уровни документации
 
@@ -84,12 +113,24 @@ resolved = departures & arrivals & ~blocks
 
 ## Текущая фаза проекта
 
-Реализованный фундамент теперь включает definitions, object identity, scheduling, дискретное object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, направленную локальную Navigation и первый vertical slice Control Backbone со structured command results и `PlaceTerrainCommand`.
+Реализованный фундамент теперь включает definitions, object identity, scheduling, production simulation stepping, дискретное object spatial state, landscape terrain, geometry, structural transition algebra, `FullShape`, cardinal `RampShape`, directed local Navigation, Control Backbone, deterministic Scenario fixture, timed adjacent Movement и actor-independent TransitionCost model.
 
-Следующий крупный шаг — Scenario Harness; далее идут basic movement, occupancy, pathfinding и первый agent vertical slice.
+Movement теперь реальный consumer Scheduler: принятый `MoveStepCommand` создаёт active action, ждёт deterministic число simulation ticks, повторно валидирует edge на completion и только после этого меняет Spatial.
 
-Проект намеренно не строит системы до появления потребителя. Queued command batching semantics, caches, богатые movement costs, actor capability overlays, falling, chunk layouts и advanced pathfinding остаются deferred до появления реальной нагрузки.
+Transition-cost layer теперь включает:
+
+```text
+landscape traversal.cost
+source departure Shape factor
+destination arrival Shape factor
+cardinal / double-diagonal / triple-diagonal grid length
+fixed-point deterministic arithmetic
+```
+
+Следующий обязательный gameplay milestone — минимальная Z-level debug-визуализация, затем Occupancy, Pathfinder, первый agent vertical slice и world generation.
+
+Проект по-прежнему избегает speculative systems. Actor-specific surface affinity, early movement cancellation, reactive wake-up при landscape mutation, полная Occupancy semantics, `MoveTo`, детали Pathfinder, финальная renderer architecture, chunks/regions и generation algorithms остаются deferred до своих реальных milestones.
 
 ## Навигация по документации
 
-Полная карта доступна в sidebar. [Глоссарий](Glossary.md) определяет проектные термины: *authoritative owner*, *terrain anchor*, *standing position*, *departure*, *arrival*, *block* и *structural edge*.
+Полная карта доступна в sidebar. [Глоссарий](Glossary.md) определяет проектные термины: *authoritative owner*, *terrain anchor*, *standing position*, *departure*, *arrival*, *block*, *structural edge* и связанные понятия симуляции.

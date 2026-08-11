@@ -20,8 +20,9 @@ EvoForge is intentionally not built as:
 - a universal `WorldCell` object containing every environmental mechanic;
 - a system where every object receives `update(dt)` every frame;
 - a universal physics engine whose abstractions dictate all gameplay;
-- a central type switch that knows every object, terrain type, Shape, or Command;
+- a central type switch that knows every object, terrain type, Shape, Command or timed process;
 - a command bus through which every internal mutation must be routed;
+- a generic Action framework that owns every timed mechanic;
 - a framework that pre-implements speculative infrastructure before a real consumer exists.
 
 Selective data-oriented design is allowed and expected in measured hot paths, but it is an implementation technique rather than the domain model.
@@ -52,12 +53,15 @@ OO domain model
 + narrow coordinated domain write capabilities
 + deterministic authoritative mutation
 + indexed spatial/world queries
++ actor-independent structural topology and edge cost
 + selective DOD after profiling
 ```
 
-Objects are real domain objects with stable identity, but mutable mechanics are not accumulated inside `WorldObject`. Definitions describe immutable composition. Systems own authoritative runtime properties. The scheduler controls when work occurs but does not own domain semantics.
+Objects are real domain objects with stable identity, but mutable mechanics are not accumulated inside `WorldObject`. Definitions describe immutable composition. Systems own authoritative runtime properties. Scheduler controls when work occurs but does not own domain semantics.
 
 External Player/AI/script/scenario intent converges on Control Commands. Internal simulation processes are not forced back through Command and may use explicitly granted narrow domain APIs directly.
+
+Timed Movement is the first concrete proof of this model: a synchronous external command may start a long-lived `MovementAction`; Scheduler later resumes the domain process directly, without turning completion into another internal Command.
 
 ## World decomposition
 
@@ -68,43 +72,111 @@ WORLD
 ├── Objects
 │   ├── identity / existence
 │   ├── definitions
-│   └── object positions
+│   ├── Spatial position
+│   └── timed Movement state
 │
 └── Landscape
     ├── terrain material/content
     ├── coordinated LandscapeMutations boundary
-    └── mechanics layered over terrain
+    ├── Geometry / Shape topology
+    └── landscape traversal definitions
 ```
 
 Both domains use the same integer XYZ address space. That does not mean they share one storage owner. Terrain is not converted into `WorldObject` instances just because it occupies coordinates.
+
+## Structural movement model
+
+The current movement chain deliberately separates different questions:
+
+```text
+Navigation
+    -> is A -> B a valid directed structural neighbor edge?
+
+TransitionCost
+    -> what is the actor-independent intrinsic price of that valid edge?
+
+MovementRate
+    -> how fast does this object convert cost into simulation time?
+
+MovementAction
+    -> wait, revalidate and commit Spatial or interrupt
+```
+
+Navigation depends only on Geometry and does not know actor identity, cost or Pathfinder.
+
+TransitionCost combines both supporting landscape cells, each Shape's own departure/arrival traversal contribution, and discrete grid direction length. It is currently actor-independent.
+
+Movement then converts that cost into ticks with deterministic per-object fractional carry. The object remains authoritatively at its source cell until scheduled completion succeeds.
+
+Future Pathfinder must consume the same Navigation + TransitionCost semantics rather than inventing a second topology or edge-price model.
+
+## Time model
+
+Simulation time is discrete and authoritative.
+
+```text
+SimulationClock
+    -> current tick
+
+SimulationStepper
+    -> advance one production tick
+
+Scheduler
+    -> activate due domain processes in deterministic order
+```
+
+Current production one-tick order is:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+Presentation FPS is not simulation time. A future 1x/2x/5x presentation-speed control should change how quickly production ticks are advanced in real time, not alter MovementRate or edge cost to simulate speed-up.
 
 ## Determinism
 
 For the same authoritative initial state, submitted command sequence, and authoritative random state, the simulation must produce the same supported result. This means authoritative behavior cannot depend on unspecified `HashMap` iteration order, uncontrolled random sources, thread timing, or worker threads mutating the world directly.
 
-The current synchronous Control delivery executes one submitted command immediately, so later calls observe earlier mutations. Any future queued delivery must specify its own deterministic ordering and visibility semantics explicitly.
+Timed Movement and TransitionCost now provide concrete deterministic numeric behavior:
 
-Cross-platform bit-identical floating-point semantics are not currently promised. A stricter numeric contract will be introduced only if a mechanic actually requires it.
+```text
+fixed-point integer edge-cost arithmetic
+stable Scheduler ordering
+per-object movement timing carry
+minimum one-tick movement duration
+production tick semantics independent of caller batching/FPS
+```
+
+The current synchronous Control delivery executes the submitted handler immediately. For timed Movement, this means the action is started immediately but completion still occurs later through simulation time.
+
+Cross-platform bit-identical floating-point semantics are not currently promised. Current Movement/TransitionCost avoids floating point in authoritative timing/cost arithmetic entirely.
 
 ## Extension philosophy
 
 The project distinguishes new content from new mechanics.
 
-If existing mechanics already express a new object or landscape type, add definition data. If genuinely new runtime behavior is required, introduce a specialized mechanic with its own definition compiler/state owner/system and tests. Do not expand a central `WorldObject`, `TerrainSystem`, or registry simply because adding one field would be convenient.
+If existing mechanics already express a new object or landscape type, add definition data. For example, a new landscape material can define another positive `traversal.cost` without changing Movement code.
 
-The same rule applies to geometry: a new Shape is a new `Shape` implementation. Navigation must not gain `instanceof RampShape` or a switch over known shape types.
+If genuinely new runtime behavior is required, introduce a specialized mechanic with its own definition compiler/state owner/system and tests. Do not expand a central `WorldObject`, `TerrainSystem`, Scheduler or registry simply because adding one field/switch would be convenient.
+
+The same rule applies to geometry: a new Shape is a new `Shape` implementation. Navigation and `TransitionCostCalculator` must not gain `instanceof NewShape` or a switch over known shape types. If the Shape has an intrinsic actor-independent traversal effect, it contributes that locally through the same departure/arrival role law.
 
 For external intent, a new Command adds a typed command/result/handler under the appropriate Control use-case. `CommandDispatcher` does not gain a central domain switch. Internal mechanics should not invent Commands merely to call another system.
 
+For timed mechanics, domain process state stays in the domain and normally binds to Scheduler through one `ProcessScheduler`/handler family rather than a universal `ActionSystem`.
+
 ## Current state
 
-Completed foundations include:
+Completed foundations and vertical slices include:
 
 ```text
 Object identity and repository
 Definition loading and aspect compilation
-Simulation clock and scheduler
-Discrete XYZ object positioning and spatial index
+SimulationClock and Scheduler
+SimulationTime / ProcessScheduler / BoundProcessScheduler
+production SimulationStepper
+Discrete XYZ object positioning and spatial indexes
 Landscape definitions and terrain storage
 Coordinated LandscapeMutations lifecycle boundary
 Geometry abstraction and Shape contract
@@ -112,10 +184,23 @@ TransitionMask / TransitionPorts / TransitionComposition
 FullShape
 Cardinal RampShape
 Directed structural Navigation resolver
+GridTransitionLength
 Control Backbone core and synchronous delivery
 PlaceTerrainCommand vertical slice
+deterministic test-only Scenario fixture
+movement.rate object capability
+Timed MoveStep MovementAction lifecycle
+completion-time Movement revalidation
+persistent fractional movement timing carry
+landscape traversal.cost
+Shape departure/arrival traversal factors
+actor-independent TransitionCostCalculator
 ```
 
-The next major consumer is the Scenario Harness. Later phases will introduce basic movement, occupancy, pathfinding, and the first agent vertical slice.
+The next required milestone is the minimal Z-level visual/debug view so existing terrain, ramps, objects, Navigation and discrete timed Movement become directly observable by a human.
 
-See [Control Backbone](Control-Backbone.md) for the command model and [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md) for the deliberate gaps that remain open.
+After that, planned milestones are Occupancy, Pathfinder, the first agent vertical slice and World generation.
+
+Known Movement gaps are explicit: destination reservation, early cancellation, reactive wake-up on world mutation, actor-specific surface affinity and multi-step `MoveTo` remain deferred until their consumers exist.
+
+See [Movement System](Movement-System.md) for the detailed current movement/cost contract, [Control Backbone](Control-Backbone.md) for the external-intent model, [Time and Scheduler](Time-and-Scheduler.md) for timed-process binding, and [Roadmap and Deferred Decisions](Roadmap-and-Deferred-Decisions.md) for the remaining deliberate gaps.

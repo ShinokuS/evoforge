@@ -35,10 +35,11 @@ FullShape
 RampShape
 ObjectId
 WorldObject
+MovementRate
 actor abilities
 occupancy
+TransitionCost
 pathfinding algorithm
-path cost
 falling
 terrain material identity
 ```
@@ -128,7 +129,7 @@ transitions(A + d) contains -d
 
 Every source query is resolved independently. Symmetric Full movement and bidirectional Ramp traversal emerge because both directions separately receive valid contributions.
 
-This is important because future geometry may intentionally be asymmetric.
+This is important because geometry may intentionally be asymmetric.
 
 ## Missing destinations
 
@@ -148,6 +149,39 @@ Navigation also accumulates `transitionBlocks` from local geometry. A Shape may 
 
 This is how ordinary terrain bodies remain non-navigable without Navigation needing to understand “solid block” types.
 
+## Relationship to TransitionCost and Movement
+
+The current runtime chain keeps three questions separate:
+
+```text
+Navigation
+    -> does structural edge A -> B exist?
+
+TransitionCostLookup
+    -> what is the actor-independent intrinsic price of that valid edge?
+
+MovementSystem
+    -> can this object start it, and how many ticks does its MovementRate require?
+```
+
+`MovementSystem` always checks Navigation first. Only if the directed bit exists does it request a `TransitionCost`.
+
+TransitionCost therefore cannot create an edge by assigning a low cost, and Navigation cannot make an edge expensive by encoding material or actor rules.
+
+At scheduled Movement completion, `MovementActionProcessor` asks Navigation again before committing `SpatialSystem.move`. This is how a terrain/geometry mutation during a sleeping action prevents a stale movement commit.
+
+Future Pathfinder should enumerate candidate structural edges from Navigation and price them with the **same** `TransitionCostLookup` used by authoritative Movement. It must not duplicate topology or maintain a second edge-price model.
+
+See [Movement System](Movement-System.md) for the full timing/cost lifecycle.
+
+## Traversal factors are not Navigation cost
+
+`Shape` now also exposes `departureTraversalFactor` / `arrivalTraversalFactor`, but Navigation deliberately ignores those values.
+
+They follow the same local role law as transition ports so topology and cost agree on which Shape owns which side of a directed edge. `TransitionCostCalculator`, not Navigation, consumes the factors after the edge is valid.
+
+This keeps structural connectivity independent from numeric movement price.
+
 ## No falling
 
 An absent structural edge is simply absent. Navigation does not reinterpret a missing floor as permission to fall.
@@ -166,7 +200,7 @@ If falling is added later, it must be modeled as a separate involuntary mechanic
 
 Current Navigation calculates topology from current Geometry on every query. There is no persistent topology cache and therefore no cache invalidation contract.
 
-This is deliberate. Caching will be designed only after Movement/Pathfinder creates a representative workload and profiling shows whether reuse is worthwhile.
+This is deliberate. Timed Movement now provides a real correctness consumer, but Pathfinder will provide the first representative high-volume topology workload. Caching should be designed only after that workload is measured and reuse is shown to be worthwhile.
 
 Possible future implementations remain open:
 
@@ -194,6 +228,9 @@ Navigation currently has several complementary test layers:
 - Ramp integration and hardening scenarios;
 - mutation visibility tests;
 - seeded randomized comparison against an independent reference resolver;
-- integer-boundary arithmetic tests.
+- integer-boundary arithmetic tests;
+- Movement completion revalidation after a formerly valid edge disappears.
 
-See [Testing Strategy](Testing-Strategy.md) for why the reference resolver deliberately prioritizes independence and clarity over matching production implementation structure.
+The Shape role-contract suite also checks that traversal-factor ownership stays aligned with the same departure/arrival roles used by Navigation.
+
+See [Testing Strategy](Testing-Strategy.md) for the complete testing model.
