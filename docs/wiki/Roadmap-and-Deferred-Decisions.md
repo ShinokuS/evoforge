@@ -13,8 +13,9 @@ DONE  Production cardinal RampShape
 DONE  Final geometry/navigation hardening and documentation
 DONE  Control Backbone core + first PlaceTerrain vertical slice
 DONE  Test-only Scenario fixture: arrange -> start -> submit/read
-NEXT  Basic Movement: one adjacent structural step
-      first production simulation-step owner + Action/Scheduler consumer
+DONE  Timed Basic Movement: one adjacent structural transition
+DONE  first production SimulationStepper + Scheduler process binding
+NEXT  TransitionCost model: terrain + Shape traversal + grid length
       minimal visualization / Z-level debug view
       Occupancy
       Pathfinder
@@ -44,15 +45,15 @@ authoritative domain APIs
 structured result
 ```
 
-The first delivery is synchronous and the first concrete vertical slice is `PlaceTerrainCommand`.
+The first delivery is synchronous. `PlaceTerrainCommand` and `MoveStepCommand` are concrete vertical slices.
 
-Command is not an internal RPC requirement. Once intent has been accepted, internal processes such as future world generation, erosion or continuing Actions may work directly through narrow domain write APIs.
+Command is not an internal RPC requirement. Once intent has been accepted, internal processes such as continuing Movement Actions, future world generation or erosion may work directly through narrow domain write APIs.
 
 Queued/asynchronous delivery remains deferred. It may reuse the same Command/Handler/Dispatcher contracts but must define deterministic ordering, flush point and within-tick state visibility explicitly.
 
 ## Scenario fixture
 
-The first scenario layer is intentionally a **test-only deterministic fixture**, not a simulation runtime.
+The scenario layer remains intentionally a **test-only deterministic fixture**, not a simulation runtime.
 
 It separates two phases:
 
@@ -60,57 +61,120 @@ It separates two phases:
 ScenarioBuilder
     -> arrange a small hand-authored world through controlled write capabilities
     -> register test definitions
+    -> create/place test objects
     -> start()
 
 ScenarioHarness
     -> submit production Commands
-    -> observe read-only Terrain / Geometry / Navigation state
+    -> advance the production SimulationStepper
+    -> observe read-only Object / Transform / Terrain / Geometry / Navigation state
 ```
 
 `start()` closes the arrange phase. The running harness does not expose raw authoritative mutators.
 
-The first fixture deliberately has **no `advanceTicks()` and no Scheduler orchestration**. No production mechanic currently schedules work, so defining tick/dispatch semantics here would be speculative and would incorrectly make test code the owner of the simulation-step contract.
+Movement created the first real timed Scheduler consumer, so the harness now exposes `advance()` and `advanceTicks(n)`. Those methods do not invent test-only time semantics: they delegate to the production `SimulationStepper`.
 
-When Movement creates the first real timed Action/Scheduler consumer, a small production owner of the simulation step should define clock advancement and phase ordering. The harness may then drive that production API rather than define its own interpretation of a tick.
+Scenario worlds remain small and hand-authored so tests know the expected answer in advance. Procedurally generated worlds serve different purposes such as scale, robustness and later gameplay/world-generation validation.
 
-Scenario worlds are small and hand-authored so tests know the expected answer in advance. Procedurally generated worlds serve different purposes such as scale, robustness and later gameplay/world-generation validation.
+## Timed Basic Movement
 
-## Basic Movement
+The first Movement slice is now concrete and deliberately narrow: an object with a compiled `movement.rate` capability may start one adjacent structural transition through `MoveStepCommand`. Pathfinder is not involved.
 
-Movement is the next gameplay milestone and the first consumer of structural Navigation.
-
-The first slice should be deliberately small: a concrete actor attempts one adjacent structural transition through the Command boundary. It does **not** require Pathfinder.
-
-Movement will establish real requirements for:
+The lifecycle is:
 
 ```text
-actor movement capability
-Spatial integration
-MoveCommand / result semantics
-transition revalidation
-first Action if movement spans simulation time
-first Scheduler consumer
-production simulation-step ordering
-movement diagnostics when a transition is rejected
+MoveStepCommand
+    ↓
+validate object capability / placement / adjacency / Navigation
+    ↓
+create MovementAction
+    ↓
+schedule completion after deterministic duration
+    ↓
+object remains authoritatively at source
+    ↓
+completion-time revalidation
+    ↓
+SpatialSystem.move(...) or interrupt
+    ↓
+remove active MovementAction
 ```
 
-Shape and Navigation should continue to describe structural topology rather than absorb actor-specific movement policy.
+Movement Actions exist only while active; completed/interrupted history is not retained inside Movement.
 
-## Production simulation step and timed Actions
+The first duration model uses neutral grid transition length (`1`, `sqrt(2)`, `sqrt(3)` represented in fixed-point) divided by `MovementRate`. Fractional timing is preserved with deterministic per-object carry rather than per-step ceiling, and every movement transition takes at least one simulation tick.
 
-The project already has `SimulationClock` and `Scheduler`, but no production mechanic currently schedules work.
+`MoveStepResult` and domain `MovementStartResult` use the existing structured result floor. Unknown/stale trusted `ObjectId` values remain programming/configuration errors rather than normal domain rejection.
 
-If Basic Movement requires duration, Movement becomes the first consumer that justifies a production simulation-step owner. That owner — name intentionally deferred until the role is concrete — should be the single place that defines phase order such as clock advancement and Scheduler dispatch.
+### Known gaps of the first slice
 
-The Scenario fixture and future GUI must drive that production contract; neither should independently define what one simulation tick means.
+- no Occupancy or destination reservation: multiple objects can currently target the same cell;
+- no early movement cancellation: Actions end only when their scheduled completion runs;
+- no terrain/Shape-specific transition cost yet;
+- no Pathfinder or multi-step `MoveTo`;
+- no continuous/interpolated authoritative position between cells.
 
-The exact policy for same-tick rescheduling remains deferred until the first timed Action demonstrates which behavior is required.
+These are explicit boundaries, not accidental hidden behavior.
+
+## Timed process integration
+
+Movement is the first production consumer of the general timed-process pattern:
+
+```text
+domain system starts process
+    ↓
+domain-owned process state
+    ↓
+ProcessScheduler.scheduleAfter(delay, processId)
+    ↓
+BoundProcessScheduler binds one HandlerId
+    ↓
+Scheduler
+    ↓
+domain process processor resumes processId
+```
+
+The Scheduler knows only **when**, **which handler**, and **which process id**. The domain owns what that process means.
+
+`MovementActionId` is not `TaskHandle`. One registered Movement handler services all Movement Actions; future timed mechanics should follow the same narrow binding pattern rather than add a central Scheduler switch or universal Action framework.
+
+## Production simulation step
+
+`SimulationStepper` now owns the first production definition of one simulation tick:
+
+```text
+clock.advance()
+Scheduler.dispatchDue(clock.tick())
+```
+
+One tick performs one Scheduler snapshot batch. Work scheduled during a handler for the same tick is not recursively drained in that batch. Movement never schedules zero-duration completion, so it does not depend on same-tick recursive execution.
+
+Scenario and future presentation code drive this production contract rather than define their own ordering. Tests assert that `advanceTicks(n)` is equivalent to invoking the production step `n` times individually.
+
+## TransitionCost model — next
+
+The next Movement milestone replaces neutral grid length as the only transition cost with the already-agreed directed `TransitionCost` model.
+
+The design constraints are:
+
+```text
+Navigation decides POSSIBILITY
+TransitionCost decides PRICE
+MovementRate converts PRICE to TIME
+Pathfinder later consumes the SAME PRICE
+```
+
+The first cost model should combine both cells of `A -> B`, not choose an arbitrary destination-only terrain value. Landscape definitions provide base surface cost; Shape contributes its own traversal characteristic under the same departure/arrival role law used by structural topology; grid direction contributes cardinal/double-diagonal/triple-diagonal length.
+
+Movement must not contain `instanceof RampShape` or a growing switch over concrete Shapes. A new Shape owns only its local directed traversal contribution.
+
+Actor-specific surface affinity (for example a swamp creature preferring mud while a human prefers road) is deliberately deferred. The first TransitionCost remains actor-independent; `MovementRate` changes overall speed but not route ranking.
 
 ## Minimal visualization
 
-A first visual/debug view is a required milestone after Movement, not a final renderer project.
+A first visual/debug view is a required milestone after the TransitionCost slice, not a final renderer project.
 
-Its purpose is to make the already-existing spatial and navigation behavior observable by a human. The initial scope should stay small, for example:
+Its purpose is to make the already-existing spatial/navigation/movement behavior observable by a human. The initial scope should stay small:
 
 ```text
 render one Z level
@@ -119,8 +183,10 @@ show terrain / ramp geometry
 show object positions
 click or inspect a cell
 show structural transition mask / basic diagnostics
-watch an actor move
+watch discrete cell-to-cell movement
 ```
+
+The first view does **not** need smooth movement interpolation. An object may remain displayed in its source cell until its Movement Action commits the destination, so faster objects simply change cells on earlier simulation ticks.
 
 This is intended as a development instrument. Final rendering architecture, art pipeline and polished Z-level UX remain later concerns.
 
@@ -128,13 +194,13 @@ This is intended as a development instrument. Final rendering architecture, art 
 
 Occupancy is intentionally separate from structural terrain topology. Navigation can say that two positions are structurally adjacent even when another object temporarily occupies the destination.
 
-The exact occupancy representation remains deferred until Movement establishes the queries and mutation semantics it actually needs.
+The exact occupancy/reservation representation remains deferred until the first real multi-agent Movement scenario proves the required semantics.
 
 ## Pathfinder
 
-Pathfinding is a required later milestone, but it comes after Basic Movement because movement itself is its first real consumer.
+Pathfinding is a required later milestone, but it comes after Basic Movement, TransitionCost and Occupancy because movement itself defines the contracts it must consume.
 
-Pathfinding will consume Navigation rather than define terrain topology. Its API should be shaped by real movement needs: whether callers need a full route or next step, how unreachable or partial paths are represented, and later how dynamic occupancy/costs participate.
+Pathfinding will consume Navigation rather than define terrain topology and will use the same directed TransitionCost used by authoritative Movement. Its API should be shaped by real movement needs: whether callers need a full route or next step, how unreachable or partial paths are represented, and how dynamic occupancy participates.
 
 The first Pathfinder will also provide the first representative workload for measuring Navigation/Geometry/Terrain lookup throughput and allocation behavior.
 
@@ -142,7 +208,7 @@ Only then should the project decide whether topology caching, packed coordinate 
 
 ## First agent vertical slice
 
-Once Basic Movement and Pathfinder exist, the first agent slice can connect an actual object/controller intent to repeated movement through real structural navigation.
+Once Movement and Pathfinder exist, the first agent slice can connect an actual object/controller intent to repeated movement through real structural navigation.
 
 That slice should prove the end-to-end path before broader AI planner families are designed.
 
@@ -182,9 +248,9 @@ These choices are interconnected and should be designed together when a real gen
 
 ```text
 full actor capability model
-final occupancy representation
-movement duration semantics beyond the first real Action
-transition/path costs
+actor-specific terrain/surface affinity
+final occupancy/reservation representation
+early cancelled MovementAction semantics
 involuntary falling
 climbing/jumping/swimming/flying overlays
 ```
@@ -196,14 +262,13 @@ Falling deserves special care: ordinary Navigation currently never treats empty 
 ```text
 cache policy
 cache invalidation lifecycle
-path cost API
-diagnostic explanation API beyond the first real Movement need
+diagnostic explanation API beyond real Movement/Pathfinder needs
 hierarchical pathfinding
 path cache
 background pathfinding snapshot/revision model
 ```
 
-The current primitive `int transitions(x,y,z)` contract is intentionally small. It should not be enlarged before a consumer demonstrates that another semantic query belongs at the same boundary.
+The current primitive `int transitions(x,y,z)` contract remains intentionally small. It should not be enlarged before a consumer demonstrates that another semantic query belongs at the same boundary.
 
 ## Deferred geometry decisions
 
@@ -223,7 +288,7 @@ If a future geometry genuinely needs multiple standing positions, the Shape role
 
 ## Landscape lifecycle decision
 
-The former geometry-override lifecycle gap is now resolved by the coordinated `LandscapeMutations` boundary:
+The former geometry-override lifecycle gap is resolved by the coordinated `LandscapeMutations` boundary:
 
 ```text
 placeTerrain   -> clear stale override
