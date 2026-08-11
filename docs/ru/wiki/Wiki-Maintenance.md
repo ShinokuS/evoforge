@@ -45,9 +45,73 @@ docs/
     └── wiki/*.md
 ```
 
-Имена paired pages сохраняются одинаковыми внутри locale directories. Это позволяет VitePress переключать locale предсказуемо и делает structural parity проверяемой CI.
+Имена paired pages сохраняются одинаковыми внутри locale directories. Если перевод расходится с English source, English source имеет приоритет до исправления перевода.
 
-Если перевод расходится с English source, English source имеет приоритет до исправления перевода. Semantic change в English docs должен обновлять affected Russian counterpart в том же PR.
+Semantic change в English docs должен обновлять affected Russian counterpart в том же PR.
+
+## Freshness guard переводов
+
+Одного наличия русского файла недостаточно: он может незаметно описывать старую архитектуру.
+
+Поэтому `docs/ru/.source-blobs.json` хранит для каждого канонического English document Git blob SHA той английской версии, с которой русский перевод был явно сверен.
+
+CI проверяет:
+
+```text
+English page exists
+Russian page with same source filename exists
+translation is non-empty and not identical to English
+recorded source blob == current English source blob
+no orphan Russian guide pages exist
+```
+
+Если English source изменился после последней проверки перевода, documentation CI падает. Manifest — это freshness guard, а не machine translation: semantic quality всё равно подтверждается review.
+
+## Явное stamping проверенных переводов
+
+Не редактируйте SHA в `docs/ru/.source-blobs.json` вручную.
+
+После того как русский counterpart реально проверен и обновлён относительно изменённого English source, stamp выполняется только для явно перечисленных страниц:
+
+```text
+npm run docs:i18n:stamp -- wiki/Movement-System.md
+
+npm run docs:i18n:stamp -- \
+  wiki/Movement-System.md \
+  wiki/Adding-a-Mechanic.md \
+  wiki/Glossary.md
+```
+
+Keys задаются относительно канонического `docs/` root и совпадают с manifest keys.
+
+Stamper:
+
+```text
+требует явный список keys
+проверяет наличие English и Russian files
+отклоняет пустой или полностью идентичный English перевод
+вычисляет настоящий Git blob SHA English source
+меняет только явно указанные manifest entries
+не трогает остальные freshness markers
+```
+
+Команды вида «автоматически stamp все изменённые страницы» намеренно нет. Записанный SHA означает, что конкретный перевод был проверен, поэтому массовое автоматическое stamping уничтожило бы смысл guard.
+
+Рекомендуемый flow:
+
+```text
+изменить canonical English page
+        ↓
+проверить/обновить Russian counterpart
+        ↓
+npm run docs:i18n:stamp -- <explicit reviewed keys>
+        ↓
+npm run docs:i18n:check
+        ↓
+PR / CI
+```
+
+Сам stamping helper тестируется встроенным Node test runner через `npm run docs:i18n:test`.
 
 ## Один source, несколько publication targets
 
@@ -96,14 +160,6 @@ VitePress использует встроенную locale model:
 
 Locale-specific nav/sidebar/text настраиваются в `docs/.vitepress/config.mts`.
 
-## Проверка полноты переводов
-
-CI выполняет structural i18n check до VitePress build. Он проверяет, что для канонических core docs и каждой English guide page существует русский counterpart с тем же filename.
-
-Это не может доказать литературное качество или semantic freshness перевода, но предотвращает тихое появление новой English page без русской пары.
-
-VitePress build дополнительно проверяет обе локали и internal links.
-
 ## GitHub Wiki synchronization
 
 Workflow `.github/workflows/sync-wiki.yml` создаёт staging tree:
@@ -127,11 +183,14 @@ npm install
 npm run docs:dev
 npm run docs:build
 npm run docs:preview
+npm run docs:i18n:test
+npm run docs:i18n:check
+npm run docs:i18n:stamp -- wiki/Movement-System.md
 ```
 
 `docs:build` — validation step: unresolved links/generator errors ломают build.
 
-`.github/workflows/docs-site.yml` строит site на PR и публикует в GitHub Pages после merge в `main`.
+`.github/workflows/docs-site.yml` на documentation PR сначала запускает тесты i18n tooling, затем freshness check, multilingual Wiki staging и VitePress build. После merge в `main` site публикуется в GitHub Pages.
 
 ## Workflow permissions
 
@@ -168,6 +227,7 @@ production change
 + TECHNICAL_REFERENCE.md if implementation changed
 + affected English guide pages
 + corresponding Russian translations
++ explicit source stamping for reviewed translations
 ```
 
 Internal implementation change может не требовать Wiki update, если guide не описывает implementation-specific detail.
@@ -183,7 +243,8 @@ Does CURRENT accidentally become FIXED?
 Does implementation masquerade as persistence identity?
 Does a future subsystem appear before it exists?
 Are diagrams/terms consistent?
-Are English/Russian counterparts present?
+Was every changed Russian counterpart reviewed against current English source?
+Were only explicitly reviewed pages stamped?
 Does the static site build without broken links?
 ```
 
