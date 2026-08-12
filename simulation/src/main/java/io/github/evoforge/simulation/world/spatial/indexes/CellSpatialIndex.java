@@ -16,6 +16,7 @@ public final class CellSpatialIndex
     }
 
     private final Map<CellKey, List<ObjectId>> cells = new HashMap<>();
+    private final CellProbe lookupProbe = new CellProbe();
 
     private final Lookup lookup = new LookupView();
 
@@ -175,11 +176,7 @@ public final class CellSpatialIndex
             int y,
             int z) {
 
-        List<ObjectId> cell = cells.get(
-                new CellKey(
-                        x,
-                        y,
-                        z));
+        List<ObjectId> cell = lookupCell(x, y, z);
 
         return cell == null
                 ? 0
@@ -192,11 +189,7 @@ public final class CellSpatialIndex
             int z,
             int index) {
 
-        List<ObjectId> cell = cells.get(
-                new CellKey(
-                        x,
-                        y,
-                        z));
+        List<ObjectId> cell = lookupCell(x, y, z);
 
         if (cell == null) {
             throw new IndexOutOfBoundsException(
@@ -204,6 +197,15 @@ public final class CellSpatialIndex
         }
 
         return cell.get(index);
+    }
+
+    private List<ObjectId> lookupCell(
+            int x,
+            int y,
+            int z) {
+
+        lookupProbe.set(x, y, z);
+        return cells.get(lookupProbe);
     }
 
     private static void requireId(
@@ -215,10 +217,64 @@ public final class CellSpatialIndex
         }
     }
 
+    private static int hash(
+            int x,
+            int y,
+            int z) {
+
+        int result = Integer.hashCode(x);
+        result = 31 * result + Integer.hashCode(y);
+        result = 31 * result + Integer.hashCode(z);
+        return result;
+    }
+
     private record CellKey(
             int x,
             int y,
             int z) {
+
+        @Override
+        public int hashCode() {
+            return hash(x, y, z);
+        }
+    }
+
+    private static final class CellProbe {
+        private int x;
+        private int y;
+        private int z;
+
+        private void set(
+                int x,
+                int y,
+                int z) {
+
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash(x, y, z);
+        }
+
+        @Override
+        public boolean equals(
+                Object other) {
+
+            if (other instanceof CellKey key) {
+                return x == key.x()
+                        && y == key.y()
+                        && z == key.z();
+            }
+            if (other instanceof CellProbe probe) {
+                return x == probe.x
+                        && y == probe.y
+                        && z == probe.z;
+            }
+            return false;
+        }
     }
 
     private final class LookupView
