@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector3;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationStepper;
@@ -19,43 +20,45 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
+import io.github.evoforge.visualizer.render.LandscapeRenderer;
+import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 
 /**
- * Minimal debug presentation of one authoritative navigation Z plane plus the
- * immediately lower plane. The renderer receives observation capabilities and
- * time advancement only; it has no command or domain mutation capability.
+ * Full top-down debug presentation of one authoritative standing/navigation Z
+ * plane plus optional lower context. Landscape art is generated locally from
+ * presentation rules; the renderer still owns no simulation mutation capability.
  */
 public final class ZLevelVisualizer extends InputAdapter {
 
-    private static final float BASE_VIEW_WIDTH = 20f;
+    private static final float BASE_VIEW_WIDTH = 24f;
     private static final float PAN_SPEED = 8f;
     private static final float MIN_ZOOM = 0.25f;
     private static final float MAX_ZOOM = 4f;
 
     private static final Color BACKGROUND =
-            new Color(0.055f, 0.065f, 0.085f, 1f);
-    private static final Color FULL =
-            new Color(0.38f, 0.43f, 0.49f, 1f);
-    private static final Color RAMP =
-            new Color(0.63f, 0.48f, 0.27f, 1f);
-    private static final Color OTHER_SHAPE =
-            new Color(0.48f, 0.38f, 0.58f, 1f);
-    private static final Color GRID =
-            new Color(0.15f, 0.17f, 0.21f, 1f);
+            new Color(0.045f, 0.055f, 0.065f, 1f);
+    private static final Color GRID_SUBTLE =
+            new Color(0.12f, 0.16f, 0.14f, 1f);
+    private static final Color GRID_DEBUG =
+            new Color(0.42f, 0.48f, 0.44f, 1f);
     private static final Color RAMP_ARROW =
-            new Color(0.95f, 0.84f, 0.35f, 1f);
+            new Color(1f, 0.88f, 0.28f, 1f);
     private static final Color OBJECT_EVEN =
-            new Color(0.28f, 0.76f, 0.92f, 1f);
+            new Color(0.30f, 0.78f, 0.94f, 1f);
     private static final Color OBJECT_ODD =
-            new Color(0.85f, 0.43f, 0.54f, 1f);
+            new Color(0.90f, 0.44f, 0.56f, 1f);
     private static final Color SELECTED =
-            new Color(1f, 0.93f, 0.35f, 1f);
+            new Color(1f, 0.93f, 0.34f, 1f);
     private static final Color TRANSITION_FLAT =
-            new Color(0.32f, 0.86f, 0.73f, 1f);
+            new Color(0.30f, 0.88f, 0.76f, 1f);
     private static final Color TRANSITION_UP =
-            new Color(0.46f, 0.86f, 0.42f, 1f);
+            new Color(0.50f, 0.92f, 0.43f, 1f);
     private static final Color TRANSITION_DOWN =
-            new Color(0.96f, 0.55f, 0.28f, 1f);
+            new Color(1f, 0.56f, 0.26f, 1f);
+    private static final Color PANEL =
+            new Color(0.035f, 0.045f, 0.052f, 0.96f);
+    private static final Color PANEL_BORDER =
+            new Color(0.24f, 0.30f, 0.31f, 1f);
 
     private final SimulationView view;
     private final SimulationTime simulationTime;
@@ -65,9 +68,17 @@ public final class ZLevelVisualizer extends InputAdapter {
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
     private final BitmapFont font = new BitmapFont();
+    private final Matrix4 hudProjection = new Matrix4();
     private final Vector3 pick = new Vector3();
+    private final ProceduralLandscapePack landscapePack =
+            new ProceduralLandscapePack();
+    private final LandscapeRenderer landscapeRenderer;
 
-    private int selectedZ;
+    private int selectedZ = 1;
+    private int gridMode = 1;
+    private boolean showTransitions;
+    private boolean showShapeDirections;
+    private boolean showLowerContext = true;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
@@ -90,6 +101,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         this.view = view;
         this.simulationTime = simulationTime;
         time = new VisualizerTimeController(stepper, 0.25f);
+        landscapeRenderer = new LandscapeRenderer(view, landscapePack);
 
         camera.position.set(0f, 0f, 0f);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -109,21 +121,34 @@ public final class ZLevelVisualizer extends InputAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         camera.update();
-        shapes.setProjectionMatrix(camera.combined);
         VisibleRange range = visibleRange();
 
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        landscapeRenderer.draw(
+                batch,
+                range.minX(),
+                range.maxX(),
+                range.minY(),
+                range.maxY(),
+                selectedZ,
+                showLowerContext);
+        batch.end();
+
+        shapes.setProjectionMatrix(camera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawTerrainPlane(range, selectedZ - 1, true);
-        drawTerrainPlane(range, selectedZ, false);
         drawObjects(range);
         shapes.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawGrid(range);
-        drawRampDirections(range, selectedZ - 1, true);
-        drawRampDirections(range, selectedZ, false);
+        if (showShapeDirections) {
+            drawRampDirections(range, selectedZ);
+        }
         drawCellSelection();
-        drawTransitionOverlay();
+        if (showTransitions) {
+            drawTransitionOverlay();
+        }
         drawSelectedObject();
         shapes.end();
 
@@ -144,7 +169,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 / (float) width;
         camera.update();
 
-        batch.getProjectionMatrix().setToOrtho2D(
+        hudProjection.setToOrtho2D(
                 0f,
                 0f,
                 width,
@@ -155,6 +180,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         if (Gdx.input.getInputProcessor() == this) {
             Gdx.input.setInputProcessor(null);
         }
+        landscapePack.dispose();
         shapes.dispose();
         batch.dispose();
         font.dispose();
@@ -183,6 +209,22 @@ public final class ZLevelVisualizer extends InputAdapter {
             case Input.Keys.PAGE_DOWN -> {
                 selectedZ--;
                 clearSelection();
+                return true;
+            }
+            case Input.Keys.G -> {
+                gridMode = (gridMode + 1) % 3;
+                return true;
+            }
+            case Input.Keys.F2 -> {
+                showTransitions = !showTransitions;
+                return true;
+            }
+            case Input.Keys.F3 -> {
+                showShapeDirections = !showShapeDirections;
+                return true;
+            }
+            case Input.Keys.F4 -> {
+                showLowerContext = !showLowerContext;
                 return true;
             }
             default -> {
@@ -260,36 +302,6 @@ public final class ZLevelVisualizer extends InputAdapter {
                 MathUtils.ceil(camera.position.y + halfHeight) + 1);
     }
 
-    private void drawTerrainPlane(
-            VisibleRange range,
-            int standingZ,
-            boolean dimmed) {
-
-        int terrainZ = standingZ - 1;
-
-        for (int x = range.minX(); x <= range.maxX(); x++) {
-            for (int y = range.minY(); y <= range.maxY(); y++) {
-                if (!view.terrain().contains(x, y, terrainZ)) {
-                    continue;
-                }
-
-                Shape shape = view.geometry().find(x, y, terrainZ);
-                Color base = shape instanceof RampShape
-                        ? RAMP
-                        : shape == null
-                                ? OTHER_SHAPE
-                                : FULL;
-
-                setLayerColor(base, dimmed);
-                shapes.rect(
-                        x + 0.04f,
-                        y + 0.04f,
-                        0.92f,
-                        0.92f);
-            }
-        }
-    }
-
     private void drawObjects(
             VisibleRange range) {
 
@@ -328,7 +340,11 @@ public final class ZLevelVisualizer extends InputAdapter {
     private void drawGrid(
             VisibleRange range) {
 
-        shapes.setColor(GRID);
+        if (gridMode == 0) {
+            return;
+        }
+
+        shapes.setColor(gridMode == 1 ? GRID_SUBTLE : GRID_DEBUG);
 
         for (int x = range.minX(); x <= range.maxX() + 1; x++) {
             shapes.line(
@@ -348,10 +364,10 @@ public final class ZLevelVisualizer extends InputAdapter {
 
     private void drawRampDirections(
             VisibleRange range,
-            int standingZ,
-            boolean dimmed) {
+            int standingZ) {
 
         int terrainZ = standingZ - 1;
+        shapes.setColor(RAMP_ARROW);
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
@@ -361,16 +377,14 @@ public final class ZLevelVisualizer extends InputAdapter {
                     continue;
                 }
 
-                setLayerColor(RAMP_ARROW, dimmed);
-
                 if (shape == RampShape.POSITIVE_X) {
-                    drawArrow(x, y, 1, 0, 0.34f);
+                    drawArrow(x, y, 1, 0, 0.35f);
                 } else if (shape == RampShape.NEGATIVE_X) {
-                    drawArrow(x, y, -1, 0, 0.34f);
+                    drawArrow(x, y, -1, 0, 0.35f);
                 } else if (shape == RampShape.POSITIVE_Y) {
-                    drawArrow(x, y, 0, 1, 0.34f);
+                    drawArrow(x, y, 0, 1, 0.35f);
                 } else if (shape == RampShape.NEGATIVE_Y) {
-                    drawArrow(x, y, 0, -1, 0.34f);
+                    drawArrow(x, y, 0, -1, 0.35f);
                 }
             }
         }
@@ -475,74 +489,198 @@ public final class ZLevelVisualizer extends InputAdapter {
     }
 
     private void drawHud() {
+        int width = Gdx.graphics.getWidth();
+        int height = Gdx.graphics.getHeight();
+
+        float margin = 12f;
+        float statusWidth = Math.min(610f, width - margin * 2f);
+        float statusHeight = 104f;
+        float statusX = margin;
+        float statusY = height - margin - statusHeight;
+
+        boolean hasInspector = selectedCell != null;
+        float inspectorWidth = Math.min(340f, width - margin * 2f);
+        float inspectorHeight = selectedObject == null ? 112f : 170f;
+        float inspectorX = width - margin - inspectorWidth;
+        float inspectorY = height - margin - inspectorHeight;
+
+        if (hasInspector && inspectorX < statusX + statusWidth + margin) {
+            inspectorX = margin;
+            inspectorY = statusY - margin - inspectorHeight;
+        }
+
+        shapes.setProjectionMatrix(hudProjection);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        drawPanel(statusX, statusY, statusWidth, statusHeight);
+        if (hasInspector) {
+            drawPanel(
+                    inspectorX,
+                    inspectorY,
+                    inspectorWidth,
+                    inspectorHeight);
+        }
+        shapes.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.setColor(PANEL_BORDER);
+        shapes.rect(statusX, statusY, statusWidth, statusHeight);
+        if (hasInspector) {
+            shapes.rect(
+                    inspectorX,
+                    inspectorY,
+                    inspectorWidth,
+                    inspectorHeight);
+        }
+        shapes.end();
+
+        batch.setProjectionMatrix(hudProjection);
         batch.begin();
-
         font.setColor(Color.WHITE);
-        float top = Gdx.graphics.getHeight() - 14f;
 
+        float textX = statusX + 12f;
+        float top = statusY + statusHeight - 12f;
         font.draw(
                 batch,
-                "tick=" + simulationTime.tick()
-                        + "   Z=" + selectedZ
+                "STATUS   tick " + simulationTime.tick()
+                        + "   Z " + selectedZ
                         + "   " + (time.running() ? "RUN x1" : "PAUSED"),
-                12f,
+                textX,
                 top);
         font.draw(
                 batch,
-                "Space run/pause | N single tick | PgUp/PgDn Z | WASD pan | wheel zoom",
-                12f,
-                top - 20f);
+                "Space run/pause | N step | PgUp/PgDn Z",
+                textX,
+                top - 22f);
         font.draw(
                 batch,
-                "standing plane Z=" + selectedZ
-                        + " (support terrain Z=" + (selectedZ - 1) + ")",
-                12f,
-                top - 40f);
+                "WASD pan | wheel zoom | G grid " + gridLabel(),
+                textX,
+                top - 44f);
+        font.draw(
+                batch,
+                "F2 transitions " + onOff(showTransitions)
+                        + " | F3 shapes " + onOff(showShapeDirections)
+                        + " | F4 lower " + onOff(showLowerContext),
+                textX,
+                top - 66f);
 
-        if (selectedCell != null) {
-            int mask = view.navigation().transitions(
-                    selectedCell.x(),
-                    selectedCell.y(),
-                    selectedCell.z());
-
-            font.draw(
-                    batch,
-                    "cell: (" + selectedCell.x()
-                            + ", " + selectedCell.y()
-                            + ", " + selectedCell.z()
-                            + ") transitions=" + Integer.bitCount(mask),
-                    12f,
-                    top - 66f);
-        }
-
-        if (selectedObject != null) {
-            WorldObject object = view.objects().get(selectedObject);
-
-            if (object != null && view.transforms().has(selectedObject)) {
-                font.draw(
-                        batch,
-                        "object: " + selectedObject,
-                        12f,
-                        top - 90f);
-                font.draw(
-                        batch,
-                        "definition: " + object.definitionId(),
-                        12f,
-                        top - 108f);
-                font.draw(
-                        batch,
-                        "XYZ: "
-                                + view.transforms().x(selectedObject)
-                                + ", "
-                                + view.transforms().y(selectedObject)
-                                + ", "
-                                + view.transforms().z(selectedObject),
-                        12f,
-                        top - 126f);
-            }
+        if (hasInspector) {
+            drawInspectorText(
+                    inspectorX + 12f,
+                    inspectorY + inspectorHeight - 12f);
         }
 
         batch.end();
+    }
+
+    private void drawPanel(
+            float x,
+            float y,
+            float width,
+            float height) {
+
+        shapes.setColor(PANEL);
+        shapes.rect(x, y, width, height);
+    }
+
+    private void drawInspectorText(
+            float x,
+            float top) {
+
+        int terrainZ = selectedCell.z() - 1;
+        boolean terrain = view.terrain().contains(
+                selectedCell.x(),
+                selectedCell.y(),
+                terrainZ);
+        Shape shape = view.geometry().find(
+                selectedCell.x(),
+                selectedCell.y(),
+                terrainZ);
+        int transitions = view.navigation().transitions(
+                selectedCell.x(),
+                selectedCell.y(),
+                selectedCell.z());
+
+        font.draw(
+                batch,
+                "CELL   (" + selectedCell.x()
+                        + ", " + selectedCell.y()
+                        + ", " + selectedCell.z() + ")",
+                x,
+                top);
+        font.draw(
+                batch,
+                "support terrain: " + (terrain ? "present" : "empty"),
+                x,
+                top - 22f);
+        font.draw(
+                batch,
+                "shape: " + shapeLabel(shape),
+                x,
+                top - 44f);
+        font.draw(
+                batch,
+                "transitions: " + Integer.bitCount(transitions),
+                x,
+                top - 66f);
+
+        if (selectedObject == null) {
+            return;
+        }
+
+        WorldObject object = view.objects().get(selectedObject);
+        if (object == null || !view.transforms().has(selectedObject)) {
+            return;
+        }
+
+        font.draw(batch, "OBJECT   " + selectedObject, x, top - 96f);
+        font.draw(
+                batch,
+                "definition: " + object.definitionId(),
+                x,
+                top - 118f);
+        font.draw(
+                batch,
+                "XYZ: "
+                        + view.transforms().x(selectedObject)
+                        + ", "
+                        + view.transforms().y(selectedObject)
+                        + ", "
+                        + view.transforms().z(selectedObject),
+                x,
+                top - 140f);
+    }
+
+    private static String shapeLabel(
+            Shape shape) {
+
+        if (shape == RampShape.POSITIVE_X) {
+            return "Ramp +X";
+        }
+        if (shape == RampShape.NEGATIVE_X) {
+            return "Ramp -X";
+        }
+        if (shape == RampShape.POSITIVE_Y) {
+            return "Ramp +Y";
+        }
+        if (shape == RampShape.NEGATIVE_Y) {
+            return "Ramp -Y";
+        }
+        return shape == null ? "none" : shape.getClass().getSimpleName();
+    }
+
+    private String gridLabel() {
+        return switch (gridMode) {
+            case 0 -> "OFF";
+            case 1 -> "SUBTLE";
+            default -> "DEBUG";
+        };
+    }
+
+    private static String onOff(
+            boolean value) {
+
+        return value ? "ON" : "OFF";
     }
 
     private void drawArrow(
@@ -583,23 +721,6 @@ public final class ZLevelVisualizer extends InputAdapter {
                 endY,
                 backX - perpendicularX * size,
                 backY - perpendicularY * size);
-    }
-
-    private void setLayerColor(
-            Color base,
-            boolean dimmed) {
-
-        if (!dimmed) {
-            shapes.setColor(base);
-            return;
-        }
-
-        float gray = (base.r + base.g + base.b) / 3f;
-        shapes.setColor(
-                base.r * 0.35f + gray * 0.10f,
-                base.g * 0.35f + gray * 0.10f,
-                base.b * 0.35f + gray * 0.10f,
-                1f);
     }
 
     private void clearSelection() {
