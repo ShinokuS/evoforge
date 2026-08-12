@@ -207,7 +207,7 @@ F4             lower visibility depth: 0 / 1 / 4 / 8
 
 Click всегда адресует `(x,y,selectedZ)`. Видимый через shaft lower floor не меняет input Z автоматически.
 
-Cell inspector показывает slice role и геометрический context: body depth, drop depth, ceiling distance, cover depth и exposure distance там, где они применимы.
+В status HUD теперь также показывается текущий FPS. Cell inspector показывает slice role и геометрический context: body depth, drop depth, ceiling distance, cover depth и exposure distance там, где они применимы.
 
 Objects пока остаются намеренно primitive current-Z debug markers. Их будущий art/occlusion должен потреблять тот же presentation context, а не заставлять terrain resolver знать object definitions.
 
@@ -259,6 +259,17 @@ analysis cache hit / miss count
 ```
 
 Эта telemetry намеренно лёгкая и остаётся доступной по мере развития visualizer. При regression сначала следует локализовать проблему этими числами, а уже затем вводить chunks, dirty regions или более широкие caches.
+
+### Pixel-stable движение камеры
+
+Процедурный landscape использует `Nearest` filtering, поэтому continuously moving orthographic camera не должна передавать в renderer произвольные sub-screen-pixel смещения. На большом zoom-out это меняет фазу nearest-sampling сразу для всей картинки и визуально может выглядеть как stutter даже при стабильном frame time.
+
+`ZLevelVisualizer` поэтому разделяет две позиции камеры:
+
+- непрерывный logical pan target, который WASD обновляет frame-time-independent движением;
+- render position, которая снапится так, чтобы край viewport двигался целыми screen-pixel шагами для текущего zoom и размера окна.
+
+Logical target не квантуется, поэтому input не накапливает rounding error. Pixel alignment применяется только к presentation. `CameraPixelSnap` содержит чистую тестируемую математику и не влияет на simulation coordinates, selection semantics или visibility caches.
 
 Terrain extent поддерживается инкрементально внутри `TerrainSystem`; visualizer не придумывает arbitrary maximum Z.
 
