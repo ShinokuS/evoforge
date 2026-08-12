@@ -7,8 +7,10 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 /**
  * Procedural art for solid material intersected by a horizontal Z cut.
  *
- * <p>Cut material is intentionally dark and neutral. It communicates occluding
- * mass/depth rather than pretending to be another walkable terrain material.
+ * <p>Cut material stays in the same restrained landscape colour family while
+ * using sparse strata/edge detail to communicate mass. Actual perceived depth
+ * is owned by renderer shading, so shallow cuts remain readable and deep mass
+ * naturally loses texture instead of switching to an unrelated dark material.
  * Ramp appearance stays owned by {@link ProceduralLandscapePack}; the same Ramp
  * art is reused at every slice and only environmental shading changes.</p>
  */
@@ -201,13 +203,15 @@ public final class ProceduralSliceArt {
             int oy,
             int variant) {
 
-        int yA = 4 + variant % 3;
+        int yA = 5 + variant % 3;
         int yB = 10 + (variant + 1) % 2;
 
-        for (int x = 2; x <= 6; x++) {
+        // Sparse short strata keep shallow body readable without covering a
+        // large mountain cut in repetitive horizontal noise.
+        for (int x = 3; x <= 6; x++) {
             pixel(pixmap, ox, oy, x, yA, EvoForgePalette.CUT_DARK);
         }
-        for (int x = 9; x <= 13; x++) {
+        for (int x = 10; x <= 12; x++) {
             pixel(pixmap, ox, oy, x, yB, EvoForgePalette.CUT_LIGHT);
         }
     }
@@ -219,7 +223,7 @@ public final class ProceduralSliceArt {
             int seed) {
 
         int state = seed ^ 0x51ED270B;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 6; i++) {
             state = mix(state + i * 59);
             int x = 2 + Math.floorMod(state, 12);
             state = mix(state ^ 0x9E3779B9);
@@ -230,7 +234,7 @@ public final class ProceduralSliceArt {
                     oy,
                     x,
                     y,
-                    i % 4 == 0
+                    i == 0
                             ? EvoForgePalette.CUT_LIGHT
                             : EvoForgePalette.CUT_DARK);
         }
