@@ -24,7 +24,7 @@ SimulationTime
 SimulationStepper
 ```
 
-`SimulationView` теперь также предоставляет `TerrainExtentLookup` — универсальный read-only факт `minZ/maxZ` о реально существующем terrain. Это simulation data, а не presentation policy: consumer может узнать, где terrain действительно заканчивается, не придумывая произвольную максимальную высоту мира.
+`SimulationView` предоставляет `TerrainExtentLookup` — универсальный read-only факт `minZ/maxZ` о реально существующем terrain — и `TerrainRevisionLookup`, монотонную read-only версию состояния terrain. Это не presentation policy: extents позволяют узнать, где terrain действительно заканчивается, а revision позволяет derived read-cache доказать, что его исходное authoritative state не изменилось.
 
 ## Selected Z — горизонтальный срез
 
@@ -80,9 +80,10 @@ exposureDistance  расстояние через open volume до sky-connected
 solid(x,y,z)
 opaque(x,y,z)
 min/max occupied Z
+revision()
 ```
 
-Текущий adapter `TerrainVisibilityVolume` трактует authoritative terrain как solid и opaque.
+Текущий adapter `TerrainVisibilityVolume` трактует authoritative terrain как solid и opaque и прокидывает authoritative terrain revision. Будущий composite volume должен возвращать revision только если способен гарантировать, что версия учитывает всех contributors; отрицательное значение намеренно отключает повторное использование cache вместо риска stale visibility.
 
 `LandscapeSliceResolver.Analysis` строит один bounded camera-local exposure field. Сначала источниками становятся air cells, которые действительно находятся выше верхнего opaque volume своей колонки, затем выполняется 6-neighbour flood/BFS только через open volume.
 
@@ -225,19 +226,43 @@ Objects пока остаются намеренно primitive current-Z debug m
 - deep open shaft с floor на несколько elevations ниже;
 - slow/fast movers с authoritative Movement на 8/2 ticks.
 
-Headless tests покрывают terrain extent lifecycle, horizontal-cut priority, дешёвый current-surface query для perimeter, body/drop/cover/ceiling measurements, exposure-distance от side mouth, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology и Movement timing.
+Headless tests покрывают terrain extent/revision lifecycle, horizontal-cut priority, дешёвый current-surface query для perimeter, body/drop/cover/ceiling measurements, exposure-distance от side mouth, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology и Movement timing.
 
 Manual acceptance следует проводить на нескольких relevant Z и проверять, что структура мира остаётся понятной без полного прозрачного upper floor.
 
 ## Performance boundary
 
-Exposure вычисляется один раз на rendered camera range, а не независимо для каждого tile. BFS намеренно ограничен visual exposure horizon и запрошенным lower-depth range.
+Производительность рассматривается как development invariant, а не как уборка только перед релизом: сначала добавляем дешёвую telemetry, затем оптимизируем доказанный hot-path без изменения simulation semantics.
 
-Active-Z perimeter использует только прямые current-surface membership checks и не дублирует exposure analysis.
+Первый profiling-pass visualizer показал две конкретные стоимости:
+
+- camera-local 3D exposure BFS перестраивался каждый frame и представлял каждую посещённую клетку через `HashMap<Position, Integer>` и queue-объекты;
+- sparse coordinate reads создавали временный key-record при каждом terrain, geometry-override и cell-object lookup.
+
+Текущая реализация поэтому:
+
+- хранит exposure distance в плотном primitive `int[]` volume и использует `int[]` BFS queue, устраняя per-node объекты BFS;
+- держит один padded `LandscapeSliceResolver.Analysis` вокруг видимого диапазона камеры и повторно использует его, пока камера остаётся внутри этого окна;
+- инвалидирует analysis при изменении selected Z, lower-depth policy или versioned visibility volume;
+- использует монотонный authoritative terrain revision для текущего terrain-backed volume;
+- использует reusable non-stored coordinate probes в read-hot sparse-map lookups, поэтому чтение больше не создаёт coordinate key каждый раз;
+- оставляет active-Z perimeter на прямых membership checks и никогда не перестраивает exposure analysis ради outline.
+
+`LandscapeRenderer` примерно раз в секунду печатает строку `VisualizerPerf` со значениями:
+
+```text
+fps
+число видимых клеток
+landscape average / maximum CPU time
+analysis average / maximum CPU time
+analysis cache hit / miss count
+```
+
+Эта telemetry намеренно лёгкая и остаётся доступной по мере развития visualizer. При regression сначала следует локализовать проблему этими числами, а уже затем вводить chunks, dirty regions или более широкие caches.
 
 Terrain extent поддерживается инкрементально внутри `TerrainSystem`; visualizer не придумывает arbitrary maximum Z.
 
-Текущий adapter может проходить global terrain Z extent, чтобы найти top opaque cell конкретной колонки. Если representative deep/sparse world покажет, что это дорого, оптимизация должна появиться **за существующей volume boundary** — например per-column top query или cached presentation data. Семантика видимости ради representation optimization не меняется.
+Текущий adapter всё ещё проходит occupied terrain Z extent при перестроении exposure field, чтобы найти top opaque cell конкретной колонки. Если representative deep/sparse world покажет значимое время именно в `analysis max`, оптимизация должна появиться **за существующей volume boundary** — например per-column top query или другая измеренная representation. Семантика видимости ради representation optimization не меняется.
 
 ## Отложенные presentation decisions
 
