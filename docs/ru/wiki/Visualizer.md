@@ -2,7 +2,7 @@
 
 Visualizer EvoForge — это **debug-наблюдатель за реальной симуляцией**, а не вторая модель мира и не владелец simulation state.
 
-Текущий presentation contract — **полный top-down**. Landscape art генерируется самим EvoForge при запуске вместо зависимости от внешнего tileset.
+Текущий presentation contract — **полный top-down с настоящим горизонтальным Z-срезом**. Landscape art генерируется самим EvoForge при запуске вместо зависимости от внешнего tileset.
 
 ## Граница модулей
 
@@ -26,86 +26,163 @@ SimulationStepper
 
 Он не получает `SpatialSystem`, `TerrainSystem`, `GeometrySystem`, `MovementSystem`, `Scheduler` или `SimulationClock`.
 
-## Значение Z-plane
+## Selected Z — это горизонтальный срез
 
-Z визуализатора — это **standing/navigation plane**, потому что именно в этих координатах живут Spatial objects и Navigation transitions.
+Z визуализатора — **standing/navigation plane**, потому что именно в этих координатах живут Spatial objects и Navigation transitions.
 
-При текущем supported-position law Shape terrain/Shape, поддерживающий standing position `(x,y,z)`, читается в:
+При текущем supported-position law terrain/Shape, поддерживающий standing position `(x,y,z)`, anchored в:
 
 ```text
 (x, y, z - 1)
 ```
 
-Выбранный standing plane authoritative. Нижний слой — только presentation context:
+Renderer больше не трактует выбранный уровень как изолированный floor с прозрачным floor ниже. Для каждого видимого XY выполняется строгий порядок:
 
 ```text
-selected Z:
-    objects на Z
-    support terrain/Shape на Z - 1
+1. terrain anchored на selected Z
+      -> SOLID BODY, пересекающий текущий срез
 
-lower context:
-    objects не рисуются
-    затемнённый support terrain ближайшего нижнего standing plane
-    показывается только там, где у selected plane нет support terrain в этом XY
+2. иначе terrain anchored на selected Z - 1
+      -> CURRENT SURFACE, поддерживающий этот standing plane
+
+3. иначе поиск вниз по открытой колонке
+      -> ближайший LOWER SURFACE в пределах заданной глубины
+
+4. иначе
+      -> EMPTY
 ```
 
-Положительный или отрицательный Z не трактуется автоматически как above-ground/underground.
+Этот контракт реализован в `LandscapeSliceResolver` и тестируется headless независимо от libGDX.
+
+### Почему solid body имеет приоритет
+
+Верхнее плато не должно исчезать, когда пользователь переключается на один Z ниже.
+
+```text
+standing Z=1      grass top
+                  ─────────
+terrain Z=0       █████████  solid material
+standing Z=0      горизонтальный срез через этот материал
+terrain Z=-1      lower support
+```
+
+При selected `Z=1` terrain на `0` рисуется как текущая walkable surface.
+
+При selected `Z=0` этот же terrain не становится ghost-floor сверху. Он занимает текущий spatial slice и рисуется как процедурный earth/rock cut.
+
+Поэтому footprint горы естественно меняется при движении среза вверх/вниз.
+
+## Открытые колонки и lower depth
+
+Нижний контекст виден только через действительно открытую вертикальную колонку.
+
+Если нет ни solid body на selected Z, ни support на selected Z-1, renderer ищет вниз ближайшую поверхность. Первая найденная поверхность рисуется с затемнением, зависящим от глубины.
+
+Текущие debug-варианты:
+
+```text
+0   только текущий срез
+1   один lower standing elevation
+4   до четырёх lower standing elevations
+```
+
+`F4` циклически переключает эти значения. По умолчанию используется `4`, потому что lower surfaces появляются только в holes/open space и не засоряют обычный solid terrain.
+
+Это позволяет читать:
+
+- pits;
+- shafts;
+- deep cliffs;
+- openings между уровнями;
+- cave voids с floor ниже.
+
+Для одного XY renderer не рисует сразу несколько нижних поверхностей. Показывается **ближайшая видимая lower surface**, потому что любой более близкий terrain закрывает sight line.
+
+## В normal view нет полного ghost-above layer
+
+Обычный режим намеренно **не накладывает целиком `Z+1` как прозрачный floor**.
+
+Одновременное смешение двух похожих grass/floor textures ухудшает читаемость обоих уровней. Верхняя структура проявляется тем, что реально пересекает текущий горизонтальный срез:
+
+```text
+terrain body на selected Z -> видимый solid material
+vertical connector          -> специальный presentation cue
+upper floor вне среза        -> не рисуется
+```
+
+Позднее можно добавить отдельный construction/debug X-ray, но это будет самостоятельный режим, а не normal Z language.
+
+## Горы и пещеры
+
+Один и тот же slice contract покрывает и mountains, и underground.
+
+Stacked mountain:
+
+```text
+terrain Z=3        ██ summit body
+terrain Z=2      ██████
+terrain Z=1    █████████
+terrain Z=0  █████████████
+```
+
+при `PageUp/PageDown` выглядит как разные solid footprints одного массива.
+
+Cave — это open region внутри body layer при сохранённом lower terrain как floor:
+
+```text
+selected Z=1
+
+████████████████   terrain body на Z=1
+██              ██
+██    cave      ██   body на Z=1 отсутствует
+██              ██   terrain на Z=0 становится floor
+████████████████
+```
+
+Отдельные `CaveShape`, `MountainShape` или visual-only simulation state не нужны.
+
+Будущий ceiling/covered indicator может оказаться полезным для interior gameplay, но текущий renderer намеренно не придумывает entity-height/roof semantics, которых ещё нет в simulation.
 
 ## Контракт процедурной визуализации
 
-Текущий landscape полностью генерируется внутри `core`:
+Generated presentation теперь разделена по смыслу:
 
 ```text
 SimulationView
-    ↓ terrain / Shape / XYZ
+    ↓
+LandscapeSliceResolver
+    ↓ horizontal-cut role
 LandscapeRenderer
-    ↓ neighbourhood + Z context
-LandscapeTopology
-    ↓ normalized cell topology
-ProceduralLandscapePack
-    ↓ generated TextureRegion
-SpriteBatch
+    ├── surface role -> ProceduralLandscapePack
+    └── cut-body role -> ProceduralSliceArt
 ```
 
-Главное разделение:
+`LandscapeTopology` предоставляет обеим веткам normalized 8-neighbour topology и детерминированный XYZ visual variant.
 
-```text
-simulation       что существует и как ведёт себя
-presentation     как это состояние рисуется
-```
-
-Simulation definitions не содержат texture names, sprite ids или visual rules.
+Simulation по-прежнему владеет только тем, что существует и как себя ведёт. Presentation владеет pixels, palette, shading и derived visual cues.
 
 ### Native pixel profile
-
-Первый procedural profile EvoForge использует:
 
 ```text
 logical world cell = 1 x 1 simulation unit
 native visual cell = 16 x 16 source pixels
 ```
 
-Значение 16 pixels относится только к presentation. Zoom может показывать одну world cell большим или меньшим количеством экранных pixels, не меняя simulation coordinates.
+16 pixels — исключительно presentation value. Zoom меняет screen size без изменения simulation coordinates.
 
 ### Палитра
 
-`EvoForgePalette` содержит одну ограниченную grass/earth palette. Сгенерированные tiles используют общие base, highlight, shadow, deep-tone и outline colors, поэтому независимо созданные элементы сохраняют единый визуальный язык.
+`EvoForgePalette` задаёт общий grass/earth language для surfaces, cliffs и cut-body graphics. Ограниченные highlight/shadow/outline rules сохраняют единый стиль independently generated tiles.
 
-Палитра намеренно небольшая. Новые материалы должны расширять общий visual language, а не вводить несвязанные цветовые схемы под каждый объект.
+### In-memory atlases
 
-### In-memory atlas
+Generated art строится через libGDX `Pixmap` при старте visualizer и превращается в `TextureRegion` с `Nearest` filtering и однопиксельным duplicate padding.
 
-`ProceduralLandscapePack` создаёт один `Pixmap` atlas во время старта visualizer, превращает его в одну libGDX `Texture`, а затем раздаёт `TextureRegion` из этой texture.
+Source PNG, JSON visual descriptor, TexturePacker step и сторонняя установка assets не нужны.
 
-Source PNG, JSON visual descriptor, TexturePacker step и установка сторонних assets не требуются.
+## Cell-aligned topology
 
-Вокруг каждого 16x16 region генерируется однопиксельный duplicate padding, а texture использует `Nearest` filtering, чтобы края pixel art оставались стабильными при zoom.
-
-### Cell-aligned autotiling
-
-Landscape остаётся выровненным по simulation grid.
-
-Для каждой terrain cell `LandscapeRenderer` смотрит восемь соседей:
+Для terrain art renderer читает восемь соседей:
 
 ```text
 NW  N  NE
@@ -113,32 +190,21 @@ NW  N  NE
 SW  S  SE
 ```
 
-`LandscapeTopology` превращает neighbourhood в 8-bit mask. Для diagonals действует corner gating: diagonal учитывается только если присутствуют оба соседних cardinal направления.
+`LandscapeTopology` использует 8-bit mask с diagonal corner gating: diagonal учитывается только если присутствуют оба соседних cardinal направления.
 
-Это позволяет выражать:
+Одна topology используется по-разному в зависимости от slice role:
 
-- outer edges;
-- outer corners;
-- inner corners;
-- произвольные outlines плато
+- current/lower surfaces генерируют grass edges и exposed earth lips;
+- solid-body cells генерируют earth/rock cut boundaries вокруг open space, включая cave walls;
+- arbitrary plateau/cave outlines остаются точно aligned с simulation cells.
 
-без смещения render-grid на половину клетки относительно simulation-grid.
+Четыре детерминированных XYZ-selected variants уменьшают заметное повторение без frame-to-frame randomness.
 
-Generator создаёт четыре детерминированных визуальных варианта для каждой topology. XYZ клетки стабильно выбирает variant, поэтому детали поверхности не мерцают между frames.
+## Отображение Ramp между Z
 
-### Грани возвышенности
+Ramp semantics полностью принадлежат `RampShape`.
 
-Отдельный `CliffShape` только ради графики не вводится.
-
-Визуальные exposed earth/cliff edges генерируются из отсутствия same-level support terrain вокруг текущей поверхности. Это presentation-derived edge; authoritative vertical topology по-прежнему задают Terrain + Shape + Navigation.
-
-North/west и south/east faces получают различную обработку light/shadow, чтобы высота читалась в полном top-down без pseudo-isometric displacement.
-
-### Ramp art
-
-Ramp semantics по-прежнему полностью принадлежат `RampShape`.
-
-Procedural pack генерирует **четыре отдельные orientation Ramp**:
+Procedural surface pack генерирует четыре независимо освещённые orientation:
 
 ```text
 +X
@@ -147,84 +213,108 @@ Procedural pack генерирует **четыре отдельные orientati
 -Y
 ```
 
-Они не получаются простым поворотом одного готового sprite. Geometry симметрична, но lighting остаётся фиксированным в world space. Поэтому highlight/shadow не поворачиваются вместе с ramp.
+Horizontal-cut model даёт одному authoritative Ramp несколько presentation views без duplicate Shapes в simulation.
 
-В normal view направление подъёма должно читаться из самой сгенерированной terrain graphics. `F3` остаётся опциональным диагностическим overlay направления Shape.
+### Ramp на своём supported standing plane
+
+Когда terrain Ramp находится на `selected Z - 1`, показывается обычный generated slope.
+
+### Ramp body в lower cut
+
+Когда terrain Ramp anchored непосредственно на `selected Z`, `ProceduralSliceArt` рисует directional ramp-cut внутри solid material. Так connector остаётся читаемым с нижнего среза, но не притворяется walkable surface на этом lower standing plane.
+
+### Маркер спуска на upper landing
+
+На supported standing plane верхний landing получает маленький presentation-only descent mouth, направленный обратно к Ramp.
+
+Маркер **derived** из единственного authoritative `RampShape`. Это не второй Shape, object или Navigation edge.
+
+`F3` по-прежнему может явно показывать direction arrows и для current surface ramps, и для ramp bodies, пересекающих выбранный cut.
 
 ## Rendering и debug UI
 
-Terrain мира рисуется через `SpriteBatch`. `ShapeRenderer` остаётся для намеренно primitive/debug информации: текущих object markers, selection и diagnostic arrows.
+Terrain рисуется через `SpriteBatch`. `ShapeRenderer` остаётся для намеренно primitive/debug информации: objects, selection, grid и diagnostic overlays.
 
 Управление:
 
 ```text
 Space          run / pause
 N              один simulation tick в pause
-PageUp/Down    selected standing Z
+PageUp/Down    перемещение горизонтального standing-Z cut
 WASD           pan camera
 mouse wheel    zoom
 G              grid: off / subtle / debug
 F2             Navigation transition overlay
-F3             Shape direction overlay
-F4             lower-Z context
+F3             Ramp/Shape direction overlay
+F4             lower visibility depth: 0 / 1 / 4
 ```
 
-HUD рисуется в непрозрачных screen-space panels вместо голого текста поверх карты. Cell inspector показывает XYZ, наличие support, Shape и количество исходящих transitions. Object inspector показывает id, definition id и authoritative XYZ.
+Click всегда адресует `(x,y,selectedZ)`. Lower surface, видимая через shaft, не становится автоматически clicked Z.
 
-## Demo / acceptance world
+Inspector показывает resolved slice role (`SOLID BODY`, `SURFACE`, `LOWER depth N`, `EMPTY`), source terrain Z, Shape и outgoing transitions.
 
-`VisualizerDemoWorld` — presentation-owned deterministic setup content, построенный через `SimulationAssembly`.
+## Z stress / acceptance world
 
-Текущая сцена содержит:
+`VisualizerDemoWorld` — deterministic presentation-owned setup через настоящий `SimulationAssembly`.
 
-- широкую meadow на standing `Z=0`;
-- irregular plateau на standing `Z=1` для проверки обычных edges и inner/outer corner cases;
-- по одному настоящему Ramp **с каждой из четырёх сторон плато**;
-- небольшую terrace на standing `Z=2`;
-- ещё один настоящий Ramp между `Z=1` и `Z=2`;
-- slow и fast mover на основном плато.
+Сцена теперь специально нагружает Z language, а не показывает только одно плато:
 
-Четыре first-level Ramp — это acceptance coverage всех cardinal orientations, а не декоративные копии. Headless tests проверяют их реальные Navigation transitions.
+- broad lower meadow;
+- irregular base plateau на standing `Z=1`;
+- четыре real cardinal base ramps;
+- mountain body, stacked через несколько terrain Z;
+- west-facing cave entrance и chamber, созданные отсутствием body cells;
+- cave floor из lower terrain layer;
+- high cliff без специального `CliffShape`;
+- несколько higher local ramps, образующих длинный multi-Z ascent;
+- summit до standing `Z=4`;
+- deep open shaft с floor на несколько elevations ниже;
+- slow/fast movers, сохраняющие authoritative пример Movement на 2/8 ticks.
 
-Вторая terrace доказывает, что presentation не захардкожен под единственный перепад высоты.
+Headless tests проверяют:
 
-Оба mover на tick zero начинают одинаковый по стоимости adjacent `MoveStep`. Fast mover завершает его через 2 ticks, slow mover — через 8 ticks. Тем самым presentation наблюдает authoritative timed Movement, а не анимирует собственное состояние.
+- все четыре base Ramp orientations;
+- Ramp topology на последовательных mountain elevations;
+- отсутствие cave body при сохранённом floor;
+- gaps deep shaft и lower floor;
+- timed Movement;
+- slice priority и lower-depth clipping отдельно через `LandscapeSliceResolverTest`.
+
+Manual acceptance нужно проводить, переключая одну и ту же XY-area через `Z=0..4`. Цель — понимать трёхмерную структуру без прозрачного полного upper floor.
 
 ## Почему поиск внешнего landscape tileset заморожен
 
-Эксперименты с Minifantasy и Beast Pixels помогли выявить нужную presentation boundary, но также показали ключевую проблему: внешний pack легко может не содержать visual primitive для реальной arbitrary Z topology EvoForge или использовать другую terrain grammar.
+Ранние внешние tileset experiments помогли выявить presentation boundary, но неоднократно задавали terrain grammar, не совпадающую с arbitrary Z topology EvoForge.
 
-Поэтому на текущем этапе разработки landscape visuals используют canonical procedural pack. Это убирает asset licensing/setup friction и позволяет topology определять graphics, а не наоборот.
-
-Presentation boundary всё равно позволяет позднее подключить external или hand-authored art. Procedural generation — текущий canonical development visual language, а не новая simulation dependency.
+На текущем этапе topology поэтому сама генерирует canonical art. External или hand-authored art можно позднее подключить за presentation boundary без изменения simulation semantics.
 
 ## Отложенные visual decisions
 
-Следующие идеи намеренно зафиксированы, но **не реализуются**, пока не появится реальный consumer:
+Зафиксированы, но намеренно не реализованы:
 
-- дополнительные procedural materials: dirt, stone, sand, snow, water;
-- priority/layered transitions между несколькими terrain materials;
+- ceiling/roof/covered-state presentation после появления соответствующей simulation semantics;
+- explicit adjacent-layer X-ray/build mode;
+- дополнительные materials: dirt, stone, sand, snow, water;
+- priority/layered transitions между несколькими materials;
 - альтернативные procedural palettes/styles;
-- крупные anchored sprites для trees, animals, buildings и equipment;
-- external или hand-authored visual packs за той же presentation boundary;
-- dual-grid / marching-squares selector для будущего pack, которому он действительно понадобится;
-- cached/dirty visual tiles или chunk presentation storage после измеренного renderer cost;
-- несколько lower Z layers и более сильные z-fog/cutaway modes;
-- tooling для export generated atlas и отдельного визуального анализа;
-- более богатые shadow/compositing passes;
-- procedural characters/objects только при появлении первого реального gameplay consumer.
+- крупные anchored sprites для trees, creatures, buildings и equipment;
+- external/hand-authored visual packs за той же boundary;
+- dual-grid / marching-squares selection для visual language, которому он реально понадобится;
+- richer shadows/compositing;
+- generated-atlas/export tooling;
+- visual dirty caches/chunk render storage только после profiling.
 
-Хранение этих решений в документации вместо преждевременной реализации сохраняет extension knowledge без dormant infrastructure.
+Текущий renderer не утверждает, что любой будущий art style обязан использовать этот же autotiling. Он фиксирует первые доказанные presentation semantics для Z-world EvoForge.
 
 ## Performance boundary
 
-Renderer по-прежнему обходит только camera-visible XY range и не сканирует весь object repository.
+Renderer обходит только camera-visible XY cells. Slice resolution и topology вычисляются on demand через существующие sparse read contracts.
 
-Terrain/Geometry reads остаются на текущем sparse-storage path. Autotile topology пока вычисляется для видимых клеток, а не кешируется. Любые dirty caches, chunk render storage или packed-coordinate optimization должны появиться только после JFR/representative world measurements.
+Текущий maximum lower-depth search добавляет до четырёх terrain lookups только для open XY column, а не для каждой обычной solid cell. Caches, packed keys и chunk-local render state должны появляться только после реального profiling.
 
 ## Следующие simulation consumers
 
-Visualizer теперь должен быть достаточно устойчивым наблюдателем для следующих milestones:
+Visualizer остаётся observer при следующих milestones:
 
 ```text
 Occupancy
@@ -236,4 +326,4 @@ observable action outcome
 first agent / Cow vertical slice
 ```
 
-Эти системы могут добавлять debug overlays, но каждая остаётся authoritative в своём simulation subsystem. Presentation остаётся observer.
+Эти системы могут добавлять diagnostics, но presentation остаётся non-authoritative.
