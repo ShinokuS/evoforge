@@ -6,6 +6,7 @@ import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -40,6 +41,7 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final float PAN_SPEED = 8f;
     private static final float MIN_ZOOM = 0.25f;
     private static final float MAX_ZOOM = 4f;
+    private static final float FAR_ZOOM_SMOOTH_SAMPLING = 2.5f;
 
     private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4, 8};
     private static final int INSPECT_EXPOSURE_DISTANCE = 12;
@@ -97,6 +99,7 @@ public final class ZLevelVisualizer extends InputAdapter {
     private int lowerDepthIndex = 3;
     private boolean showTransitions;
     private boolean showShapeDirections;
+    private boolean smoothLandscapeSampling;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
@@ -130,6 +133,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         cameraTargetY = 0f;
         camera.position.set(0f, 0f, 0f);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        updateLandscapeSampling();
         Gdx.input.setInputProcessor(this);
     }
 
@@ -145,9 +149,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 BACKGROUND.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        snapRenderCamera(
-                Gdx.graphics.getWidth(),
-                Gdx.graphics.getHeight());
+        camera.position.set(cameraTargetX, cameraTargetY, 0f);
         camera.update();
         VisibleRange range = visibleRange();
 
@@ -197,7 +199,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         camera.viewportHeight = BASE_VIEW_WIDTH
                 * (float) height
                 / (float) width;
-        snapRenderCamera(width, height);
+        camera.position.set(cameraTargetX, cameraTargetY, 0f);
         camera.update();
 
         hudProjection.setToOrtho2D(
@@ -275,6 +277,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 camera.zoom * (1f + amountY * 0.1f),
                 MIN_ZOOM,
                 MAX_ZOOM);
+        updateLandscapeSampling();
         return true;
     }
 
@@ -324,19 +327,18 @@ public final class ZLevelVisualizer extends InputAdapter {
         }
     }
 
-    private void snapRenderCamera(
-            int width,
-            int height) {
+    private void updateLandscapeSampling() {
+        boolean smooth = camera.zoom >= FAR_ZOOM_SMOOTH_SAMPLING;
+        if (smooth == smoothLandscapeSampling) {
+            return;
+        }
 
-        camera.position.x = CameraPixelSnap.axis(
-                cameraTargetX,
-                camera.viewportWidth * camera.zoom,
-                Math.max(1, width));
-        camera.position.y = CameraPixelSnap.axis(
-                cameraTargetY,
-                camera.viewportHeight * camera.zoom,
-                Math.max(1, height));
-        camera.position.z = 0f;
+        smoothLandscapeSampling = smooth;
+        Texture.TextureFilter filter = smooth
+                ? Texture.TextureFilter.Linear
+                : Texture.TextureFilter.Nearest;
+        landscapePack.surface(0, 0).getTexture().setFilter(filter, filter);
+        sliceArt.solid(0, 0).getTexture().setFilter(filter, filter);
     }
 
     private VisibleRange visibleRange() {
@@ -639,7 +641,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         int height = Gdx.graphics.getHeight();
 
         float margin = 12f;
-        float statusWidth = Math.min(630f, width - margin * 2f);
+        float statusWidth = Math.min(720f, width - margin * 2f);
         float statusHeight = 104f;
         float statusX = margin;
         float statusY = height - margin - statusHeight;
@@ -700,7 +702,9 @@ public final class ZLevelVisualizer extends InputAdapter {
                 top - 22f);
         font.draw(
                 batch,
-                "WASD pan | wheel zoom | G grid " + gridLabel(),
+                "WASD pan | wheel zoom " + zoomLabel()
+                        + " " + samplingLabel()
+                        + " | G grid " + gridLabel(),
                 textX,
                 top - 44f);
         font.draw(
@@ -856,6 +860,14 @@ public final class ZLevelVisualizer extends InputAdapter {
             case 1 -> "SUBTLE";
             default -> "DEBUG";
         };
+    }
+
+    private String zoomLabel() {
+        return (Math.round(camera.zoom * 100f) / 100f) + "x";
+    }
+
+    private String samplingLabel() {
+        return smoothLandscapeSampling ? "LINEAR" : "NEAREST";
     }
 
     private int lowerDepth() {
