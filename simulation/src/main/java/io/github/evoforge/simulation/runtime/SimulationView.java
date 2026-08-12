@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.runtime;
 
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
@@ -14,6 +15,7 @@ public record SimulationView(
         ObjectLookup objects,
         TransformLookup transforms,
         TerrainLookup terrain,
+        TerrainExtentLookup terrainExtents,
         GeometryLookup geometry,
         NavigationLookup navigation,
         CellObjectLookup cells) {
@@ -30,6 +32,10 @@ public record SimulationView(
         if (terrain == null) {
             throw new IllegalArgumentException(
                     "terrain must not be null");
+        }
+        if (terrainExtents == null) {
+            throw new IllegalArgumentException(
+                    "terrainExtents must not be null");
         }
         if (geometry == null) {
             throw new IllegalArgumentException(
