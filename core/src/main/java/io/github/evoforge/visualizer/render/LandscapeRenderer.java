@@ -5,11 +5,10 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
-import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
 /** Draws authoritative landscape using geometry-derived cutaway visibility. */
 public final class LandscapeRenderer {
@@ -22,8 +21,7 @@ public final class LandscapeRenderer {
     private static final long PERF_LOG_INTERVAL_NANOS = 1_000_000_000L;
 
     private final SimulationView view;
-    private final ProceduralLandscapePack surfaceArt;
-    private final ProceduralSliceArt sliceArt;
+    private final ShapePresentationRegistry shapePresentations;
     private final LandscapeSliceResolver sliceResolver;
     private final AnalysisCacheEntry[] analysisCache =
             new AnalysisCacheEntry[ANALYSIS_CACHE_SIZE];
@@ -42,26 +40,22 @@ public final class LandscapeRenderer {
 
     public LandscapeRenderer(
             SimulationView view,
-            ProceduralLandscapePack surfaceArt,
-            ProceduralSliceArt sliceArt,
+            ShapePresentationRegistry shapePresentations,
             LandscapeSliceResolver sliceResolver) {
 
         if (view == null) {
             throw new IllegalArgumentException("view must not be null");
         }
-        if (surfaceArt == null) {
-            throw new IllegalArgumentException("surfaceArt must not be null");
-        }
-        if (sliceArt == null) {
-            throw new IllegalArgumentException("sliceArt must not be null");
+        if (shapePresentations == null) {
+            throw new IllegalArgumentException(
+                    "shapePresentations must not be null");
         }
         if (sliceResolver == null) {
             throw new IllegalArgumentException("sliceResolver must not be null");
         }
 
         this.view = view;
-        this.surfaceArt = surfaceArt;
-        this.sliceArt = sliceArt;
+        this.shapePresentations = shapePresentations;
         this.sliceResolver = sliceResolver;
     }
 
@@ -292,17 +286,18 @@ public final class LandscapeRenderer {
                 cell.terrainZ(),
                 ProceduralLandscapePack.SURFACE_VARIANTS);
         int topology = neighbourMask(x, y, cell.terrainZ());
+        boolean solidBody =
+                cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY;
 
-        TextureRegion region;
-        if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
-            region = cell.shape() instanceof RampShape ramp
-                    ? surfaceArt.ramp(ramp, variant)
-                    : sliceArt.solid(topology, variant);
+        TextureRegion region = shapePresentations.terrainRegion(
+                cell.shape(),
+                topology,
+                variant,
+                solidBody);
+
+        if (solidBody) {
             setSolidTint(batch, cell.bodyDepth());
         } else {
-            region = cell.shape() instanceof RampShape ramp
-                    ? surfaceArt.ramp(ramp, variant)
-                    : surfaceArt.surface(topology, variant);
             setSurfaceTint(batch, cell);
         }
 
