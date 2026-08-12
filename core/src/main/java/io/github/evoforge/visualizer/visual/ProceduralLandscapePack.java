@@ -8,9 +8,9 @@ import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 /**
  * Generates the canonical early EvoForge landscape tileset in memory.
  *
- * <p>The pack is intentionally presentation-only: simulation provides terrain,
- * Shape and XYZ topology; this class turns that topology into deterministic
- * 16x16 pixel art. No external image files are required.</p>
+ * <p>Simulation provides terrain, Shape and XYZ topology; this presentation
+ * component turns that topology into deterministic 16x16 pixel art. No image
+ * files, asset descriptors or third-party tilesets are required.</p>
  */
 public final class ProceduralLandscapePack {
 
@@ -21,10 +21,9 @@ public final class ProceduralLandscapePack {
     private static final int RAMP_DIRECTIONS = 4;
     private static final int SURFACE_TILE_COUNT =
             MASK_COUNT * SURFACE_VARIANTS;
-    private static final int RAMP_TILE_COUNT =
-            RAMP_DIRECTIONS * SURFACE_VARIANTS;
     private static final int TOTAL_TILE_COUNT =
-            SURFACE_TILE_COUNT + RAMP_TILE_COUNT;
+            SURFACE_TILE_COUNT
+                    + RAMP_DIRECTIONS * SURFACE_VARIANTS;
 
     private static final int PADDING = 1;
     private static final int STRIDE = TILE_PIXELS + PADDING * 2;
@@ -46,35 +45,8 @@ public final class ProceduralLandscapePack {
         atlas.setColor(0x00000000);
         atlas.fill();
 
-        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
-            for (int mask = 0; mask < MASK_COUNT; mask++) {
-                int index = variant * MASK_COUNT + mask;
-                TileOrigin origin = origin(index);
-                drawSurface(
-                        atlas,
-                        origin.x(),
-                        origin.y(),
-                        LandscapeTopology.normalize(mask),
-                        variant);
-                bleedPadding(atlas, origin.x(), origin.y());
-            }
-        }
-
-        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
-            for (int direction = 0; direction < RAMP_DIRECTIONS; direction++) {
-                int index = SURFACE_TILE_COUNT
-                        + variant * RAMP_DIRECTIONS
-                        + direction;
-                TileOrigin origin = origin(index);
-                drawRamp(
-                        atlas,
-                        origin.x(),
-                        origin.y(),
-                        direction,
-                        variant);
-                bleedPadding(atlas, origin.x(), origin.y());
-            }
-        }
+        generateSurfaceTiles(atlas);
+        generateRampTiles(atlas);
 
         texture = new Texture(atlas);
         texture.setFilter(
@@ -82,21 +54,7 @@ public final class ProceduralLandscapePack {
                 Texture.TextureFilter.Nearest);
         atlas.dispose();
 
-        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
-            for (int mask = 0; mask < MASK_COUNT; mask++) {
-                int index = variant * MASK_COUNT + mask;
-                surfaces[variant][mask] = region(index);
-            }
-        }
-
-        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
-            for (int direction = 0; direction < RAMP_DIRECTIONS; direction++) {
-                int index = SURFACE_TILE_COUNT
-                        + variant * RAMP_DIRECTIONS
-                        + direction;
-                ramps[direction][variant] = region(index);
-            }
-        }
+        indexRegions();
     }
 
     public TextureRegion surface(
@@ -117,6 +75,62 @@ public final class ProceduralLandscapePack {
 
     public void dispose() {
         texture.dispose();
+    }
+
+    private static void generateSurfaceTiles(
+            Pixmap atlas) {
+
+        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
+            for (int mask = 0; mask < MASK_COUNT; mask++) {
+                int index = variant * MASK_COUNT + mask;
+                TileOrigin origin = origin(index);
+                drawSurface(
+                        atlas,
+                        origin.x(),
+                        origin.y(),
+                        LandscapeTopology.normalize(mask),
+                        variant);
+                bleedPadding(atlas, origin.x(), origin.y());
+            }
+        }
+    }
+
+    private static void generateRampTiles(
+            Pixmap atlas) {
+
+        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
+            for (int direction = 0; direction < RAMP_DIRECTIONS; direction++) {
+                int index = SURFACE_TILE_COUNT
+                        + variant * RAMP_DIRECTIONS
+                        + direction;
+                TileOrigin origin = origin(index);
+                drawRamp(
+                        atlas,
+                        origin.x(),
+                        origin.y(),
+                        direction,
+                        variant);
+                bleedPadding(atlas, origin.x(), origin.y());
+            }
+        }
+    }
+
+    private void indexRegions() {
+        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
+            for (int mask = 0; mask < MASK_COUNT; mask++) {
+                surfaces[variant][mask] = region(
+                        variant * MASK_COUNT + mask);
+            }
+        }
+
+        for (int variant = 0; variant < SURFACE_VARIANTS; variant++) {
+            for (int direction = 0; direction < RAMP_DIRECTIONS; direction++) {
+                ramps[direction][variant] = region(
+                        SURFACE_TILE_COUNT
+                                + variant * RAMP_DIRECTIONS
+                                + direction);
+            }
+        }
     }
 
     private TextureRegion region(
@@ -236,46 +250,59 @@ public final class ProceduralLandscapePack {
 
         if (north && east
                 && !LandscapeTopology.contains(mask, LandscapeTopology.NE)) {
-            notch(pixmap, ox, oy, 14, 0, 1, 1);
+            innerCorner(pixmap, ox, oy, 15, 0, -1, 1);
         }
         if (south && east
                 && !LandscapeTopology.contains(mask, LandscapeTopology.SE)) {
-            notch(pixmap, ox, oy, 14, 14, 1, -1);
+            innerCorner(pixmap, ox, oy, 15, 15, -1, -1);
         }
         if (south && west
                 && !LandscapeTopology.contains(mask, LandscapeTopology.SW)) {
-            notch(pixmap, ox, oy, 0, 14, -1, -1);
+            innerCorner(pixmap, ox, oy, 0, 15, 1, -1);
         }
         if (north && west
                 && !LandscapeTopology.contains(mask, LandscapeTopology.NW)) {
-            notch(pixmap, ox, oy, 0, 0, -1, 1);
+            innerCorner(pixmap, ox, oy, 0, 0, 1, 1);
         }
     }
 
-    private static void notch(
+    private static void innerCorner(
             Pixmap pixmap,
             int ox,
             int oy,
-            int x,
-            int y,
-            int horizontalSign,
-            int verticalSign) {
+            int cornerX,
+            int cornerY,
+            int towardX,
+            int towardY) {
 
-        pixel(pixmap, ox, oy, x, y, EvoForgePalette.EARTH_DARK);
         pixel(
                 pixmap,
                 ox,
                 oy,
-                x + (horizontalSign > 0 ? 1 : 0),
-                y,
+                cornerX,
+                cornerY,
+                EvoForgePalette.EARTH_DARK);
+        pixel(
+                pixmap,
+                ox,
+                oy,
+                cornerX + towardX,
+                cornerY,
                 EvoForgePalette.EARTH_BASE);
         pixel(
                 pixmap,
                 ox,
                 oy,
-                x,
-                y + (verticalSign > 0 ? 1 : 0),
+                cornerX,
+                cornerY + towardY,
                 EvoForgePalette.EARTH_BASE);
+        pixel(
+                pixmap,
+                ox,
+                oy,
+                cornerX + towardX,
+                cornerY + towardY,
+                EvoForgePalette.GRASS_DARK);
     }
 
     private static void drawRamp(
@@ -306,12 +333,7 @@ public final class ProceduralLandscapePack {
 
         for (int y = 0; y < TILE_PIXELS; y++) {
             for (int x = 0; x < TILE_PIXELS; x++) {
-                float highness = highness(direction, x, y);
-                float cross = crossCoordinate(direction, x, y);
-                int width = 8 + Math.round(highness * 6f);
-                float half = width * 0.5f;
-
-                if (Math.abs(cross - 7.5f) <= half) {
+                if (rampInside(direction, x, y)) {
                     pixel(
                             pixmap,
                             ox,
@@ -336,30 +358,14 @@ public final class ProceduralLandscapePack {
 
         for (int y = 0; y < TILE_PIXELS; y++) {
             for (int x = 0; x < TILE_PIXELS; x++) {
-                if (pixmap.getPixel(ox + x, oy + y)
-                        != EvoForgePalette.GRASS_BASE) {
+                if (!rampInside(direction, x, y)) {
                     continue;
                 }
 
-                boolean boundary = false;
-                if (x > 0 && pixmap.getPixel(ox + x - 1, oy + y)
-                        != EvoForgePalette.GRASS_BASE) {
-                    boundary = true;
-                }
-                if (x < TILE_PIXELS - 1
-                        && pixmap.getPixel(ox + x + 1, oy + y)
-                        != EvoForgePalette.GRASS_BASE) {
-                    boundary = true;
-                }
-                if (y > 0 && pixmap.getPixel(ox + x, oy + y - 1)
-                        != EvoForgePalette.GRASS_BASE) {
-                    boundary = true;
-                }
-                if (y < TILE_PIXELS - 1
-                        && pixmap.getPixel(ox + x, oy + y + 1)
-                        != EvoForgePalette.GRASS_BASE) {
-                    boundary = true;
-                }
+                boolean boundary = !rampInside(direction, x - 1, y)
+                        || !rampInside(direction, x + 1, y)
+                        || !rampInside(direction, x, y - 1)
+                        || !rampInside(direction, x, y + 1);
 
                 if (boundary) {
                     pixel(
@@ -374,11 +380,28 @@ public final class ProceduralLandscapePack {
         }
     }
 
+    private static boolean rampInside(
+            int direction,
+            int x,
+            int y) {
+
+        if (x < 0 || y < 0 || x >= TILE_PIXELS || y >= TILE_PIXELS) {
+            return false;
+        }
+
+        float highness = highness(direction, x, y);
+        float cross = crossCoordinate(direction, x, y);
+        int width = 8 + Math.round(highness * 6f);
+        return Math.abs(cross - 7.5f) <= width * 0.5f;
+    }
+
     private static int rampBoundaryColor(
             int direction,
             int x,
             int y) {
 
+        // Fixed world-space light from north-west. The ramp geometry rotates,
+        // but lighting does not, preventing the common "rotated shadow" look.
         if (x <= 3 || y <= 3) {
             return EvoForgePalette.GRASS_LIGHT;
         }
@@ -397,22 +420,23 @@ public final class ProceduralLandscapePack {
             int direction) {
 
         for (int band : new int[] {5, 9, 13}) {
-            for (int i = 3; i <= 12; i++) {
+            for (int cross = 3; cross <= 12; cross++) {
                 int x;
                 int y;
 
                 if (direction == 0 || direction == 2) {
-                    x = i;
-                    y = direction == 0 ? TILE_PIXELS - 1 - band : band;
+                    x = cross;
+                    y = direction == 0
+                            ? TILE_PIXELS - 1 - band
+                            : band;
                 } else {
-                    x = direction == 1 ? band : TILE_PIXELS - 1 - band;
-                    y = i;
+                    x = direction == 1
+                            ? band
+                            : TILE_PIXELS - 1 - band;
+                    y = cross;
                 }
 
-                int current = pixmap.getPixel(ox + x, oy + y);
-                if (current == EvoForgePalette.GRASS_BASE
-                        || current == EvoForgePalette.GRASS_LIGHT
-                        || current == EvoForgePalette.GRASS_DARK) {
+                if (rampInside(direction, x, y)) {
                     pixel(
                             pixmap,
                             ox,
@@ -438,7 +462,7 @@ public final class ProceduralLandscapePack {
             int x = 2 + Math.floorMod(state, 12);
             state = mix(state ^ 0x85EBCA6B);
             int y = 2 + Math.floorMod(state, 12);
-            int color = (i % 4 == 0)
+            int color = i % 4 == 0
                     ? EvoForgePalette.GRASS_LIGHT
                     : EvoForgePalette.GRASS_DARK;
             pixel(pixmap, ox, oy, x, y, color);
@@ -468,8 +492,8 @@ public final class ProceduralLandscapePack {
             int x = 3 + Math.floorMod(state, 10);
             state = mix(state ^ 0x27D4EB2D);
             int y = 3 + Math.floorMod(state, 10);
-            int current = pixmap.getPixel(ox + x, oy + y);
-            if (current == EvoForgePalette.GRASS_BASE) {
+
+            if (rampInside(direction, x, y)) {
                 pixel(
                         pixmap,
                         ox,
