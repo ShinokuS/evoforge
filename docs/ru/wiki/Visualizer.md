@@ -65,9 +65,10 @@ exposureDistance  расстояние через open volume до sky-connected
 
 Обзор вниз с возвышенности не приравнивается к нахождению под толщей материала.
 
-- **drop depth** затемняется мягко, поэтому terrain у основания cliff остаётся хорошо читаемым;
+- **drop depth** постепенно угасает к цвету фона: ближайший lower terrain остаётся читаемым, а очень глубокие одиночные клетки перестают конкурировать с активным срезом;
 - **cover/body depth** затемняются значительно сильнее;
-- глубокие covered areas постепенно достигают тёмного, но всё ещё читаемого минимума вместо превращения в другой terrain type.
+- оба эффекта сохраняют исходную цветовую семью terrain вместо переключения на отдельный cave/cut hue;
+- достаточно глубокие области могут почти сливаться с background и терять мелкую texture, не становясь другим simulation material.
 
 Это presentation cue, а не simulation освещения.
 
@@ -169,7 +170,7 @@ Surface pack владеет grass, edge/corner variation и всеми четы�
 
 ### Solid cut art
 
-`ProceduralSliceArt` теперь использует тёмную нейтральную palette с контрастными edges и небольшими strata/detail marks. Он обозначает **occluding mass**, а не второй коричневый floor material. `bodyDepth` дополнительно прогрессивно затемняет этот art.
+`ProceduralSliceArt` использует сдержанную затенённую palette, близкую к земле/растительности, а не отдельный грязно-чёрный visual language. `bodyDepth` постепенно убирает яркость и detail, при этом первые несколько cut layers остаются визуально связаны с поверхностью выше.
 
 ### Единая стилистика Ramp
 
@@ -178,6 +179,16 @@ Surface pack владеет grass, edge/corner variation и всеми четы�
 Один и тот же generated Ramp region используется во всех случаях, когда Ramp видим, в том числе если его terrain cell пересекает нижний horizontal cut. Renderer меняет только environmental depth tint; отдельного ramp-cut sprite и upper descent marker больше нет.
 
 Authoritative Ramp semantics полностью остаются в `RampShape` и Navigation.
+
+## Периметр активного standing-Z
+
+Текущая выбранная standing surface получает presentation-only perimeter cue, чтобы активный Z не приходилось определять только по оттенкам глубины.
+
+Обводится только **внешняя cardinal-граница** `CURRENT_SURFACE`. Если две соседние клетки обе принадлежат активной поверхности, между ними линия не появляется, поэтому это не превращается в дополнительную сетку.
+
+Cue состоит из светлого малонасыщенного rim со стороны активного слоя и узкой тёмной линии сразу снаружи. Толщина выводится из world-units-per-screen-pixel текущей камеры, поэтому contour остаётся примерно однопиксельным при разном zoom.
+
+`LandscapeSliceResolver.isCurrentSurface(...)` владеет дешёвым structural query для этого overlay. Контур не запускает повторный exposure BFS и не добавляет нового simulation state или terrain type.
 
 ## Управление и inspector
 
@@ -214,13 +225,15 @@ Objects пока остаются намеренно primitive current-Z debug m
 - deep open shaft с floor на несколько elevations ниже;
 - slow/fast movers с authoritative Movement на 8/2 ticks.
 
-Headless tests покрывают terrain extent lifecycle, horizontal-cut priority, body/drop/cover/ceiling measurements, exposure-distance от side mouth, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology и Movement timing.
+Headless tests покрывают terrain extent lifecycle, horizontal-cut priority, дешёвый current-surface query для perimeter, body/drop/cover/ceiling measurements, exposure-distance от side mouth, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology и Movement timing.
 
 Manual acceptance следует проводить на нескольких relevant Z и проверять, что структура мира остаётся понятной без полного прозрачного upper floor.
 
 ## Performance boundary
 
 Exposure вычисляется один раз на rendered camera range, а не независимо для каждого tile. BFS намеренно ограничен visual exposure horizon и запрошенным lower-depth range.
+
+Active-Z perimeter использует только прямые current-surface membership checks и не дублирует exposure analysis.
 
 Terrain extent поддерживается инкрементально внутри `TerrainSystem`; visualizer не придумывает arbitrary maximum Z.
 
