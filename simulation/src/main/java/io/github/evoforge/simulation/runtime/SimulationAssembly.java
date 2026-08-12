@@ -284,6 +284,7 @@ public final class SimulationAssembly {
                 objects,
                 spatial.transforms(),
                 landscape.terrain(),
+                landscape.terrainExtents(),
                 landscape.geometry(),
                 navigation.lookup(),
                 cells.lookup());
