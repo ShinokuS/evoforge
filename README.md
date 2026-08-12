@@ -2,12 +2,18 @@
 
 EvoForge is a deterministic emergent-simulation project built with Java 21 and libGDX.
 
-The simulation architecture lives in the pure-Java `simulation` module. libGDX modules are presentation/launcher layers and must not become owners of authoritative simulation state.
+The authoritative simulation lives in the pure-Java `simulation` module. libGDX modules are presentation/launcher layers and must not become owners of simulation state.
 
-## Architecture
+## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — stable semantic contracts, invariants and deferred architectural decisions.
-- [`docs/TECHNICAL_REFERENCE.md`](docs/TECHNICAL_REFERENCE.md) — current implementation, packages, algorithms, tests and known technical gaps.
+- [`docs/architecture.md`](docs/architecture.md) — global cross-system architecture contract.
+- [`docs/roadmap.md`](docs/roadmap.md) — milestone status and intentionally deferred work.
+- [`docs/systems/`](docs/systems/) — one canonical semantic page per implemented subsystem.
+- [`docs/decisions/`](docs/decisions/) — durable architectural rationale.
+- [`docs/guides/`](docs/guides/) — practical development recipes.
+- [`docs/notes/`](docs/notes/) — non-normative Development Journal.
+
+The same Markdown is published through VitePress/GitHub Pages. There is no parallel translation or Wiki source tree.
 
 ## Modules
 
@@ -17,8 +23,6 @@ The simulation architecture lives in the pure-Java `simulation` module. libGDX m
 - `assets` — definitions and presentation assets.
 
 ## Tests
-
-Run the simulation suite:
 
 ```bash
 ./gradlew :simulation:test --rerun-tasks --console=plain
@@ -30,6 +34,17 @@ Windows:
 .\gradlew.bat :simulation:test --rerun-tasks --console=plain
 ```
 
-## Gradle
+Run the full repository test suite when changing cross-module code:
+
+```bash
+./gradlew test --rerun-tasks --console=plain
+```
+
+Documentation:
+
+```bash
+npm ci
+npm run docs:build
+```
 
 The project uses the included Gradle wrapper. Avoid routine `clean`; normal incremental test/build tasks are preferred unless a clean build is specifically required.
