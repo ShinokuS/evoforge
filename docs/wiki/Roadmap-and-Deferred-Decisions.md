@@ -19,7 +19,7 @@ DONE  Timed adjacent Movement
 DONE  SimulationStepper + Scheduler process binding
 DONE  TransitionCost: terrain + Shape roles + grid length
 DONE  Minimal live Z-level Visualizer
-ACTIVE Procedural full-top-down landscape / Z readability
+ACTIVE Procedural full-top-down horizontal Z-slice readability
 NEXT  Occupancy
       Pathfinder
       observable Action completion/outcome
@@ -40,14 +40,24 @@ The canonical development presentation is:
 full top-down
 logical simulation cell = 1 x 1
 native procedural visual cell = 16 x 16 pixels
-simulation topology -> procedural presentation rules -> generated atlas
+simulation topology -> horizontal slice semantics -> generated presentation
 ```
 
 The generated landscape is presentation-only. Simulation contains no pixels, palettes, sprite ids or rendering rules.
 
-The current procedural visual language covers grass/earth surface variation, cell-aligned edges/corners, Z-readable exposed faces and all four cardinal Ramp orientations. The acceptance scene includes a second elevation so the renderer cannot accidentally special-case one plateau height.
+The current Z language is a **horizontal cut**, not an isolated floor stack and not a permanently transparent multi-floor view:
 
-See [Z-level Visualizer and Procedural Landscape](Visualizer.md) for the implemented contract.
+```text
+terrain at selected Z       -> solid body intersecting the cut
+terrain at selected Z - 1   -> current supported surface
+otherwise                   -> nearest visible lower surface through open space
+```
+
+The current lower-depth debug options are `0 / 1 / 4`. Complete upper floors are not ghosted in normal view. A higher mountain instead remains visible on a lower slice because its terrain body intersects that cut.
+
+Ramp presentation is derived from the one authoritative `RampShape`: normal slope on its supported plane, directional cut art when the lower horizontal slice intersects the Ramp body, and a small presentation-only descent marker on the upper landing.
+
+The acceptance scene now includes four base Ramp directions, a stacked mountain reaching standing `Z=4`, a cave, a deep shaft and multiple higher Ramp transitions. See [Z-level Visualizer and Procedural Landscape](Visualizer.md).
 
 ## Immediate next milestone: Occupancy
 
@@ -140,19 +150,22 @@ These decisions should be designed together when generation actually needs them.
 
 The following are recorded but intentionally absent from current code:
 
+- ceiling/roof/covered-state presentation once real simulation semantics require it;
+- explicit adjacent-layer X-ray/build mode;
 - additional procedural materials: dirt, stone, sand, snow, water;
 - priority/layered transitions between multiple terrain materials;
 - alternate procedural palettes or visual styles;
 - larger anchored sprites for trees, creatures, buildings and equipment;
 - procedural character/object generation beyond the first gameplay consumer;
 - external or hand-authored visual packs behind the same presentation boundary;
-- dual-grid / marching-squares resolver for a future visual pack that genuinely requires it;
-- multiple contextual lower Z levels, stronger Z-fog, roofs and cutaway modes;
-- richer shadow/compositing passes;
+- dual-grid / marching-squares resolver for a future visual language that genuinely requires it;
+- richer shadows/compositing passes;
 - generated-atlas/export tooling for standalone art review;
 - visual tile caches, dirty regions and chunk render storage before profiling proves a need.
 
-The current cell-aligned renderer is not a claim that every future visual pack must use the same autotiling algorithm. It is simply the first real consumer and preserves exact alignment with simulation cells.
+The current cell-aligned renderer is not a claim that every future visual pack must use the same autotiling algorithm. It is the first real consumer and preserves exact alignment with simulation cells.
+
+Normal view deliberately does not draw a full transparent upper floor. If an X-ray mode becomes useful for construction or debugging, it should remain an explicit mode and must not change input or simulation semantics.
 
 ## Deferred Movement decisions
 
@@ -216,7 +229,7 @@ A future queued gateway must explicitly preserve or redefine deterministic order
 
 ## Performance watch points
 
-Current code intentionally keeps simple sparse lookup paths and computes visual topology for visible cells on demand.
+Current code intentionally keeps simple sparse lookup paths and computes visual topology/slice state for visible cells on demand.
 
 Measure before changing representation:
 
@@ -226,7 +239,8 @@ Navigation local resolver throughput
 TransitionCost lookup throughput
 Pathfinder expansion cost
 active Movement/Scheduler scale
-procedural landscape frame cost
+procedural surface + horizontal-slice frame cost
+open-column lower-depth lookup cost
 ```
 
 Potential optimizations such as packed coordinates, chunk-local arrays, caches, dirty visual regions or specialized DOD storage become current only after a representative workload demonstrates a real bottleneck.
