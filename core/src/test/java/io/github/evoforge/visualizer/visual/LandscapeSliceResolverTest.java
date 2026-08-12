@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.visual;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
@@ -120,6 +121,32 @@ final class LandscapeSliceResolverTest {
         assertEquals(4, center.ceilingDistance());
         assertEquals(1, center.coverDepth());
         assertEquals(3, center.exposureDistance());
+    }
+
+    @Test
+    void zBandRetargetMatchesDedicatedAnalysis() {
+        SimulationRuntime runtime = caveRoom(true, 5);
+        LandscapeSliceResolver resolver = resolver(runtime);
+        LandscapeSliceResolver.Analysis band = resolver.analyzeBand(
+                -1, 4, 0, 4, 1, 2, 8, 4);
+
+        assertTrue(band.supportsStandingZ(-3));
+        assertTrue(band.supportsStandingZ(5));
+        assertFalse(band.supportsStandingZ(6));
+
+        for (int standingZ = -1; standingZ <= 5; standingZ++) {
+            LandscapeSliceResolver.Cell fromBand = band
+                    .atStandingZ(standingZ)
+                    .resolve(2, 2);
+            LandscapeSliceResolver.Cell dedicated = resolver
+                    .analyze(-1, 4, 0, 4, standingZ, 2, 8)
+                    .resolve(2, 2);
+            assertEquals(dedicated, fromBand);
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> band.atStandingZ(6));
     }
 
     @Test
