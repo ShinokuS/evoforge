@@ -24,7 +24,7 @@ SimulationTime
 SimulationStepper
 ```
 
-`SimulationView` now also exposes `TerrainExtentLookup`, a generic read-only `minZ/maxZ` fact about currently present terrain. This is simulation data, not presentation policy: it lets consumers know where terrain actually ends without guessing an arbitrary world height.
+`SimulationView` exposes `TerrainExtentLookup`, a generic read-only `minZ/maxZ` fact about currently present terrain, and `TerrainRevisionLookup`, a monotonic read-only terrain-state version. Neither is presentation policy: extents let consumers know where terrain actually ends, while the revision lets derived read caches prove that their source state has not changed.
 
 ## Selected Z is a horizontal cut
 
@@ -80,9 +80,10 @@ This is a presentation cue, not a lighting simulation.
 solid(x,y,z)
 opaque(x,y,z)
 min/max occupied Z
+revision()
 ```
 
-The current adapter, `TerrainVisibilityVolume`, treats authoritative terrain as solid and opaque.
+The current adapter, `TerrainVisibilityVolume`, treats authoritative terrain as solid and opaque and forwards the authoritative terrain revision. A future composite volume must expose a revision only when it can guarantee that all of its contributors are represented; a negative revision deliberately disables cache reuse instead of risking stale visibility.
 
 `LandscapeSliceResolver.Analysis` builds one bounded camera-local exposure field. It seeds air that is genuinely above the top opaque volume of its column, then performs a 6-neighbour flood/BFS through open volume.
 
@@ -225,19 +226,43 @@ Objects remain intentionally primitive current-Z debug markers. Their future art
 - deep open shaft whose floor is several elevations below;
 - slow/fast movers preserving authoritative 8-tick / 2-tick Movement behavior.
 
-Headless tests cover terrain extent lifecycle, horizontal-cut priority, the cheap current-surface query used by the perimeter, body/drop/cover/ceiling measurements, side-mouth exposure distance, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology and Movement timing.
+Headless tests cover terrain extent/revision lifecycle, horizontal-cut priority, the cheap current-surface query used by the perimeter, body/drop/cover/ceiling measurements, side-mouth exposure distance, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology and Movement timing.
 
 Manual acceptance should move through the relevant Z levels and verify that structure remains understandable without complete transparent upper floors.
 
 ## Performance boundary
 
-Exposure is computed once per rendered camera range, not independently for every tile. The BFS is deliberately bounded by the visual exposure horizon and the requested lower-depth range.
+Performance is treated as a development invariant rather than a release-only cleanup task: instrument first, then optimize demonstrated hot paths without changing simulation semantics.
 
-The active-Z perimeter uses direct current-surface membership checks only; it does not duplicate the exposure analysis.
+The first visualizer profiling pass found two concrete costs:
+
+- camera-local 3D exposure BFS was rebuilt every frame and represented each visited cell with `HashMap<Position, Integer>` / queue objects;
+- sparse coordinate reads created temporary key records on every terrain, geometry-override and cell-object lookup.
+
+The current implementation therefore:
+
+- stores exposure distance in a dense primitive `int[]` volume with an `int[]` BFS queue, eliminating per-node BFS objects;
+- keeps one padded `LandscapeSliceResolver.Analysis` around the visible camera range and reuses it while the camera remains inside that window;
+- invalidates that analysis when selected Z, lower-depth policy or the versioned visibility volume changes;
+- uses monotonic authoritative terrain revision for the current terrain-backed volume;
+- uses reusable non-stored coordinate probes for read-hot sparse-map lookups, so reads do not allocate a coordinate key each time;
+- keeps the active-Z perimeter on direct membership checks and never rebuilds exposure analysis for the outline.
+
+`LandscapeRenderer` emits a `VisualizerPerf` line approximately once per second with:
+
+```text
+fps
+visible cell count
+landscape average / maximum CPU time
+analysis average / maximum CPU time
+analysis cache hit / miss count
+```
+
+This telemetry is intentionally lightweight and stays available while the visualizer evolves. A regression should first be localized with these numbers before introducing chunks, dirty regions or wider caching.
 
 Current terrain extent is maintained incrementally by `TerrainSystem`; the visualizer does not invent an arbitrary maximum Z.
 
-The current adapter may scan the global terrain Z extent to find the top opaque cell for a column. If representative deep/sparse worlds show this to be expensive, optimize behind the existing volume boundary with a per-column top query or cached presentation data. Do not change visibility semantics merely to optimize representation.
+The current adapter still scans the occupied terrain Z extent to find the top opaque cell for a column when an exposure field is rebuilt. If representative deep/sparse worlds prove that scan significant in `analysis max`, optimize behind the existing volume boundary with a per-column top query or another measured representation. Do not change visibility semantics merely to optimize representation.
 
 ## Deferred presentation decisions
 
