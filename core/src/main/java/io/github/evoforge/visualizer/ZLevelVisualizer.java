@@ -50,6 +50,10 @@ public final class ZLevelVisualizer extends InputAdapter {
             new Color(0.12f, 0.16f, 0.14f, 1f);
     private static final Color GRID_DEBUG =
             new Color(0.42f, 0.48f, 0.44f, 1f);
+    private static final Color ACTIVE_SLICE_RIM =
+            new Color(0.82f, 0.85f, 0.69f, 1f);
+    private static final Color ACTIVE_SLICE_SHADOW =
+            new Color(0.12f, 0.14f, 0.11f, 1f);
     private static final Color RAMP_ARROW =
             new Color(1f, 0.88f, 0.28f, 1f);
     private static final Color OBJECT_EVEN =
@@ -154,6 +158,7 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         shapes.setProjectionMatrix(camera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
+        drawActiveSliceContour(range);
         drawObjects(range);
         shapes.end();
 
@@ -320,6 +325,105 @@ public final class ZLevelVisualizer extends InputAdapter {
                 MathUtils.ceil(camera.position.x + halfWidth) + 1,
                 MathUtils.floor(camera.position.y - halfHeight) - 1,
                 MathUtils.ceil(camera.position.y + halfHeight) + 1);
+    }
+
+    private void drawActiveSliceContour(
+            VisibleRange range) {
+
+        float pixel = worldUnitsPerPixel();
+        float shadowThickness = pixel * 1.25f;
+        float rimThickness = pixel;
+
+        for (int x = range.minX(); x <= range.maxX(); x++) {
+            for (int y = range.minY(); y <= range.maxY(); y++) {
+                if (!sliceResolver.isCurrentSurface(x, y, selectedZ)) {
+                    continue;
+                }
+
+                boolean north = !sliceResolver.isCurrentSurface(
+                        x, y + 1, selectedZ);
+                boolean east = !sliceResolver.isCurrentSurface(
+                        x + 1, y, selectedZ);
+                boolean south = !sliceResolver.isCurrentSurface(
+                        x, y - 1, selectedZ);
+                boolean west = !sliceResolver.isCurrentSurface(
+                        x - 1, y, selectedZ);
+
+                if (!north && !east && !south && !west) {
+                    continue;
+                }
+
+                shapes.setColor(ACTIVE_SLICE_SHADOW);
+                drawContourEdges(
+                        x,
+                        y,
+                        north,
+                        east,
+                        south,
+                        west,
+                        shadowThickness,
+                        true);
+
+                shapes.setColor(ACTIVE_SLICE_RIM);
+                drawContourEdges(
+                        x,
+                        y,
+                        north,
+                        east,
+                        south,
+                        west,
+                        rimThickness,
+                        false);
+            }
+        }
+    }
+
+    private void drawContourEdges(
+            int x,
+            int y,
+            boolean north,
+            boolean east,
+            boolean south,
+            boolean west,
+            float thickness,
+            boolean outside) {
+
+        if (north) {
+            shapes.rect(
+                    x,
+                    outside ? y + 1f : y + 1f - thickness,
+                    1f,
+                    thickness);
+        }
+        if (east) {
+            shapes.rect(
+                    outside ? x + 1f : x + 1f - thickness,
+                    y,
+                    thickness,
+                    1f);
+        }
+        if (south) {
+            shapes.rect(
+                    x,
+                    outside ? y - thickness : y,
+                    1f,
+                    thickness);
+        }
+        if (west) {
+            shapes.rect(
+                    outside ? x - thickness : x,
+                    y,
+                    thickness,
+                    1f);
+        }
+    }
+
+    private float worldUnitsPerPixel() {
+        int width = Math.max(1, Gdx.graphics.getWidth());
+        int height = Math.max(1, Gdx.graphics.getHeight());
+        float horizontal = camera.viewportWidth * camera.zoom / width;
+        float vertical = camera.viewportHeight * camera.zoom / height;
+        return Math.max(horizontal, vertical);
     }
 
     private void drawObjects(
