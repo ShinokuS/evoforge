@@ -14,36 +14,55 @@ final class VisualizerDemoWorldTest {
     void demoExposesRealRampTopologyOnAllFourBaseSides() {
         SimulationRuntime runtime = VisualizerDemoWorld.create();
 
-        assertRamp(runtime, 0, -5, 1, 0, -1, -1, 0, 1, 0);
-        assertRamp(runtime, 0, 5, 1, 0, 1, -1, 0, -1, 0);
-        assertRamp(runtime, -7, 0, 1, -1, 0, -1, 1, 0, 0);
-        assertRamp(runtime, 7, -4, 1, 1, 0, -1, -1, 0, 0);
+        assertRamp(runtime, 0, -6, 1, 0, -1, -1, 0, 1, 0);
+        assertRamp(runtime, 0, 6, 1, 0, 1, -1, 0, -1, 0);
+        assertRamp(runtime, -8, 0, 1, -1, 0, -1, 1, 0, 0);
+        assertRamp(runtime, 8, -3, 1, 1, 0, -1, -1, 0, 0);
     }
 
     @Test
     void demoContainsSuccessiveMountainRampElevations() {
         SimulationRuntime runtime = VisualizerDemoWorld.create();
 
-        assertRamp(runtime, 1, -3, 2, -1, 0, -1, 1, 0, 0);
-        assertRamp(runtime, 2, 2, 3, -1, 0, -1, 1, 0, 0);
-        assertRamp(runtime, 4, 2, 4, -1, 0, -1, 1, 0, 0);
+        assertRamp(runtime, 1, -4, 2, -1, 0, -1, 1, 0, 0);
+        assertRamp(runtime, 2, 3, 3, -1, 0, -1, 1, 0, 0);
+        assertRamp(runtime, 4, 3, 4, -1, 0, -1, 1, 0, 0);
     }
 
     @Test
-    void demoContainsCaveVoidAndDeepOpenShaft() {
+    void mountainCaveHasFloorWallsAndRealRoof() {
         SimulationRuntime runtime = VisualizerDemoWorld.create();
 
-        // Cave: mountain body at terrain Z=1 is absent while its floor at
-        // terrain Z=0 remains present.
         assertFalse(runtime.view().terrain().contains(3, 0, 1));
         assertTrue(runtime.view().terrain().contains(3, 0, 0));
+        assertTrue(runtime.view().terrain().contains(3, 0, 2));
         assertTrue(runtime.view().terrain().contains(2, 2, 1));
 
-        // Shaft: plateau floor and meadow floor are both absent; a much lower
-        // surface exists at terrain Z=-3 for lower-depth rendering.
+        // The mouth is open in the body layer but remains under mountain roof;
+        // exposure therefore comes horizontally from exterior air rather than
+        // from a fake presentation hole above the whole chamber.
+        assertFalse(runtime.view().terrain().contains(1, 0, 1));
+        assertTrue(runtime.view().terrain().contains(1, 0, 2));
+    }
+
+    @Test
+    void flatRoofCavernAndDeepShaftAreRealGeometry() {
+        SimulationRuntime runtime = VisualizerDemoWorld.create();
+
+        // Separate enclosed cavern under a flat cap.
+        assertTrue(runtime.view().terrain().contains(-12, 1, -1));
+        assertFalse(runtime.view().terrain().contains(-12, 1, 0));
+        assertFalse(runtime.view().terrain().contains(-12, 1, 1));
+        assertTrue(runtime.view().terrain().contains(-12, 1, 2));
+        assertFalse(runtime.view().terrain().contains(-11, 0, 2));
+
+        // Deep shaft: every intermediate layer is genuinely empty.
         assertFalse(runtime.view().terrain().contains(-4, 2, 0));
         assertFalse(runtime.view().terrain().contains(-4, 2, -1));
-        assertTrue(runtime.view().terrain().contains(-4, 2, -3));
+        assertFalse(runtime.view().terrain().contains(-4, 2, -2));
+        assertFalse(runtime.view().terrain().contains(-4, 2, -3));
+        assertFalse(runtime.view().terrain().contains(-4, 2, -4));
+        assertTrue(runtime.view().terrain().contains(-4, 2, -5));
     }
 
     @Test
