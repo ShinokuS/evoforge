@@ -207,7 +207,7 @@ F4             lower visibility depth: 0 / 1 / 4 / 8
 
 Click interaction always addresses `(x,y,selectedZ)`. Seeing a lower floor through a shaft does not silently change input Z.
 
-The cell inspector reports the slice role plus geometric context: body depth, drop depth, ceiling distance, cover depth and exposure distance where relevant.
+The status HUD includes current FPS. The cell inspector reports the slice role plus geometric context: body depth, drop depth, ceiling distance, cover depth and exposure distance where relevant.
 
 Objects remain intentionally primitive current-Z debug markers. Their future art/occlusion behavior should consume the same presentation context rather than teach the terrain resolver about object definitions.
 
@@ -259,6 +259,17 @@ analysis cache hit / miss count
 ```
 
 This telemetry is intentionally lightweight and stays available while the visualizer evolves. A regression should first be localized with these numbers before introducing chunks, dirty regions or wider caching.
+
+### Pixel-stable camera movement
+
+The procedural landscape uses `Nearest` filtering, so a continuously moving orthographic camera must not feed arbitrary sub-screen-pixel translations directly into rendering. At large zoom-out, that changes the nearest-sampling phase of the entire image and can look like frame stutter even when frame time is stable.
+
+`ZLevelVisualizer` therefore keeps two camera positions:
+
+- a continuous logical pan target updated by frame-time-independent WASD movement;
+- a render position snapped so the viewport edge advances in whole screen-pixel increments for the current zoom and window size.
+
+The logical target is never quantized, so input does not accumulate rounding error. Only presentation is pixel-aligned. `CameraPixelSnap` is pure/tested math and does not affect simulation coordinates, selection semantics or visibility caches.
 
 Current terrain extent is maintained incrementally by `TerrainSystem`; the visualizer does not invent an arbitrary maximum Z.
 
