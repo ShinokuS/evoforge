@@ -16,7 +16,7 @@ final class VisualizerDemoWorldTest {
 
         assertRamp(runtime, 0, -6, 1, 0, -1, -1, 0, 1, 0);
         assertRamp(runtime, 0, 6, 1, 0, 1, -1, 0, -1, 0);
-        assertRamp(runtime, -8, 0, 1, -1, 0, -1, 1, 0, 0);
+        assertRamp(runtime, -8, 4, 1, -1, 0, -1, 1, 0, 0);
         assertRamp(runtime, 8, -3, 1, 1, 0, -1, -1, 0, 0);
     }
 
