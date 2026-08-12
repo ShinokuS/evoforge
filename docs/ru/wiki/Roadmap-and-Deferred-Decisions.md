@@ -19,7 +19,7 @@ DONE  Timed adjacent Movement
 DONE  SimulationStepper + Scheduler process binding
 DONE  TransitionCost: terrain + Shape roles + grid length
 DONE  Minimal live Z-level Visualizer
-ACTIVE Procedural full-top-down landscape / Z readability
+ACTIVE Procedural full-top-down horizontal Z-slice readability
 NEXT  Occupancy
       Pathfinder
       observable Action completion/outcome
@@ -40,14 +40,24 @@ Canonical development presentation:
 full top-down
 logical simulation cell = 1 x 1
 native procedural visual cell = 16 x 16 pixels
-simulation topology -> procedural presentation rules -> generated atlas
+simulation topology -> horizontal slice semantics -> generated presentation
 ```
 
 Сгенерированный landscape существует только в presentation. Simulation не содержит pixels, palettes, sprite ids или rendering rules.
 
-Текущий procedural visual language покрывает grass/earth surface variation, cell-aligned edges/corners, читаемые по Z exposed faces и все четыре cardinal Ramp orientation. Acceptance scene содержит второй уровень высоты, чтобы renderer не мог случайно special-case один plateau height.
+Текущий Z language — это **горизонтальный срез**, а не isolated floor stack и не постоянно прозрачный multi-floor view:
 
-Реализованный контракт описан в [Z-level Visualizer и процедурный ландшафт](Visualizer.md).
+```text
+terrain на selected Z       -> solid body, пересекающий cut
+terrain на selected Z - 1   -> current supported surface
+иначе                       -> nearest visible lower surface через open space
+```
+
+Текущие debug depth options для lower context: `0 / 1 / 4`. Полные upper floors в normal view не ghost-ятся. Более высокая гора остаётся видимой на нижнем срезе потому, что её terrain body пересекает этот cut.
+
+Ramp presentation derived из единственного authoritative `RampShape`: normal slope на supported plane, directional cut art когда нижний horizontal slice пересекает Ramp body, и маленький presentation-only descent marker на upper landing.
+
+Acceptance scene теперь содержит четыре base Ramp directions, stacked mountain до standing `Z=4`, cave, deep shaft и несколько higher Ramp transitions. Реализованный контракт описан в [Z-level Visualizer и процедурный ландшафт](Visualizer.md).
 
 ## Ближайший milestone: Occupancy
 
@@ -140,19 +150,22 @@ pressure on chunk/region/load-state decisions
 
 Следующие вещи зафиксированы, но намеренно отсутствуют в текущем коде:
 
+- ceiling/roof/covered-state presentation после появления реальной simulation semantics;
+- explicit adjacent-layer X-ray/build mode;
 - дополнительные procedural materials: dirt, stone, sand, snow, water;
 - priority/layered transitions между несколькими terrain materials;
 - альтернативные procedural palettes или visual styles;
 - крупные anchored sprites для trees, creatures, buildings и equipment;
 - procedural character/object generation до появления первого gameplay consumer;
 - external или hand-authored visual packs за той же presentation boundary;
-- dual-grid / marching-squares resolver для будущего visual pack, которому он действительно понадобится;
-- несколько contextual lower Z levels, более сильный Z-fog, roofs и cutaway modes;
+- dual-grid / marching-squares resolver для будущего visual language, которому он действительно понадобится;
 - более богатые shadow/compositing passes;
 - generated-atlas/export tooling для отдельного art review;
 - visual tile caches, dirty regions и chunk render storage до profiling evidence.
 
-Текущий cell-aligned renderer не означает, что любой будущий visual pack обязан использовать тот же autotiling algorithm. Это лишь первый реальный consumer, сохраняющий точное совпадение с simulation cells.
+Текущий cell-aligned renderer не означает, что любой будущий visual pack обязан использовать тот же autotiling algorithm. Это первый реальный consumer, сохраняющий точное совпадение с simulation cells.
+
+Normal view намеренно не рисует полный прозрачный upper floor. Если X-ray mode станет полезен для construction/debugging, он должен оставаться explicit mode и не менять input или simulation semantics.
 
 ## Deferred Movement decisions
 
@@ -216,7 +229,7 @@ Deferred:
 
 ## Performance watch points
 
-Текущий код намеренно сохраняет простые sparse lookup paths и вычисляет visual topology для visible cells по требованию.
+Текущий код намеренно сохраняет простые sparse lookup paths и вычисляет visual topology/slice state для visible cells по требованию.
 
 До изменения representation нужно измерить:
 
@@ -226,7 +239,8 @@ Navigation local resolver throughput
 TransitionCost lookup throughput
 Pathfinder expansion cost
 active Movement/Scheduler scale
-procedural landscape frame cost
+procedural surface + horizontal-slice frame cost
+open-column lower-depth lookup cost
 ```
 
 Packed coordinates, chunk-local arrays, caches, dirty visual regions или specialized DOD storage становятся текущими только после representative workload, который показывает реальный bottleneck.
