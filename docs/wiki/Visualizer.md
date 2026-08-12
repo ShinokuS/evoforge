@@ -163,7 +163,7 @@ logical simulation cell = 1 x 1
 native procedural cell   = 16 x 16 pixels
 ```
 
-Generated textures use `Nearest` filtering and duplicate padding. No source PNG, JSON descriptor, TexturePacker step or third-party asset installation is required.
+Generated textures use duplicate padding. Normal/near views use `Nearest` filtering to preserve the pixel-art language; far zoom (`zoom >= 2.5`) switches the same generated textures to `Linear` filtering to reduce whole-scene sampling shimmer during continuous camera movement. No source PNG, JSON descriptor, TexturePacker step or third-party asset installation is required.
 
 ### Surface art
 
@@ -187,9 +187,22 @@ The currently selected standing surface receives a presentation-only perimeter c
 
 Only the **outer cardinal boundary** of `CURRENT_SURFACE` is outlined. Adjacent cells that are both on the active surface produce no internal line, so this is not another grid.
 
-The cue uses a pale low-saturation rim on the active side plus a narrow dark line just outside it. Both widths are derived from camera world-units-per-screen-pixel, so the contour remains approximately one screen pixel across zoom levels.
+The cue uses a bright pale rim on the active side plus a dark outer backing. Width is derived from camera world-units-per-screen-pixel, so the current implementation stays approximately `2.25` screen pixels for the bright rim and `4` screen pixels for the outer backing across zoom levels. This deliberately favors immediate Z readability over a hairline aesthetic.
 
 `LandscapeSliceResolver.isCurrentSurface(...)` owns the cheap structural query used by the overlay. The contour does not rebuild exposure BFS and introduces no new simulation state or terrain type.
+
+## Diagnostic overlays
+
+`F2` Navigation transitions and `F3` Ramp directions are deliberately stronger than ordinary world art because they are debugging instruments, not environmental decoration.
+
+Both overlays are rendered as filled double-stroke geometry rather than relying on platform-dependent OpenGL line width:
+
+- dark backing around each segment for separation from any terrain color;
+- approximately `2.75` screen-pixel bright stroke over a `5` screen-pixel backing;
+- filled arrow heads that scale with the same world-space direction geometry;
+- high-saturation diagnostic colors: cyan for flat transitions, green for upward transitions, orange for downward transitions and warm yellow for Ramp direction.
+
+The thickness is derived from screen-pixel scale, so diagnostics remain readable at both close and far zoom. These overlays never modify Navigation or Shape semantics.
 
 ## Controls and inspector
 
@@ -207,7 +220,7 @@ F4             lower visibility depth: 0 / 1 / 4 / 8
 
 Click interaction always addresses `(x,y,selectedZ)`. Seeing a lower floor through a shaft does not silently change input Z.
 
-The status HUD includes current FPS. The cell inspector reports the slice role plus geometric context: body depth, drop depth, ceiling distance, cover depth and exposure distance where relevant.
+The status HUD includes current FPS, zoom and active texture sampling mode. The cell inspector reports the slice role plus geometric context: body depth, drop depth, ceiling distance, cover depth and exposure distance where relevant.
 
 Objects remain intentionally primitive current-Z debug markers. Their future art/occlusion behavior should consume the same presentation context rather than teach the terrain resolver about object definitions.
 
@@ -234,19 +247,24 @@ Manual acceptance should move through the relevant Z levels and verify that stru
 
 Performance is treated as a development invariant rather than a release-only cleanup task: instrument first, then optimize demonstrated hot paths without changing simulation semantics.
 
-The first visualizer profiling pass found two concrete costs:
+The first visualizer profiling pass found concrete costs:
 
-- camera-local 3D exposure BFS was rebuilt every frame and represented each visited cell with `HashMap<Position, Integer>` / queue objects;
-- sparse coordinate reads created temporary key records on every terrain, geometry-override and cell-object lookup.
+- camera-local 3D exposure BFS was rebuilt too frequently and represented visited cells with `HashMap<Position, Integer>` / queue objects;
+- sparse coordinate reads created temporary key records on terrain, geometry-override and cell-object lookup;
+- fixed world-cell cache padding caused far zoom to leave the cached window more frequently because camera world-space velocity scales with zoom;
+- changing selected Z forced a fresh exposure analysis even when the neighboring slice occupied the same camera volume.
 
 The current implementation therefore:
 
 - stores exposure distance in a dense primitive `int[]` volume with an `int[]` BFS queue, eliminating per-node BFS objects;
-- keeps one padded `LandscapeSliceResolver.Analysis` around the visible camera range and reuses it while the camera remains inside that window;
-- invalidates that analysis when selected Z, lower-depth policy or the versioned visibility volume changes;
-- uses monotonic authoritative terrain revision for the current terrain-backed volume;
-- uses reusable non-stored coordinate probes for read-hot sparse-map lookups, so reads do not allocate a coordinate key each time;
-- keeps the active-Z perimeter on direct membership checks and never rebuilds exposure analysis for the outline.
+- uses reusable non-stored coordinate probes for read-hot sparse-map lookups;
+- scales XY analysis padding with visible viewport span rather than a fixed number of world cells;
+- keeps a small LRU of padded analysis windows;
+- builds each cached exposure field for a standing-Z band (`±4` around the build Z), so nearby `PageUp/PageDown` changes retarget the same field instead of rebuilding BFS;
+- invalidates derived caches from authoritative visibility revision, lower-depth policy, supported Z band and camera containment;
+- keeps the active-Z perimeter and diagnostic overlays on cheap direct reads and never rebuilds exposure analysis for them.
+
+Tests compare a Z-band-retargeted analysis against independently built per-Z analyses to protect visibility semantics while sharing the exposure field.
 
 `LandscapeRenderer` emits a `VisualizerPerf` line approximately once per second with:
 
@@ -256,20 +274,23 @@ visible cell count
 landscape average / maximum CPU time
 analysis average / maximum CPU time
 analysis cache hit / miss count
+current XY padding
+cached analysis count
+Z-band radius
 ```
 
 This telemetry is intentionally lightweight and stays available while the visualizer evolves. A regression should first be localized with these numbers before introducing chunks, dirty regions or wider caching.
 
-### Pixel-stable camera movement
+### Continuous camera and far-zoom sampling
 
-The procedural landscape uses `Nearest` filtering, so a continuously moving orthographic camera must not feed arbitrary sub-screen-pixel translations directly into rendering. At large zoom-out, that changes the nearest-sampling phase of the entire image and can look like frame stutter even when frame time is stable.
+WASD drives one continuous frame-time-independent orthographic camera. The attempted screen-pixel camera snapping was removed after manual testing showed that quantizing the render position made far-zoom movement visibly more stepped.
 
-`ZLevelVisualizer` therefore keeps two camera positions:
+Instead, sampling policy handles the pixel-art tradeoff:
 
-- a continuous logical pan target updated by frame-time-independent WASD movement;
-- a render position snapped so the viewport edge advances in whole screen-pixel increments for the current zoom and window size.
+- near/normal zoom uses `Nearest` for crisp native pixel art;
+- far zoom (`>= 2.5`) uses `Linear` to reduce nearest-sampling shimmer while the camera remains fully continuous.
 
-The logical target is never quantized, so input does not accumulate rounding error. Only presentation is pixel-aligned. `CameraPixelSnap` is pure/tested math and does not affect simulation coordinates, selection semantics or visibility caches.
+Sampling is presentation-only. It does not change simulation coordinates, selection, visibility, cache truth or movement semantics.
 
 Current terrain extent is maintained incrementally by `TerrainSystem`; the visualizer does not invent an arbitrary maximum Z.
 
