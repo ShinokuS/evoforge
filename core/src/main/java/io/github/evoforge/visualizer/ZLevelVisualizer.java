@@ -21,19 +21,26 @@ import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
+import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
+import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
 /**
- * Full top-down debug presentation of one authoritative standing/navigation Z
- * plane plus optional lower context. Landscape art is generated locally from
- * presentation rules; the renderer still owns no simulation mutation capability.
+ * Full top-down debug presentation of an authoritative horizontal Z slice.
+ *
+ * <p>The selected standing plane is not an isolated floor. Terrain occupying
+ * that Z is rendered as solid cut material, support below becomes the current
+ * surface, and deeper surfaces are visible only through open vertical columns.
+ * Presentation owns no simulation mutation capability.</p>
  */
 public final class ZLevelVisualizer extends InputAdapter {
 
-    private static final float BASE_VIEW_WIDTH = 24f;
+    private static final float BASE_VIEW_WIDTH = 28f;
     private static final float PAN_SPEED = 8f;
     private static final float MIN_ZOOM = 0.25f;
     private static final float MAX_ZOOM = 4f;
+
+    private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4};
 
     private static final Color BACKGROUND =
             new Color(0.045f, 0.055f, 0.065f, 1f);
@@ -72,13 +79,16 @@ public final class ZLevelVisualizer extends InputAdapter {
     private final Vector3 pick = new Vector3();
     private final ProceduralLandscapePack landscapePack =
             new ProceduralLandscapePack();
+    private final ProceduralSliceArt sliceArt =
+            new ProceduralSliceArt();
+    private final LandscapeSliceResolver sliceResolver;
     private final LandscapeRenderer landscapeRenderer;
 
     private int selectedZ = 1;
     private int gridMode = 1;
+    private int lowerDepthIndex = 2;
     private boolean showTransitions;
     private boolean showShapeDirections;
-    private boolean showLowerContext = true;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
@@ -101,7 +111,12 @@ public final class ZLevelVisualizer extends InputAdapter {
         this.view = view;
         this.simulationTime = simulationTime;
         time = new VisualizerTimeController(stepper, 0.25f);
-        landscapeRenderer = new LandscapeRenderer(view, landscapePack);
+        sliceResolver = new LandscapeSliceResolver(view);
+        landscapeRenderer = new LandscapeRenderer(
+                view,
+                landscapePack,
+                sliceArt,
+                sliceResolver);
 
         camera.position.set(0f, 0f, 0f);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -132,7 +147,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 range.minY(),
                 range.maxY(),
                 selectedZ,
-                showLowerContext);
+                lowerDepth());
         batch.end();
 
         shapes.setProjectionMatrix(camera.combined);
@@ -143,6 +158,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawGrid(range);
         if (showShapeDirections) {
+            drawRampDirections(range, selectedZ - 1);
             drawRampDirections(range, selectedZ);
         }
         drawCellSelection();
@@ -180,6 +196,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         if (Gdx.input.getInputProcessor() == this) {
             Gdx.input.setInputProcessor(null);
         }
+        sliceArt.dispose();
         landscapePack.dispose();
         shapes.dispose();
         batch.dispose();
@@ -224,7 +241,8 @@ public final class ZLevelVisualizer extends InputAdapter {
                 return true;
             }
             case Input.Keys.F4 -> {
-                showLowerContext = !showLowerContext;
+                lowerDepthIndex = (lowerDepthIndex + 1)
+                        % LOWER_DEPTH_OPTIONS.length;
                 return true;
             }
             default -> {
@@ -364,9 +382,8 @@ public final class ZLevelVisualizer extends InputAdapter {
 
     private void drawRampDirections(
             VisibleRange range,
-            int standingZ) {
+            int terrainZ) {
 
-        int terrainZ = standingZ - 1;
         shapes.setColor(RAMP_ARROW);
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
@@ -493,13 +510,13 @@ public final class ZLevelVisualizer extends InputAdapter {
         int height = Gdx.graphics.getHeight();
 
         float margin = 12f;
-        float statusWidth = Math.min(610f, width - margin * 2f);
+        float statusWidth = Math.min(630f, width - margin * 2f);
         float statusHeight = 104f;
         float statusX = margin;
         float statusY = height - margin - statusHeight;
 
         boolean hasInspector = selectedCell != null;
-        float inspectorWidth = Math.min(340f, width - margin * 2f);
+        float inspectorWidth = Math.min(360f, width - margin * 2f);
         float inspectorHeight = selectedObject == null ? 112f : 170f;
         float inspectorX = width - margin - inspectorWidth;
         float inspectorY = height - margin - inspectorHeight;
@@ -548,7 +565,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 top);
         font.draw(
                 batch,
-                "Space run/pause | N step | PgUp/PgDn Z",
+                "Space run/pause | N step | PgUp/PgDn horizontal slice",
                 textX,
                 top - 22f);
         font.draw(
@@ -559,8 +576,8 @@ public final class ZLevelVisualizer extends InputAdapter {
         font.draw(
                 batch,
                 "F2 transitions " + onOff(showTransitions)
-                        + " | F3 shapes " + onOff(showShapeDirections)
-                        + " | F4 lower " + onOff(showLowerContext),
+                        + " | F3 ramps " + onOff(showShapeDirections)
+                        + " | F4 lower depth " + lowerDepth(),
                 textX,
                 top - 66f);
 
@@ -587,15 +604,11 @@ public final class ZLevelVisualizer extends InputAdapter {
             float x,
             float top) {
 
-        int terrainZ = selectedCell.z() - 1;
-        boolean terrain = view.terrain().contains(
+        LandscapeSliceResolver.Cell slice = sliceResolver.resolve(
                 selectedCell.x(),
                 selectedCell.y(),
-                terrainZ);
-        Shape shape = view.geometry().find(
-                selectedCell.x(),
-                selectedCell.y(),
-                terrainZ);
+                selectedCell.z(),
+                lowerDepth());
         int transitions = view.navigation().transitions(
                 selectedCell.x(),
                 selectedCell.y(),
@@ -610,12 +623,12 @@ public final class ZLevelVisualizer extends InputAdapter {
                 top);
         font.draw(
                 batch,
-                "support terrain: " + (terrain ? "present" : "empty"),
+                "slice: " + sliceLabel(slice),
                 x,
                 top - 22f);
         font.draw(
                 batch,
-                "shape: " + shapeLabel(shape),
+                "shape: " + shapeLabel(slice.shape()),
                 x,
                 top - 44f);
         font.draw(
@@ -651,6 +664,18 @@ public final class ZLevelVisualizer extends InputAdapter {
                 top - 140f);
     }
 
+    private static String sliceLabel(
+            LandscapeSliceResolver.Cell cell) {
+
+        return switch (cell.kind()) {
+            case SOLID_BODY -> "SOLID BODY terrain Z=" + cell.terrainZ();
+            case CURRENT_SURFACE -> "SURFACE terrain Z=" + cell.terrainZ();
+            case LOWER_SURFACE -> "LOWER depth " + cell.lowerDepth()
+                    + " terrain Z=" + cell.terrainZ();
+            case EMPTY -> "EMPTY";
+        };
+    }
+
     private static String shapeLabel(
             Shape shape) {
 
@@ -675,6 +700,10 @@ public final class ZLevelVisualizer extends InputAdapter {
             case 1 -> "SUBTLE";
             default -> "DEBUG";
         };
+    }
+
+    private int lowerDepth() {
+        return LOWER_DEPTH_OPTIONS[lowerDepthIndex];
     }
 
     private static String onOff(
