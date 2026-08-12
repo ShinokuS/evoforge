@@ -76,6 +76,16 @@ public final class RampShape
                         rampToLower);
     }
 
+    /** Cardinal horizontal direction in which this ramp rises. */
+    public int riseX() {
+        return riseX;
+    }
+
+    /** Cardinal horizontal direction in which this ramp rises. */
+    public int riseY() {
+        return riseY;
+    }
+
     @Override
     public long transitionPorts(
             int relativeX,
