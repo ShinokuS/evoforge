@@ -3,7 +3,6 @@ package io.github.evoforge.visualizer.visual;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 
 /**
  * Generates the canonical early EvoForge landscape tileset in memory.
@@ -66,10 +65,11 @@ public final class ProceduralLandscapePack {
     }
 
     public TextureRegion ramp(
-            RampShape shape,
+            int riseX,
+            int riseY,
             int variant) {
 
-        return ramps[rampDirection(shape)]
+        return ramps[rampDirection(riseX, riseY)]
                 [Math.floorMod(variant, SURFACE_VARIANTS)];
     }
 
@@ -564,21 +564,23 @@ public final class ProceduralLandscapePack {
     }
 
     private static int rampDirection(
-            RampShape shape) {
+            int riseX,
+            int riseY) {
 
-        if (shape == RampShape.POSITIVE_Y) {
+        if (riseX == 0 && riseY == 1) {
             return 0;
         }
-        if (shape == RampShape.POSITIVE_X) {
+        if (riseX == 1 && riseY == 0) {
             return 1;
         }
-        if (shape == RampShape.NEGATIVE_Y) {
+        if (riseX == 0 && riseY == -1) {
             return 2;
         }
-        if (shape == RampShape.NEGATIVE_X) {
+        if (riseX == -1 && riseY == 0) {
             return 3;
         }
-        throw new IllegalArgumentException("unsupported RampShape: " + shape);
+        throw new IllegalArgumentException(
+                "unsupported ramp rise vector " + riseX + "," + riseY);
     }
 
     private static void bleedPadding(
