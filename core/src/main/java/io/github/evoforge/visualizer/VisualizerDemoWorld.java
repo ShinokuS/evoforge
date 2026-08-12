@@ -112,7 +112,10 @@ public final class VisualizerDemoWorld {
         placeRamp(assembly, ground, 0, -5, 0, RampShape.POSITIVE_Y);
         placeRamp(assembly, ground, 0, 5, 0, RampShape.NEGATIVE_Y);
         placeRamp(assembly, ground, -7, 0, 0, RampShape.POSITIVE_X);
-        placeRamp(assembly, ground, 7, 0, 0, RampShape.NEGATIVE_X);
+
+        // Keep the east-side -X sample away from the mountain body so its
+        // upper landing remains a real free standing-Z=1 surface.
+        placeRamp(assembly, ground, 7, -4, 0, RampShape.NEGATIVE_X);
     }
 
     private static void buildMountainWithCave(
