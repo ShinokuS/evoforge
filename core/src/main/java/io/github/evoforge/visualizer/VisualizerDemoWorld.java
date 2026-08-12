@@ -9,7 +9,7 @@ import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
-/** Builds the deterministic Z-slice stress scene used by the visualizer. */
+/** Builds the deterministic Z/cave torture scene used by the visualizer. */
 public final class VisualizerDemoWorld {
 
     private static final int SHAFT_X = -4;
@@ -34,8 +34,8 @@ public final class VisualizerDemoWorld {
         buildLowerMeadowAndDeepShaft(assembly, ground);
         buildBasePlateau(assembly, ground);
         buildBaseRamps(assembly, ground);
-        buildMountainWithCave(assembly, ground);
-        buildHigherTiersAndRampChain(assembly, ground);
+        buildMountainCaveAndRampChain(assembly, ground);
+        buildFlatRoofCavern(assembly, ground);
 
         ObjectId slow = assembly.createObject(slowWalker);
         ObjectId fast = assembly.createObject(fastWalker);
@@ -66,8 +66,8 @@ public final class VisualizerDemoWorld {
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        for (int x = -14; x <= 14; x++) {
-            for (int y = -10; y <= 10; y++) {
+        for (int x = -16; x <= 16; x++) {
+            for (int y = -11; y <= 11; y++) {
                 if (x == SHAFT_X && y == SHAFT_Y) {
                     continue;
                 }
@@ -75,31 +75,25 @@ public final class VisualizerDemoWorld {
             }
         }
 
-        // The column above this floor is deliberately empty at Z=-2 and Z=-1.
-        // With the plateau floor also absent, higher selected slices can see
-        // several elevations down through one real open shaft.
-        assembly.placeTerrain(SHAFT_X, SHAFT_Y, -3, ground);
+        // Several genuinely empty vertical cells end at a much lower floor.
+        assembly.placeTerrain(SHAFT_X, SHAFT_Y, -5, ground);
     }
 
     private static void buildBasePlateau(
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        for (int x = -6; x <= 6; x++) {
-            for (int y = -4; y <= 4; y++) {
+        for (int x = -7; x <= 7; x++) {
+            for (int y = -5; y <= 5; y++) {
                 if (x == SHAFT_X && y == SHAFT_Y) {
                     continue;
                 }
-
-                // Irregular north-east corner exercises inner/outer autotile
-                // combinations instead of presenting only rectangles.
-                if (y == 4 && x >= 4) {
+                if (y == 5 && x >= 5) {
                     continue;
                 }
-                if (x == 6 && y >= 3) {
+                if (x == 7 && y >= 4) {
                     continue;
                 }
-
                 assembly.placeTerrain(x, y, 0, ground);
             }
         }
@@ -109,37 +103,56 @@ public final class VisualizerDemoWorld {
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        placeRamp(assembly, ground, 0, -5, 0, RampShape.POSITIVE_Y);
-        placeRamp(assembly, ground, 0, 5, 0, RampShape.NEGATIVE_Y);
-        placeRamp(assembly, ground, -7, 0, 0, RampShape.POSITIVE_X);
-
-        // Keep the east-side -X sample away from the mountain body so its
-        // upper landing remains a real free standing-Z=1 surface.
-        placeRamp(assembly, ground, 7, -4, 0, RampShape.NEGATIVE_X);
+        placeRamp(assembly, ground, 0, -6, 0, RampShape.POSITIVE_Y);
+        placeRamp(assembly, ground, 0, 6, 0, RampShape.NEGATIVE_Y);
+        placeRamp(assembly, ground, -8, 0, 0, RampShape.POSITIVE_X);
+        placeRamp(assembly, ground, 8, -3, 0, RampShape.NEGATIVE_X);
     }
 
-    private static void buildMountainWithCave(
+    private static void buildMountainCaveAndRampChain(
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        // Terrain at Z=1 becomes solid mountain body when the selected
-        // standing slice is Z=1, and becomes its walkable top at Z=2.
+        // Mountain body at terrain Z=1. Missing cells form a west-facing mouth
+        // and chamber; the base plateau at terrain Z=0 remains the cave floor.
         for (int x = 1; x <= 6; x++) {
-            for (int y = -3; y <= 3; y++) {
-                if (isCaveVoid(x, y)) {
+            for (int y = -4; y <= 4; y++) {
+                if (isMountainCaveAir(x, y)) {
                     continue;
                 }
                 assembly.placeTerrain(x, y, 1, ground);
             }
         }
 
-        // West-facing entrance plus a chamber are simply absent body cells at
-        // Z=1. The existing plateau terrain at Z=0 remains the cave floor.
-        // One Ramp on the south-west shoulder reaches the mountain top.
-        assembly.setShape(1, -3, 1, RampShape.POSITIVE_X);
+        // Real roof above the chamber. Looking from higher slices therefore
+        // sees mountain mass, not a magically illuminated cave interior.
+        for (int x = 1; x <= 5; x++) {
+            for (int y = -1; y <= 1; y++) {
+                assembly.placeTerrain(x, y, 2, ground);
+            }
+        }
+
+        // First local ascent: base plateau standing Z=1 -> mountain Z=2.
+        assembly.setShape(1, -4, 1, RampShape.POSITIVE_X);
+
+        // Higher shelf and two more local ramps create a multi-Z climb without
+        // inventing a long-slope mechanic.
+        for (int x = 3; x <= 6; x++) {
+            for (int y = 2; y <= 4; y++) {
+                assembly.placeTerrain(x, y, 2, ground);
+            }
+        }
+        placeRamp(assembly, ground, 2, 3, 2, RampShape.POSITIVE_X);
+
+        for (int x = 5; x <= 6; x++) {
+            for (int y = 2; y <= 4; y++) {
+                assembly.placeTerrain(x, y, 3, ground);
+            }
+        }
+        placeRamp(assembly, ground, 4, 3, 3, RampShape.POSITIVE_X);
     }
 
-    private static boolean isCaveVoid(
+    private static boolean isMountainCaveAir(
             int x,
             int y) {
 
@@ -149,31 +162,41 @@ public final class VisualizerDemoWorld {
         return x >= 2 && x <= 5 && y >= -1 && y <= 1;
     }
 
-    private static void buildHigherTiersAndRampChain(
+    private static void buildFlatRoofCavern(
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        // Third standing elevation. Part of this footprint lies over the cave,
-        // so switching slices demonstrates a roof without ghosting upper floors.
-        for (int x = 3; x <= 6; x++) {
-            for (int y = 0; y <= 3; y++) {
-                assembly.placeTerrain(x, y, 2, ground);
+        // Separate cave under a deliberately flat cap on the west side. The
+        // chamber floor is the lower meadow (terrain Z=-1), walls occupy Z=0/1,
+        // and the flat roof lives at Z=2. One missing roof cell is an actual
+        // vertical opening rather than an X-ray presentation exception.
+        int minX = -14;
+        int maxX = -9;
+        int minY = -4;
+        int maxY = 3;
+        int openingX = -11;
+        int openingY = 0;
+
+        for (int z = 0; z <= 1; z++) {
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = minY; y <= maxY; y++) {
+                    if (x != minX && x != maxX
+                            && y != minY && y != maxY) {
+                        continue;
+                    }
+                    assembly.placeTerrain(x, y, z, ground);
+                }
             }
         }
 
-        // Z=2 -> Z=3 transition on the west shoulder of the third tier.
-        placeRamp(assembly, ground, 2, 2, 2, RampShape.POSITIVE_X);
-
-        // Small summit body at terrain Z=3. The ramp at (4,2,3) follows the
-        // previous +X ascent and proves that successive local ramps can form a
-        // longer mountain climb without a special long-slope mechanic.
-        assembly.placeTerrain(5, 1, 3, ground);
-        assembly.placeTerrain(6, 1, 3, ground);
-        assembly.placeTerrain(5, 2, 3, ground);
-        assembly.placeTerrain(6, 2, 3, ground);
-        assembly.placeTerrain(5, 3, 3, ground);
-        assembly.placeTerrain(6, 3, 3, ground);
-        placeRamp(assembly, ground, 4, 2, 3, RampShape.POSITIVE_X);
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                if (x == openingX && y == openingY) {
+                    continue;
+                }
+                assembly.placeTerrain(x, y, 2, ground);
+            }
+        }
     }
 
     private static void placeRamp(
