@@ -1,114 +1,51 @@
 package io.github.evoforge.visualizer;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
-import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Matrix4;
-import com.badlogic.gdx.math.Vector3;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationStepper;
 import io.github.evoforge.simulation.time.SimulationTime;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
-import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.object.WorldObject;
+import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
+import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
+import io.github.evoforge.visualizer.render.VisualizerHudRenderer;
+import io.github.evoforge.visualizer.render.VisualizerOverlayRenderer;
 import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
 /**
- * Full top-down debug presentation of an authoritative horizontal Z slice.
+ * Orchestrates the debug presentation of the authoritative simulation view.
  *
- * <p>Visibility is derived from world volume rather than absolute Z labels:
- * solid mass intersects the cut, open surfaces remain bright when exposed,
- * covered cave space darkens with cover/exposure distance, and lower surfaces
- * remain visible through genuinely open drops. Presentation owns no simulation
- * mutation capability.</p>
+ * <p>Camera, input, presentation state, world overlays and HUD each own their
+ * existing responsibility. This class only coordinates their lifecycle and
+ * render order; simulation mutation remains outside the presentation layer.</p>
  */
-public final class ZLevelVisualizer extends InputAdapter {
-
-    private static final float BASE_VIEW_WIDTH = 28f;
-    private static final float PAN_SPEED = 8f;
-    private static final float MIN_ZOOM = 0.25f;
-    private static final float MAX_ZOOM = 4f;
-    private static final float FAR_ZOOM_SMOOTH_SAMPLING = 2.5f;
-
-    private static final float ACTIVE_SLICE_SHADOW_PIXELS = 4.0f;
-    private static final float ACTIVE_SLICE_RIM_PIXELS = 2.25f;
-    private static final float DIAGNOSTIC_SHADOW_PIXELS = 5.0f;
-    private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
-
-    private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4, 8};
-    private static final int INSPECT_EXPOSURE_DISTANCE = 12;
+public final class ZLevelVisualizer {
 
     private static final Color BACKGROUND =
             new Color(0.045f, 0.055f, 0.065f, 1f);
-    private static final Color GRID_SUBTLE =
-            new Color(0.12f, 0.16f, 0.14f, 1f);
-    private static final Color GRID_DEBUG =
-            new Color(0.42f, 0.48f, 0.44f, 1f);
-    private static final Color ACTIVE_SLICE_RIM =
-            new Color(0.96f, 0.98f, 0.72f, 1f);
-    private static final Color ACTIVE_SLICE_SHADOW =
-            new Color(0.025f, 0.035f, 0.028f, 0.92f);
-    private static final Color DIAGNOSTIC_SHADOW =
-            new Color(0.02f, 0.025f, 0.022f, 0.94f);
-    private static final Color RAMP_ARROW =
-            new Color(1f, 0.78f, 0.08f, 1f);
-    private static final Color OBJECT_EVEN =
-            new Color(0.30f, 0.78f, 0.94f, 1f);
-    private static final Color OBJECT_ODD =
-            new Color(0.90f, 0.44f, 0.56f, 1f);
-    private static final Color SELECTED =
-            new Color(1f, 0.93f, 0.34f, 1f);
-    private static final Color TRANSITION_FLAT =
-            new Color(0.10f, 1f, 0.92f, 1f);
-    private static final Color TRANSITION_UP =
-            new Color(0.52f, 1f, 0.18f, 1f);
-    private static final Color TRANSITION_DOWN =
-            new Color(1f, 0.38f, 0.10f, 1f);
-    private static final Color PANEL =
-            new Color(0.035f, 0.045f, 0.052f, 0.96f);
-    private static final Color PANEL_BORDER =
-            new Color(0.24f, 0.30f, 0.31f, 1f);
 
-    private final SimulationView view;
-    private final SimulationTime simulationTime;
     private final VisualizerTimeController time;
+    private final VisualizerState state = new VisualizerState();
+    private final VisualizerCamera camera = new VisualizerCamera();
+    private final VisualizerInputController input;
 
-    private final OrthographicCamera camera = new OrthographicCamera();
-    private final ShapeRenderer shapes = new ShapeRenderer();
-    private final SpriteBatch batch = new SpriteBatch();
-    private final BitmapFont font = new BitmapFont();
-    private final Matrix4 hudProjection = new Matrix4();
-    private final Vector3 pick = new Vector3();
+    private final SpriteBatch landscapeBatch = new SpriteBatch();
     private final ProceduralLandscapePack landscapePack =
             new ProceduralLandscapePack();
     private final ProceduralSliceArt sliceArt =
             new ProceduralSliceArt();
     private final LandscapeSliceResolver sliceResolver;
+    private final ShapePresentationRegistry shapePresentations;
     private final LandscapeRenderer landscapeRenderer;
+    private final VisualizerOverlayRenderer overlayRenderer;
+    private final VisualizerHudRenderer hudRenderer;
 
-    private float cameraTargetX;
-    private float cameraTargetY;
-    private int selectedZ = 1;
-    private int gridMode = 1;
-    private int lowerDepthIndex = 3;
-    private boolean showTransitions;
-    private boolean showShapeDirections;
     private boolean smoothLandscapeSampling;
-    private CellSelection selectedCell;
-    private ObjectId selectedObject;
 
     public ZLevelVisualizer(
             SimulationView view,
@@ -126,28 +63,42 @@ public final class ZLevelVisualizer extends InputAdapter {
             throw new IllegalArgumentException("stepper must not be null");
         }
 
-        this.view = view;
-        this.simulationTime = simulationTime;
         time = new VisualizerTimeController(stepper, 0.25f);
+        input = new VisualizerInputController(view, state, camera, time);
         sliceResolver = new LandscapeSliceResolver(view);
+        shapePresentations = ProceduralShapePresentations.create(
+                landscapePack,
+                sliceArt);
         landscapeRenderer = new LandscapeRenderer(
                 view,
-                landscapePack,
-                sliceArt,
+                shapePresentations,
                 sliceResolver);
+        overlayRenderer = new VisualizerOverlayRenderer(
+                view,
+                state,
+                camera,
+                sliceResolver,
+                shapePresentations);
+        hudRenderer = new VisualizerHudRenderer(
+                view,
+                simulationTime,
+                time,
+                state,
+                camera,
+                sliceResolver,
+                shapePresentations);
 
-        cameraTargetX = 0f;
-        cameraTargetY = 0f;
-        camera.position.set(0f, 0f, 0f);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         updateLandscapeSampling();
-        Gdx.input.setInputProcessor(this);
+        Gdx.input.setInputProcessor(input);
     }
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
-        updateCameraTarget(delta);
+        input.update(delta);
         time.update(delta);
+        camera.update();
+        updateLandscapeSampling();
 
         Gdx.gl.glClearColor(
                 BACKGROUND.r,
@@ -156,189 +107,45 @@ public final class ZLevelVisualizer extends InputAdapter {
                 BACKGROUND.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        camera.position.set(cameraTargetX, cameraTargetY, 0f);
-        camera.update();
-        VisibleRange range = visibleRange();
+        VisualizerCamera.VisibleRange range = camera.visibleRange();
 
-        batch.setProjectionMatrix(camera.combined);
-        batch.begin();
+        landscapeBatch.setProjectionMatrix(camera.projection());
+        landscapeBatch.begin();
         landscapeRenderer.draw(
-                batch,
+                landscapeBatch,
                 range.minX(),
                 range.maxX(),
                 range.minY(),
                 range.maxY(),
-                selectedZ,
-                lowerDepth());
-        batch.end();
+                state.selectedZ(),
+                state.lowerDepth());
+        landscapeBatch.end();
 
-        shapes.setProjectionMatrix(camera.combined);
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawActiveSliceContour(range);
-        drawObjects(range);
-        shapes.end();
-
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        drawGrid(range);
-        drawCellSelection();
-        drawSelectedObject();
-        shapes.end();
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        if (showShapeDirections) {
-            drawRampDirections(range, selectedZ - 1);
-            drawRampDirections(range, selectedZ);
-        }
-        if (showTransitions) {
-            drawTransitionOverlay();
-        }
-        shapes.end();
-
-        drawHud();
+        overlayRenderer.draw(range);
+        hudRenderer.draw();
     }
 
     public void resize(
             int width,
             int height) {
 
-        if (width <= 0 || height <= 0) {
-            return;
-        }
-
-        camera.viewportWidth = BASE_VIEW_WIDTH;
-        camera.viewportHeight = BASE_VIEW_WIDTH
-                * (float) height
-                / (float) width;
-        camera.position.set(cameraTargetX, cameraTargetY, 0f);
-        camera.update();
-
-        hudProjection.setToOrtho2D(
-                0f,
-                0f,
-                width,
-                height);
+        camera.resize(width, height);
+        hudRenderer.resize(width, height);
     }
 
     public void dispose() {
-        if (Gdx.input.getInputProcessor() == this) {
+        if (Gdx.input.getInputProcessor() == input) {
             Gdx.input.setInputProcessor(null);
         }
+        hudRenderer.dispose();
+        overlayRenderer.dispose();
         sliceArt.dispose();
         landscapePack.dispose();
-        shapes.dispose();
-        batch.dispose();
-        font.dispose();
-    }
-
-    @Override
-    public boolean keyDown(
-            int keycode) {
-
-        switch (keycode) {
-            case Input.Keys.SPACE -> {
-                time.toggleRunning();
-                return true;
-            }
-            case Input.Keys.N -> {
-                if (!time.running()) {
-                    time.stepOnce();
-                }
-                return true;
-            }
-            case Input.Keys.PAGE_UP -> {
-                selectedZ++;
-                clearSelection();
-                return true;
-            }
-            case Input.Keys.PAGE_DOWN -> {
-                selectedZ--;
-                clearSelection();
-                return true;
-            }
-            case Input.Keys.G -> {
-                gridMode = (gridMode + 1) % 3;
-                return true;
-            }
-            case Input.Keys.F2 -> {
-                showTransitions = !showTransitions;
-                return true;
-            }
-            case Input.Keys.F3 -> {
-                showShapeDirections = !showShapeDirections;
-                return true;
-            }
-            case Input.Keys.F4 -> {
-                lowerDepthIndex = (lowerDepthIndex + 1)
-                        % LOWER_DEPTH_OPTIONS.length;
-                return true;
-            }
-            default -> {
-                return false;
-            }
-        }
-    }
-
-    @Override
-    public boolean scrolled(
-            float amountX,
-            float amountY) {
-
-        camera.zoom = MathUtils.clamp(
-                camera.zoom * (1f + amountY * 0.1f),
-                MIN_ZOOM,
-                MAX_ZOOM);
-        updateLandscapeSampling();
-        return true;
-    }
-
-    @Override
-    public boolean touchDown(
-            int screenX,
-            int screenY,
-            int pointer,
-            int button) {
-
-        if (button != Input.Buttons.LEFT) {
-            return false;
-        }
-
-        pick.set(screenX, screenY, 0f);
-        camera.unproject(pick);
-
-        int x = MathUtils.floor(pick.x);
-        int y = MathUtils.floor(pick.y);
-
-        selectedCell = new CellSelection(x, y, selectedZ);
-
-        int count = view.cells().objectCount(x, y, selectedZ);
-        selectedObject = count == 0
-                ? null
-                : view.cells().objectAt(x, y, selectedZ, 0);
-
-        return true;
-    }
-
-    private void updateCameraTarget(
-            float delta) {
-
-        float distance = PAN_SPEED * camera.zoom * delta;
-
-        if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            cameraTargetX -= distance;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.D)) {
-            cameraTargetX += distance;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.S)) {
-            cameraTargetY -= distance;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.W)) {
-            cameraTargetY += distance;
-        }
+        landscapeBatch.dispose();
     }
 
     private void updateLandscapeSampling() {
-        boolean smooth = camera.zoom >= FAR_ZOOM_SMOOTH_SAMPLING;
+        boolean smooth = camera.smoothLandscapeSampling();
         if (smooth == smoothLandscapeSampling) {
             return;
         }
@@ -349,647 +156,5 @@ public final class ZLevelVisualizer extends InputAdapter {
                 : Texture.TextureFilter.Nearest;
         landscapePack.surface(0, 0).getTexture().setFilter(filter, filter);
         sliceArt.solid(0, 0).getTexture().setFilter(filter, filter);
-    }
-
-    private VisibleRange visibleRange() {
-        float halfWidth = camera.viewportWidth * camera.zoom * 0.5f;
-        float halfHeight = camera.viewportHeight * camera.zoom * 0.5f;
-
-        return new VisibleRange(
-                MathUtils.floor(camera.position.x - halfWidth) - 1,
-                MathUtils.ceil(camera.position.x + halfWidth) + 1,
-                MathUtils.floor(camera.position.y - halfHeight) - 1,
-                MathUtils.ceil(camera.position.y + halfHeight) + 1);
-    }
-
-    private void drawActiveSliceContour(
-            VisibleRange range) {
-
-        float pixel = worldUnitsPerPixel();
-        float shadowThickness = pixel * ACTIVE_SLICE_SHADOW_PIXELS;
-        float rimThickness = pixel * ACTIVE_SLICE_RIM_PIXELS;
-
-        for (int x = range.minX(); x <= range.maxX(); x++) {
-            for (int y = range.minY(); y <= range.maxY(); y++) {
-                if (!sliceResolver.isCurrentSurface(x, y, selectedZ)) {
-                    continue;
-                }
-
-                boolean north = !sliceResolver.isCurrentSurface(
-                        x, y + 1, selectedZ);
-                boolean east = !sliceResolver.isCurrentSurface(
-                        x + 1, y, selectedZ);
-                boolean south = !sliceResolver.isCurrentSurface(
-                        x, y - 1, selectedZ);
-                boolean west = !sliceResolver.isCurrentSurface(
-                        x - 1, y, selectedZ);
-
-                if (!north && !east && !south && !west) {
-                    continue;
-                }
-
-                shapes.setColor(ACTIVE_SLICE_SHADOW);
-                drawContourEdges(
-                        x,
-                        y,
-                        north,
-                        east,
-                        south,
-                        west,
-                        shadowThickness,
-                        true);
-
-                shapes.setColor(ACTIVE_SLICE_RIM);
-                drawContourEdges(
-                        x,
-                        y,
-                        north,
-                        east,
-                        south,
-                        west,
-                        rimThickness,
-                        false);
-            }
-        }
-    }
-
-    private void drawContourEdges(
-            int x,
-            int y,
-            boolean north,
-            boolean east,
-            boolean south,
-            boolean west,
-            float thickness,
-            boolean outside) {
-
-        if (north) {
-            shapes.rect(
-                    x,
-                    outside ? y + 1f : y + 1f - thickness,
-                    1f,
-                    thickness);
-        }
-        if (east) {
-            shapes.rect(
-                    outside ? x + 1f : x + 1f - thickness,
-                    y,
-                    thickness,
-                    1f);
-        }
-        if (south) {
-            shapes.rect(
-                    x,
-                    outside ? y - thickness : y,
-                    1f,
-                    thickness);
-        }
-        if (west) {
-            shapes.rect(
-                    outside ? x - thickness : x,
-                    y,
-                    thickness,
-                    1f);
-        }
-    }
-
-    private float worldUnitsPerPixel() {
-        int width = Math.max(1, Gdx.graphics.getWidth());
-        int height = Math.max(1, Gdx.graphics.getHeight());
-        float horizontal = camera.viewportWidth * camera.zoom / width;
-        float vertical = camera.viewportHeight * camera.zoom / height;
-        return Math.max(horizontal, vertical);
-    }
-
-    private void drawObjects(
-            VisibleRange range) {
-
-        for (int x = range.minX(); x <= range.maxX(); x++) {
-            for (int y = range.minY(); y <= range.maxY(); y++) {
-                int count = view.cells().objectCount(x, y, selectedZ);
-
-                for (int index = 0; index < count; index++) {
-                    ObjectId id = view.cells().objectAt(
-                            x,
-                            y,
-                            selectedZ,
-                            index);
-                    WorldObject object = view.objects().get(id);
-
-                    if (object == null) {
-                        continue;
-                    }
-
-                    shapes.setColor(
-                            object.definitionId().asInt() % 2 == 0
-                                    ? OBJECT_EVEN
-                                    : OBJECT_ODD);
-
-                    float offset = Math.min(index, 3) * 0.12f;
-                    shapes.circle(
-                            x + 0.5f + offset,
-                            y + 0.5f - offset,
-                            0.22f,
-                            16);
-                }
-            }
-        }
-    }
-
-    private void drawGrid(
-            VisibleRange range) {
-
-        if (gridMode == 0) {
-            return;
-        }
-
-        shapes.setColor(gridMode == 1 ? GRID_SUBTLE : GRID_DEBUG);
-
-        for (int x = range.minX(); x <= range.maxX() + 1; x++) {
-            shapes.line(
-                    x,
-                    range.minY(),
-                    x,
-                    range.maxY() + 1f);
-        }
-        for (int y = range.minY(); y <= range.maxY() + 1; y++) {
-            shapes.line(
-                    range.minX(),
-                    y,
-                    range.maxX() + 1f,
-                    y);
-        }
-    }
-
-    private void drawRampDirections(
-            VisibleRange range,
-            int terrainZ) {
-
-        for (int x = range.minX(); x <= range.maxX(); x++) {
-            for (int y = range.minY(); y <= range.maxY(); y++) {
-                Shape shape = view.geometry().find(x, y, terrainZ);
-
-                if (!(shape instanceof RampShape)) {
-                    continue;
-                }
-
-                if (shape == RampShape.POSITIVE_X) {
-                    drawDiagnosticArrow(x, y, 1, 0, 0.43f, RAMP_ARROW);
-                } else if (shape == RampShape.NEGATIVE_X) {
-                    drawDiagnosticArrow(x, y, -1, 0, 0.43f, RAMP_ARROW);
-                } else if (shape == RampShape.POSITIVE_Y) {
-                    drawDiagnosticArrow(x, y, 0, 1, 0.43f, RAMP_ARROW);
-                } else if (shape == RampShape.NEGATIVE_Y) {
-                    drawDiagnosticArrow(x, y, 0, -1, 0.43f, RAMP_ARROW);
-                }
-            }
-        }
-    }
-
-    private void drawCellSelection() {
-        if (selectedCell == null) {
-            return;
-        }
-
-        shapes.setColor(SELECTED);
-        shapes.rect(
-                selectedCell.x() + 0.03f,
-                selectedCell.y() + 0.03f,
-                0.94f,
-                0.94f);
-    }
-
-    private void drawTransitionOverlay() {
-        if (selectedCell == null) {
-            return;
-        }
-
-        int mask = view.navigation().transitions(
-                selectedCell.x(),
-                selectedCell.y(),
-                selectedCell.z());
-
-        for (int dz = -1; dz <= 1; dz++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0 && dz == 0) {
-                        continue;
-                    }
-                    if (!TransitionMask.contains(mask, dx, dy, dz)) {
-                        continue;
-                    }
-
-                    Color color = dz > 0
-                            ? TRANSITION_UP
-                            : dz < 0
-                                    ? TRANSITION_DOWN
-                                    : TRANSITION_FLAT;
-                    drawTransitionArrow(
-                            selectedCell.x(),
-                            selectedCell.y(),
-                            dx,
-                            dy,
-                            dz,
-                            color);
-                }
-            }
-        }
-    }
-
-    private void drawTransitionArrow(
-            int x,
-            int y,
-            int dx,
-            int dy,
-            int dz,
-            Color color) {
-
-        float startX = x + 0.5f;
-        float startY = y + 0.5f;
-        float magnitude = (float) Math.sqrt(dx * dx + dy * dy);
-
-        if (magnitude == 0f) {
-            float pixel = worldUnitsPerPixel();
-            float radius = dz > 0 ? 0.13f : 0.10f;
-            shapes.setColor(DIAGNOSTIC_SHADOW);
-            shapes.circle(
-                    startX,
-                    startY,
-                    radius + pixel * 2.2f,
-                    20);
-            shapes.setColor(color);
-            shapes.circle(startX, startY, radius, 20);
-            return;
-        }
-
-        float unitX = dx / magnitude;
-        float unitY = dy / magnitude;
-        float length = 0.43f;
-        float endX = startX + unitX * length;
-        float endY = startY + unitY * length;
-        drawDoubleStrokeArrow(
-                startX,
-                startY,
-                endX,
-                endY,
-                unitX,
-                unitY,
-                color,
-                0.145f);
-    }
-
-    private void drawDiagnosticArrow(
-            int cellX,
-            int cellY,
-            int dx,
-            int dy,
-            float length,
-            Color color) {
-
-        float startX = cellX + 0.5f;
-        float startY = cellY + 0.5f;
-        float endX = startX + dx * length;
-        float endY = startY + dy * length;
-
-        drawDoubleStrokeArrow(
-                startX,
-                startY,
-                endX,
-                endY,
-                dx,
-                dy,
-                color,
-                0.15f);
-    }
-
-    private void drawDoubleStrokeArrow(
-            float startX,
-            float startY,
-            float endX,
-            float endY,
-            float unitX,
-            float unitY,
-            Color color,
-            float headSize) {
-
-        float pixel = worldUnitsPerPixel();
-        float shadowWidth = pixel * DIAGNOSTIC_SHADOW_PIXELS;
-        float strokeWidth = pixel * DIAGNOSTIC_STROKE_PIXELS;
-
-        shapes.setColor(DIAGNOSTIC_SHADOW);
-        shapes.rectLine(startX, startY, endX, endY, shadowWidth);
-        drawFilledArrowHead(
-                endX,
-                endY,
-                unitX,
-                unitY,
-                headSize + pixel * 2.2f);
-
-        shapes.setColor(color);
-        shapes.rectLine(startX, startY, endX, endY, strokeWidth);
-        drawFilledArrowHead(
-                endX,
-                endY,
-                unitX,
-                unitY,
-                headSize);
-    }
-
-    private void drawFilledArrowHead(
-            float endX,
-            float endY,
-            float unitX,
-            float unitY,
-            float size) {
-
-        float perpendicularX = -unitY;
-        float perpendicularY = unitX;
-        float backX = endX - unitX * size;
-        float backY = endY - unitY * size;
-        float halfWidth = size * 0.72f;
-
-        shapes.triangle(
-                endX,
-                endY,
-                backX + perpendicularX * halfWidth,
-                backY + perpendicularY * halfWidth,
-                backX - perpendicularX * halfWidth,
-                backY - perpendicularY * halfWidth);
-    }
-
-    private void drawSelectedObject() {
-        if (selectedObject == null
-                || !view.transforms().has(selectedObject)
-                || view.transforms().z(selectedObject) != selectedZ) {
-            return;
-        }
-
-        int x = view.transforms().x(selectedObject);
-        int y = view.transforms().y(selectedObject);
-
-        shapes.setColor(SELECTED);
-        shapes.circle(x + 0.5f, y + 0.5f, 0.31f, 20);
-    }
-
-    private void drawHud() {
-        int width = Gdx.graphics.getWidth();
-        int height = Gdx.graphics.getHeight();
-
-        float margin = 12f;
-        float statusWidth = Math.min(720f, width - margin * 2f);
-        float statusHeight = 104f;
-        float statusX = margin;
-        float statusY = height - margin - statusHeight;
-
-        boolean hasInspector = selectedCell != null;
-        float inspectorWidth = Math.min(380f, width - margin * 2f);
-        float inspectorHeight = selectedObject == null ? 150f : 216f;
-        float inspectorX = width - margin - inspectorWidth;
-        float inspectorY = height - margin - inspectorHeight;
-
-        if (hasInspector && inspectorX < statusX + statusWidth + margin) {
-            inspectorX = margin;
-            inspectorY = statusY - margin - inspectorHeight;
-        }
-
-        shapes.setProjectionMatrix(hudProjection);
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawPanel(statusX, statusY, statusWidth, statusHeight);
-        if (hasInspector) {
-            drawPanel(
-                    inspectorX,
-                    inspectorY,
-                    inspectorWidth,
-                    inspectorHeight);
-        }
-        shapes.end();
-
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(PANEL_BORDER);
-        shapes.rect(statusX, statusY, statusWidth, statusHeight);
-        if (hasInspector) {
-            shapes.rect(
-                    inspectorX,
-                    inspectorY,
-                    inspectorWidth,
-                    inspectorHeight);
-        }
-        shapes.end();
-
-        batch.setProjectionMatrix(hudProjection);
-        batch.begin();
-        font.setColor(Color.WHITE);
-
-        float textX = statusX + 12f;
-        float top = statusY + statusHeight - 12f;
-        font.draw(
-                batch,
-                "STATUS   tick " + simulationTime.tick()
-                        + "   Z " + selectedZ
-                        + "   FPS " + Gdx.graphics.getFramesPerSecond()
-                        + "   " + (time.running() ? "RUN x1" : "PAUSED"),
-                textX,
-                top);
-        font.draw(
-                batch,
-                "Space run/pause | N step | PgUp/PgDn horizontal slice",
-                textX,
-                top - 22f);
-        font.draw(
-                batch,
-                "WASD pan | wheel zoom " + zoomLabel()
-                        + " " + samplingLabel()
-                        + " | G grid " + gridLabel(),
-                textX,
-                top - 44f);
-        font.draw(
-                batch,
-                "F2 transitions " + onOff(showTransitions)
-                        + " | F3 ramps " + onOff(showShapeDirections)
-                        + " | F4 lower depth " + lowerDepth(),
-                textX,
-                top - 66f);
-
-        if (hasInspector) {
-            drawInspectorText(
-                    inspectorX + 12f,
-                    inspectorY + inspectorHeight - 12f);
-        }
-
-        batch.end();
-    }
-
-    private void drawPanel(
-            float x,
-            float y,
-            float width,
-            float height) {
-
-        shapes.setColor(PANEL);
-        shapes.rect(x, y, width, height);
-    }
-
-    private void drawInspectorText(
-            float x,
-            float top) {
-
-        LandscapeSliceResolver.Cell slice = sliceResolver.analyze(
-                selectedCell.x(),
-                selectedCell.x(),
-                selectedCell.y(),
-                selectedCell.y(),
-                selectedCell.z(),
-                lowerDepth(),
-                INSPECT_EXPOSURE_DISTANCE)
-                .resolve(selectedCell.x(), selectedCell.y());
-        int transitions = view.navigation().transitions(
-                selectedCell.x(),
-                selectedCell.y(),
-                selectedCell.z());
-
-        font.draw(
-                batch,
-                "CELL   (" + selectedCell.x()
-                        + ", " + selectedCell.y()
-                        + ", " + selectedCell.z() + ")",
-                x,
-                top);
-        font.draw(
-                batch,
-                "slice: " + sliceLabel(slice),
-                x,
-                top - 22f);
-        font.draw(
-                batch,
-                "context: " + contextLabel(slice),
-                x,
-                top - 44f);
-        font.draw(
-                batch,
-                "shape: " + shapeLabel(slice.shape()),
-                x,
-                top - 66f);
-        font.draw(
-                batch,
-                "transitions: " + Integer.bitCount(transitions),
-                x,
-                top - 88f);
-
-        if (selectedObject == null) {
-            return;
-        }
-
-        WorldObject object = view.objects().get(selectedObject);
-        if (object == null || !view.transforms().has(selectedObject)) {
-            return;
-        }
-
-        font.draw(batch, "OBJECT   " + selectedObject, x, top - 118f);
-        font.draw(
-                batch,
-                "definition: " + object.definitionId(),
-                x,
-                top - 140f);
-        font.draw(
-                batch,
-                "XYZ: "
-                        + view.transforms().x(selectedObject)
-                        + ", "
-                        + view.transforms().y(selectedObject)
-                        + ", "
-                        + view.transforms().z(selectedObject),
-                x,
-                top - 162f);
-    }
-
-    private static String sliceLabel(
-            LandscapeSliceResolver.Cell cell) {
-
-        return switch (cell.kind()) {
-            case SOLID_BODY -> "SOLID BODY terrain Z=" + cell.terrainZ();
-            case CURRENT_SURFACE -> "SURFACE terrain Z=" + cell.terrainZ();
-            case LOWER_SURFACE -> "LOWER depth " + cell.dropDepth()
-                    + " terrain Z=" + cell.terrainZ();
-            case EMPTY -> "EMPTY";
-        };
-    }
-
-    private static String contextLabel(
-            LandscapeSliceResolver.Cell cell) {
-
-        if (cell.kind() == LandscapeSliceResolver.Kind.EMPTY) {
-            return "none";
-        }
-        if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
-            return "body depth " + cell.bodyDepth();
-        }
-        if (!cell.covered()) {
-            return "open sky | exposure 0";
-        }
-        return "ceiling " + cell.ceilingDistance()
-                + " | cover " + cell.coverDepth()
-                + " | exposure " + cell.exposureDistance();
-    }
-
-    private static String shapeLabel(
-            Shape shape) {
-
-        if (shape == RampShape.POSITIVE_X) {
-            return "Ramp +X";
-        }
-        if (shape == RampShape.NEGATIVE_X) {
-            return "Ramp -X";
-        }
-        if (shape == RampShape.POSITIVE_Y) {
-            return "Ramp +Y";
-        }
-        if (shape == RampShape.NEGATIVE_Y) {
-            return "Ramp -Y";
-        }
-        return shape == null ? "none" : shape.getClass().getSimpleName();
-    }
-
-    private String gridLabel() {
-        return switch (gridMode) {
-            case 0 -> "OFF";
-            case 1 -> "SUBTLE";
-            default -> "DEBUG";
-        };
-    }
-
-    private String zoomLabel() {
-        return (Math.round(camera.zoom * 100f) / 100f) + "x";
-    }
-
-    private String samplingLabel() {
-        return smoothLandscapeSampling ? "LINEAR" : "NEAREST";
-    }
-
-    private int lowerDepth() {
-        return LOWER_DEPTH_OPTIONS[lowerDepthIndex];
-    }
-
-    private static String onOff(
-            boolean value) {
-
-        return value ? "ON" : "OFF";
-    }
-
-    private void clearSelection() {
-        selectedCell = null;
-        selectedObject = null;
-    }
-
-    private record VisibleRange(
-            int minX,
-            int maxX,
-            int minY,
-            int maxY) {
-    }
-
-    private record CellSelection(
-            int x,
-            int y,
-            int z) {
     }
 }
