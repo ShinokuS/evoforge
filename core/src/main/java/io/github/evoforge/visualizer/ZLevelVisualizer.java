@@ -28,10 +28,11 @@ import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 /**
  * Full top-down debug presentation of an authoritative horizontal Z slice.
  *
- * <p>The selected standing plane is not an isolated floor. Terrain occupying
- * that Z is rendered as solid cut material, support below becomes the current
- * surface, and deeper surfaces are visible only through open vertical columns.
- * Presentation owns no simulation mutation capability.</p>
+ * <p>Visibility is derived from world volume rather than absolute Z labels:
+ * solid mass intersects the cut, open surfaces remain bright when exposed,
+ * covered cave space darkens with cover/exposure distance, and lower surfaces
+ * remain visible through genuinely open drops. Presentation owns no simulation
+ * mutation capability.</p>
  */
 public final class ZLevelVisualizer extends InputAdapter {
 
@@ -40,7 +41,8 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final float MIN_ZOOM = 0.25f;
     private static final float MAX_ZOOM = 4f;
 
-    private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4};
+    private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4, 8};
+    private static final int INSPECT_EXPOSURE_DISTANCE = 12;
 
     private static final Color BACKGROUND =
             new Color(0.045f, 0.055f, 0.065f, 1f);
@@ -86,7 +88,7 @@ public final class ZLevelVisualizer extends InputAdapter {
 
     private int selectedZ = 1;
     private int gridMode = 1;
-    private int lowerDepthIndex = 2;
+    private int lowerDepthIndex = 3;
     private boolean showTransitions;
     private boolean showShapeDirections;
     private CellSelection selectedCell;
@@ -516,8 +518,8 @@ public final class ZLevelVisualizer extends InputAdapter {
         float statusY = height - margin - statusHeight;
 
         boolean hasInspector = selectedCell != null;
-        float inspectorWidth = Math.min(360f, width - margin * 2f);
-        float inspectorHeight = selectedObject == null ? 112f : 170f;
+        float inspectorWidth = Math.min(380f, width - margin * 2f);
+        float inspectorHeight = selectedObject == null ? 150f : 216f;
         float inspectorX = width - margin - inspectorWidth;
         float inspectorY = height - margin - inspectorHeight;
 
@@ -604,11 +606,15 @@ public final class ZLevelVisualizer extends InputAdapter {
             float x,
             float top) {
 
-        LandscapeSliceResolver.Cell slice = sliceResolver.resolve(
+        LandscapeSliceResolver.Cell slice = sliceResolver.analyze(
+                selectedCell.x(),
                 selectedCell.x(),
                 selectedCell.y(),
+                selectedCell.y(),
                 selectedCell.z(),
-                lowerDepth());
+                lowerDepth(),
+                INSPECT_EXPOSURE_DISTANCE)
+                .resolve(selectedCell.x(), selectedCell.y());
         int transitions = view.navigation().transitions(
                 selectedCell.x(),
                 selectedCell.y(),
@@ -628,14 +634,19 @@ public final class ZLevelVisualizer extends InputAdapter {
                 top - 22f);
         font.draw(
                 batch,
-                "shape: " + shapeLabel(slice.shape()),
+                "context: " + contextLabel(slice),
                 x,
                 top - 44f);
         font.draw(
                 batch,
-                "transitions: " + Integer.bitCount(transitions),
+                "shape: " + shapeLabel(slice.shape()),
                 x,
                 top - 66f);
+        font.draw(
+                batch,
+                "transitions: " + Integer.bitCount(transitions),
+                x,
+                top - 88f);
 
         if (selectedObject == null) {
             return;
@@ -646,12 +657,12 @@ public final class ZLevelVisualizer extends InputAdapter {
             return;
         }
 
-        font.draw(batch, "OBJECT   " + selectedObject, x, top - 96f);
+        font.draw(batch, "OBJECT   " + selectedObject, x, top - 118f);
         font.draw(
                 batch,
                 "definition: " + object.definitionId(),
                 x,
-                top - 118f);
+                top - 140f);
         font.draw(
                 batch,
                 "XYZ: "
@@ -661,7 +672,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                         + ", "
                         + view.transforms().z(selectedObject),
                 x,
-                top - 140f);
+                top - 162f);
     }
 
     private static String sliceLabel(
@@ -670,10 +681,27 @@ public final class ZLevelVisualizer extends InputAdapter {
         return switch (cell.kind()) {
             case SOLID_BODY -> "SOLID BODY terrain Z=" + cell.terrainZ();
             case CURRENT_SURFACE -> "SURFACE terrain Z=" + cell.terrainZ();
-            case LOWER_SURFACE -> "LOWER depth " + cell.lowerDepth()
+            case LOWER_SURFACE -> "LOWER depth " + cell.dropDepth()
                     + " terrain Z=" + cell.terrainZ();
             case EMPTY -> "EMPTY";
         };
+    }
+
+    private static String contextLabel(
+            LandscapeSliceResolver.Cell cell) {
+
+        if (cell.kind() == LandscapeSliceResolver.Kind.EMPTY) {
+            return "none";
+        }
+        if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
+            return "body depth " + cell.bodyDepth();
+        }
+        if (!cell.covered()) {
+            return "open sky | exposure 0";
+        }
+        return "ceiling " + cell.ceilingDistance()
+                + " | cover " + cell.coverDepth()
+                + " | exposure " + cell.exposureDistance();
     }
 
     private static String shapeLabel(
