@@ -84,6 +84,8 @@ public final class LandscapeSliceResolver {
     public final class Analysis {
 
         private final int selectedStandingZ;
+        private final int minSupportedStandingZ;
+        private final int maxSupportedStandingZ;
         private final int maxLowerDepth;
         private final int maxExposureDistance;
         private final ExposureField exposure;
@@ -95,9 +97,16 @@ public final class LandscapeSliceResolver {
                 int maxY,
                 int selectedStandingZ,
                 int maxLowerDepth,
-                int maxExposureDistance) {
+                int maxExposureDistance,
+                int standingZRadius) {
 
             this.selectedStandingZ = selectedStandingZ;
+            this.minSupportedStandingZ = safeAdd(
+                    selectedStandingZ,
+                    -standingZRadius);
+            this.maxSupportedStandingZ = safeAdd(
+                    selectedStandingZ,
+                    standingZRadius);
             this.maxLowerDepth = maxLowerDepth;
             this.maxExposureDistance = maxExposureDistance;
             exposure = buildExposureField(
@@ -105,9 +114,58 @@ public final class LandscapeSliceResolver {
                     maxX,
                     minY,
                     maxY,
-                    selectedStandingZ,
+                    minSupportedStandingZ,
+                    maxSupportedStandingZ,
                     maxLowerDepth,
                     maxExposureDistance);
+        }
+
+        private Analysis(
+                int selectedStandingZ,
+                int minSupportedStandingZ,
+                int maxSupportedStandingZ,
+                int maxLowerDepth,
+                int maxExposureDistance,
+                ExposureField exposure) {
+
+            this.selectedStandingZ = selectedStandingZ;
+            this.minSupportedStandingZ = minSupportedStandingZ;
+            this.maxSupportedStandingZ = maxSupportedStandingZ;
+            this.maxLowerDepth = maxLowerDepth;
+            this.maxExposureDistance = maxExposureDistance;
+            this.exposure = exposure;
+        }
+
+        public boolean supportsStandingZ(
+                int standingZ) {
+
+            return standingZ >= minSupportedStandingZ
+                    && standingZ <= maxSupportedStandingZ;
+        }
+
+        /**
+         * Creates a cheap slice view over the same already-built exposure field.
+         * The field was constructed with a full exposure-radius margin around
+         * every supported standing Z, so retargeting does not truncate any path
+         * that could affect the configured exposure distance.
+         */
+        public Analysis atStandingZ(
+                int standingZ) {
+
+            if (!supportsStandingZ(standingZ)) {
+                throw new IllegalArgumentException(
+                        "standing Z is outside analysis band: " + standingZ);
+            }
+            if (standingZ == selectedStandingZ) {
+                return this;
+            }
+            return new Analysis(
+                    standingZ,
+                    minSupportedStandingZ,
+                    maxSupportedStandingZ,
+                    maxLowerDepth,
+                    maxExposureDistance,
+                    exposure);
         }
 
         public Cell resolve(
@@ -166,11 +224,13 @@ public final class LandscapeSliceResolver {
 
             int airZ = terrainZ + 1;
             Cover cover = coverAt(x, y, airZ);
-            int exposureDistance = exposure.distanceAt(
-                    x,
-                    y,
-                    airZ,
-                    maxExposureDistance + 1);
+            int exposureDistance = cover.depth() == 0
+                    ? 0
+                    : exposure.distanceAt(
+                            x,
+                            y,
+                            airZ,
+                            maxExposureDistance + 1);
 
             return new Cell(
                     kind,
@@ -237,6 +297,31 @@ public final class LandscapeSliceResolver {
             int maxLowerDepth,
             int maxExposureDistance) {
 
+        return analyzeBand(
+                minX,
+                maxX,
+                minY,
+                maxY,
+                selectedStandingZ,
+                maxLowerDepth,
+                maxExposureDistance,
+                0);
+    }
+
+    /**
+     * Builds one exposure field that can serve the selected standing Z and a
+     * symmetric band of nearby Z levels without another BFS rebuild.
+     */
+    public Analysis analyzeBand(
+            int minX,
+            int maxX,
+            int minY,
+            int maxY,
+            int selectedStandingZ,
+            int maxLowerDepth,
+            int maxExposureDistance,
+            int standingZRadius) {
+
         if (minX > maxX || minY > maxY) {
             throw new IllegalArgumentException("invalid XY analysis bounds");
         }
@@ -248,6 +333,10 @@ public final class LandscapeSliceResolver {
             throw new IllegalArgumentException(
                     "maxExposureDistance must not be negative");
         }
+        if (standingZRadius < 0) {
+            throw new IllegalArgumentException(
+                    "standingZRadius must not be negative");
+        }
 
         return new Analysis(
                 minX,
@@ -256,7 +345,8 @@ public final class LandscapeSliceResolver {
                 maxY,
                 selectedStandingZ,
                 maxLowerDepth,
-                maxExposureDistance);
+                maxExposureDistance,
+                standingZRadius);
     }
 
     /** Convenience for narrow tests and one-cell tooling. */
@@ -282,7 +372,8 @@ public final class LandscapeSliceResolver {
             int maxX,
             int minY,
             int maxY,
-            int selectedStandingZ,
+            int minSupportedStandingZ,
+            int maxSupportedStandingZ,
             int maxLowerDepth,
             int maxExposureDistance) {
 
@@ -291,8 +382,8 @@ public final class LandscapeSliceResolver {
         int expandedMinY = safeAdd(minY, -maxExposureDistance);
         int expandedMaxY = safeAdd(maxY, maxExposureDistance);
         int verticalMargin = maxLowerDepth + maxExposureDistance + 1;
-        int minZ = safeAdd(selectedStandingZ, -verticalMargin);
-        int maxZ = safeAdd(selectedStandingZ, maxExposureDistance + 1);
+        int minZ = safeAdd(minSupportedStandingZ, -verticalMargin);
+        int maxZ = safeAdd(maxSupportedStandingZ, maxExposureDistance + 1);
 
         ExposureField field = new ExposureField(
                 expandedMinX,
@@ -510,13 +601,13 @@ public final class LandscapeSliceResolver {
             long height = (long) maxY - minY + 1L;
             long depth = (long) maxZ - minZ + 1L;
             long plane = width * height;
-            long volume = plane * depth;
+            long volumeSize = plane * depth;
 
             if (width <= 0L || height <= 0L || depth <= 0L
                     || width > Integer.MAX_VALUE
                     || height > Integer.MAX_VALUE
                     || plane > Integer.MAX_VALUE
-                    || volume > Integer.MAX_VALUE) {
+                    || volumeSize > Integer.MAX_VALUE) {
                 throw new IllegalArgumentException(
                         "exposure analysis volume is too large");
             }
@@ -524,7 +615,7 @@ public final class LandscapeSliceResolver {
             sizeX = (int) width;
             sizeY = (int) height;
             planeSize = (int) plane;
-            distances = new int[(int) volume];
+            distances = new int[(int) volumeSize];
             Arrays.fill(distances, UNVISITED);
         }
 
