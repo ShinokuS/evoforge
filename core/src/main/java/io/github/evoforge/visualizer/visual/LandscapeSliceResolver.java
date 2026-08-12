@@ -207,6 +207,10 @@ public final class LandscapeSliceResolver {
         this.volume = volume;
     }
 
+    public long visibilityRevision() {
+        return volume.revision();
+    }
+
     /**
      * Cheap structural query for overlays that only need the active standing
      * surface and must not rebuild the camera-local exposure field.
