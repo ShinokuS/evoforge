@@ -48,4 +48,9 @@ public final class TerrainVisibilityVolume implements VisibilityVolumeLookup {
     public int maxOccupiedZ() {
         return view.terrainExtents().maxZ();
     }
+
+    @Override
+    public long revision() {
+        return view.terrainRevision().revision();
+    }
 }
