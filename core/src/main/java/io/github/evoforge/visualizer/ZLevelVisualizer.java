@@ -90,6 +90,8 @@ public final class ZLevelVisualizer extends InputAdapter {
     private final LandscapeSliceResolver sliceResolver;
     private final LandscapeRenderer landscapeRenderer;
 
+    private float cameraTargetX;
+    private float cameraTargetY;
     private int selectedZ = 1;
     private int gridMode = 1;
     private int lowerDepthIndex = 3;
@@ -124,6 +126,8 @@ public final class ZLevelVisualizer extends InputAdapter {
                 sliceArt,
                 sliceResolver);
 
+        cameraTargetX = 0f;
+        cameraTargetY = 0f;
         camera.position.set(0f, 0f, 0f);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         Gdx.input.setInputProcessor(this);
@@ -131,7 +135,7 @@ public final class ZLevelVisualizer extends InputAdapter {
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
-        updateCamera(delta);
+        updateCameraTarget(delta);
         time.update(delta);
 
         Gdx.gl.glClearColor(
@@ -141,6 +145,9 @@ public final class ZLevelVisualizer extends InputAdapter {
                 BACKGROUND.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        snapRenderCamera(
+                Gdx.graphics.getWidth(),
+                Gdx.graphics.getHeight());
         camera.update();
         VisibleRange range = visibleRange();
 
@@ -190,6 +197,7 @@ public final class ZLevelVisualizer extends InputAdapter {
         camera.viewportHeight = BASE_VIEW_WIDTH
                 * (float) height
                 / (float) width;
+        snapRenderCamera(width, height);
         camera.update();
 
         hudProjection.setToOrtho2D(
@@ -297,23 +305,38 @@ public final class ZLevelVisualizer extends InputAdapter {
         return true;
     }
 
-    private void updateCamera(
+    private void updateCameraTarget(
             float delta) {
 
         float distance = PAN_SPEED * camera.zoom * delta;
 
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            camera.position.x -= distance;
+            cameraTargetX -= distance;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.D)) {
-            camera.position.x += distance;
+            cameraTargetX += distance;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.S)) {
-            camera.position.y -= distance;
+            cameraTargetY -= distance;
         }
         if (Gdx.input.isKeyPressed(Input.Keys.W)) {
-            camera.position.y += distance;
+            cameraTargetY += distance;
         }
+    }
+
+    private void snapRenderCamera(
+            int width,
+            int height) {
+
+        camera.position.x = CameraPixelSnap.axis(
+                cameraTargetX,
+                camera.viewportWidth * camera.zoom,
+                Math.max(1, width));
+        camera.position.y = CameraPixelSnap.axis(
+                cameraTargetY,
+                camera.viewportHeight * camera.zoom,
+                Math.max(1, height));
+        camera.position.z = 0f;
     }
 
     private VisibleRange visibleRange() {
@@ -507,7 +530,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 } else if (shape == RampShape.POSITIVE_Y) {
                     drawArrow(x, y, 0, 1, 0.35f);
                 } else if (shape == RampShape.NEGATIVE_Y) {
-                    drawArrow(x, y, 0, -1, 0.35f);
+                    drawArrow(x, y, 0, -1, 0, 0.35f);
                 }
             }
         }
@@ -666,6 +689,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 batch,
                 "STATUS   tick " + simulationTime.tick()
                         + "   Z " + selectedZ
+                        + "   FPS " + Gdx.graphics.getFramesPerSecond()
                         + "   " + (time.running() ? "RUN x1" : "PAUSED"),
                 textX,
                 top);
