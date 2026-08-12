@@ -19,7 +19,7 @@ DONE  Timed adjacent Movement
 DONE  SimulationStepper + Scheduler process binding
 DONE  TransitionCost: terrain + Shape roles + grid length
 DONE  Minimal live Z-level Visualizer
-ACTIVE Procedural full-top-down horizontal Z-slice readability
+ACTIVE Procedural full-top-down cutaway / geometric exposure readability
 NEXT  Occupancy
       Pathfinder
       observable Action completion/outcome
@@ -28,7 +28,7 @@ NEXT  Occupancy
       representative profiling / optimization
 ```
 
-Внутренняя архитектура будущего milestone по-прежнему должна появляться вместе с его первым реальным consumer. Сам факт, что milestone запланирован, не является основанием заранее реализовывать все его возможные подсистемы.
+Внутренняя архитектура будущего milestone должна появляться вместе с его первым реальным consumer. Сам факт, что milestone запланирован, не является основанием заранее реализовывать все его возможные подсистемы.
 
 ## Текущее направление presentation
 
@@ -40,24 +40,40 @@ Canonical development presentation:
 full top-down
 logical simulation cell = 1 x 1
 native procedural visual cell = 16 x 16 pixels
-simulation topology -> horizontal slice semantics -> generated presentation
+world geometry -> horizontal cut -> geometric exposure -> generated presentation
 ```
 
-Сгенерированный landscape существует только в presentation. Simulation не содержит pixels, palettes, sprite ids или rendering rules.
+Simulation не содержит pixels, palettes или camera cutaway state.
 
-Текущий Z language — это **горизонтальный срез**, а не isolated floor stack и не постоянно прозрачный multi-floor view:
+Текущий Z language не зависит от absolute Z labels и не ghost-ит соседние floors постоянно:
 
 ```text
 terrain на selected Z       -> solid body, пересекающий cut
 terrain на selected Z - 1   -> current supported surface
-иначе                       -> nearest visible lower surface через open space
+open volume ниже            -> ближайший lower surface в debug depth
 ```
 
-Текущие debug depth options для lower context: `0 / 1 / 4`. Полные upper floors в normal view не ghost-ятся. Более высокая гора остаётся видимой на нижнем срезе потому, что её terrain body пересекает этот cut.
+Presentation context выводится отдельно:
 
-Ramp presentation derived из единственного authoritative `RampShape`: normal slope на supported plane, directional cut art когда нижний horizontal slice пересекает Ramp body, и маленький presentation-only descent marker на upper landing.
+```text
+bodyDepth
+dropDepth
+ceilingDistance
+coverDepth
+exposureDistance через open air до sky-connected exterior
+```
 
-Acceptance scene теперь содержит четыре base Ramp directions, stacked mountain до standing `Z=4`, cave, deep shaft и несколько higher Ramp transitions. Реализованный контракт описан в [Z-level Visualizer и процедурный ландшафт](Visualizer.md).
+Covered/body depth затемняются агрессивно; обзор вниз через open space получает более мягкий depth shading. Поэтому с возвышенности lower terrain остаётся читаемым, а глубокое underground пространство постепенно приближается к тёмному cutaway состоянию.
+
+`VisibilityVolumeLookup` — presentation-side capability boundary. Текущий adapter трактует terrain как solid/opaque; будущие roofs, walls или large objects смогут участвовать через другой adapter/composition без изменения cutaway algorithm. Тест уже доказывает, что non-terrain opaque contributor корректно блокирует visibility.
+
+`TerrainExtentLookup` — небольшой generic simulation read contract, позволяющий presentation узнать реальный vertical terrain extent вместо произвольной высоты мира. Rendering semantics он не содержит.
+
+Acceptance scene включает четыре base Ramp directions, stacked mountain до standing `Z=4`, mountain cave с side mouth и настоящим roof, отдельную cavern под flat cap с настоящим vertical opening, deep shaft и successive higher Ramp transitions.
+
+Ramp visual style теперь не зависит от slice context: используется один и тот же generated Ramp art, меняется только environmental shading.
+
+Реализованный контракт описан в [Z-level Visualizer и процедурный ландшафт](Visualizer.md).
 
 ## Ближайший milestone: Occupancy
 
@@ -150,8 +166,10 @@ pressure on chunk/region/load-state decisions
 
 Следующие вещи зафиксированы, но намеренно отсутствуют в текущем коде:
 
-- ceiling/roof/covered-state presentation после появления реальной simulation semantics;
 - explicit adjacent-layer X-ray/build mode;
+- real roofs/structures/large objects как contributors `VisibilityVolumeLookup`, когда эти entities появятся;
+- partial optical transmission для glass, water, smoke или foliage;
+- authoritative actor LOS и lighting; camera cutaway exposure не должна превращаться в agent perception;
 - дополнительные procedural materials: dirt, stone, sand, snow, water;
 - priority/layered transitions между несколькими terrain materials;
 - альтернативные procedural palettes или visual styles;
@@ -159,13 +177,13 @@ pressure on chunk/region/load-state decisions
 - procedural character/object generation до появления первого gameplay consumer;
 - external или hand-authored visual packs за той же presentation boundary;
 - dual-grid / marching-squares resolver для будущего visual language, которому он действительно понадобится;
-- более богатые shadow/compositing passes;
+- richer shadows/compositing passes;
 - generated-atlas/export tooling для отдельного art review;
 - visual tile caches, dirty regions и chunk render storage до profiling evidence.
 
-Текущий cell-aligned renderer не означает, что любой будущий visual pack обязан использовать тот же autotiling algorithm. Это первый реальный consumer, сохраняющий точное совпадение с simulation cells.
+Normal view намеренно не рисует полный прозрачный upper floor. Будущий X-ray/build mode должен оставаться explicit и не менять input или simulation semantics.
 
-Normal view намеренно не рисует полный прозрачный upper floor. Если X-ray mode станет полезен для construction/debugging, он должен оставаться explicit mode и не менять input или simulation semantics.
+Binary presentation `solid/opaque` достаточно для текущего terrain-only consumer. Не нужно превращать его в simulation-wide optics до появления gameplay consumer, которому действительно понадобится transmission/opacity.
 
 ## Deferred Movement decisions
 
@@ -212,6 +230,8 @@ Deferred:
 
 Если третий реальный Shape нарушит текущий one-supported-position assumption, нужно пересмотреть Shape support ownership, Navigation и TransitionCost вместе, а не патчить одну систему.
 
+Будущий Shape также может описывать occupied/occluding volume богаче, чем текущий whole-cell terrain adapter. Volume adapter расширяется только после появления такого Shape; sub-cell geometry framework заранее не вводится.
+
 ## Deferred Control / runtime infrastructure
 
 Сейчас существует только synchronous external command submission.
@@ -229,7 +249,7 @@ Deferred:
 
 ## Performance watch points
 
-Текущий код намеренно сохраняет простые sparse lookup paths и вычисляет visual topology/slice state для visible cells по требованию.
+Текущий код намеренно сохраняет простые sparse lookup paths и вычисляет visual topology/cutaway state для camera range по требованию.
 
 До изменения representation нужно измерить:
 
@@ -239,11 +259,14 @@ Navigation local resolver throughput
 TransitionCost lookup throughput
 Pathfinder expansion cost
 active Movement/Scheduler scale
-procedural surface + horizontal-slice frame cost
-open-column lower-depth lookup cost
+procedural surface + cutaway frame cost
+exposure BFS cost
+per-column top-opaque scan across sparse/deep Z ranges
 ```
 
-Packed coordinates, chunk-local arrays, caches, dirty visual regions или specialized DOD storage становятся текущими только после representative workload, который показывает реальный bottleneck.
+`TerrainSystem` теперь инкрементально поддерживает точный global vertical extent. Текущий presentation adapter всё ещё может проходить этот Z-range для каждого XY, чтобы найти top opacity. Если representative worlds покажут, что это дорого, оптимизация должна появиться за `VisibilityVolumeLookup` через per-column query/cache, а не менять semantics.
+
+Packed coordinates, chunk-local arrays, dirty visual regions и прочая DOD representation остаются profiling-driven.
 
 ## Правило принятия deferred решения
 
