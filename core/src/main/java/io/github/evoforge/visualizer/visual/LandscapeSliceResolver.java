@@ -117,15 +117,11 @@ public final class LandscapeSliceResolver {
                 int y) {
 
             if (view.terrain().contains(x, y, selectedStandingZ)) {
-                int bodyDepth = terrainBodyDepth(
-                        x,
-                        y,
-                        selectedStandingZ);
                 return new Cell(
                         Kind.SOLID_BODY,
                         selectedStandingZ,
                         0,
-                        bodyDepth,
+                        terrainBodyDepth(x, y, selectedStandingZ),
                         0,
                         0,
                         0,
@@ -280,14 +276,12 @@ public final class LandscapeSliceResolver {
         int maxZ = safeAdd(selectedStandingZ, maxExposureDistance + 1);
 
         ArrayDeque<Position> queue = new ArrayDeque<>();
-        Map<Column, TopOpaque> topOpaque = new HashMap<>();
 
         for (long lx = expandedMinX; lx <= expandedMaxX; lx++) {
             int x = (int) lx;
             for (long ly = expandedMinY; ly <= expandedMaxY; ly++) {
                 int y = (int) ly;
                 TopOpaque top = findTopOpaque(x, y);
-                topOpaque.put(new Column(x, y), top);
 
                 for (long lz = minZ; lz <= maxZ; lz++) {
                     int z = (int) lz;
@@ -371,16 +365,19 @@ public final class LandscapeSliceResolver {
             int y,
             int startZ) {
 
+        if (view.terrainExtents().empty()
+                || startZ > view.terrainExtents().maxZ()) {
+            return 0;
+        }
+
         int depth = 0;
-        for (long lz = startZ; lz <= Integer.MAX_VALUE; lz++) {
+        int maxZ = view.terrainExtents().maxZ();
+        for (long lz = startZ; lz <= maxZ; lz++) {
             int z = (int) lz;
             if (!view.terrain().contains(x, y, z)) {
                 break;
             }
             depth++;
-            if (z == Integer.MAX_VALUE) {
-                break;
-            }
         }
         return depth;
     }
@@ -450,9 +447,6 @@ public final class LandscapeSliceResolver {
     };
 
     private record Position(int x, int y, int z) {
-    }
-
-    private record Column(int x, int y) {
     }
 
     private record TopOpaque(boolean present, int z) {
