@@ -5,17 +5,15 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
-/** Draws authoritative landscape state as a true horizontal Z slice. */
+/** Draws authoritative landscape using geometry-derived cutaway visibility. */
 public final class LandscapeRenderer {
 
-    private static final Color LOWER_DEPTH_ONE =
-            new Color(0.39f, 0.42f, 0.38f, 1f);
+    private static final int EXPOSURE_DISTANCE = 12;
 
     private final SimulationView view;
     private final ProceduralLandscapePack surfaceArt;
@@ -47,16 +45,6 @@ public final class LandscapeRenderer {
         this.sliceResolver = sliceResolver;
     }
 
-    /**
-     * Draws one horizontal standing-Z cut.
-     *
-     * <p>Per XY cell the visual priority is:</p>
-     * <ol>
-     *   <li>solid terrain body anchored at selected Z;</li>
-     *   <li>current surface supported by terrain at selected Z - 1;</li>
-     *   <li>nearest lower surface visible through an otherwise open column.</li>
-     * </ol>
-     */
     public void draw(
             SpriteBatch batch,
             int minX,
@@ -66,41 +54,31 @@ public final class LandscapeRenderer {
             int selectedStandingZ,
             int maxLowerDepth) {
 
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                drawCell(
-                        batch,
-                        x,
-                        y,
-                        selectedStandingZ,
-                        maxLowerDepth);
-            }
-        }
-
-        drawCurrentRampDescentMarkers(
-                batch,
+        LandscapeSliceResolver.Analysis analysis = sliceResolver.analyze(
                 minX,
                 maxX,
                 minY,
                 maxY,
-                selectedStandingZ);
+                selectedStandingZ,
+                maxLowerDepth,
+                EXPOSURE_DISTANCE);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                drawCell(batch, analysis, x, y);
+            }
+        }
 
         batch.setColor(Color.WHITE);
     }
 
     private void drawCell(
             SpriteBatch batch,
+            LandscapeSliceResolver.Analysis analysis,
             int x,
-            int y,
-            int selectedStandingZ,
-            int maxLowerDepth) {
+            int y) {
 
-        LandscapeSliceResolver.Cell cell = sliceResolver.resolve(
-                x,
-                y,
-                selectedStandingZ,
-                maxLowerDepth);
-
+        LandscapeSliceResolver.Cell cell = analysis.resolve(x, y);
         if (cell.kind() == LandscapeSliceResolver.Kind.EMPTY) {
             return;
         }
@@ -114,92 +92,85 @@ public final class LandscapeRenderer {
 
         TextureRegion region;
         if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
+            // Ramp keeps exactly the same generated visual language on every
+            // slice; only the environmental depth tint changes.
             region = cell.shape() instanceof RampShape ramp
-                    ? sliceArt.rampCut(ramp, variant)
+                    ? surfaceArt.ramp(ramp, variant)
                     : sliceArt.solid(topology, variant);
-            batch.setColor(Color.WHITE);
+            setSolidTint(batch, cell.bodyDepth());
         } else {
             region = cell.shape() instanceof RampShape ramp
                     ? surfaceArt.ramp(ramp, variant)
                     : surfaceArt.surface(topology, variant);
-
-            if (cell.kind() == LandscapeSliceResolver.Kind.LOWER_SURFACE) {
-                setLowerTint(batch, cell.lowerDepth());
-            } else {
-                batch.setColor(Color.WHITE);
-            }
+            setSurfaceTint(batch, cell);
         }
 
         batch.draw(region, x, y, 1f, 1f);
     }
 
-    /**
-     * A Ramp is authoritative only once, but its upper landing receives a
-     * presentation-only descent mouth so the same connector reads in both
-     * travel directions without inventing another Shape in simulation.
-     */
-    private void drawCurrentRampDescentMarkers(
+    private static void setSolidTint(
             SpriteBatch batch,
-            int minX,
-            int maxX,
-            int minY,
-            int maxY,
-            int selectedStandingZ) {
+            int bodyDepth) {
 
-        int terrainZ = selectedStandingZ - 1;
-        batch.setColor(Color.WHITE);
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                LandscapeSliceResolver.Cell rampCell = sliceResolver.resolve(
-                        x,
-                        y,
-                        selectedStandingZ,
-                        0);
-                if (rampCell.kind()
-                        != LandscapeSliceResolver.Kind.CURRENT_SURFACE
-                        || !(rampCell.shape() instanceof RampShape ramp)) {
-                    continue;
-                }
-
-                int landingX = x + riseX(ramp);
-                int landingY = y + riseY(ramp);
-                if (landingX < minX || landingX > maxX
-                        || landingY < minY || landingY > maxY) {
-                    continue;
-                }
-
-                LandscapeSliceResolver.Cell landing = sliceResolver.resolve(
-                        landingX,
-                        landingY,
-                        selectedStandingZ,
-                        0);
-                if (landing.kind()
-                        != LandscapeSliceResolver.Kind.CURRENT_SURFACE
-                        || landing.terrainZ() != terrainZ) {
-                    continue;
-                }
-
-                batch.draw(
-                        sliceArt.descentMarker(ramp),
-                        landingX,
-                        landingY,
-                        1f,
-                        1f);
-            }
-        }
+        float shade = switch (Math.min(bodyDepth, 5)) {
+            case 1 -> 0.92f;
+            case 2 -> 0.76f;
+            case 3 -> 0.62f;
+            case 4 -> 0.50f;
+            default -> 0.40f;
+        };
+        batch.setColor(shade, shade, shade, 1f);
     }
 
-    private static void setLowerTint(
+    private static void setSurfaceTint(
             SpriteBatch batch,
+            LandscapeSliceResolver.Cell cell) {
+
+        float environment = environmentShade(cell);
+        float drop = cell.kind() == LandscapeSliceResolver.Kind.LOWER_SURFACE
+                ? dropShade(cell.dropDepth())
+                : 1f;
+        float shade = environment * drop;
+
+        // A tiny cool bias helps covered/lower space separate from ordinary
+        // grass without inventing a second cave material or lighting system.
+        batch.setColor(
+                shade * 0.96f,
+                shade * 0.98f,
+                shade,
+                1f);
+    }
+
+    private static float environmentShade(
+            LandscapeSliceResolver.Cell cell) {
+
+        if (!cell.covered()) {
+            return 1f;
+        }
+
+        float cover = Math.max(
+                0.44f,
+                0.80f - (Math.min(cell.coverDepth(), 6) - 1) * 0.075f);
+        float tallCavernRelief = Math.min(
+                0.08f,
+                Math.max(0, cell.ceilingDistance() - 1) * 0.015f);
+        float exposure = Math.max(
+                0.48f,
+                1f - Math.min(cell.exposureDistance(), EXPOSURE_DISTANCE + 1)
+                        * 0.055f);
+
+        return Math.max(
+                0.28f,
+                Math.min(0.86f, cover + tallCavernRelief) * exposure);
+    }
+
+    private static float dropShade(
             int depth) {
 
-        float attenuation = 1f / (1f + (depth - 1) * 0.42f);
-        batch.setColor(
-                LOWER_DEPTH_ONE.r * attenuation,
-                LOWER_DEPTH_ONE.g * attenuation,
-                LOWER_DEPTH_ONE.b * attenuation,
-                1f);
+        if (depth <= 0) {
+            return 1f;
+        }
+        return Math.max(0.50f, 1f - depth * 0.085f);
     }
 
     private int neighbourMask(
@@ -235,29 +206,5 @@ public final class LandscapeRenderer {
         }
 
         return LandscapeTopology.normalize(mask);
-    }
-
-    private static int riseX(
-            RampShape ramp) {
-
-        if (ramp == RampShape.POSITIVE_X) {
-            return 1;
-        }
-        if (ramp == RampShape.NEGATIVE_X) {
-            return -1;
-        }
-        return 0;
-    }
-
-    private static int riseY(
-            RampShape ramp) {
-
-        if (ramp == RampShape.POSITIVE_Y) {
-            return 1;
-        }
-        if (ramp == RampShape.NEGATIVE_Y) {
-            return -1;
-        }
-        return 0;
     }
 }
