@@ -148,7 +148,7 @@ public final class VisualizerHudRenderer {
         font.draw(
                 batch,
                 "F2 transitions " + onOff(state.showTransitions())
-                        + " | F3 shapes " + onOff(state.showShapeDirections())
+                        + " | F3 ramps " + onOff(state.showShapeDirections())
                         + " | F4 lower depth " + state.lowerDepth(),
                 textX,
                 top - 66f);
