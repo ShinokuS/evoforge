@@ -163,7 +163,7 @@ logical simulation cell = 1 x 1
 native procedural cell   = 16 x 16 pixels
 ```
 
-Generated textures используют `Nearest` filtering и duplicate padding. Source PNG, JSON descriptor, TexturePacker step и установка third-party assets не нужны.
+Generated textures используют duplicate padding. На обычном/ближнем zoom используется `Nearest`, чтобы сохранять pixel-art язык; на дальнем zoom (`zoom >= 2.5`) те же generated textures переключаются на `Linear`, чтобы уменьшить whole-scene sampling shimmer при непрерывном движении камеры. Source PNG, JSON descriptor, TexturePacker step и установка third-party assets не нужны.
 
 ### Surface art
 
@@ -187,9 +187,22 @@ Authoritative Ramp semantics полностью остаются в `RampShape` 
 
 Обводится только **внешняя cardinal-граница** `CURRENT_SURFACE`. Если две соседние клетки обе принадлежат активной поверхности, между ними линия не появляется, поэтому это не превращается в дополнительную сетку.
 
-Cue состоит из светлого малонасыщенного rim со стороны активного слоя и узкой тёмной линии сразу снаружи. Толщина выводится из world-units-per-screen-pixel текущей камеры, поэтому contour остаётся примерно однопиксельным при разном zoom.
+Cue состоит из яркого светлого rim со стороны активного слоя и тёмной внешней подложки. Толщина выводится из world-units-per-screen-pixel текущей камеры: текущая реализация держит примерно `2.25` screen pixels для светлого rim и `4` screen pixels для внешней подложки при любом zoom. Здесь сознательно приоритет отдан мгновенной читаемости активного Z, а не тонкой hairline-эстетике.
 
 `LandscapeSliceResolver.isCurrentSurface(...)` владеет дешёвым structural query для этого overlay. Контур не запускает повторный exposure BFS и не добавляет нового simulation state или terrain type.
+
+## Диагностические overlays
+
+`F2` Navigation transitions и `F3` Ramp directions сознательно заметнее обычного world art, потому что это debug-инструменты, а не часть окружения.
+
+Оба overlay рендерятся как filled double-stroke geometry вместо зависимости от platform-specific OpenGL line width:
+
+- тёмная подложка вокруг каждого сегмента отделяет его от любого terrain color;
+- примерно `2.75` screen-pixel яркого stroke поверх `5` screen-pixel тёмной подложки;
+- заполненные arrow heads используют ту же world-space геометрию направления;
+- высоконасыщенные diagnostic colors: cyan для flat transition, green для перехода вверх, orange для перехода вниз и тёплый yellow для Ramp direction.
+
+Толщина выводится из screen-pixel scale, поэтому diagnostics остаются читаемыми и на ближнем, и на дальнем zoom. Эти overlays не меняют Navigation или Shape semantics.
 
 ## Управление и inspector
 
@@ -207,7 +220,7 @@ F4             lower visibility depth: 0 / 1 / 4 / 8
 
 Click всегда адресует `(x,y,selectedZ)`. Видимый через shaft lower floor не меняет input Z автоматически.
 
-В status HUD теперь также показывается текущий FPS. Cell inspector показывает slice role и геометрический context: body depth, drop depth, ceiling distance, cover depth и exposure distance там, где они применимы.
+В status HUD показываются текущие FPS, zoom и режим texture sampling. Cell inspector показывает slice role и геометрический context: body depth, drop depth, ceiling distance, cover depth и exposure distance там, где они применимы.
 
 Objects пока остаются намеренно primitive current-Z debug markers. Их будущий art/occlusion должен потреблять тот же presentation context, а не заставлять terrain resolver знать object definitions.
 
@@ -234,19 +247,24 @@ Manual acceptance следует проводить на нескольких re
 
 Производительность рассматривается как development invariant, а не как уборка только перед релизом: сначала добавляем дешёвую telemetry, затем оптимизируем доказанный hot-path без изменения simulation semantics.
 
-Первый profiling-pass visualizer показал две конкретные стоимости:
+Первый profiling-pass visualizer выявил конкретные стоимости:
 
-- camera-local 3D exposure BFS перестраивался каждый frame и представлял каждую посещённую клетку через `HashMap<Position, Integer>` и queue-объекты;
-- sparse coordinate reads создавали временный key-record при каждом terrain, geometry-override и cell-object lookup.
+- camera-local 3D exposure BFS перестраивался слишком часто и представлял посещённые клетки через `HashMap<Position, Integer>` и queue-объекты;
+- sparse coordinate reads создавали временный key-record при terrain, geometry-override и cell-object lookup;
+- фиксированный cache padding в world cells приводил к более частому выходу камеры из cache-window на дальнем zoom, потому что world-space скорость камеры растёт вместе с zoom;
+- изменение selected Z заставляло строить новый exposure analysis даже для соседнего slice в том же camera volume.
 
 Текущая реализация поэтому:
 
 - хранит exposure distance в плотном primitive `int[]` volume и использует `int[]` BFS queue, устраняя per-node объекты BFS;
-- держит один padded `LandscapeSliceResolver.Analysis` вокруг видимого диапазона камеры и повторно использует его, пока камера остаётся внутри этого окна;
-- инвалидирует analysis при изменении selected Z, lower-depth policy или versioned visibility volume;
-- использует монотонный authoritative terrain revision для текущего terrain-backed volume;
-- использует reusable non-stored coordinate probes в read-hot sparse-map lookups, поэтому чтение больше не создаёт coordinate key каждый раз;
-- оставляет active-Z perimeter на прямых membership checks и никогда не перестраивает exposure analysis ради outline.
+- использует reusable non-stored coordinate probes в read-hot sparse-map lookups;
+- масштабирует XY analysis padding вместе с видимым viewport span вместо фиксированного числа world cells;
+- держит небольшой LRU padded analysis windows;
+- строит каждый cached exposure field сразу для standing-Z band (`±4` относительно build Z), поэтому соседние `PageUp/PageDown` только retarget уже готового поля и не требуют нового BFS;
+- инвалидирует derived caches по authoritative visibility revision, lower-depth policy, поддерживаемому Z-band и camera containment;
+- оставляет active-Z perimeter и diagnostic overlays на дешёвых direct reads и не перестраивает exposure analysis ради них.
+
+Тесты сравнивают Z-band-retargeted analysis с отдельно построенными per-Z analysis, чтобы reuse exposure field не менял visibility semantics.
 
 `LandscapeRenderer` примерно раз в секунду печатает строку `VisualizerPerf` со значениями:
 
@@ -256,20 +274,23 @@ fps
 landscape average / maximum CPU time
 analysis average / maximum CPU time
 analysis cache hit / miss count
+текущий XY padding
+число cached analyses
+радиус Z-band
 ```
 
 Эта telemetry намеренно лёгкая и остаётся доступной по мере развития visualizer. При regression сначала следует локализовать проблему этими числами, а уже затем вводить chunks, dirty regions или более широкие caches.
 
-### Pixel-stable движение камеры
+### Непрерывная камера и sampling на дальнем zoom
 
-Процедурный landscape использует `Nearest` filtering, поэтому continuously moving orthographic camera не должна передавать в renderer произвольные sub-screen-pixel смещения. На большом zoom-out это меняет фазу nearest-sampling сразу для всей картинки и визуально может выглядеть как stutter даже при стабильном frame time.
+WASD управляет одной непрерывной frame-time-independent orthographic camera. Попытка привязать render-position к screen pixels была удалена после manual testing: квантизация делала дальнее движение визуально более ступенчатым.
 
-`ZLevelVisualizer` поэтому разделяет две позиции камеры:
+Вместо этого компромисс pixel-art решается sampling policy:
 
-- непрерывный logical pan target, который WASD обновляет frame-time-independent движением;
-- render position, которая снапится так, чтобы край viewport двигался целыми screen-pixel шагами для текущего zoom и размера окна.
+- на обычном/ближнем zoom используется `Nearest` для чёткого native pixel art;
+- на дальнем zoom (`>= 2.5`) используется `Linear`, чтобы уменьшить nearest-sampling shimmer при полностью непрерывной камере.
 
-Logical target не квантуется, поэтому input не накапливает rounding error. Pixel alignment применяется только к presentation. `CameraPixelSnap` содержит чистую тестируемую математику и не влияет на simulation coordinates, selection semantics или visibility caches.
+Sampling относится только к presentation. Он не меняет simulation coordinates, selection, visibility, cache truth или movement semantics.
 
 Terrain extent поддерживается инкрементально внутри `TerrainSystem`; visualizer не придумывает arbitrary maximum Z.
 
