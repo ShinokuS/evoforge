@@ -19,6 +19,11 @@ public interface VisibilityVolumeLookup {
 
     int maxOccupiedZ();
 
-    /** Monotonic version used to invalidate presentation caches safely. */
-    long revision();
+    /**
+     * Monotonic version for cache invalidation, or a negative value when this
+     * volume cannot currently guarantee safe cache reuse.
+     */
+    default long revision() {
+        return -1L;
+    }
 }
