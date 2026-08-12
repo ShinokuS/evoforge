@@ -1,5 +1,6 @@
 package io.github.evoforge.visualizer.render;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -14,11 +15,32 @@ import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 public final class LandscapeRenderer {
 
     private static final int EXPOSURE_DISTANCE = 12;
+    private static final int ANALYSIS_PADDING = 8;
+    private static final long PERF_LOG_INTERVAL_NANOS = 1_000_000_000L;
 
     private final SimulationView view;
     private final ProceduralLandscapePack surfaceArt;
     private final ProceduralSliceArt sliceArt;
     private final LandscapeSliceResolver sliceResolver;
+
+    private LandscapeSliceResolver.Analysis cachedAnalysis;
+    private long cachedTerrainRevision = Long.MIN_VALUE;
+    private int cachedMinX;
+    private int cachedMaxX;
+    private int cachedMinY;
+    private int cachedMaxY;
+    private int cachedStandingZ;
+    private int cachedLowerDepth;
+
+    private long perfWindowStartNanos = System.nanoTime();
+    private long perfAnalysisNanos;
+    private long perfLandscapeNanos;
+    private long perfMaxAnalysisNanos;
+    private long perfMaxLandscapeNanos;
+    private int perfFrames;
+    private int perfCacheHits;
+    private int perfCacheMisses;
+    private long lastVisibleCells;
 
     public LandscapeRenderer(
             SimulationView view,
@@ -54,14 +76,16 @@ public final class LandscapeRenderer {
             int selectedStandingZ,
             int maxLowerDepth) {
 
-        LandscapeSliceResolver.Analysis analysis = sliceResolver.analyze(
+        long landscapeStart = System.nanoTime();
+        long analysisStart = landscapeStart;
+        LandscapeSliceResolver.Analysis analysis = analysisFor(
                 minX,
                 maxX,
                 minY,
                 maxY,
                 selectedStandingZ,
-                maxLowerDepth,
-                EXPOSURE_DISTANCE);
+                maxLowerDepth);
+        long analysisNanos = System.nanoTime() - analysisStart;
 
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -70,6 +94,112 @@ public final class LandscapeRenderer {
         }
 
         batch.setColor(Color.WHITE);
+
+        long landscapeNanos = System.nanoTime() - landscapeStart;
+        lastVisibleCells = (long) (maxX - minX + 1)
+                * (long) (maxY - minY + 1);
+        recordPerformance(analysisNanos, landscapeNanos);
+    }
+
+    private LandscapeSliceResolver.Analysis analysisFor(
+            int minX,
+            int maxX,
+            int minY,
+            int maxY,
+            int selectedStandingZ,
+            int maxLowerDepth) {
+
+        long terrainRevision = view.terrainRevision().revision();
+        boolean cacheHit = cachedAnalysis != null
+                && cachedTerrainRevision == terrainRevision
+                && cachedStandingZ == selectedStandingZ
+                && cachedLowerDepth == maxLowerDepth
+                && minX >= cachedMinX
+                && maxX <= cachedMaxX
+                && minY >= cachedMinY
+                && maxY <= cachedMaxY;
+
+        if (cacheHit) {
+            perfCacheHits++;
+            return cachedAnalysis;
+        }
+
+        perfCacheMisses++;
+        cachedTerrainRevision = terrainRevision;
+        cachedStandingZ = selectedStandingZ;
+        cachedLowerDepth = maxLowerDepth;
+        cachedMinX = safeAdd(minX, -ANALYSIS_PADDING);
+        cachedMaxX = safeAdd(maxX, ANALYSIS_PADDING);
+        cachedMinY = safeAdd(minY, -ANALYSIS_PADDING);
+        cachedMaxY = safeAdd(maxY, ANALYSIS_PADDING);
+        cachedAnalysis = sliceResolver.analyze(
+                cachedMinX,
+                cachedMaxX,
+                cachedMinY,
+                cachedMaxY,
+                selectedStandingZ,
+                maxLowerDepth,
+                EXPOSURE_DISTANCE);
+        return cachedAnalysis;
+    }
+
+    private void recordPerformance(
+            long analysisNanos,
+            long landscapeNanos) {
+
+        perfFrames++;
+        perfAnalysisNanos += analysisNanos;
+        perfLandscapeNanos += landscapeNanos;
+        perfMaxAnalysisNanos = Math.max(perfMaxAnalysisNanos, analysisNanos);
+        perfMaxLandscapeNanos = Math.max(perfMaxLandscapeNanos, landscapeNanos);
+
+        long now = System.nanoTime();
+        if (now - perfWindowStartNanos < PERF_LOG_INTERVAL_NANOS) {
+            return;
+        }
+
+        long frames = Math.max(1, perfFrames);
+        Gdx.app.log(
+                "VisualizerPerf",
+                "fps=" + Gdx.graphics.getFramesPerSecond()
+                        + " visible=" + lastVisibleCells
+                        + " landscape avg/max="
+                        + millis(perfLandscapeNanos / frames)
+                        + "/" + millis(perfMaxLandscapeNanos) + "ms"
+                        + " analysis avg/max="
+                        + millis(perfAnalysisNanos / frames)
+                        + "/" + millis(perfMaxAnalysisNanos) + "ms"
+                        + " cache hit/miss="
+                        + perfCacheHits + "/" + perfCacheMisses);
+
+        perfWindowStartNanos = now;
+        perfAnalysisNanos = 0L;
+        perfLandscapeNanos = 0L;
+        perfMaxAnalysisNanos = 0L;
+        perfMaxLandscapeNanos = 0L;
+        perfFrames = 0;
+        perfCacheHits = 0;
+        perfCacheMisses = 0;
+    }
+
+    private static double millis(
+            long nanos) {
+
+        return Math.round(nanos / 10_000.0) / 100.0;
+    }
+
+    private static int safeAdd(
+            int value,
+            int delta) {
+
+        long result = (long) value + delta;
+        if (result < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        if (result > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) result;
     }
 
     private void drawCell(
@@ -112,10 +242,6 @@ public final class LandscapeRenderer {
             SpriteBatch batch,
             int bodyDepth) {
 
-        // The first cut layers remain recognisably part of the same landscape.
-        // Only genuinely deep stacked mass approaches the background/silhouette
-        // range. The curve is intentionally non-linear: depth must be readable
-        // without turning every one-level plateau into a different material.
         float shade = switch (Math.min(bodyDepth, 7)) {
             case 1 -> 1.00f;
             case 2 -> 0.84f;
@@ -137,10 +263,6 @@ public final class LandscapeRenderer {
                 ? dropShade(cell.dropDepth())
                 : 1f;
         float shade = environment * drop;
-
-        // Neutral multiplication preserves the procedural terrain hue. Depth
-        // should look like the same world in less light, not a blue/black cave
-        // material painted over the landscape.
         batch.setColor(shade, shade, shade, 1f);
     }
 
@@ -151,9 +273,6 @@ public final class LandscapeRenderer {
             return 1f;
         }
 
-        // One or two layers of cover remain readable. Thick cover progressively
-        // approaches silhouette, while a tall cavern receives a small amount of
-        // relief so vertical volume still feels larger than a cramped tunnel.
         float cover = switch (Math.min(cell.coverDepth(), 7)) {
             case 1 -> 0.88f;
             case 2 -> 0.75f;
@@ -166,10 +285,6 @@ public final class LandscapeRenderer {
         float tallCavernRelief = Math.min(
                 0.10f,
                 Math.max(0, cell.ceilingDistance() - 1) * 0.02f);
-
-        // Exposure is geometric distance through open air, not a cave flag.
-        // Close-to-mouth cells therefore retain contrast while deep enclosed
-        // space fades smoothly instead of changing palette abruptly.
         float exposure = Math.max(
                 0.38f,
                 1f - Math.min(cell.exposureDistance(), EXPOSURE_DISTANCE + 1)
@@ -187,11 +302,6 @@ public final class LandscapeRenderer {
             return 1f;
         }
 
-        // Looking down from a height stays much more permissive than looking
-        // through cover, but very deep lower surfaces must stop competing with
-        // the active slice. By depth 4 (for example the demo Z=-5 shaft floor
-        // seen from standing Z=0) texture is only a faint depth cue; still
-        // deeper surfaces approach the external background visually.
         return switch (Math.min(depth, 8)) {
             case 1 -> 0.84f;
             case 2 -> 0.64f;
