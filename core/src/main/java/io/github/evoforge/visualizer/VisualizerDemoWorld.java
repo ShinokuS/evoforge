@@ -75,7 +75,6 @@ public final class VisualizerDemoWorld {
             }
         }
 
-        // Several genuinely empty vertical cells end at a much lower floor.
         assembly.placeTerrain(SHAFT_X, SHAFT_Y, -5, ground);
     }
 
@@ -105,7 +104,8 @@ public final class VisualizerDemoWorld {
 
         placeRamp(assembly, ground, 0, -6, 0, RampShape.POSITIVE_Y);
         placeRamp(assembly, ground, 0, 6, 0, RampShape.NEGATIVE_Y);
-        placeRamp(assembly, ground, -8, 0, 0, RampShape.POSITIVE_X);
+        // Keep the west lower landing clear of the separate flat-roof cavern.
+        placeRamp(assembly, ground, -8, 4, 0, RampShape.POSITIVE_X);
         placeRamp(assembly, ground, 8, -3, 0, RampShape.NEGATIVE_X);
     }
 
@@ -113,8 +113,6 @@ public final class VisualizerDemoWorld {
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        // Mountain body at terrain Z=1. Missing cells form a west-facing mouth
-        // and chamber; the base plateau at terrain Z=0 remains the cave floor.
         for (int x = 1; x <= 6; x++) {
             for (int y = -4; y <= 4; y++) {
                 if (isMountainCaveAir(x, y)) {
@@ -124,19 +122,14 @@ public final class VisualizerDemoWorld {
             }
         }
 
-        // Real roof above the chamber. Looking from higher slices therefore
-        // sees mountain mass, not a magically illuminated cave interior.
         for (int x = 1; x <= 5; x++) {
             for (int y = -1; y <= 1; y++) {
                 assembly.placeTerrain(x, y, 2, ground);
             }
         }
 
-        // First local ascent: base plateau standing Z=1 -> mountain Z=2.
         assembly.setShape(1, -4, 1, RampShape.POSITIVE_X);
 
-        // Higher shelf and two more local ramps create a multi-Z climb without
-        // inventing a long-slope mechanic.
         for (int x = 3; x <= 6; x++) {
             for (int y = 2; y <= 4; y++) {
                 assembly.placeTerrain(x, y, 2, ground);
@@ -166,10 +159,6 @@ public final class VisualizerDemoWorld {
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        // Separate cave under a deliberately flat cap on the west side. The
-        // chamber floor is the lower meadow (terrain Z=-1), walls occupy Z=0/1,
-        // and the flat roof lives at Z=2. One missing roof cell is an actual
-        // vertical opening rather than an X-ray presentation exception.
         int minX = -14;
         int maxX = -9;
         int minY = -4;
