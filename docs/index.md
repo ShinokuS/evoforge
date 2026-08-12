@@ -2,33 +2,46 @@
 layout: home
 
 title: EvoForge Documentation
+
 titleTemplate: false
 
 hero:
   name: EvoForge
-  text: Architecture & Development Guide
-  tagline: Documentation-as-code for the deterministic emergent simulation project.
+  text: Simulation architecture and development journal
+  tagline: Canonical contracts, current system semantics, decisions, guides, and the history behind them.
   actions:
     - theme: brand
-      text: Read the Guide
-      link: /wiki/Home
+      text: Architecture
+      link: /architecture
     - theme: alt
-      text: Architecture Contract
-      link: /ARCHITECTURE
+      text: Systems
+      link: /systems/runtime
     - theme: alt
-      text: Technical Reference
-      link: /TECHNICAL_REFERENCE
+      text: Development Journal
+      link: /notes/
 
 features:
-  - title: Architecture contract
-    details: Stable ownership rules, boundaries, invariants, and intentionally deferred decisions.
-    link: /ARCHITECTURE
-  - title: Technical reference
-    details: Current packages, implementations, algorithms, test coverage, and known technical gaps.
-    link: /TECHNICAL_REFERENCE
-  - title: Project guide
-    details: Explanations, diagrams, rationale, subsystem walkthroughs, extension recipes, and terminology.
-    link: /wiki/Home
-  - title: Searchable and reviewable
-    details: The site is built from Markdown committed with the code, reviewed through pull requests, and searchable locally in the browser.
+  - title: Architecture
+    details: Small global contract containing only rules that span systems or constrain future extension.
+  - title: Systems
+    details: One canonical page per implemented subsystem. New systems do not force edits to completed system pages.
+  - title: Decisions
+    details: Durable explanations of important choices and rejected alternatives.
+  - title: Development Journal
+    details: Non-normative notes, experiments, lessons and open thoughts preserved as project history.
 ---
+
+## Documentation model
+
+EvoForge documentation is intentionally low-friction:
+
+```text
+architecture.md     global cross-system rules
+roadmap.md          milestone status and intentionally deferred work
+systems/            current semantic truth, one page per subsystem
+decisions/          why durable architectural choices were made
+guides/             practical development recipes
+notes/              non-normative Development Journal
+```
+
+Implementation details that are obvious from source code, package listings or exact class counts are not duplicated here. Code, Javadoc and tests are the implementation reference.

@@ -37,6 +37,14 @@ final class RampShapeTest {
     }
 
     @Test
+    void exposesRiseDirectionAsGeometryData() {
+        assertRise(RampShape.POSITIVE_X, 1, 0);
+        assertRise(RampShape.NEGATIVE_X, -1, 0);
+        assertRise(RampShape.POSITIVE_Y, 0, 1);
+        assertRise(RampShape.NEGATIVE_Y, 0, -1);
+    }
+
+    @Test
     void exposesNoSideOrDiagonalEntries() {
         assertEquals(
                 TransitionPorts.NONE,
@@ -159,6 +167,15 @@ final class RampShapeTest {
                         2),
                 TransitionMask.NONE,
                 rampToLower);
+    }
+
+    private static void assertRise(
+            RampShape shape,
+            int expectedX,
+            int expectedY) {
+
+        assertEquals(expectedX, shape.riseX());
+        assertEquals(expectedY, shape.riseY());
     }
 
     private static void assertPorts(
