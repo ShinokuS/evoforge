@@ -6,37 +6,56 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
+import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
-/** Draws authoritative landscape state using the generated EvoForge tileset. */
+/** Draws authoritative landscape state as a true horizontal Z slice. */
 public final class LandscapeRenderer {
 
-    private static final Color CURRENT_TINT = Color.WHITE;
-    private static final Color LOWER_TINT =
+    private static final Color LOWER_DEPTH_ONE =
             new Color(0.39f, 0.42f, 0.38f, 1f);
 
     private final SimulationView view;
-    private final ProceduralLandscapePack pack;
+    private final ProceduralLandscapePack surfaceArt;
+    private final ProceduralSliceArt sliceArt;
+    private final LandscapeSliceResolver sliceResolver;
 
     public LandscapeRenderer(
             SimulationView view,
-            ProceduralLandscapePack pack) {
+            ProceduralLandscapePack surfaceArt,
+            ProceduralSliceArt sliceArt,
+            LandscapeSliceResolver sliceResolver) {
 
         if (view == null) {
             throw new IllegalArgumentException("view must not be null");
         }
-        if (pack == null) {
-            throw new IllegalArgumentException("pack must not be null");
+        if (surfaceArt == null) {
+            throw new IllegalArgumentException("surfaceArt must not be null");
+        }
+        if (sliceArt == null) {
+            throw new IllegalArgumentException("sliceArt must not be null");
+        }
+        if (sliceResolver == null) {
+            throw new IllegalArgumentException("sliceResolver must not be null");
         }
 
         this.view = view;
-        this.pack = pack;
+        this.surfaceArt = surfaceArt;
+        this.sliceArt = sliceArt;
+        this.sliceResolver = sliceResolver;
     }
 
     /**
-     * Draws a clean standing-Z slice. Lower terrain is contextual only and is
-     * visible through cells where the selected standing plane has no support.
+     * Draws one horizontal standing-Z cut.
+     *
+     * <p>Per XY cell the visual priority is:</p>
+     * <ol>
+     *   <li>solid terrain body anchored at selected Z;</li>
+     *   <li>current surface supported by terrain at selected Z - 1;</li>
+     *   <li>nearest lower surface visible through an otherwise open column.</li>
+     * </ol>
      */
     public void draw(
             SpriteBatch batch,
@@ -45,72 +64,142 @@ public final class LandscapeRenderer {
             int minY,
             int maxY,
             int selectedStandingZ,
-            boolean showLowerContext) {
+            int maxLowerDepth) {
 
-        if (showLowerContext) {
-            drawPlane(
-                    batch,
-                    minX,
-                    maxX,
-                    minY,
-                    maxY,
-                    selectedStandingZ - 1,
-                    selectedStandingZ - 1,
-                    true);
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                drawCell(
+                        batch,
+                        x,
+                        y,
+                        selectedStandingZ,
+                        maxLowerDepth);
+            }
         }
 
-        drawPlane(
+        drawCurrentRampDescentMarkers(
                 batch,
                 minX,
                 maxX,
                 minY,
                 maxY,
-                selectedStandingZ,
-                Integer.MIN_VALUE,
-                false);
+                selectedStandingZ);
 
         batch.setColor(Color.WHITE);
     }
 
-    private void drawPlane(
+    private void drawCell(
+            SpriteBatch batch,
+            int x,
+            int y,
+            int selectedStandingZ,
+            int maxLowerDepth) {
+
+        LandscapeSliceResolver.Cell cell = sliceResolver.resolve(
+                x,
+                y,
+                selectedStandingZ,
+                maxLowerDepth);
+
+        if (cell.kind() == LandscapeSliceResolver.Kind.EMPTY) {
+            return;
+        }
+
+        int variant = LandscapeTopology.variant(
+                x,
+                y,
+                cell.terrainZ(),
+                ProceduralLandscapePack.SURFACE_VARIANTS);
+        int topology = neighbourMask(x, y, cell.terrainZ());
+
+        TextureRegion region;
+        if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
+            region = cell.shape() instanceof RampShape ramp
+                    ? sliceArt.rampCut(ramp, variant)
+                    : sliceArt.solid(topology, variant);
+            batch.setColor(Color.WHITE);
+        } else {
+            region = cell.shape() instanceof RampShape ramp
+                    ? surfaceArt.ramp(ramp, variant)
+                    : surfaceArt.surface(topology, variant);
+
+            if (cell.kind() == LandscapeSliceResolver.Kind.LOWER_SURFACE) {
+                setLowerTint(batch, cell.lowerDepth());
+            } else {
+                batch.setColor(Color.WHITE);
+            }
+        }
+
+        batch.draw(region, x, y, 1f, 1f);
+    }
+
+    /**
+     * A Ramp is authoritative only once, but its upper landing receives a
+     * presentation-only descent mouth so the same connector reads in both
+     * travel directions without inventing another Shape in simulation.
+     */
+    private void drawCurrentRampDescentMarkers(
             SpriteBatch batch,
             int minX,
             int maxX,
             int minY,
             int maxY,
-            int standingZ,
-            int occludingTerrainZ,
-            boolean dimmed) {
+            int selectedStandingZ) {
 
-        int terrainZ = standingZ - 1;
-        batch.setColor(dimmed ? LOWER_TINT : CURRENT_TINT);
+        int terrainZ = selectedStandingZ - 1;
+        batch.setColor(Color.WHITE);
 
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
-                if (!view.terrain().contains(x, y, terrainZ)) {
-                    continue;
-                }
-                if (occludingTerrainZ != Integer.MIN_VALUE
-                        && view.terrain().contains(x, y, occludingTerrainZ)) {
-                    continue;
-                }
-
-                Shape shape = view.geometry().find(x, y, terrainZ);
-                int variant = LandscapeTopology.variant(
+                LandscapeSliceResolver.Cell rampCell = sliceResolver.resolve(
                         x,
                         y,
-                        terrainZ,
-                        ProceduralLandscapePack.SURFACE_VARIANTS);
+                        selectedStandingZ,
+                        0);
+                if (rampCell.kind()
+                        != LandscapeSliceResolver.Kind.CURRENT_SURFACE
+                        || !(rampCell.shape() instanceof RampShape ramp)) {
+                    continue;
+                }
 
-                TextureRegion region = shape instanceof RampShape ramp
-                        ? pack.ramp(ramp, variant)
-                        : pack.surface(
-                                neighbourMask(x, y, terrainZ),
-                                variant);
+                int landingX = x + riseX(ramp);
+                int landingY = y + riseY(ramp);
+                if (landingX < minX || landingX > maxX
+                        || landingY < minY || landingY > maxY) {
+                    continue;
+                }
 
-                batch.draw(region, x, y, 1f, 1f);
+                LandscapeSliceResolver.Cell landing = sliceResolver.resolve(
+                        landingX,
+                        landingY,
+                        selectedStandingZ,
+                        0);
+                if (landing.kind()
+                        != LandscapeSliceResolver.Kind.CURRENT_SURFACE
+                        || landing.terrainZ() != terrainZ) {
+                    continue;
+                }
+
+                batch.draw(
+                        sliceArt.descentMarker(ramp),
+                        landingX,
+                        landingY,
+                        1f,
+                        1f);
             }
         }
+    }
+
+    private static void setLowerTint(
+            SpriteBatch batch,
+            int depth) {
+
+        float attenuation = 1f / (1f + (depth - 1) * 0.42f);
+        batch.setColor(
+                LOWER_DEPTH_ONE.r * attenuation,
+                LOWER_DEPTH_ONE.g * attenuation,
+                LOWER_DEPTH_ONE.b * attenuation,
+                1f);
     }
 
     private int neighbourMask(
@@ -146,5 +235,29 @@ public final class LandscapeRenderer {
         }
 
         return LandscapeTopology.normalize(mask);
+    }
+
+    private static int riseX(
+            RampShape ramp) {
+
+        if (ramp == RampShape.POSITIVE_X) {
+            return 1;
+        }
+        if (ramp == RampShape.NEGATIVE_X) {
+            return -1;
+        }
+        return 0;
+    }
+
+    private static int riseY(
+            RampShape ramp) {
+
+        if (ramp == RampShape.POSITIVE_Y) {
+            return 1;
+        }
+        if (ramp == RampShape.NEGATIVE_Y) {
+            return -1;
+        }
+        return 0;
     }
 }
