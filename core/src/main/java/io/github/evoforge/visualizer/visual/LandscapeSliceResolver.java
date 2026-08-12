@@ -1,8 +1,6 @@
 package io.github.evoforge.visualizer.visual;
 
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Arrays;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -88,7 +86,7 @@ public final class LandscapeSliceResolver {
         private final int selectedStandingZ;
         private final int maxLowerDepth;
         private final int maxExposureDistance;
-        private final Map<Position, Integer> exposureDistances;
+        private final ExposureField exposure;
 
         private Analysis(
                 int minX,
@@ -102,7 +100,7 @@ public final class LandscapeSliceResolver {
             this.selectedStandingZ = selectedStandingZ;
             this.maxLowerDepth = maxLowerDepth;
             this.maxExposureDistance = maxExposureDistance;
-            exposureDistances = buildExposureField(
+            exposure = buildExposureField(
                     minX,
                     maxX,
                     minY,
@@ -168,8 +166,10 @@ public final class LandscapeSliceResolver {
 
             int airZ = terrainZ + 1;
             Cover cover = coverAt(x, y, airZ);
-            int exposureDistance = exposureDistances.getOrDefault(
-                    new Position(x, y, airZ),
+            int exposureDistance = exposure.distanceAt(
+                    x,
+                    y,
+                    airZ,
                     maxExposureDistance + 1);
 
             return new Cell(
@@ -273,7 +273,7 @@ public final class LandscapeSliceResolver {
                 .resolve(x, y);
     }
 
-    private Map<Position, Integer> buildExposureField(
+    private ExposureField buildExposureField(
             int minX,
             int maxX,
             int minY,
@@ -281,8 +281,6 @@ public final class LandscapeSliceResolver {
             int selectedStandingZ,
             int maxLowerDepth,
             int maxExposureDistance) {
-
-        Map<Position, Integer> distances = new HashMap<>();
 
         int expandedMinX = safeAdd(minX, -maxExposureDistance);
         int expandedMaxX = safeAdd(maxX, maxExposureDistance);
@@ -292,7 +290,16 @@ public final class LandscapeSliceResolver {
         int minZ = safeAdd(selectedStandingZ, -verticalMargin);
         int maxZ = safeAdd(selectedStandingZ, maxExposureDistance + 1);
 
-        ArrayDeque<Position> queue = new ArrayDeque<>();
+        ExposureField field = new ExposureField(
+                expandedMinX,
+                expandedMaxX,
+                expandedMinY,
+                expandedMaxY,
+                minZ,
+                maxZ);
+        int[] queue = new int[field.size()];
+        int head = 0;
+        int tail = 0;
 
         for (long lx = expandedMinX; lx <= expandedMaxX; lx++) {
             int x = (int) lx;
@@ -309,43 +316,45 @@ public final class LandscapeSliceResolver {
                         continue;
                     }
 
-                    Position position = new Position(x, y, z);
-                    distances.put(position, 0);
-                    queue.addLast(position);
+                    int index = field.indexOf(x, y, z);
+                    field.setDistance(index, 0);
+                    queue[tail++] = index;
                 }
             }
         }
 
-        while (!queue.isEmpty()) {
-            Position current = queue.removeFirst();
-            int distance = distances.get(current);
+        while (head < tail) {
+            int currentIndex = queue[head++];
+            int distance = field.distanceAt(currentIndex);
             if (distance >= maxExposureDistance) {
                 continue;
             }
 
+            int x = field.xOf(currentIndex);
+            int y = field.yOf(currentIndex);
+            int z = field.zOf(currentIndex);
+
             for (int[] offset : NEIGHBOURS) {
-                int x = current.x() + offset[0];
-                int y = current.y() + offset[1];
-                int z = current.z() + offset[2];
+                int nextX = x + offset[0];
+                int nextY = y + offset[1];
+                int nextZ = z + offset[2];
 
-                if (x < expandedMinX || x > expandedMaxX
-                        || y < expandedMinY || y > expandedMaxY
-                        || z < minZ || z > maxZ
-                        || !openForExposure(x, y, z)) {
+                if (!field.contains(nextX, nextY, nextZ)
+                        || !openForExposure(nextX, nextY, nextZ)) {
                     continue;
                 }
 
-                Position next = new Position(x, y, z);
-                if (distances.containsKey(next)) {
+                int nextIndex = field.indexOf(nextX, nextY, nextZ);
+                if (field.visited(nextIndex)) {
                     continue;
                 }
 
-                distances.put(next, distance + 1);
-                queue.addLast(next);
+                field.setDistance(nextIndex, distance + 1);
+                queue[tail++] = nextIndex;
             }
         }
 
-        return distances;
+        return field;
     }
 
     private boolean openForExposure(
@@ -463,7 +472,133 @@ public final class LandscapeSliceResolver {
         {0, 0, -1}
     };
 
-    private record Position(int x, int y, int z) {
+    private static final class ExposureField {
+
+        private static final int UNVISITED = -1;
+
+        private final int minX;
+        private final int maxX;
+        private final int minY;
+        private final int maxY;
+        private final int minZ;
+        private final int maxZ;
+        private final int sizeX;
+        private final int sizeY;
+        private final int planeSize;
+        private final int[] distances;
+
+        private ExposureField(
+                int minX,
+                int maxX,
+                int minY,
+                int maxY,
+                int minZ,
+                int maxZ) {
+
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minY = minY;
+            this.maxY = maxY;
+            this.minZ = minZ;
+            this.maxZ = maxZ;
+
+            long width = (long) maxX - minX + 1L;
+            long height = (long) maxY - minY + 1L;
+            long depth = (long) maxZ - minZ + 1L;
+            long plane = width * height;
+            long volume = plane * depth;
+
+            if (width <= 0L || height <= 0L || depth <= 0L
+                    || width > Integer.MAX_VALUE
+                    || height > Integer.MAX_VALUE
+                    || plane > Integer.MAX_VALUE
+                    || volume > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "exposure analysis volume is too large");
+            }
+
+            sizeX = (int) width;
+            sizeY = (int) height;
+            planeSize = (int) plane;
+            distances = new int[(int) volume];
+            Arrays.fill(distances, UNVISITED);
+        }
+
+        private int size() {
+            return distances.length;
+        }
+
+        private boolean contains(
+                int x,
+                int y,
+                int z) {
+
+            return x >= minX && x <= maxX
+                    && y >= minY && y <= maxY
+                    && z >= minZ && z <= maxZ;
+        }
+
+        private int indexOf(
+                int x,
+                int y,
+                int z) {
+
+            int dx = x - minX;
+            int dy = y - minY;
+            int dz = z - minZ;
+            return dz * planeSize + dy * sizeX + dx;
+        }
+
+        private int xOf(
+                int index) {
+
+            return minX + index % planeSize % sizeX;
+        }
+
+        private int yOf(
+                int index) {
+
+            return minY + index % planeSize / sizeX;
+        }
+
+        private int zOf(
+                int index) {
+
+            return minZ + index / planeSize;
+        }
+
+        private boolean visited(
+                int index) {
+
+            return distances[index] != UNVISITED;
+        }
+
+        private int distanceAt(
+                int index) {
+
+            return distances[index];
+        }
+
+        private int distanceAt(
+                int x,
+                int y,
+                int z,
+                int fallback) {
+
+            if (!contains(x, y, z)) {
+                return fallback;
+            }
+
+            int distance = distances[indexOf(x, y, z)];
+            return distance == UNVISITED ? fallback : distance;
+        }
+
+        private void setDistance(
+                int index,
+                int distance) {
+
+            distances[index] = distance;
+        }
     }
 
     private record TopOpaque(boolean present, int z) {
