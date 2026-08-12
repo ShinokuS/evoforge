@@ -15,6 +15,7 @@ import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 public final class LandscapeRenderer {
 
     private static final int EXPOSURE_DISTANCE = 12;
+    private static final int STANDING_Z_CACHE_RADIUS = 4;
     private static final int MIN_ANALYSIS_PADDING = 8;
     private static final int ANALYSIS_PADDING_DIVISOR = 4;
     private static final int ANALYSIS_CACHE_SIZE = 6;
@@ -121,7 +122,7 @@ public final class LandscapeRenderer {
                     perfCacheHits++;
                     entry.lastUse = ++cacheUseSequence;
                     lastAnalysisPadding = entry.padding;
-                    return entry.analysis;
+                    return entry.viewFor(selectedStandingZ);
                 }
             }
         }
@@ -132,14 +133,24 @@ public final class LandscapeRenderer {
         int analysisMaxX = safeAdd(maxX, padding);
         int analysisMinY = safeAdd(minY, -padding);
         int analysisMaxY = safeAdd(maxY, padding);
-        LandscapeSliceResolver.Analysis analysis = sliceResolver.analyze(
-                analysisMinX,
-                analysisMaxX,
-                analysisMinY,
-                analysisMaxY,
-                selectedStandingZ,
-                maxLowerDepth,
-                EXPOSURE_DISTANCE);
+        LandscapeSliceResolver.Analysis analysis = visibilityRevision >= 0L
+                ? sliceResolver.analyzeBand(
+                        analysisMinX,
+                        analysisMaxX,
+                        analysisMinY,
+                        analysisMaxY,
+                        selectedStandingZ,
+                        maxLowerDepth,
+                        EXPOSURE_DISTANCE,
+                        STANDING_Z_CACHE_RADIUS)
+                : sliceResolver.analyze(
+                        analysisMinX,
+                        analysisMaxX,
+                        analysisMinY,
+                        analysisMaxY,
+                        selectedStandingZ,
+                        maxLowerDepth,
+                        EXPOSURE_DISTANCE);
 
         lastAnalysisPadding = padding;
         if (visibilityRevision >= 0L) {
@@ -147,13 +158,13 @@ public final class LandscapeRenderer {
             analysisCache[slot] = new AnalysisCacheEntry(
                     analysis,
                     visibilityRevision,
-                    selectedStandingZ,
                     maxLowerDepth,
                     analysisMinX,
                     analysisMaxX,
                     analysisMinY,
                     analysisMaxY,
                     padding,
+                    selectedStandingZ,
                     ++cacheUseSequence);
         }
         return analysis;
@@ -221,7 +232,8 @@ public final class LandscapeRenderer {
                         + " cache hit/miss="
                         + perfCacheHits + "/" + perfCacheMisses
                         + " padding=" + lastAnalysisPadding
-                        + " cached=" + cachedEntryCount());
+                        + " cached=" + cachedEntryCount()
+                        + " zRadius=" + STANDING_Z_CACHE_RADIUS);
 
         perfWindowStartNanos = now;
         perfAnalysisNanos = 0L;
@@ -412,36 +424,38 @@ public final class LandscapeRenderer {
 
         private final LandscapeSliceResolver.Analysis analysis;
         private final long visibilityRevision;
-        private final int standingZ;
         private final int lowerDepth;
         private final int minX;
         private final int maxX;
         private final int minY;
         private final int maxY;
         private final int padding;
+        private LandscapeSliceResolver.Analysis lastView;
+        private int lastStandingZ;
         private long lastUse;
 
         private AnalysisCacheEntry(
                 LandscapeSliceResolver.Analysis analysis,
                 long visibilityRevision,
-                int standingZ,
                 int lowerDepth,
                 int minX,
                 int maxX,
                 int minY,
                 int maxY,
                 int padding,
+                int initialStandingZ,
                 long lastUse) {
 
             this.analysis = analysis;
             this.visibilityRevision = visibilityRevision;
-            this.standingZ = standingZ;
             this.lowerDepth = lowerDepth;
             this.minX = minX;
             this.maxX = maxX;
             this.minY = minY;
             this.maxY = maxY;
             this.padding = padding;
+            this.lastView = analysis;
+            this.lastStandingZ = initialStandingZ;
             this.lastUse = lastUse;
         }
 
@@ -455,12 +469,22 @@ public final class LandscapeRenderer {
                 int requestedMaxY) {
 
             return visibilityRevision == revision
-                    && standingZ == selectedStandingZ
                     && lowerDepth == maxLowerDepth
+                    && analysis.supportsStandingZ(selectedStandingZ)
                     && requestedMinX >= minX
                     && requestedMaxX <= maxX
                     && requestedMinY >= minY
                     && requestedMaxY <= maxY;
+        }
+
+        private LandscapeSliceResolver.Analysis viewFor(
+                int selectedStandingZ) {
+
+            if (selectedStandingZ != lastStandingZ) {
+                lastView = analysis.atStandingZ(selectedStandingZ);
+                lastStandingZ = selectedStandingZ;
+            }
+            return lastView;
         }
     }
 }
