@@ -11,10 +11,9 @@ import org.junit.jupiter.api.Test;
 
 final class ShapePresentationBoundaryTest {
 
-    private static final String RAMP_IMPORT =
-            "import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;";
-    private static final String FULL_IMPORT =
-            "import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;";
+    private static final List<String> CONCRETE_SHAPE_NAMES = List.of(
+            "RampShape",
+            "FullShape");
 
     @Test
     void genericPresentationDoesNotKnowConcreteShapeTypes()
@@ -34,12 +33,13 @@ final class ShapePresentationBoundaryTest {
             Path file = mainJava.resolve(relative);
             assertTrue(Files.isRegularFile(file), "missing source file: " + file);
             String source = Files.readString(file);
-            assertFalse(
-                    source.contains(RAMP_IMPORT),
-                    () -> file + " imports concrete RampShape");
-            assertFalse(
-                    source.contains(FULL_IMPORT),
-                    () -> file + " imports concrete FullShape");
+
+            for (String concreteShapeName : CONCRETE_SHAPE_NAMES) {
+                assertFalse(
+                        source.contains(concreteShapeName),
+                        () -> file + " knows concrete Shape type "
+                                + concreteShapeName);
+            }
         }
     }
 
