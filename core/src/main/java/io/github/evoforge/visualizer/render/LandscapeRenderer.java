@@ -24,7 +24,7 @@ public final class LandscapeRenderer {
     private final LandscapeSliceResolver sliceResolver;
 
     private LandscapeSliceResolver.Analysis cachedAnalysis;
-    private long cachedTerrainRevision = Long.MIN_VALUE;
+    private long cachedVisibilityRevision = Long.MIN_VALUE;
     private int cachedMinX;
     private int cachedMaxX;
     private int cachedMinY;
@@ -109,9 +109,10 @@ public final class LandscapeRenderer {
             int selectedStandingZ,
             int maxLowerDepth) {
 
-        long terrainRevision = view.terrainRevision().revision();
-        boolean cacheHit = cachedAnalysis != null
-                && cachedTerrainRevision == terrainRevision
+        long visibilityRevision = sliceResolver.visibilityRevision();
+        boolean cacheHit = visibilityRevision >= 0L
+                && cachedAnalysis != null
+                && cachedVisibilityRevision == visibilityRevision
                 && cachedStandingZ == selectedStandingZ
                 && cachedLowerDepth == maxLowerDepth
                 && minX >= cachedMinX
@@ -125,7 +126,7 @@ public final class LandscapeRenderer {
         }
 
         perfCacheMisses++;
-        cachedTerrainRevision = terrainRevision;
+        cachedVisibilityRevision = visibilityRevision;
         cachedStandingZ = selectedStandingZ;
         cachedLowerDepth = maxLowerDepth;
         cachedMinX = safeAdd(minX, -ANALYSIS_PADDING);
@@ -222,8 +223,6 @@ public final class LandscapeRenderer {
 
         TextureRegion region;
         if (cell.kind() == LandscapeSliceResolver.Kind.SOLID_BODY) {
-            // Ramp keeps exactly the same generated visual language on every
-            // slice; only the environmental depth tint changes.
             region = cell.shape() instanceof RampShape ramp
                     ? surfaceArt.ramp(ramp, variant)
                     : sliceArt.solid(topology, variant);
