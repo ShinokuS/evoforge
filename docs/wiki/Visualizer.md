@@ -65,9 +65,10 @@ These measurements are independent. A tall cavern may have a distant ceiling whi
 
 Looking downward from an elevation is not treated like being buried under material.
 
-- **drop depth** uses gentle dimming so terrain below a cliff remains readable;
+- **drop depth** progressively fades toward the background: nearby lower terrain remains readable while very deep isolated cells stop competing with the active slice;
 - **cover/body depth** uses stronger progressive darkening;
-- deep covered regions saturate toward a dark readable minimum rather than becoming a different terrain type.
+- both preserve the same terrain color family instead of switching to a separate cave/cut hue;
+- sufficiently deep regions can approach the background and lose fine texture without becoming a different simulation material.
 
 This is a presentation cue, not a lighting simulation.
 
@@ -169,7 +170,7 @@ The surface pack owns grass, edge/corner variation and all four cardinal Ramp or
 
 ### Solid cut art
 
-`ProceduralSliceArt` now uses a dark neutral palette with high-contrast edges and small strata/detail marks. It represents **occluding mass**, not a second brown floor material. Body depth further darkens this art progressively.
+`ProceduralSliceArt` uses a restrained shaded earth/vegetation-adjacent palette rather than a separate dirty-black material language. Body depth progressively removes brightness and detail, while the first few cut layers remain visually related to the surface above them.
 
 ### Ramp consistency
 
@@ -178,6 +179,16 @@ There is only one procedural Ramp visual language.
 The same generated Ramp region is used whenever the Ramp is visible, including when its terrain cell intersects a lower horizontal cut. The renderer changes only environmental depth tint; it no longer substitutes a special ramp-cut sprite or creates an upper descent marker.
 
 Authoritative Ramp semantics remain exclusively in `RampShape` and Navigation.
+
+## Active standing-Z perimeter
+
+The currently selected standing surface receives a presentation-only perimeter cue so the eye does not have to infer the active Z from shading alone.
+
+Only the **outer cardinal boundary** of `CURRENT_SURFACE` is outlined. Adjacent cells that are both on the active surface produce no internal line, so this is not another grid.
+
+The cue uses a pale low-saturation rim on the active side plus a narrow dark line just outside it. Both widths are derived from camera world-units-per-screen-pixel, so the contour remains approximately one screen pixel across zoom levels.
+
+`LandscapeSliceResolver.isCurrentSurface(...)` owns the cheap structural query used by the overlay. The contour does not rebuild exposure BFS and introduces no new simulation state or terrain type.
 
 ## Controls and inspector
 
@@ -214,13 +225,15 @@ Objects remain intentionally primitive current-Z debug markers. Their future art
 - deep open shaft whose floor is several elevations below;
 - slow/fast movers preserving authoritative 8-tick / 2-tick Movement behavior.
 
-Headless tests cover terrain extent lifecycle, horizontal-cut priority, body/drop/cover/ceiling measurements, side-mouth exposure distance, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology and Movement timing.
+Headless tests cover terrain extent lifecycle, horizontal-cut priority, the cheap current-surface query used by the perimeter, body/drop/cover/ceiling measurements, side-mouth exposure distance, sealed chambers, tall caverns, future non-terrain occluders, Ramp topology and Movement timing.
 
 Manual acceptance should move through the relevant Z levels and verify that structure remains understandable without complete transparent upper floors.
 
 ## Performance boundary
 
 Exposure is computed once per rendered camera range, not independently for every tile. The BFS is deliberately bounded by the visual exposure horizon and the requested lower-depth range.
+
+The active-Z perimeter uses direct current-surface membership checks only; it does not duplicate the exposure analysis.
 
 Current terrain extent is maintained incrementally by `TerrainSystem`; the visualizer does not invent an arbitrary maximum Z.
 
