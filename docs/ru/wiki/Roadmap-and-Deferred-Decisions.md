@@ -1,6 +1,8 @@
 # Дорожная карта и отложенные решения
 
-EvoForge намеренно отделяет завершённый архитектурный фундамент от решений, которые должны дождаться реального consumer. Отложенная деталь — не повод заранее строить speculative infrastructure, но несколько крупных gameplay-милстоунов уже являются обязательными частями проекта.
+EvoForge намеренно разделяет **реализованный фундамент**, **следующих конкретных consumers** и **идеи, которые известны, но ещё не обоснованы для реализации в коде**.
+
+Отложенное решение должно жить в документации, а не в dormant infrastructure. Оно становится текущей задачей, когда этого требует реальный consumer, корректность, persistence boundary или измеренная performance-проблема.
 
 ## Текущая последовательность
 
@@ -9,350 +11,273 @@ DONE  Object / Definition / Scheduler / Spatial foundation
 DONE  Landscape terrain core
 DONE  Geometry foundation and transition algebra
 DONE  Directed structural Navigation
-DONE  Production cardinal RampShape
-DONE  Final geometry/navigation hardening and documentation
-DONE  Control Backbone core + first PlaceTerrain vertical slice
-DONE  Test-only Scenario fixture: arrange -> start -> submit/read
-DONE  Timed Basic Movement: один соседний structural transition
-DONE  first production SimulationStepper + Scheduler process binding
-DONE  TransitionCost: landscape surface cost + Shape roles + grid length
-NEXT  minimal visualization / Z-level debug view
-      Occupancy
+DONE  Production cardinal RampShape + hardening
+DONE  Control Backbone + PlaceTerrain vertical slice
+DONE  Production SimulationAssembly / SimulationRuntime / SimulationView
+DONE  Test-only Scenario fixture
+DONE  Timed adjacent Movement
+DONE  SimulationStepper + Scheduler process binding
+DONE  TransitionCost: terrain + Shape roles + grid length
+DONE  Minimal live Z-level Visualizer
+ACTIVE Procedural full-top-down cutaway / geometric exposure readability
+NEXT  Occupancy
       Pathfinder
-      first agent vertical slice
-      World generation
+      observable Action completion/outcome
+      first agent / Cow vertical slice
+      deterministic World Generation
+      representative profiling / optimization
 ```
 
-Последовательность может измениться из-за реальной dependency, но перечисленные этапы — это запланированная работа, а не необязательные идеи. При этом их внутренняя архитектура должна появляться только вместе с первым consumer, который доказывает конкретные requirements.
+Внутренняя архитектура будущего milestone должна появляться вместе с его первым реальным consumer. Сам факт, что milestone запланирован, не является основанием заранее реализовывать все его возможные подсистемы.
 
-## Control Backbone
+## Текущее направление presentation
 
-Текущий узкий фундамент Control создаёт один external-intent path для Player, AI, scripts, scenarios и будущих adapters:
+Поиск готового landscape tileset заморожен на текущем этапе разработки.
+
+Canonical development presentation:
 
 ```text
-external intent
-    ↓
-Command
-    ↓
-delivery
-    ↓
-CommandDispatcher
-    ↓
-handler
-    ↓
-authoritative domain APIs
-    ↓
-structured result
+full top-down
+logical simulation cell = 1 x 1
+native procedural visual cell = 16 x 16 pixels
+world geometry -> horizontal cut -> geometric exposure -> generated presentation
 ```
 
-Первая delivery implementation синхронная. Concrete vertical slices включают `PlaceTerrainCommand` и `MoveStepCommand`.
+Simulation не содержит pixels, palettes или camera cutaway state.
 
-Command не является обязательным внутренним RPC. После принятия intent внутренние процессы, например продолжающиеся Movement Actions, будущая world generation или erosion, могут работать напрямую через узкие domain write APIs.
-
-Queued/asynchronous delivery остаётся deferred. Она может переиспользовать те же Command/Handler/Dispatcher contracts, но должна явно определить deterministic ordering, момент flush и within-tick state visibility.
-
-## Scenario fixture
-
-Scenario-layer по-прежнему намеренно является **test-only deterministic fixture**, а не simulation runtime.
-
-Она разделяет две стадии:
+Текущий Z language не зависит от absolute Z labels и не ghost-ит соседние floors постоянно:
 
 ```text
-ScenarioBuilder
-    -> вручную собирает маленький мир через controlled write-capabilities
-    -> регистрирует test definitions
-    -> задаёт movement rate и landscape traversal cost
-    -> создаёт и размещает test objects
-    -> start()
-
-ScenarioHarness
-    -> отправляет production Commands
-    -> двигает production SimulationStepper
-    -> наблюдает read-only Object / Transform / Terrain / Geometry / Navigation state
+terrain на selected Z       -> solid body, пересекающий cut
+terrain на selected Z - 1   -> current supported surface
+open volume ниже            -> ближайший lower surface в debug depth
 ```
 
-`start()` закрывает arrange-фазу. Запущенный harness не раскрывает raw authoritative mutators.
-
-Movement создал первый реальный timed Scheduler consumer, поэтому harness теперь имеет `advance()` и `advanceTicks(n)`. Эти методы не вводят test-only time semantics: они делегируют production `SimulationStepper`.
-
-Scenario-миры остаются маленькими и рукотворными, потому что тест заранее знает правильный результат. Procedural world generation решает другие задачи: масштаб, устойчивость и будущую проверку gameplay/world-generation.
-
-## Timed Basic Movement
-
-Первый Movement slice concrete и намеренно узкий: object с compiled `movement.rate` capability может начать один соседний structural transition через `MoveStepCommand`. Pathfinder не участвует.
-
-Lifecycle:
+Presentation context выводится отдельно:
 
 ```text
-MoveStepCommand
-    ↓
-validate object capability / placement / adjacency / Navigation
-    ↓
-calculate actor-independent TransitionCost
-    ↓
-convert cost to duration with MovementRate + per-object carry
-    ↓
-create MovementAction
-    ↓
-schedule completion after deterministic duration
-    ↓
-object authoritative остаётся в source
-    ↓
-completion-time revalidation
-    ↓
-SpatialSystem.move(...) or interrupt
-    ↓
-remove active MovementAction
+bodyDepth
+dropDepth
+ceilingDistance
+coverDepth
+exposureDistance через open air до sky-connected exterior
 ```
 
-Movement Actions существуют только пока active; история completed/interrupted внутри Movement не хранится.
+Covered/body depth затемняются агрессивно; обзор вниз через open space получает более мягкий depth shading. Поэтому с возвышенности lower terrain остаётся читаемым, а глубокое underground пространство постепенно приближается к тёмному cutaway состоянию.
 
-Fractional timing сохраняется через deterministic per-object carry вместо per-step ceiling, а любой movement transition занимает минимум один simulation tick.
+`VisibilityVolumeLookup` — presentation-side capability boundary. Текущий adapter трактует terrain как solid/opaque; будущие roofs, walls или large objects смогут участвовать через другой adapter/composition без изменения cutaway algorithm. Тест уже доказывает, что non-terrain opaque contributor корректно блокирует visibility.
 
-`MoveStepResult` и domain `MovementStartResult` используют уже существующий structured result floor. Unknown/stale trusted `ObjectId` остаётся programming/configuration error, а не normal domain rejection.
+`TerrainExtentLookup` — небольшой generic simulation read contract, позволяющий presentation узнать реальный vertical terrain extent вместо произвольной высоты мира. Rendering semantics он не содержит.
 
-### Известные границы текущего slice
+Acceptance scene включает четыре base Ramp directions, stacked mountain до standing `Z=4`, mountain cave с side mouth и настоящим roof, отдельную cavern под flat cap с настоящим vertical opening, deep shaft и successive higher Ramp transitions.
 
-- пока нет Occupancy или destination reservation: несколько objects могут выбрать одну cell;
-- нет early movement cancellation: Actions обычно заканчиваются при scheduled completion;
-- нет actor-specific surface affinity или locomotion-mode interaction;
-- sleeping action не просыпается реактивно при terrain/geometry mutation;
-- нет Pathfinder или multi-step `MoveTo`;
-- нет continuous authoritative position между клетками.
+Ramp visual style теперь не зависит от slice context: используется один и тот же generated Ramp art, меняется только environmental shading.
 
-Это explicit boundaries, а не случайное скрытое поведение.
+Реализованный контракт описан в [Z-level Visualizer и процедурный ландшафт](Visualizer.md).
 
-Полный реализованный контракт описан в [Movement System](Movement-System.md).
+## Ближайший milestone: Occupancy
 
-## Timed process integration
-
-Movement — первый production consumer общего timed-process pattern:
+Occupancy намеренно остаётся отдельно от structural Navigation:
 
 ```text
-domain system starts process
-    ↓
-domain-owned process state
-    ↓
-ProcessScheduler.scheduleAfter(delay, processId)
-    ↓
-BoundProcessScheduler binds one HandlerId
-    ↓
-Scheduler
-    ↓
-domain process processor resumes processId
+Navigation      возможен ли structural transition?
+TransitionCost какова его intrinsic cost?
+Occupancy       свободно/занято/зарезервировано ли пространство сейчас?
+Movement        может ли конкретный actor начать/закончить move?
 ```
 
-Scheduler знает только **когда**, **какой handler** и **какой process id**. Domain владеет смыслом process.
+Точная reservation model пока открыта. Первый реальный multi-agent conflict scenario должен определить, резервирует ли moving actor destination, продолжает ли занимать source, временно ли claim-ит оба или конфликт разрешается только на completion.
 
-`MovementActionId` не является `TaskHandle`. Один зарегистрированный Movement handler обслуживает все Movement Actions; будущие timed mechanics должны использовать тот же узкий binding pattern, а не central Scheduler switch или universal Action framework.
-
-## Production simulation step
-
-`SimulationStepper` владеет current production-определением одного simulation tick:
-
-```text
-clock.advance()
-Scheduler.dispatchDue(clock.tick())
-```
-
-Один tick выполняет один Scheduler snapshot batch. Работа, поставленная handler-ом на тот же tick во время dispatch, не дренируется рекурсивно в этом batch. Movement никогда не schedule-ит zero-duration completion и не зависит от same-tick recursive execution.
-
-Scenario и будущий presentation-код вызывают этот production contract, а не определяют собственный ordering. Tests фиксируют, что `advanceTicks(n)` эквивалентен `n` отдельным вызовам production step.
-
-## TransitionCost model
-
-Actor-independent directed TransitionCost model теперь реализована и используется authoritative Movement.
-
-Ownership law:
-
-```text
-Navigation decides POSSIBILITY
-TransitionCost decides intrinsic PRICE
-MovementRate converts PRICE to TIME
-Pathfinder later consumes the SAME PRICE
-```
-
-Для valid directed edge `A -> B` с direction `d`:
-
-```text
-localA = surfaceCost(A) * departureFactor(shapeA, d)
-localB = surfaceCost(B) * arrivalFactor(shapeB, d)
-
-TransitionCost(A -> B)
-    = lengthFactor(d)
-      * average(localA, localB)
-```
-
-Реализация использует fixed-point integer arithmetic и одну deterministic final rounding boundary.
-
-Landscape definitions предоставляют `traversal.cost`. Shape вносит intrinsic directed traversal factor по тому же departure/arrival role law, который уже используется topology. Direction length берётся из `GridTransitionLength` (`1`, `sqrt(2)`, `sqrt(3)` представлены как `1000`, `1414`, `1732`).
-
-`FullShape` и текущий cardinal `RampShape` используют neutral traversal factors для своих owned roles. Arbitrary дополнительный ramp penalty не придумывается: grid direction уже учитывает текущее discrete elevation displacement.
-
-Movement и calculator не содержат `instanceof RampShape` или растущий switch по concrete Shapes. Новый Shape владеет только своим local directed traversal contribution.
-
-Actor-specific surface affinity — например болотное существо, предпочитающее mud, а человек road — намеренно deferred. Current TransitionCost actor-independent; `MovementRate` меняет execution time, но не ranking маршрутов.
-
-Future Pathfinder обязан использовать те же `TransitionCostLookup` semantics вместо собственной второй таблицы цен.
-
-## Минимальная визуализация
-
-Первая visual/debug view теперь является следующим обязательным milestone, но это ещё не проект финального renderer.
-
-Её задача — сделать уже существующее spatial/navigation/movement поведение наблюдаемым человеком. Начальный scope должен быть небольшим:
-
-```text
-отрисовка одного Z-level
-переключение видимого Z-level
-terrain / ramp geometry
-позиции объектов
-клик или инспекция клетки
-structural transition mask / базовая диагностика
-наблюдение discrete cell-to-cell movement
-```
-
-Smooth movement interpolation в первой версии не нужен. Object может оставаться отображённым в source cell до commit Movement Action, поэтому более быстрые objects просто меняют клетку на более ранних simulation ticks.
-
-Visualizer должен читать simulation state и вызывать production simulation-step contract; он не становится authoritative owner Movement или world time.
-
-Это development-инструмент. Финальная rendering architecture, art pipeline и полноценный Z-level UX остаются поздними задачами.
-
-## Occupancy
-
-Occupancy намеренно отделена от structural terrain topology. Navigation может считать две positions structurally adjacent, даже если destination временно занята другим object.
-
-Точное occupancy/reservation representation остаётся deferred до первого реального multi-agent Movement scenario, который докажет необходимые semantics.
-
-Нужно будет отдельно решить, резервирует ли moving actor destination, считается ли он занимающим source и destination одновременно или conflicts разрешаются только на completion. Ни одна из этих политик сейчас скрыто не зашита в Movement.
+Temporary object occupancy не должна попадать в Navigation topology.
 
 ## Pathfinder
 
-Pathfinding — обязательный более поздний milestone, но он идёт после Basic Movement, TransitionCost и Occupancy, потому что именно Movement формирует contracts, которые Pathfinder должен потреблять.
+Pathfinder идёт после Occupancy, чтобы его первый production contract сразу учитывал и structural topology, и dynamic availability policy, реально используемую Movement.
 
-Pathfinding потребляет Navigation, а не определяет terrain topology, и использует тот же directed `TransitionCostLookup`, что authoritative Movement. Его API должен формироваться из реальных требований Movement: нужен ли полный route или следующий step, как выражаются unreachable/partial paths и как участвует dynamic occupancy.
-
-Первый Pathfinder также создаст representative workload для измерения Navigation/Geometry/Terrain/TransitionCost lookup throughput и allocations.
-
-Только после этого стоит решать, нужны ли topology caching, packed coordinate keys, chunk-local arrays, hierarchical search и другие low-level optimizations.
-
-## Первый agent vertical slice
-
-После появления Movement, Occupancy и Pathfinder первый agent slice сможет связать реальное object/controller intent с повторяющимся движением через structural Navigation.
-
-Этот slice должен доказать end-to-end путь до проектирования широкого семейства AI planners.
-
-## World generation
-
-World generation — обязательный milestone проекта, но **не test fixture для корректности Movement или Pathfinder**.
-
-Scenario tests используют рукотворные миры, потому что их ожидаемая topology и результат заранее известны. Procedural generation решает другие задачи:
+Он должен потреблять:
 
 ```text
-создание более крупных playable worlds
-deterministic generation по explicit seed
-проверка масштаба и robustness
-первый реальный consumer authoritative randomness
-конкретизация chunk/region/generated-state решений при необходимости
+NavigationLookup
+TransitionCostLookup
+future Occupancy read contract
 ```
 
-Точный generator design, noise model, biomes, caves, размеры regions и persistence boundaries остаются deferred до этой фазы. До неё уже должна существовать минимальная визуализация, чтобы сгенерированный мир сразу можно было наблюдать человеком.
+Он не должен изобретать вторую terrain-cost model. Route cost и authoritative Movement cost должны опираться на одинаковую `TransitionCost` semantics.
 
-## Deferred world-generation details
+Первый Pathfinder также должен стать первым representative high-volume consumer Terrain/Geometry/Navigation/TransitionCost reads. Именно этот workload должен определять optimization decisions.
 
-До фазы generation/streaming/persistence намеренно остаются открытыми:
+## Observable Action completion
+
+До того как первый AI consumer начнёт последовательно связывать movement steps, результат in-flight Movement action должен стать наблюдаемым.
+
+Сейчас invalidated Movement action может исчезнуть после completion-time revalidation, не оставляя outcome, по которому agent способен принять решение. Будущий contract должен дать реальному consumer success/failure reason без преждевременного universal Action framework или global EventBus.
+
+## Первый agent / Cow vertical slice
+
+Первый agent slice остаётся узким:
 
 ```text
-exact valid world coordinate bounds
-chunk and region dimensions
-terrain packing
-unloaded vs absent vs not-generated semantics
-RNG service and seed ownership details
-region save boundaries
-persistence format
+simple need/goal
+    ↓
+choose target
+    ↓
+Pathfinder
+    ↓
+next adjacent edge
+    ↓
+existing timed Movement
+    ↓
+observe outcome
+    ↓
+reconsider / continue
 ```
 
-Эти решения связаны и должны проектироваться вместе, когда появится реальный generation или persistence consumer.
+`MoveTo` не должен слепо исполнять один immutable whole path через меняющийся мир. Agent должен иметь возможность пересмотреть решение после authoritative movement outcome и изменений мира.
 
-## Deferred movement decisions
+Широкое семейство AI planners не выбирается до того, как этот vertical slice покажет реальные требования decision loop.
+
+## Deterministic World Generation
+
+World generation идёт после первого observable agent slice и не используется как correctness fixture для Movement или Pathfinder.
+
+Scenario tests остаются hand-authored, потому что ожидаемая topology известна заранее. Generated worlds решают другие задачи:
 
 ```text
-full actor capability model
-actor-specific terrain/surface affinity
-final occupancy/reservation representation
-early cancelled MovementAction semantics
-reactive wake-up on world mutation
-involuntary falling
-climbing/jumping/swimming/flying overlays
-multi-step MoveTo ownership and route lifecycle
+larger playable worlds
+seeded robustness testing
+scale testing
+first authoritative RNG consumer
+pressure on chunk/region/load-state decisions
 ```
 
-Falling требует особой осторожности: empty space сейчас никогда не является valid structural edge. Если falling появится, это должен быть explicit involuntary mechanic/process, а не скрытая интерпретация missing terrain.
+До этого milestone остаются deferred:
 
-## Deferred Navigation decisions
+- noise/height/biome algorithms;
+- caves и underground generation;
+- размеры chunks и regions;
+- unloaded vs absent vs not-generated state;
+- authoritative RNG ownership и stream policy;
+- generation/persistence boundaries;
+- world-coordinate limits и packed-coordinate representation.
 
-```text
-cache policy
-cache invalidation lifecycle
-diagnostic explanation API beyond real Movement/Pathfinder needs
-hierarchical pathfinding
-path cache
-background pathfinding snapshot/revision model
-```
+Эти решения должны проектироваться вместе, когда generation действительно начнёт их требовать.
 
-Текущий primitive `int transitions(x,y,z)` contract остаётся намеренно мал и не расширяется без consumer evidence.
+## Deferred presentation decisions
+
+Следующие вещи зафиксированы, но намеренно отсутствуют в текущем коде:
+
+- explicit adjacent-layer X-ray/build mode;
+- real roofs/structures/large objects как contributors `VisibilityVolumeLookup`, когда эти entities появятся;
+- partial optical transmission для glass, water, smoke или foliage;
+- authoritative actor LOS и lighting; camera cutaway exposure не должна превращаться в agent perception;
+- дополнительные procedural materials: dirt, stone, sand, snow, water;
+- priority/layered transitions между несколькими terrain materials;
+- альтернативные procedural palettes или visual styles;
+- крупные anchored sprites для trees, creatures, buildings и equipment;
+- procedural character/object generation до появления первого gameplay consumer;
+- external или hand-authored visual packs за той же presentation boundary;
+- dual-grid / marching-squares resolver для будущего visual language, которому он действительно понадобится;
+- richer shadows/compositing passes;
+- generated-atlas/export tooling для отдельного art review;
+- visual tile caches, dirty regions и chunk render storage до profiling evidence.
+
+Normal view намеренно не рисует полный прозрачный upper floor. Будущий X-ray/build mode должен оставаться explicit и не менять input или simulation semantics.
+
+Binary presentation `solid/opaque` достаточно для текущего terrain-only consumer. Не нужно превращать его в simulation-wide optics до появления gameplay consumer, которому действительно понадобится transmission/opacity.
+
+## Deferred Movement decisions
+
+Текущий timed Movement намеренно узкий. Deferred:
+
+- final occupancy/reservation semantics;
+- early cancellation;
+- reactive wake-up при terrain/geometry mutation;
+- actor-specific terrain affinity и locomotion modes;
+- involuntary falling;
+- climbing, jumping, swimming и flying;
+- multi-step `MoveTo` ownership и route lifecycle;
+- continuous presentation interpolation.
+
+Falling должен оставаться explicit involuntary mechanic/process. Empty space не превращается скрыто в ordinary Navigation edge.
+
+## Deferred Navigation / pathfinding infrastructure
+
+Не добавляется без representative consumer:
+
+- persistent Navigation cache;
+- cache invalidation lifecycle;
+- path cache;
+- hierarchical pathfinding;
+- packed topology storage;
+- background pathfinding и snapshot/revision protocol;
+- rich Navigation explanation objects на hot lookup path.
+
+Текущий primitive transition-mask read boundary остаётся малым, пока реальный debugging или Pathfinder consumer не докажет необходимость дополнительного semantic query.
 
 ## Deferred geometry decisions
 
-Текущих `FullShape` и четырёх cardinal `RampShape` достаточно для текущего vertical slice. Пока не нужны:
+`FullShape` и четыре cardinal `RampShape` orientation достаточны для текущих mechanics.
+
+Deferred:
+
+- diagonal ramps;
+- fractional surface heights;
+- continuous slopes;
+- отдельный stairs framework;
+- bridges/suspended support;
+- multi-standing-position Shapes;
+- generalized orientation framework.
+
+Если третий реальный Shape нарушит текущий one-supported-position assumption, нужно пересмотреть Shape support ownership, Navigation и TransitionCost вместе, а не патчить одну систему.
+
+Будущий Shape также может описывать occupied/occluding volume богаче, чем текущий whole-cell terrain adapter. Volume adapter расширяется только после появления такого Shape; sub-cell geometry framework заранее не вводится.
+
+## Deferred Control / runtime infrastructure
+
+Сейчас существует только synchronous external command submission.
+
+Deferred:
+
+- queued/asynchronous gateway;
+- within-tick command flush semantics;
+- multithreaded authoritative mutation;
+- general EventBus;
+- universal Action framework;
+- networking/persistence-facing command representation.
+
+Будущий queued gateway должен явно сохранить или переопределить deterministic ordering и within-tick state visibility. Transport semantics не должны незаметно менять simulation semantics.
+
+## Performance watch points
+
+Текущий код намеренно сохраняет простые sparse lookup paths и вычисляет visual topology/cutaway state для camera range по требованию.
+
+До изменения representation нужно измерить:
 
 ```text
-diagonal ramps
-fractional surface heights
-continuous slope geometry
-multi-standing-position Shapes
-stairs framework
-bridge-specific Shape types
-general orientation framework
+Terrain / Geometry sparse lookup allocation
+Navigation local resolver throughput
+TransitionCost lookup throughput
+Pathfinder expansion cost
+active Movement/Scheduler scale
+procedural surface + cutaway frame cost
+exposure BFS cost
+per-column top-opaque scan across sparse/deep Z ranges
 ```
 
-Если будущая geometry потребует multiple standing positions, role law Shape, вывод Navigation read-window и TransitionCost support-owner lookup пересматриваются вместе, а не патчатся исключениями.
+`TerrainSystem` теперь инкрементально поддерживает точный global vertical extent. Текущий presentation adapter всё ещё может проходить этот Z-range для каждого XY, чтобы найти top opacity. Если representative worlds покажут, что это дорого, оптимизация должна появиться за `VisibilityVolumeLookup` через per-column query/cache, а не менять semantics.
 
-## Решение lifecycle Landscape
+Packed coordinates, chunk-local arrays, dirty visual regions и прочая DOD representation остаются profiling-driven.
 
-Прежний geometry-override lifecycle gap закрыт согласованной границей `LandscapeMutations`:
+## Правило принятия deferred решения
 
-```text
-placeTerrain   -> очищает stale override
-replaceTerrain -> сохраняет override
-removeTerrain  -> очищает override
-```
-
-`TerrainSystem` по-прежнему не зависит от `GeometrySystem`; `LandscapeSystem` координирует обоих owners сверху.
-
-## Deferred simulation infrastructure
-
-```text
-final EventBus implementation
-full object lifecycle orchestration
-queued/asynchronous command batching and within-tick visibility policy
-multithreading beyond one authoritative mutation thread
-full renderer / final Z-level UX
-final RNG architecture beyond the first real random consumer
-AI planner family
-```
-
-Это acknowledged later requirements, а не current implementation tasks. Они не должны блокировать обязательные промежуточные milestones выше.
-
-## Когда deferred detail становится current
-
-Хотя бы одно:
+Отложенная идея становится active design, когда выполняется хотя бы одно условие:
 
 ```text
 a production consumer cannot proceed without it
-a correctness test proves the current contract insufficient
+an invariant/correctness test proves the current contract insufficient
 a representative workload measures a real performance problem
-a vertical slice exposes an ownership ambiguity
 persistence/network/tooling requires a stable external representation
+a vertical slice exposes an ownership ambiguity
 ```
 
-“Может пригодиться позже” недостаточно. Сам milestone может быть обязательным, а его внутренняя деталь — совершенно правильно оставаться deferred до появления реального consumer.
+«Может пригодиться потом» недостаточно.

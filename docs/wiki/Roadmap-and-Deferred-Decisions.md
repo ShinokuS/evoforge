@@ -1,6 +1,8 @@
 # Roadmap and Deferred Decisions
 
-EvoForge intentionally separates completed architectural foundations from decisions that should wait for a real consumer. A deferred detail is not an invitation to design speculative infrastructure early, but several major gameplay milestones are already required parts of the project.
+EvoForge deliberately separates **implemented foundations**, **the next concrete consumers**, and **ideas that are known but not justified in code yet**.
+
+A deferred item belongs in documentation, not in dormant infrastructure. It becomes current when a real consumer, correctness requirement, persistence boundary, or measured performance problem requires it.
 
 ## Current sequence
 
@@ -9,350 +11,273 @@ DONE  Object / Definition / Scheduler / Spatial foundation
 DONE  Landscape terrain core
 DONE  Geometry foundation and transition algebra
 DONE  Directed structural Navigation
-DONE  Production cardinal RampShape
-DONE  Final geometry/navigation hardening and documentation
-DONE  Control Backbone core + first PlaceTerrain vertical slice
-DONE  Test-only Scenario fixture: arrange -> start -> submit/read
-DONE  Timed Basic Movement: one adjacent structural transition
-DONE  first production SimulationStepper + Scheduler process binding
-DONE  TransitionCost: landscape surface cost + Shape roles + grid length
-NEXT  minimal visualization / Z-level debug view
-      Occupancy
+DONE  Production cardinal RampShape + hardening
+DONE  Control Backbone + PlaceTerrain vertical slice
+DONE  Production SimulationAssembly / SimulationRuntime / SimulationView
+DONE  Test-only Scenario fixture
+DONE  Timed adjacent Movement
+DONE  SimulationStepper + Scheduler process binding
+DONE  TransitionCost: terrain + Shape roles + grid length
+DONE  Minimal live Z-level Visualizer
+ACTIVE Procedural full-top-down cutaway / geometric exposure readability
+NEXT  Occupancy
       Pathfinder
-      first agent vertical slice
-      World generation
+      observable Action completion/outcome
+      first agent / Cow vertical slice
+      deterministic World Generation
+      representative profiling / optimization
 ```
 
-The sequence can change when a real dependency requires it, but these named milestones are planned work rather than optional ideas. Their internal architecture should still be introduced by the first consumer that proves each requirement.
+The exact internal design of a future milestone is still introduced by its first real consumer. A named milestone being planned does not justify implementing its possible sub-systems early.
 
-## Control Backbone
+## Current presentation direction
 
-The current narrow control foundation establishes one external-intent path for Player, AI, scripts, scenarios and future adapters:
+Landscape visual search is frozen for the current development phase.
+
+The canonical development presentation is:
 
 ```text
-external intent
-    ↓
-Command
-    ↓
-delivery
-    ↓
-CommandDispatcher
-    ↓
-handler
-    ↓
-authoritative domain APIs
-    ↓
-structured result
+full top-down
+logical simulation cell = 1 x 1
+native procedural visual cell = 16 x 16 pixels
+world geometry -> horizontal cut -> geometric exposure -> generated presentation
 ```
 
-The first delivery is synchronous. `PlaceTerrainCommand` and `MoveStepCommand` are concrete vertical slices.
+Simulation contains no pixels, palettes or camera cutaway state.
 
-Command is not an internal RPC requirement. Once intent has been accepted, internal processes such as continuing Movement Actions, future world generation or erosion may work directly through narrow domain write APIs.
-
-Queued/asynchronous delivery remains deferred. It may reuse the same Command/Handler/Dispatcher contracts but must define deterministic ordering, flush point and within-tick state visibility explicitly.
-
-## Scenario fixture
-
-The scenario layer remains intentionally a **test-only deterministic fixture**, not a simulation runtime.
-
-It separates two phases:
+The current Z language is not based on absolute Z labels and does not permanently ghost adjacent floors:
 
 ```text
-ScenarioBuilder
-    -> arrange a small hand-authored world through controlled write capabilities
-    -> register test definitions
-    -> assign movement rate and landscape traversal cost
-    -> create/place test objects
-    -> start()
-
-ScenarioHarness
-    -> submit production Commands
-    -> advance the production SimulationStepper
-    -> observe read-only Object / Transform / Terrain / Geometry / Navigation state
+terrain at selected Z       -> solid body intersecting the cut
+terrain at selected Z - 1   -> current supported surface
+open volume below           -> nearest lower surface within debug depth
 ```
 
-`start()` closes the arrange phase. The running harness does not expose raw authoritative mutators.
-
-Movement created the first real timed Scheduler consumer, so the harness now exposes `advance()` and `advanceTicks(n)`. Those methods do not invent test-only time semantics: they delegate to the production `SimulationStepper`.
-
-Scenario worlds remain small and hand-authored so tests know the expected answer in advance. Procedurally generated worlds serve different purposes such as scale, robustness and later gameplay/world-generation validation.
-
-## Timed Basic Movement
-
-The first Movement slice is concrete and deliberately narrow: an object with a compiled `movement.rate` capability may start one adjacent structural transition through `MoveStepCommand`. Pathfinder is not involved.
-
-The lifecycle is:
+Presentation context is derived independently:
 
 ```text
-MoveStepCommand
-    ↓
-validate object capability / placement / adjacency / Navigation
-    ↓
-calculate actor-independent TransitionCost
-    ↓
-convert cost to duration with MovementRate + per-object carry
-    ↓
-create MovementAction
-    ↓
-schedule completion after deterministic duration
-    ↓
-object remains authoritatively at source
-    ↓
-completion-time revalidation
-    ↓
-SpatialSystem.move(...) or interrupt
-    ↓
-remove active MovementAction
+bodyDepth
+ dropDepth
+ ceilingDistance
+ coverDepth
+ exposureDistance through open air to sky-connected exterior
 ```
 
-Movement Actions exist only while active; completed/interrupted history is not retained inside Movement.
+Covered/body depth darkens aggressively; looking down through open space uses gentler depth shading. This preserves readable views from elevations while deep underground space progressively approaches a dark cutaway state.
 
-Fractional timing is preserved with deterministic per-object carry rather than per-step ceiling, and every movement transition takes at least one simulation tick.
+`VisibilityVolumeLookup` is a presentation-side capability boundary. The current adapter treats terrain as solid/opaque; future roofs, walls or large objects can contribute through another adapter/composition without changing the cutaway algorithm. A test already proves that a non-terrain opaque contributor blocks visibility correctly.
 
-`MoveStepResult` and domain `MovementStartResult` use the existing structured result floor. Unknown/stale trusted `ObjectId` values remain programming/configuration errors rather than normal domain rejection.
+`TerrainExtentLookup` is now a small generic simulation read contract so presentation can determine where terrain truly ends vertically instead of assuming an arbitrary world height. It carries no rendering semantics.
 
-### Known gaps of the current slice
+The acceptance scene contains four base Ramp directions, a stacked mountain to standing `Z=4`, a side-mouth mountain cave with real roof, a separate cavern beneath a flat cap with a real vertical opening, a deep shaft and successive higher Ramp transitions.
 
-- no Occupancy or destination reservation: multiple objects can currently target the same cell;
-- no early movement cancellation: Actions normally end when their scheduled completion runs;
-- no actor-specific surface affinity or locomotion-mode interaction;
-- no reactive wake-up when terrain/geometry changes during a sleeping action;
-- no Pathfinder or multi-step `MoveTo`;
-- no continuous authoritative position between cells.
+Ramp visual style is now invariant across slice context: the same generated Ramp art is reused, with only environmental shading changing.
 
-These are explicit boundaries, not accidental hidden behavior.
+See [Z-level Visualizer and Procedural Landscape](Visualizer.md).
 
-See [Movement System](Movement-System.md) for the full implemented contract.
+## Immediate next milestone: Occupancy
 
-## Timed process integration
-
-Movement is the first production consumer of the general timed-process pattern:
+Occupancy remains intentionally separate from structural Navigation:
 
 ```text
-domain system starts process
-    ↓
-domain-owned process state
-    ↓
-ProcessScheduler.scheduleAfter(delay, processId)
-    ↓
-BoundProcessScheduler binds one HandlerId
-    ↓
-Scheduler
-    ↓
-domain process processor resumes processId
+Navigation      is a structural transition possible?
+TransitionCost what does that transition intrinsically cost?
+Occupancy       is the relevant space free/claimed/reserved now?
+Movement        can this concrete actor start/finish the move?
 ```
 
-The Scheduler knows only **when**, **which handler**, and **which process id**. The domain owns what that process means.
+The exact reservation model is still open. The first real multi-agent conflict scenario should decide whether a moving actor reserves destination, continues to occupy source, claims both temporarily, or resolves conflicts only at completion.
 
-`MovementActionId` is not `TaskHandle`. One registered Movement handler services all Movement Actions; future timed mechanics should follow the same narrow binding pattern rather than add a central Scheduler switch or universal Action framework.
-
-## Production simulation step
-
-`SimulationStepper` owns the current production definition of one simulation tick:
-
-```text
-clock.advance()
-Scheduler.dispatchDue(clock.tick())
-```
-
-One tick performs one Scheduler snapshot batch. Work scheduled during a handler for the same tick is not recursively drained in that batch. Movement never schedules zero-duration completion, so it does not depend on same-tick recursive execution.
-
-Scenario and future presentation code drive this production contract rather than define their own ordering. Tests assert that `advanceTicks(n)` is equivalent to invoking the production step `n` times individually.
-
-## TransitionCost model
-
-The actor-independent directed TransitionCost model is now implemented and is consumed by authoritative Movement.
-
-The ownership law is:
-
-```text
-Navigation decides POSSIBILITY
-TransitionCost decides intrinsic PRICE
-MovementRate converts PRICE to TIME
-Pathfinder later consumes the SAME PRICE
-```
-
-For a valid directed edge `A -> B` with direction `d`:
-
-```text
-localA = surfaceCost(A) * departureFactor(shapeA, d)
-localB = surfaceCost(B) * arrivalFactor(shapeB, d)
-
-TransitionCost(A -> B)
-    = lengthFactor(d)
-      * average(localA, localB)
-```
-
-The implementation uses fixed-point integer arithmetic and one deterministic final rounding boundary.
-
-Landscape definitions provide `traversal.cost`. Shape contributes an intrinsic directed traversal factor under the same departure/arrival role law already used by topology. Direction length comes from `GridTransitionLength` (`1`, `sqrt(2)`, `sqrt(3)` represented as `1000`, `1414`, `1732`).
-
-`FullShape` and the current cardinal `RampShape` use neutral traversal factors for their owned roles. No arbitrary extra ramp penalty is invented; grid direction already accounts for current discrete elevation displacement.
-
-Movement and the calculator contain no `instanceof RampShape` or growing switch over concrete Shapes. A new Shape owns only its local directed traversal contribution.
-
-Actor-specific surface affinity (for example a swamp creature preferring mud while a human prefers road) remains deliberately deferred. Current TransitionCost is actor-independent; `MovementRate` changes execution time but not route ranking.
-
-Future Pathfinder must consume the same `TransitionCostLookup` semantics rather than invent a second cost table.
-
-## Minimal visualization
-
-A first visual/debug view is now the next required milestone, not a final renderer project.
-
-Its purpose is to make the already-existing spatial/navigation/movement behavior observable by a human. The initial scope should stay small:
-
-```text
-render one Z level
-switch visible Z level
-show terrain / ramp geometry
-show object positions
-click or inspect a cell
-show structural transition mask / basic diagnostics
-watch discrete cell-to-cell movement
-```
-
-The first view does **not** need smooth movement interpolation. An object may remain displayed in its source cell until its Movement Action commits the destination, so faster objects simply change cells on earlier simulation ticks.
-
-The visualizer should read simulation state and drive the production simulation-step contract; it must not become an authoritative owner of movement or world time.
-
-This is intended as a development instrument. Final rendering architecture, art pipeline and polished Z-level UX remain later concerns.
-
-## Occupancy
-
-Occupancy is intentionally separate from structural terrain topology. Navigation can say that two positions are structurally adjacent even when another object temporarily occupies the destination.
-
-The exact occupancy/reservation representation remains deferred until the first real multi-agent Movement scenario proves the required semantics.
-
-Likely questions include whether a moving actor reserves its destination, occupies source and destination simultaneously, or resolves conflicts only at completion. None of those policies is hidden in current Movement.
+Do not put temporary object occupancy into Navigation topology.
 
 ## Pathfinder
 
-Pathfinding is a required later milestone, but it comes after Basic Movement, TransitionCost and Occupancy because movement itself defines the contracts it must consume.
+Pathfinder follows Occupancy so its first production contract can account for both structural topology and the dynamic availability policy that Movement actually uses.
 
-Pathfinding will consume Navigation rather than define terrain topology and will use the same directed `TransitionCostLookup` used by authoritative Movement. Its API should be shaped by real movement needs: whether callers need a full route or next step, how unreachable or partial paths are represented, and how dynamic occupancy participates.
-
-The first Pathfinder will also provide the first representative workload for measuring Navigation/Geometry/Terrain/TransitionCost lookup throughput and allocation behavior.
-
-Only then should the project decide whether topology caching, packed coordinate keys, chunk-local arrays, hierarchical search or other low-level optimizations are justified.
-
-## First agent vertical slice
-
-Once Movement, Occupancy and Pathfinder exist, the first agent slice can connect an actual object/controller intent to repeated movement through real structural navigation.
-
-That slice should prove the end-to-end path before broader AI planner families are designed.
-
-## World generation
-
-World generation is a required project milestone, but it is **not** the test fixture for Movement or Pathfinder correctness.
-
-Scenario tests use hand-authored worlds because the expected topology and result are known exactly. Procedural generation serves different goals:
+It must consume:
 
 ```text
-create larger playable worlds
-deterministic generation from explicit seeds
-exercise scale and robustness
-become the first real authoritative-randomness consumer
-force concrete chunk/region/generated-state decisions when needed
+NavigationLookup
+TransitionCostLookup
+future Occupancy read contract
 ```
 
-The exact generator design, noise model, biomes, caves, region dimensions and persistence boundaries remain deferred until this phase. A minimal visualizer should exist first so generated worlds have an immediate human observer.
+It must not invent a second terrain-cost model. Route cost and authoritative Movement cost must remain based on the same `TransitionCost` semantics.
 
-## Deferred world-generation details
+The first Pathfinder is also expected to become the first representative high-volume consumer of Terrain/Geometry/Navigation/TransitionCost reads. That workload should drive optimization decisions rather than speculation.
 
-The following remain intentionally open until generation/streaming/persistence becomes current:
+## Observable Action completion
+
+Before the first AI consumer repeatedly chains movement steps, the result of an in-flight Movement action needs to become observable.
+
+Today an invalidated Movement action can disappear after completion-time revalidation without leaving an outcome for an agent to reason about. The future contract should expose success/failure reason to the real consumer without prematurely introducing a universal Action framework or global EventBus.
+
+## First agent / Cow vertical slice
+
+The first agent slice should remain narrow:
 
 ```text
-exact valid world coordinate bounds
-chunk and region dimensions
-terrain packing
-unloaded vs absent vs not-generated semantics
-RNG service and seed ownership details
-region save boundaries
-persistence format
+simple need/goal
+    ↓
+choose target
+    ↓
+Pathfinder
+    ↓
+next adjacent edge
+    ↓
+existing timed Movement
+    ↓
+observe outcome
+    ↓
+reconsider / continue
 ```
 
-These choices are interconnected and should be designed together when a real generation or persistence consumer requires them.
+`MoveTo` should not blindly execute an immutable whole path through a changing world. The agent should be able to reconsider after authoritative movement outcomes and world changes.
 
-## Deferred movement decisions
+Do not select a broad AI-planner family before this vertical slice proves the actual decision-loop requirements.
+
+## Deterministic World Generation
+
+World generation comes after the first observable agent slice rather than serving as the correctness fixture for Movement or Pathfinder.
+
+Scenario tests remain hand-authored because their expected topology is known exactly. Generated worlds instead serve:
 
 ```text
-full actor capability model
-actor-specific terrain/surface affinity
-final occupancy/reservation representation
-early cancelled MovementAction semantics
-reactive wake-up on world mutation
-involuntary falling
-climbing/jumping/swimming/flying overlays
-multi-step MoveTo ownership and route lifecycle
+larger playable worlds
+seeded robustness testing
+scale testing
+first authoritative RNG consumer
+pressure on chunk/region/load-state decisions
 ```
 
-Falling deserves special care: ordinary Navigation currently never treats empty space as a valid structural edge. If falling is introduced, it should be an explicit involuntary mechanic/process rather than a hidden interpretation of missing terrain.
+Still deferred until this milestone:
 
-## Deferred Navigation decisions
+- noise/height/biome algorithms;
+- caves and underground generation;
+- chunk and region dimensions;
+- unloaded vs absent vs not-generated state;
+- authoritative RNG ownership and stream policy;
+- generation/persistence boundaries;
+- world-coordinate limits and packed-coordinate representation.
 
-```text
-cache policy
-cache invalidation lifecycle
-diagnostic explanation API beyond real Movement/Pathfinder needs
-hierarchical pathfinding
-path cache
-background pathfinding snapshot/revision model
-```
+These decisions should be designed together when generation actually needs them.
 
-The current primitive `int transitions(x,y,z)` contract remains intentionally small. It should not be enlarged before a consumer demonstrates that another semantic query belongs at the same boundary.
+## Deferred presentation decisions
+
+The following are recorded but intentionally absent from current code:
+
+- explicit adjacent-layer X-ray/build mode;
+- real roofs/structures/large objects contributing to `VisibilityVolumeLookup` when those entities exist;
+- partial optical transmission for glass, water, smoke or foliage;
+- authoritative actor LOS and lighting; camera cutaway exposure must not become agent perception;
+- additional procedural materials: dirt, stone, sand, snow, water;
+- priority/layered transitions between multiple terrain materials;
+- alternate procedural palettes or visual styles;
+- larger anchored sprites for trees, creatures, buildings and equipment;
+- procedural character/object generation beyond the first gameplay consumer;
+- external or hand-authored visual packs behind the same presentation boundary;
+- dual-grid / marching-squares resolver for a future visual language that genuinely requires it;
+- richer shadows/compositing passes;
+- generated-atlas/export tooling for standalone art review;
+- visual tile caches, dirty regions and chunk render storage before profiling proves a need.
+
+Normal view deliberately does not draw a full transparent upper floor. An eventual X-ray/build mode must remain explicit and must not change input or simulation semantics.
+
+Binary presentation `solid/opaque` is sufficient for the current terrain-only consumer. Do not generalize it into simulation-wide optics until gameplay requires transmission/opacity.
+
+## Deferred Movement decisions
+
+Current timed Movement remains intentionally narrow. Deferred items include:
+
+- final occupancy/reservation semantics;
+- early cancellation;
+- reactive wake-up on terrain/geometry mutation;
+- actor-specific terrain affinity and locomotion modes;
+- involuntary falling;
+- climbing, jumping, swimming and flying;
+- multi-step `MoveTo` ownership and route lifecycle;
+- continuous presentation interpolation.
+
+Falling must remain an explicit involuntary mechanic/process. Empty space is not silently converted into an ordinary Navigation edge.
+
+## Deferred Navigation / pathfinding infrastructure
+
+Do not add until a representative consumer proves need:
+
+- persistent Navigation cache;
+- cache invalidation lifecycle;
+- path cache;
+- hierarchical pathfinding;
+- packed topology storage;
+- background pathfinding and snapshot/revision protocol;
+- rich Navigation explanation objects on the hot lookup path.
+
+The current primitive transition-mask read boundary stays small until a real debugging or Pathfinder consumer demonstrates a missing semantic query.
 
 ## Deferred geometry decisions
 
-Current `FullShape` and four cardinal `RampShape` orientations are sufficient for the present vertical slice. The project does not currently need:
+`FullShape` and four cardinal `RampShape` orientations are sufficient for current mechanics.
+
+Still deferred:
+
+- diagonal ramps;
+- fractional surface heights;
+- continuous slopes;
+- stairs framework distinct from current Ramp semantics;
+- bridges/suspended support;
+- multi-standing-position Shapes;
+- generalized orientation framework.
+
+If a third real Shape violates the current one-supported-position assumption, revisit Shape support ownership, Navigation and TransitionCost together instead of patching one subsystem.
+
+A future Shape may also expose richer occupied/occluding volume than the current whole-cell terrain adapter. That should extend the volume adapter only when the Shape exists; do not speculate a sub-cell geometry framework now.
+
+## Deferred Control / runtime infrastructure
+
+Only synchronous external command submission exists today.
+
+Still deferred:
+
+- queued/asynchronous gateway;
+- within-tick command flush semantics;
+- multithreaded authoritative mutation;
+- general EventBus;
+- universal Action framework;
+- networking/persistence-facing command representation.
+
+A future queued gateway must explicitly preserve or redefine deterministic ordering and within-tick state visibility. Transport semantics are not allowed to silently change simulation semantics.
+
+## Performance watch points
+
+Current code intentionally keeps simple sparse lookup paths and computes visual topology/cutaway state for the camera range on demand.
+
+Measure before changing representation:
 
 ```text
-diagonal ramps
-fractional surface heights
-continuous slope geometry
-multi-standing-position Shapes
-stairs framework
-bridge-specific Shape types
-general orientation framework
+Terrain / Geometry sparse lookup allocation
+Navigation local resolver throughput
+TransitionCost lookup throughput
+Pathfinder expansion cost
+active Movement/Scheduler scale
+procedural surface + cutaway frame cost
+exposure BFS cost
+per-column top-opaque scan across sparse/deep Z ranges
 ```
 
-If a future geometry genuinely needs multiple standing positions, the Shape role law, Navigation read-window derivation and TransitionCost support-owner lookup must be reconsidered together rather than patched with one-off exceptions.
+`TerrainSystem` now maintains exact global vertical extents incrementally. The current presentation adapter may still scan that extent per XY column to find top opacity. If representative worlds prove that expensive, optimize behind `VisibilityVolumeLookup` with a per-column query or cache rather than changing semantics.
 
-## Landscape lifecycle decision
+Potential packed coordinates, chunk-local arrays, dirty visual regions and other DOD storage remain profiling-driven.
 
-The former geometry-override lifecycle gap is resolved by the coordinated `LandscapeMutations` boundary:
+## Decision rule
 
-```text
-placeTerrain   -> clear stale override
-replaceTerrain -> preserve override
-removeTerrain  -> clear override
-```
-
-`TerrainSystem` still does not depend on `GeometrySystem`; `LandscapeSystem` coordinates both owners from above.
-
-## Deferred simulation infrastructure
-
-```text
-final EventBus implementation
-full object lifecycle orchestration
-queued/asynchronous command batching and within-tick visibility policy
-multithreading beyond one authoritative mutation thread
-full renderer / final Z-level UX
-final RNG architecture beyond the first real random consumer
-AI planner family
-```
-
-These are acknowledged later requirements, not current implementation tasks. They should not block the required intermediate milestones listed above.
-
-## How to decide when a deferred detail becomes current
-
-A deferred detail should move into active design when at least one of these is true:
+A deferred item becomes active design when at least one condition is true:
 
 ```text
 a production consumer cannot proceed without it
-a correctness test proves the current contract insufficient
+an invariant/correctness test proves the current contract insufficient
 a representative workload measures a real performance problem
-a vertical slice exposes an ownership ambiguity
 persistence/network/tooling requires a stable external representation
+a vertical slice exposes an ownership ambiguity
 ```
 
-“Could be useful later” is not enough. A named milestone may already be required while its internal details remain legitimately deferred until that milestone has a real consumer.
+“Could be useful later” is not sufficient.

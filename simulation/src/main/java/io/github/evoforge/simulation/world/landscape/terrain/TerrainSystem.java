@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.landscape.terrain;
 
+import java.util.TreeMap;
+
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 
@@ -8,6 +10,33 @@ public final class TerrainSystem {
     private final TerrainStorage storage;
     private final DefinitionCatalog<LandscapeDefinitionId> definitions;
     private final TerrainLookup lookup;
+    private final TreeMap<Integer, Integer> zCounts = new TreeMap<>();
+    private long revision;
+    private final TerrainRevisionLookup revisions = () -> revision;
+    private final TerrainExtentLookup extents = new TerrainExtentLookup() {
+        @Override
+        public boolean empty() {
+            return zCounts.isEmpty();
+        }
+
+        @Override
+        public int minZ() {
+            requireTerrain();
+            return zCounts.firstKey();
+        }
+
+        @Override
+        public int maxZ() {
+            requireTerrain();
+            return zCounts.lastKey();
+        }
+
+        private void requireTerrain() {
+            if (zCounts.isEmpty()) {
+                throw new IllegalStateException("terrain is empty");
+            }
+        }
+    };
 
     public TerrainSystem(
             TerrainStorage storage,
@@ -32,6 +61,14 @@ public final class TerrainSystem {
         return lookup;
     }
 
+    public TerrainExtentLookup extents() {
+        return extents;
+    }
+
+    public TerrainRevisionLookup revisions() {
+        return revisions;
+    }
+
     public TerrainPlacementResult place(
             int x,
             int y,
@@ -45,6 +82,8 @@ public final class TerrainSystem {
         }
 
         storage.put(x, y, z, definitionId);
+        zCounts.merge(z, 1, Integer::sum);
+        revision++;
         return TerrainPlacementResult.PLACED;
     }
 
@@ -61,6 +100,7 @@ public final class TerrainSystem {
         }
 
         storage.put(x, y, z, definitionId);
+        revision++;
         return TerrainReplacementResult.REPLACED;
     }
 
@@ -74,6 +114,10 @@ public final class TerrainSystem {
         }
 
         storage.remove(x, y, z);
+        zCounts.computeIfPresent(
+                z,
+                (ignored, count) -> count == 1 ? null : count - 1);
+        revision++;
         return TerrainRemovalResult.REMOVED;
     }
 
