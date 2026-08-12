@@ -1,7 +1,9 @@
 package io.github.evoforge.visualizer.visual;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
@@ -28,6 +30,20 @@ final class LandscapeSliceResolverTest {
         assertEquals(0, cell.terrainZ());
         assertEquals(3, cell.bodyDepth());
         assertEquals(0, cell.dropDepth());
+    }
+
+    @Test
+    void currentSurfaceQueryMatchesSliceRoleWithoutExposureAnalysis() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        assembly.placeTerrain(0, 0, 0, ground);
+
+        LandscapeSliceResolver resolver = resolver(assembly.start());
+
+        assertTrue(resolver.isCurrentSurface(0, 0, 1));
+        assertFalse(resolver.isCurrentSurface(0, 0, 0));
+        assertFalse(resolver.isCurrentSurface(1, 0, 1));
+        assertFalse(resolver.isCurrentSurface(0, 0, Integer.MIN_VALUE));
     }
 
     @Test
