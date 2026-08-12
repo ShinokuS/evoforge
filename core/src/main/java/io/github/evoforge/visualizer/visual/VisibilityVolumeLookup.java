@@ -18,4 +18,7 @@ public interface VisibilityVolumeLookup {
     int minOccupiedZ();
 
     int maxOccupiedZ();
+
+    /** Monotonic version used to invalidate presentation caches safely. */
+    long revision();
 }
