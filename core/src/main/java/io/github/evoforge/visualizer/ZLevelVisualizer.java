@@ -530,7 +530,7 @@ public final class ZLevelVisualizer extends InputAdapter {
                 } else if (shape == RampShape.POSITIVE_Y) {
                     drawArrow(x, y, 0, 1, 0.35f);
                 } else if (shape == RampShape.NEGATIVE_Y) {
-                    drawArrow(x, y, 0, -1, 0, 0.35f);
+                    drawArrow(x, y, 0, -1, 0.35f);
                 }
             }
         }
