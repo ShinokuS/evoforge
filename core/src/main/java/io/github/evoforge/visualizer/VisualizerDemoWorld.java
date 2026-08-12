@@ -75,15 +75,15 @@ public final class VisualizerDemoWorld {
 
         for (int x = -4; x <= 4; x++) {
             for (int y = -3; y <= 3; y++) {
+                // Keep an irregular north-east corner in the scene so inner
+                // and outer autotile corners are exercised without requiring
+                // any setup-only terrain removal operation.
+                if (y == 3 && (x == 3 || x == 4)) {
+                    continue;
+                }
                 assembly.placeTerrain(x, y, 0, ground);
             }
         }
-
-        // Cut two cells from one corner so inner/outer edge combinations are
-        // visible in the same acceptance scene.
-        // The lower meadow remains authoritative beneath those holes.
-        assembly.removeTerrain(4, 3, 0);
-        assembly.removeTerrain(3, 3, 0);
     }
 
     private static void buildMainRamps(
@@ -111,8 +111,8 @@ public final class VisualizerDemoWorld {
             SimulationAssembly assembly,
             LandscapeDefinitionId ground) {
 
-        // Small second elevation used to verify repeated Z slicing rather than
-        // special-casing a single plateau height.
+        // Small second elevation verifies that the presentation is generic
+        // across Z rather than special-casing one plateau height.
         for (int x = 1; x <= 3; x++) {
             for (int y = 1; y <= 2; y++) {
                 assembly.placeTerrain(x, y, 1, ground);
