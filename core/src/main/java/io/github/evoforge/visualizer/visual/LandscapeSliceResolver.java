@@ -128,8 +128,8 @@ public final class LandscapeSliceResolver {
                         view.geometry().find(x, y, selectedStandingZ));
             }
 
-            int supportTerrainZ = selectedStandingZ - 1;
-            if (view.terrain().contains(x, y, supportTerrainZ)) {
+            if (isCurrentSurface(x, y, selectedStandingZ)) {
+                int supportTerrainZ = selectedStandingZ - 1;
                 return surfaceCell(
                         Kind.CURRENT_SURFACE,
                         x,
@@ -205,6 +205,23 @@ public final class LandscapeSliceResolver {
         }
         this.view = view;
         this.volume = volume;
+    }
+
+    /**
+     * Cheap structural query for overlays that only need the active standing
+     * surface and must not rebuild the camera-local exposure field.
+     */
+    public boolean isCurrentSurface(
+            int x,
+            int y,
+            int selectedStandingZ) {
+
+        if (selectedStandingZ == Integer.MIN_VALUE) {
+            return false;
+        }
+
+        return !view.terrain().contains(x, y, selectedStandingZ)
+                && view.terrain().contains(x, y, selectedStandingZ - 1);
     }
 
     public Analysis analyze(
