@@ -42,6 +42,46 @@ final class TerrainSystemTest {
     void lookupIsStable() {
         TerrainSystem terrain = createTerrain();
         assertSame(terrain.lookup(), terrain.lookup());
+        assertSame(terrain.extents(), terrain.extents());
+    }
+
+    @Test
+    void extentsTrackPlacementAndRemovalWithoutScanningStorage() {
+        TerrainSystem terrain = createTerrain();
+        TerrainExtentLookup extents = terrain.extents();
+
+        assertTrue(extents.empty());
+        assertThrows(IllegalStateException.class, extents::minZ);
+        assertThrows(IllegalStateException.class, extents::maxZ);
+
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(0, 0, 3, GRANITE));
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 0, -4, GRANITE));
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(2, 0, 3, SOIL));
+
+        assertFalse(extents.empty());
+        assertEquals(-4, extents.minZ());
+        assertEquals(3, extents.maxZ());
+
+        assertEquals(
+                TerrainRemovalResult.REMOVED,
+                terrain.remove(0, 0, 3));
+        assertEquals(3, extents.maxZ());
+
+        assertEquals(
+                TerrainRemovalResult.REMOVED,
+                terrain.remove(2, 0, 3));
+        assertEquals(-4, extents.maxZ());
+
+        assertEquals(
+                TerrainRemovalResult.REMOVED,
+                terrain.remove(1, 0, -4));
+        assertTrue(extents.empty());
     }
 
     @Test
