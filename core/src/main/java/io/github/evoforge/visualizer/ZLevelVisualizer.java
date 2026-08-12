@@ -43,6 +43,11 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final float MAX_ZOOM = 4f;
     private static final float FAR_ZOOM_SMOOTH_SAMPLING = 2.5f;
 
+    private static final float ACTIVE_SLICE_SHADOW_PIXELS = 4.0f;
+    private static final float ACTIVE_SLICE_RIM_PIXELS = 2.25f;
+    private static final float DIAGNOSTIC_SHADOW_PIXELS = 5.0f;
+    private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
+
     private static final int[] LOWER_DEPTH_OPTIONS = {0, 1, 4, 8};
     private static final int INSPECT_EXPOSURE_DISTANCE = 12;
 
@@ -53,11 +58,13 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final Color GRID_DEBUG =
             new Color(0.42f, 0.48f, 0.44f, 1f);
     private static final Color ACTIVE_SLICE_RIM =
-            new Color(0.82f, 0.85f, 0.69f, 1f);
+            new Color(0.96f, 0.98f, 0.72f, 1f);
     private static final Color ACTIVE_SLICE_SHADOW =
-            new Color(0.12f, 0.14f, 0.11f, 1f);
+            new Color(0.025f, 0.035f, 0.028f, 0.92f);
+    private static final Color DIAGNOSTIC_SHADOW =
+            new Color(0.02f, 0.025f, 0.022f, 0.94f);
     private static final Color RAMP_ARROW =
-            new Color(1f, 0.88f, 0.28f, 1f);
+            new Color(1f, 0.78f, 0.08f, 1f);
     private static final Color OBJECT_EVEN =
             new Color(0.30f, 0.78f, 0.94f, 1f);
     private static final Color OBJECT_ODD =
@@ -65,11 +72,11 @@ public final class ZLevelVisualizer extends InputAdapter {
     private static final Color SELECTED =
             new Color(1f, 0.93f, 0.34f, 1f);
     private static final Color TRANSITION_FLAT =
-            new Color(0.30f, 0.88f, 0.76f, 1f);
+            new Color(0.10f, 1f, 0.92f, 1f);
     private static final Color TRANSITION_UP =
-            new Color(0.50f, 0.92f, 0.43f, 1f);
+            new Color(0.52f, 1f, 0.18f, 1f);
     private static final Color TRANSITION_DOWN =
-            new Color(1f, 0.56f, 0.26f, 1f);
+            new Color(1f, 0.38f, 0.10f, 1f);
     private static final Color PANEL =
             new Color(0.035f, 0.045f, 0.052f, 0.96f);
     private static final Color PANEL_BORDER =
@@ -173,15 +180,18 @@ public final class ZLevelVisualizer extends InputAdapter {
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         drawGrid(range);
+        drawCellSelection();
+        drawSelectedObject();
+        shapes.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
         if (showShapeDirections) {
             drawRampDirections(range, selectedZ - 1);
             drawRampDirections(range, selectedZ);
         }
-        drawCellSelection();
         if (showTransitions) {
             drawTransitionOverlay();
         }
-        drawSelectedObject();
         shapes.end();
 
         drawHud();
@@ -356,8 +366,8 @@ public final class ZLevelVisualizer extends InputAdapter {
             VisibleRange range) {
 
         float pixel = worldUnitsPerPixel();
-        float shadowThickness = pixel * 1.25f;
-        float rimThickness = pixel;
+        float shadowThickness = pixel * ACTIVE_SLICE_SHADOW_PIXELS;
+        float rimThickness = pixel * ACTIVE_SLICE_RIM_PIXELS;
 
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
@@ -515,8 +525,6 @@ public final class ZLevelVisualizer extends InputAdapter {
             VisibleRange range,
             int terrainZ) {
 
-        shapes.setColor(RAMP_ARROW);
-
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
                 Shape shape = view.geometry().find(x, y, terrainZ);
@@ -526,13 +534,13 @@ public final class ZLevelVisualizer extends InputAdapter {
                 }
 
                 if (shape == RampShape.POSITIVE_X) {
-                    drawArrow(x, y, 1, 0, 0.35f);
+                    drawDiagnosticArrow(x, y, 1, 0, 0.43f, RAMP_ARROW);
                 } else if (shape == RampShape.NEGATIVE_X) {
-                    drawArrow(x, y, -1, 0, 0.35f);
+                    drawDiagnosticArrow(x, y, -1, 0, 0.43f, RAMP_ARROW);
                 } else if (shape == RampShape.POSITIVE_Y) {
-                    drawArrow(x, y, 0, 1, 0.35f);
+                    drawDiagnosticArrow(x, y, 0, 1, 0.43f, RAMP_ARROW);
                 } else if (shape == RampShape.NEGATIVE_Y) {
-                    drawArrow(x, y, 0, -1, 0.35f);
+                    drawDiagnosticArrow(x, y, 0, -1, 0.43f, RAMP_ARROW);
                 }
             }
         }
@@ -571,18 +579,18 @@ public final class ZLevelVisualizer extends InputAdapter {
                         continue;
                     }
 
-                    shapes.setColor(
-                            dz > 0
-                                    ? TRANSITION_UP
-                                    : dz < 0
-                                            ? TRANSITION_DOWN
-                                            : TRANSITION_FLAT);
+                    Color color = dz > 0
+                            ? TRANSITION_UP
+                            : dz < 0
+                                    ? TRANSITION_DOWN
+                                    : TRANSITION_FLAT;
                     drawTransitionArrow(
                             selectedCell.x(),
                             selectedCell.y(),
                             dx,
                             dy,
-                            dz);
+                            dz,
+                            color);
                 }
             }
         }
@@ -593,33 +601,120 @@ public final class ZLevelVisualizer extends InputAdapter {
             int y,
             int dx,
             int dy,
-            int dz) {
+            int dz,
+            Color color) {
 
         float startX = x + 0.5f;
         float startY = y + 0.5f;
-        float length = dx == 0 && dy == 0 ? 0.18f : 0.38f;
         float magnitude = (float) Math.sqrt(dx * dx + dy * dy);
-        float unitX = magnitude == 0f ? 0f : dx / magnitude;
-        float unitY = magnitude == 0f ? 0f : dy / magnitude;
-        float endX = startX + unitX * length;
-        float endY = startY + unitY * length;
-
-        shapes.line(startX, startY, endX, endY);
 
         if (magnitude == 0f) {
+            float pixel = worldUnitsPerPixel();
+            float radius = dz > 0 ? 0.13f : 0.10f;
+            shapes.setColor(DIAGNOSTIC_SHADOW);
             shapes.circle(
                     startX,
                     startY,
-                    dz > 0 ? 0.11f : 0.07f,
-                    12);
-        } else {
-            drawArrowHead(
-                    endX,
-                    endY,
-                    unitX,
-                    unitY,
-                    0.10f);
+                    radius + pixel * 2.2f,
+                    20);
+            shapes.setColor(color);
+            shapes.circle(startX, startY, radius, 20);
+            return;
         }
+
+        float unitX = dx / magnitude;
+        float unitY = dy / magnitude;
+        float length = 0.43f;
+        float endX = startX + unitX * length;
+        float endY = startY + unitY * length;
+        drawDoubleStrokeArrow(
+                startX,
+                startY,
+                endX,
+                endY,
+                unitX,
+                unitY,
+                color,
+                0.145f);
+    }
+
+    private void drawDiagnosticArrow(
+            int cellX,
+            int cellY,
+            int dx,
+            int dy,
+            float length,
+            Color color) {
+
+        float startX = cellX + 0.5f;
+        float startY = cellY + 0.5f;
+        float endX = startX + dx * length;
+        float endY = startY + dy * length;
+
+        drawDoubleStrokeArrow(
+                startX,
+                startY,
+                endX,
+                endY,
+                dx,
+                dy,
+                color,
+                0.15f);
+    }
+
+    private void drawDoubleStrokeArrow(
+            float startX,
+            float startY,
+            float endX,
+            float endY,
+            float unitX,
+            float unitY,
+            Color color,
+            float headSize) {
+
+        float pixel = worldUnitsPerPixel();
+        float shadowWidth = pixel * DIAGNOSTIC_SHADOW_PIXELS;
+        float strokeWidth = pixel * DIAGNOSTIC_STROKE_PIXELS;
+
+        shapes.setColor(DIAGNOSTIC_SHADOW);
+        shapes.rectLine(startX, startY, endX, endY, shadowWidth);
+        drawFilledArrowHead(
+                endX,
+                endY,
+                unitX,
+                unitY,
+                headSize + pixel * 2.2f);
+
+        shapes.setColor(color);
+        shapes.rectLine(startX, startY, endX, endY, strokeWidth);
+        drawFilledArrowHead(
+                endX,
+                endY,
+                unitX,
+                unitY,
+                headSize);
+    }
+
+    private void drawFilledArrowHead(
+            float endX,
+            float endY,
+            float unitX,
+            float unitY,
+            float size) {
+
+        float perpendicularX = -unitY;
+        float perpendicularY = unitX;
+        float backX = endX - unitX * size;
+        float backY = endY - unitY * size;
+        float halfWidth = size * 0.72f;
+
+        shapes.triangle(
+                endX,
+                endY,
+                backX + perpendicularX * halfWidth,
+                backY + perpendicularY * halfWidth,
+                backX - perpendicularX * halfWidth,
+                backY - perpendicularY * halfWidth);
     }
 
     private void drawSelectedObject() {
@@ -878,46 +973,6 @@ public final class ZLevelVisualizer extends InputAdapter {
             boolean value) {
 
         return value ? "ON" : "OFF";
-    }
-
-    private void drawArrow(
-            int cellX,
-            int cellY,
-            int dx,
-            int dy,
-            float length) {
-
-        float startX = cellX + 0.5f;
-        float startY = cellY + 0.5f;
-        float endX = startX + dx * length;
-        float endY = startY + dy * length;
-
-        shapes.line(startX, startY, endX, endY);
-        drawArrowHead(endX, endY, dx, dy, 0.11f);
-    }
-
-    private void drawArrowHead(
-            float endX,
-            float endY,
-            float unitX,
-            float unitY,
-            float size) {
-
-        float perpendicularX = -unitY;
-        float perpendicularY = unitX;
-        float backX = endX - unitX * size;
-        float backY = endY - unitY * size;
-
-        shapes.line(
-                endX,
-                endY,
-                backX + perpendicularX * size,
-                backY + perpendicularY * size);
-        shapes.line(
-                endX,
-                endY,
-                backX - perpendicularX * size,
-                backY - perpendicularY * size);
     }
 
     private void clearSelection() {
