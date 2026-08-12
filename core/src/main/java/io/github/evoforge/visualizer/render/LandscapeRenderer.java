@@ -112,12 +112,18 @@ public final class LandscapeRenderer {
             SpriteBatch batch,
             int bodyDepth) {
 
-        float shade = switch (Math.min(bodyDepth, 5)) {
-            case 1 -> 0.92f;
-            case 2 -> 0.76f;
-            case 3 -> 0.62f;
+        // The first cut layers remain recognisably part of the same landscape.
+        // Only genuinely deep stacked mass approaches the background/silhouette
+        // range. The curve is intentionally non-linear: depth must be readable
+        // without turning every one-level plateau into a different material.
+        float shade = switch (Math.min(bodyDepth, 7)) {
+            case 1 -> 1.00f;
+            case 2 -> 0.84f;
+            case 3 -> 0.67f;
             case 4 -> 0.50f;
-            default -> 0.40f;
+            case 5 -> 0.34f;
+            case 6 -> 0.22f;
+            default -> 0.14f;
         };
         batch.setColor(shade, shade, shade, 1f);
     }
@@ -132,13 +138,10 @@ public final class LandscapeRenderer {
                 : 1f;
         float shade = environment * drop;
 
-        // A tiny cool bias helps covered/lower space separate from ordinary
-        // grass without inventing a second cave material or lighting system.
-        batch.setColor(
-                shade * 0.96f,
-                shade * 0.98f,
-                shade,
-                1f);
+        // Neutral multiplication preserves the procedural terrain hue. Depth
+        // should look like the same world in less light, not a blue/black cave
+        // material painted over the landscape.
+        batch.setColor(shade, shade, shade, 1f);
     }
 
     private static float environmentShade(
@@ -148,20 +151,33 @@ public final class LandscapeRenderer {
             return 1f;
         }
 
-        float cover = Math.max(
-                0.44f,
-                0.80f - (Math.min(cell.coverDepth(), 6) - 1) * 0.075f);
+        // One or two layers of cover remain readable. Thick cover progressively
+        // approaches silhouette, while a tall cavern receives a small amount of
+        // relief so vertical volume still feels larger than a cramped tunnel.
+        float cover = switch (Math.min(cell.coverDepth(), 7)) {
+            case 1 -> 0.88f;
+            case 2 -> 0.75f;
+            case 3 -> 0.61f;
+            case 4 -> 0.48f;
+            case 5 -> 0.36f;
+            case 6 -> 0.27f;
+            default -> 0.20f;
+        };
         float tallCavernRelief = Math.min(
-                0.08f,
-                Math.max(0, cell.ceilingDistance() - 1) * 0.015f);
+                0.10f,
+                Math.max(0, cell.ceilingDistance() - 1) * 0.02f);
+
+        // Exposure is geometric distance through open air, not a cave flag.
+        // Close-to-mouth cells therefore retain contrast while deep enclosed
+        // space fades smoothly instead of changing palette abruptly.
         float exposure = Math.max(
-                0.48f,
+                0.38f,
                 1f - Math.min(cell.exposureDistance(), EXPOSURE_DISTANCE + 1)
-                        * 0.055f);
+                        * 0.048f);
 
         return Math.max(
-                0.28f,
-                Math.min(0.86f, cover + tallCavernRelief) * exposure);
+                0.10f,
+                Math.min(0.94f, cover + tallCavernRelief) * exposure);
     }
 
     private static float dropShade(
@@ -170,7 +186,22 @@ public final class LandscapeRenderer {
         if (depth <= 0) {
             return 1f;
         }
-        return Math.max(0.50f, 1f - depth * 0.085f);
+
+        // Looking down from a height stays much more permissive than looking
+        // through cover, but very deep lower surfaces must stop competing with
+        // the active slice. By depth 4 (for example the demo Z=-5 shaft floor
+        // seen from standing Z=0) texture is only a faint depth cue; still
+        // deeper surfaces approach the external background visually.
+        return switch (Math.min(depth, 8)) {
+            case 1 -> 0.84f;
+            case 2 -> 0.64f;
+            case 3 -> 0.42f;
+            case 4 -> 0.22f;
+            case 5 -> 0.14f;
+            case 6 -> 0.09f;
+            case 7 -> 0.06f;
+            default -> 0.045f;
+        };
     }
 
     private int neighbourMask(
