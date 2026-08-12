@@ -19,7 +19,7 @@ DONE  Timed adjacent Movement
 DONE  SimulationStepper + Scheduler process binding
 DONE  TransitionCost: terrain + Shape roles + grid length
 DONE  Minimal live Z-level Visualizer
-ACTIVE Procedural full-top-down horizontal Z-slice readability
+ACTIVE Procedural full-top-down cutaway / geometric exposure readability
 NEXT  Occupancy
       Pathfinder
       observable Action completion/outcome
@@ -40,24 +40,40 @@ The canonical development presentation is:
 full top-down
 logical simulation cell = 1 x 1
 native procedural visual cell = 16 x 16 pixels
-simulation topology -> horizontal slice semantics -> generated presentation
+world geometry -> horizontal cut -> geometric exposure -> generated presentation
 ```
 
-The generated landscape is presentation-only. Simulation contains no pixels, palettes, sprite ids or rendering rules.
+Simulation contains no pixels, palettes or camera cutaway state.
 
-The current Z language is a **horizontal cut**, not an isolated floor stack and not a permanently transparent multi-floor view:
+The current Z language is not based on absolute Z labels and does not permanently ghost adjacent floors:
 
 ```text
 terrain at selected Z       -> solid body intersecting the cut
 terrain at selected Z - 1   -> current supported surface
-otherwise                   -> nearest visible lower surface through open space
+open volume below           -> nearest lower surface within debug depth
 ```
 
-The current lower-depth debug options are `0 / 1 / 4`. Complete upper floors are not ghosted in normal view. A higher mountain instead remains visible on a lower slice because its terrain body intersects that cut.
+Presentation context is derived independently:
 
-Ramp presentation is derived from the one authoritative `RampShape`: normal slope on its supported plane, directional cut art when the lower horizontal slice intersects the Ramp body, and a small presentation-only descent marker on the upper landing.
+```text
+bodyDepth
+ dropDepth
+ ceilingDistance
+ coverDepth
+ exposureDistance through open air to sky-connected exterior
+```
 
-The acceptance scene now includes four base Ramp directions, a stacked mountain reaching standing `Z=4`, a cave, a deep shaft and multiple higher Ramp transitions. See [Z-level Visualizer and Procedural Landscape](Visualizer.md).
+Covered/body depth darkens aggressively; looking down through open space uses gentler depth shading. This preserves readable views from elevations while deep underground space progressively approaches a dark cutaway state.
+
+`VisibilityVolumeLookup` is a presentation-side capability boundary. The current adapter treats terrain as solid/opaque; future roofs, walls or large objects can contribute through another adapter/composition without changing the cutaway algorithm. A test already proves that a non-terrain opaque contributor blocks visibility correctly.
+
+`TerrainExtentLookup` is now a small generic simulation read contract so presentation can determine where terrain truly ends vertically instead of assuming an arbitrary world height. It carries no rendering semantics.
+
+The acceptance scene contains four base Ramp directions, a stacked mountain to standing `Z=4`, a side-mouth mountain cave with real roof, a separate cavern beneath a flat cap with a real vertical opening, a deep shaft and successive higher Ramp transitions.
+
+Ramp visual style is now invariant across slice context: the same generated Ramp art is reused, with only environmental shading changing.
+
+See [Z-level Visualizer and Procedural Landscape](Visualizer.md).
 
 ## Immediate next milestone: Occupancy
 
@@ -150,8 +166,10 @@ These decisions should be designed together when generation actually needs them.
 
 The following are recorded but intentionally absent from current code:
 
-- ceiling/roof/covered-state presentation once real simulation semantics require it;
 - explicit adjacent-layer X-ray/build mode;
+- real roofs/structures/large objects contributing to `VisibilityVolumeLookup` when those entities exist;
+- partial optical transmission for glass, water, smoke or foliage;
+- authoritative actor LOS and lighting; camera cutaway exposure must not become agent perception;
 - additional procedural materials: dirt, stone, sand, snow, water;
 - priority/layered transitions between multiple terrain materials;
 - alternate procedural palettes or visual styles;
@@ -163,9 +181,9 @@ The following are recorded but intentionally absent from current code:
 - generated-atlas/export tooling for standalone art review;
 - visual tile caches, dirty regions and chunk render storage before profiling proves a need.
 
-The current cell-aligned renderer is not a claim that every future visual pack must use the same autotiling algorithm. It is the first real consumer and preserves exact alignment with simulation cells.
+Normal view deliberately does not draw a full transparent upper floor. An eventual X-ray/build mode must remain explicit and must not change input or simulation semantics.
 
-Normal view deliberately does not draw a full transparent upper floor. If an X-ray mode becomes useful for construction or debugging, it should remain an explicit mode and must not change input or simulation semantics.
+Binary presentation `solid/opaque` is sufficient for the current terrain-only consumer. Do not generalize it into simulation-wide optics until gameplay requires transmission/opacity.
 
 ## Deferred Movement decisions
 
@@ -212,6 +230,8 @@ Still deferred:
 
 If a third real Shape violates the current one-supported-position assumption, revisit Shape support ownership, Navigation and TransitionCost together instead of patching one subsystem.
 
+A future Shape may also expose richer occupied/occluding volume than the current whole-cell terrain adapter. That should extend the volume adapter only when the Shape exists; do not speculate a sub-cell geometry framework now.
+
 ## Deferred Control / runtime infrastructure
 
 Only synchronous external command submission exists today.
@@ -229,7 +249,7 @@ A future queued gateway must explicitly preserve or redefine deterministic order
 
 ## Performance watch points
 
-Current code intentionally keeps simple sparse lookup paths and computes visual topology/slice state for visible cells on demand.
+Current code intentionally keeps simple sparse lookup paths and computes visual topology/cutaway state for the camera range on demand.
 
 Measure before changing representation:
 
@@ -239,11 +259,14 @@ Navigation local resolver throughput
 TransitionCost lookup throughput
 Pathfinder expansion cost
 active Movement/Scheduler scale
-procedural surface + horizontal-slice frame cost
-open-column lower-depth lookup cost
+procedural surface + cutaway frame cost
+exposure BFS cost
+per-column top-opaque scan across sparse/deep Z ranges
 ```
 
-Potential optimizations such as packed coordinates, chunk-local arrays, caches, dirty visual regions or specialized DOD storage become current only after a representative workload demonstrates a real bottleneck.
+`TerrainSystem` now maintains exact global vertical extents incrementally. The current presentation adapter may still scan that extent per XY column to find top opacity. If representative worlds prove that expensive, optimize behind `VisibilityVolumeLookup` with a per-column query or cache rather than changing semantics.
+
+Potential packed coordinates, chunk-local arrays, dirty visual regions and other DOD storage remain profiling-driven.
 
 ## Decision rule
 
