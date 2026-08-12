@@ -38,9 +38,6 @@ final class VisualizerDemoWorldTest {
         assertTrue(runtime.view().terrain().contains(3, 0, 2));
         assertTrue(runtime.view().terrain().contains(2, 2, 1));
 
-        // The mouth is open in the body layer but remains under mountain roof;
-        // exposure therefore comes horizontally from exterior air rather than
-        // from a fake presentation hole above the whole chamber.
         assertFalse(runtime.view().terrain().contains(1, 0, 1));
         assertTrue(runtime.view().terrain().contains(1, 0, 2));
     }
@@ -49,14 +46,12 @@ final class VisualizerDemoWorldTest {
     void flatRoofCavernAndDeepShaftAreRealGeometry() {
         SimulationRuntime runtime = VisualizerDemoWorld.create();
 
-        // Separate enclosed cavern under a flat cap.
         assertTrue(runtime.view().terrain().contains(-12, 1, -1));
         assertFalse(runtime.view().terrain().contains(-12, 1, 0));
         assertFalse(runtime.view().terrain().contains(-12, 1, 1));
         assertTrue(runtime.view().terrain().contains(-12, 1, 2));
         assertFalse(runtime.view().terrain().contains(-11, 0, 2));
 
-        // Deep shaft: every intermediate layer is genuinely empty.
         assertFalse(runtime.view().terrain().contains(-4, 2, 0));
         assertFalse(runtime.view().terrain().contains(-4, 2, -1));
         assertFalse(runtime.view().terrain().contains(-4, 2, -2));
@@ -99,18 +94,22 @@ final class VisualizerDemoWorldTest {
             int upDz) {
 
         int transitions = runtime.view().navigation().transitions(x, y, z);
+        String label = "ramp (" + x + "," + y + "," + z
+                + ") mask=" + Integer.toBinaryString(transitions);
 
         assertTrue(
                 TransitionMask.contains(
                         transitions,
                         downDx,
                         downDy,
-                        downDz));
+                        downDz),
+                label + " missing down (" + downDx + "," + downDy + "," + downDz + ")");
         assertTrue(
                 TransitionMask.contains(
                         transitions,
                         upDx,
                         upDy,
-                        upDz));
+                        upDz),
+                label + " missing up (" + upDx + "," + upDy + "," + upDz + ")");
     }
 }
