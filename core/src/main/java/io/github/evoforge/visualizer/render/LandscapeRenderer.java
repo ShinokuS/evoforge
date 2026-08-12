@@ -15,23 +15,19 @@ import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 public final class LandscapeRenderer {
 
     private static final int EXPOSURE_DISTANCE = 12;
-    private static final int ANALYSIS_PADDING = 8;
+    private static final int MIN_ANALYSIS_PADDING = 8;
+    private static final int ANALYSIS_PADDING_DIVISOR = 4;
+    private static final int ANALYSIS_CACHE_SIZE = 6;
     private static final long PERF_LOG_INTERVAL_NANOS = 1_000_000_000L;
 
     private final SimulationView view;
     private final ProceduralLandscapePack surfaceArt;
     private final ProceduralSliceArt sliceArt;
     private final LandscapeSliceResolver sliceResolver;
+    private final AnalysisCacheEntry[] analysisCache =
+            new AnalysisCacheEntry[ANALYSIS_CACHE_SIZE];
 
-    private LandscapeSliceResolver.Analysis cachedAnalysis;
-    private long cachedVisibilityRevision = Long.MIN_VALUE;
-    private int cachedMinX;
-    private int cachedMaxX;
-    private int cachedMinY;
-    private int cachedMaxY;
-    private int cachedStandingZ;
-    private int cachedLowerDepth;
-
+    private long cacheUseSequence;
     private long perfWindowStartNanos = System.nanoTime();
     private long perfAnalysisNanos;
     private long perfLandscapeNanos;
@@ -41,6 +37,7 @@ public final class LandscapeRenderer {
     private int perfCacheHits;
     private int perfCacheMisses;
     private long lastVisibleCells;
+    private int lastAnalysisPadding;
 
     public LandscapeRenderer(
             SimulationView view,
@@ -110,38 +107,89 @@ public final class LandscapeRenderer {
             int maxLowerDepth) {
 
         long visibilityRevision = sliceResolver.visibilityRevision();
-        boolean cacheHit = visibilityRevision >= 0L
-                && cachedAnalysis != null
-                && cachedVisibilityRevision == visibilityRevision
-                && cachedStandingZ == selectedStandingZ
-                && cachedLowerDepth == maxLowerDepth
-                && minX >= cachedMinX
-                && maxX <= cachedMaxX
-                && minY >= cachedMinY
-                && maxY <= cachedMaxY;
-
-        if (cacheHit) {
-            perfCacheHits++;
-            return cachedAnalysis;
+        if (visibilityRevision >= 0L) {
+            for (AnalysisCacheEntry entry : analysisCache) {
+                if (entry != null
+                        && entry.matches(
+                                visibilityRevision,
+                                selectedStandingZ,
+                                maxLowerDepth,
+                                minX,
+                                maxX,
+                                minY,
+                                maxY)) {
+                    perfCacheHits++;
+                    entry.lastUse = ++cacheUseSequence;
+                    lastAnalysisPadding = entry.padding;
+                    return entry.analysis;
+                }
+            }
         }
 
         perfCacheMisses++;
-        cachedVisibilityRevision = visibilityRevision;
-        cachedStandingZ = selectedStandingZ;
-        cachedLowerDepth = maxLowerDepth;
-        cachedMinX = safeAdd(minX, -ANALYSIS_PADDING);
-        cachedMaxX = safeAdd(maxX, ANALYSIS_PADDING);
-        cachedMinY = safeAdd(minY, -ANALYSIS_PADDING);
-        cachedMaxY = safeAdd(maxY, ANALYSIS_PADDING);
-        cachedAnalysis = sliceResolver.analyze(
-                cachedMinX,
-                cachedMaxX,
-                cachedMinY,
-                cachedMaxY,
+        int padding = analysisPadding(minX, maxX, minY, maxY);
+        int analysisMinX = safeAdd(minX, -padding);
+        int analysisMaxX = safeAdd(maxX, padding);
+        int analysisMinY = safeAdd(minY, -padding);
+        int analysisMaxY = safeAdd(maxY, padding);
+        LandscapeSliceResolver.Analysis analysis = sliceResolver.analyze(
+                analysisMinX,
+                analysisMaxX,
+                analysisMinY,
+                analysisMaxY,
                 selectedStandingZ,
                 maxLowerDepth,
                 EXPOSURE_DISTANCE);
-        return cachedAnalysis;
+
+        lastAnalysisPadding = padding;
+        if (visibilityRevision >= 0L) {
+            int slot = replacementSlot();
+            analysisCache[slot] = new AnalysisCacheEntry(
+                    analysis,
+                    visibilityRevision,
+                    selectedStandingZ,
+                    maxLowerDepth,
+                    analysisMinX,
+                    analysisMaxX,
+                    analysisMinY,
+                    analysisMaxY,
+                    padding,
+                    ++cacheUseSequence);
+        }
+        return analysis;
+    }
+
+    private static int analysisPadding(
+            int minX,
+            int maxX,
+            int minY,
+            int maxY) {
+
+        long width = (long) maxX - minX + 1L;
+        long height = (long) maxY - minY + 1L;
+        long viewportSpan = Math.max(width, height);
+        long scaled = (viewportSpan + ANALYSIS_PADDING_DIVISOR - 1L)
+                / ANALYSIS_PADDING_DIVISOR;
+        return (int) Math.min(
+                Integer.MAX_VALUE,
+                Math.max(MIN_ANALYSIS_PADDING, scaled));
+    }
+
+    private int replacementSlot() {
+        int oldestSlot = 0;
+        long oldestUse = Long.MAX_VALUE;
+
+        for (int index = 0; index < analysisCache.length; index++) {
+            AnalysisCacheEntry entry = analysisCache[index];
+            if (entry == null) {
+                return index;
+            }
+            if (entry.lastUse < oldestUse) {
+                oldestUse = entry.lastUse;
+                oldestSlot = index;
+            }
+        }
+        return oldestSlot;
     }
 
     private void recordPerformance(
@@ -171,7 +219,9 @@ public final class LandscapeRenderer {
                         + millis(perfAnalysisNanos / frames)
                         + "/" + millis(perfMaxAnalysisNanos) + "ms"
                         + " cache hit/miss="
-                        + perfCacheHits + "/" + perfCacheMisses);
+                        + perfCacheHits + "/" + perfCacheMisses
+                        + " padding=" + lastAnalysisPadding
+                        + " cached=" + cachedEntryCount());
 
         perfWindowStartNanos = now;
         perfAnalysisNanos = 0L;
@@ -181,6 +231,16 @@ public final class LandscapeRenderer {
         perfFrames = 0;
         perfCacheHits = 0;
         perfCacheMisses = 0;
+    }
+
+    private int cachedEntryCount() {
+        int count = 0;
+        for (AnalysisCacheEntry entry : analysisCache) {
+            if (entry != null) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static double millis(
@@ -346,5 +406,61 @@ public final class LandscapeRenderer {
         }
 
         return LandscapeTopology.normalize(mask);
+    }
+
+    private static final class AnalysisCacheEntry {
+
+        private final LandscapeSliceResolver.Analysis analysis;
+        private final long visibilityRevision;
+        private final int standingZ;
+        private final int lowerDepth;
+        private final int minX;
+        private final int maxX;
+        private final int minY;
+        private final int maxY;
+        private final int padding;
+        private long lastUse;
+
+        private AnalysisCacheEntry(
+                LandscapeSliceResolver.Analysis analysis,
+                long visibilityRevision,
+                int standingZ,
+                int lowerDepth,
+                int minX,
+                int maxX,
+                int minY,
+                int maxY,
+                int padding,
+                long lastUse) {
+
+            this.analysis = analysis;
+            this.visibilityRevision = visibilityRevision;
+            this.standingZ = standingZ;
+            this.lowerDepth = lowerDepth;
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minY = minY;
+            this.maxY = maxY;
+            this.padding = padding;
+            this.lastUse = lastUse;
+        }
+
+        private boolean matches(
+                long revision,
+                int selectedStandingZ,
+                int maxLowerDepth,
+                int requestedMinX,
+                int requestedMaxX,
+                int requestedMinY,
+                int requestedMaxY) {
+
+            return visibilityRevision == revision
+                    && standingZ == selectedStandingZ
+                    && lowerDepth == maxLowerDepth
+                    && requestedMinX >= minX
+                    && requestedMaxX <= maxX
+                    && requestedMinY >= minY
+                    && requestedMaxY <= maxY;
+        }
     }
 }
