@@ -43,6 +43,44 @@ final class TerrainSystemTest {
         TerrainSystem terrain = createTerrain();
         assertSame(terrain.lookup(), terrain.lookup());
         assertSame(terrain.extents(), terrain.extents());
+        assertSame(terrain.revisions(), terrain.revisions());
+    }
+
+    @Test
+    void revisionAdvancesOnlyForAcceptedMutations() {
+        TerrainSystem terrain = createTerrain();
+        TerrainRevisionLookup revisions = terrain.revisions();
+
+        assertEquals(0L, revisions.revision());
+        assertEquals(
+                TerrainPlacementResult.PLACED,
+                terrain.place(1, 2, 3, GRANITE));
+        assertEquals(1L, revisions.revision());
+
+        assertEquals(
+                TerrainPlacementResult.POSITION_OCCUPIED,
+                terrain.place(1, 2, 3, SOIL));
+        assertEquals(1L, revisions.revision());
+
+        assertEquals(
+                TerrainReplacementResult.REPLACED,
+                terrain.replace(1, 2, 3, SOIL));
+        assertEquals(2L, revisions.revision());
+
+        assertEquals(
+                TerrainReplacementResult.TERRAIN_ABSENT,
+                terrain.replace(8, 8, 8, SOIL));
+        assertEquals(2L, revisions.revision());
+
+        assertEquals(
+                TerrainRemovalResult.REMOVED,
+                terrain.remove(1, 2, 3));
+        assertEquals(3L, revisions.revision());
+
+        assertEquals(
+                TerrainRemovalResult.TERRAIN_ABSENT,
+                terrain.remove(1, 2, 3));
+        assertEquals(3L, revisions.revision());
     }
 
     @Test
