@@ -14,4 +14,12 @@ public interface PathTransitionConstraint {
             int toX,
             int toY,
             int toZ);
+
+    /**
+     * Version of dynamic facts read by this constraint. Immutable constraints may keep zero.
+     * A resumable search becomes STALE when this value changes.
+     */
+    default long revision() {
+        return 0L;
+    }
 }
