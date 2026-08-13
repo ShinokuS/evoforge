@@ -49,6 +49,8 @@ Absence of the aspect means the object is transparent to exclusive occupancy.
 
 This is deliberately independent from other mechanics. A future bush may be spatially present, occupancy-transparent, slow traversal and provide concealment at the same time. Those are separate mechanic contributions rather than one universal physical flag.
 
+During `SimulationAssembly` setup, exclusive occupancy for a definition must be configured before instances of that definition are spatially placed. Object creation alone does not lock this choice; placement does, because placement already consumes the occupancy semantics.
+
 ## Read projection
 
 `OccupancyLookup` exposes exactly three current states:
@@ -116,17 +118,18 @@ validate Movement capability/source/adjacency/Navigation
     ↓
 calculate shared TransitionCost and duration
     ↓
-create concrete MovementAction identity
-    ↓
 try to claim immediate destination
     ├─ OCCUPIED → structured movement:destination_occupied rejection
     ├─ RESERVED → structured movement:destination_reserved rejection
     └─ FREE     → Occupancy returns a reservation handle
+                  create MovementAction
                   store handle with the active action
                   schedule completion
 ```
 
-A rejected occupancy claim leaves no active movement action, no reservation and no timing-carry mutation.
+A rejected occupancy claim therefore never creates Movement action state, never leaves a reservation and never mutates timing carry.
+
+If later action creation or scheduling fails exceptionally after a claim was acquired, Movement rolls the exact claim back before propagating the failure.
 
 During the timed action Spatial remains at the source, preserving the existing Movement contract.
 
@@ -194,9 +197,12 @@ Headless coverage includes:
 - rejection of two exclusive occupants in one cell;
 - Occupancy-owned reservation identity and exact-owner release;
 - same-destination Movement contention;
+- source remaining physically `OCCUPIED` while destination is `RESERVED`;
+- rejected claims leaving Movement/timing behavior unchanged;
 - distinction between `RESERVED` and later physical `OCCUPIED`;
 - transparent movers sharing a cell with an exclusive object;
-- release after completion-time structural interruption.
+- release after completion-time structural interruption;
+- setup ordering that prevents occupancy semantics changing after placement.
 
 ## Deferred
 
