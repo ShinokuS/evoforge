@@ -41,6 +41,9 @@ public final class ScenarioCatalog {
                 new PathfindingStructuralDetourScenario(),
                 new PathfindingWeightedDetourScenario(),
                 new PathfindingRampScenario(),
+                new PathfindingMultiLevelClimbScenario(),
+                new PathfindingZSwitchbackScenario(),
+                new PathfindingVerticalOverpassScenario(),
                 new PathfindingUnreachableScenario(),
                 new PathfindingHierarchyScenario(),
                 new PathfindingInvalidationScenario()));
