@@ -39,6 +39,9 @@ import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSyste
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Production composition root for a simulation instance.
  *
@@ -66,6 +69,8 @@ public final class SimulationAssembly {
     private final OccupancySystem occupancy;
     private final ObjectPlacementSystem objectPlacement;
     private final MovementStateStore movementState;
+    private final Set<ObjectDefinitionId> placedObjectDefinitions =
+            new HashSet<>();
 
     private boolean started;
 
@@ -159,12 +164,22 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Marks instances of the definition as requiring one exclusive cell. */
+    /**
+     * Marks instances of the definition as requiring one exclusive cell.
+     * Occupancy semantics must be configured before any instance of this
+     * definition is spatially placed during setup.
+     */
     public SimulationAssembly exclusiveOccupancy(
             ObjectDefinitionId definitionId) {
 
         requireNotStarted();
         requireObjectDefinition(definitionId);
+
+        if (placedObjectDefinitions.contains(definitionId)) {
+            throw new IllegalStateException(
+                    "exclusive occupancy must be configured before placing "
+                            + "instances of definition: " + definitionId);
+        }
 
         occupancyDefinitions.put(
                 definitionId,
@@ -198,6 +213,13 @@ public final class SimulationAssembly {
                         x,
                         y,
                         z));
+
+        WorldObject object = objects.get(objectId);
+        if (object == null) {
+            throw new IllegalStateException(
+                    "placed object disappeared from repository: " + objectId);
+        }
+        placedObjectDefinitions.add(object.definitionId());
 
         return this;
     }

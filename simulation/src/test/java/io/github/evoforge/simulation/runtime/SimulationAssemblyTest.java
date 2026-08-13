@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -121,5 +122,36 @@ final class SimulationAssemblyTest {
                         0,
                         0,
                         0));
+    }
+
+    @Test
+    void occupancySemanticsCannotChangeAfterDefinitionInstancesArePlaced() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        ObjectDefinitionId definition =
+                assembly.objectDefinition("test:object");
+        ObjectId objectId = assembly.createObject(definition);
+
+        assembly.placeObject(objectId, 0, 0, 0);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> assembly.exclusiveOccupancy(definition));
+    }
+
+    @Test
+    void occupancyMayBeConfiguredAfterCreationButBeforePlacement() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        ObjectDefinitionId definition =
+                assembly.objectDefinition("test:object");
+        ObjectId objectId = assembly.createObject(definition);
+
+        assembly.exclusiveOccupancy(definition);
+        assembly.placeObject(objectId, 0, 0, 0);
+
+        SimulationRuntime runtime = assembly.start();
+
+        assertEquals(
+                OccupancyState.OCCUPIED,
+                runtime.view().occupancy().state(0, 0, 0));
     }
 }
