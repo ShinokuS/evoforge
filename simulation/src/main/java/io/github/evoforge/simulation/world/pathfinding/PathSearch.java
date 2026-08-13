@@ -7,6 +7,9 @@ public interface PathSearch {
 
     PathSearchStatus advance(int expansionBudget);
 
+    /** Stops an unfinished computational search and releases reusable workspace. */
+    void cancel();
+
     PathRoute route();
 
     PathSearchMetrics metrics();
