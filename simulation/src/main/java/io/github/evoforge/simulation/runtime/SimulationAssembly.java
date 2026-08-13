@@ -3,6 +3,8 @@ package io.github.evoforge.simulation.runtime;
 import io.github.evoforge.simulation.control.core.CommandDispatcher;
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepHandler;
+import io.github.evoforge.simulation.control.movement.MoveToCommand;
+import io.github.evoforge.simulation.control.movement.MoveToHandler;
 import io.github.evoforge.simulation.control.sync.SynchronousCommandGateway;
 import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
 import io.github.evoforge.simulation.control.terrain.PlaceTerrainHandler;
@@ -21,10 +23,12 @@ import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementRate;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementStateStore;
+import io.github.evoforge.simulation.world.mechanics.movement.MovementStepCompletionRelay;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
@@ -169,8 +173,16 @@ public final class SimulationAssembly {
         SimulationClock clock = new SimulationClock();
         SimulationStepper stepper = new SimulationStepper(clock, scheduler);
 
+        MovementStepCompletionRelay movementCompletions =
+                new MovementStepCompletionRelay();
         MovementActionProcessor movementActions = new MovementActionProcessor(
-                movementState, objects, spatial.transforms(), navigation.lookup(), occupancy, spatial);
+                movementState,
+                objects,
+                spatial.transforms(),
+                navigation.lookup(),
+                occupancy,
+                spatial,
+                movementCompletions);
         HandlerId movementHandlerId = scheduledHandlers.register(movementActions::complete);
         ProcessScheduler movementScheduler = new BoundProcessScheduler(
                 clock, scheduler, movementHandlerId);
@@ -200,11 +212,17 @@ public final class SimulationAssembly {
                 occupancy,
                 movementState,
                 movementScheduler);
+        MoveToSystem moveTo = new MoveToSystem(
+                spatial.transforms(),
+                pathfinder,
+                movement);
+        movementCompletions.bind(moveTo);
 
         CommandDispatcher dispatcher = new CommandDispatcher();
         dispatcher.register(PlaceTerrainCommand.class, new PlaceTerrainHandler(landscape));
         dispatcher.register(ReplaceTerrainCommand.class, new ReplaceTerrainHandler(landscape));
         dispatcher.register(MoveStepCommand.class, new MoveStepHandler(movement));
+        dispatcher.register(MoveToCommand.class, new MoveToHandler(moveTo));
 
         SimulationView view = new SimulationView(
                 objects,
@@ -216,7 +234,8 @@ public final class SimulationAssembly {
                 navigation.lookup(),
                 occupancy,
                 cells.lookup(),
-                pathfinder);
+                pathfinder,
+                moveTo);
 
         return new SimulationRuntime(
                 new SynchronousCommandGateway(dispatcher), clock, stepper, view);

@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.movement;
 
+import io.github.evoforge.simulation.result.ResultCode;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
@@ -10,12 +11,26 @@ import io.github.evoforge.simulation.world.spatial.TransformLookup;
 
 public final class MovementActionProcessor {
 
+    private static final ResultCode COMMITTED =
+            ResultCode.of("movement", "committed");
+    private static final ResultCode OBJECT_REMOVED =
+            ResultCode.of("movement", "object_removed");
+    private static final ResultCode NOT_PLACED =
+            ResultCode.of("movement", "not_placed");
+    private static final ResultCode SOURCE_CHANGED =
+            ResultCode.of("movement", "source_changed");
+    private static final ResultCode TRANSITION_UNAVAILABLE =
+            ResultCode.of("movement", "transition_unavailable");
+    private static final ResultCode DESTINATION_UNAVAILABLE =
+            ResultCode.of("movement", "destination_unavailable");
+
     private final MovementStateStore state;
     private final ObjectLookup objects;
     private final TransformLookup transforms;
     private final NavigationLookup navigation;
     private final OccupancySystem occupancy;
     private final SpatialSystem spatial;
+    private final MovementStepCompletionSink completions;
 
     public MovementActionProcessor(
             MovementStateStore state,
@@ -23,7 +38,8 @@ public final class MovementActionProcessor {
             TransformLookup transforms,
             NavigationLookup navigation,
             OccupancySystem occupancy,
-            SpatialSystem spatial) {
+            SpatialSystem spatial,
+            MovementStepCompletionSink completions) {
 
         if (state == null) {
             throw new IllegalArgumentException(
@@ -49,6 +65,10 @@ public final class MovementActionProcessor {
             throw new IllegalArgumentException(
                     "spatial must not be null");
         }
+        if (completions == null) {
+            throw new IllegalArgumentException(
+                    "completions must not be null");
+        }
 
         this.state = state;
         this.objects = objects;
@@ -56,6 +76,7 @@ public final class MovementActionProcessor {
         this.navigation = navigation;
         this.occupancy = occupancy;
         this.spatial = spatial;
+        this.completions = completions;
     }
 
     public void complete(
@@ -77,6 +98,7 @@ public final class MovementActionProcessor {
         if (!objects.isAlive(action.objectId())) {
             releaseReservation(action, reservationId);
             state.discardObject(action.objectId());
+            emit(action, false, OBJECT_REMOVED);
             return;
         }
 
@@ -88,14 +110,14 @@ public final class MovementActionProcessor {
         }
 
         if (!transforms.has(action.objectId())) {
-            finishInterrupted(action, reservationId);
+            finish(action, reservationId, false, NOT_PLACED);
             return;
         }
 
         if (transforms.x(action.objectId()) != action.fromX()
                 || transforms.y(action.objectId()) != action.fromY()
                 || transforms.z(action.objectId()) != action.fromZ()) {
-            finishInterrupted(action, reservationId);
+            finish(action, reservationId, false, SOURCE_CHANGED);
             return;
         }
 
@@ -111,7 +133,11 @@ public final class MovementActionProcessor {
                 dx,
                 dy,
                 dz)) {
-            finishInterrupted(action, reservationId);
+            finish(
+                    action,
+                    reservationId,
+                    false,
+                    TRANSITION_UNAVAILABLE);
             return;
         }
 
@@ -133,7 +159,11 @@ public final class MovementActionProcessor {
                     action.toX(),
                     action.toY(),
                     action.toZ())) {
-                finishInterrupted(action, reservationId);
+                finish(
+                        action,
+                        reservationId,
+                        false,
+                        DESTINATION_UNAVAILABLE);
                 return;
             }
         }
@@ -144,16 +174,41 @@ public final class MovementActionProcessor {
                 action.toY(),
                 action.toZ());
 
-        releaseReservation(action, reservationId);
-        state.removeAction(actionId);
+        finish(
+                action,
+                reservationId,
+                true,
+                COMMITTED);
     }
 
-    private void finishInterrupted(
+    private void finish(
             MovementAction action,
-            OccupancyReservationId reservationId) {
+            OccupancyReservationId reservationId,
+            boolean committed,
+            ResultCode code) {
 
         releaseReservation(action, reservationId);
-        state.removeAction(action.id());
+        MovementAction removed =
+                state.removeAction(action.id());
+        if (removed != action) {
+            throw new IllegalStateException(
+                    "movement action state changed during completion: "
+                            + action.id());
+        }
+        emit(action, committed, code);
+    }
+
+    private void emit(
+            MovementAction action,
+            boolean committed,
+            ResultCode code) {
+
+        completions.completed(
+                new MovementStepCompletion(
+                        action.id(),
+                        action.objectId(),
+                        committed,
+                        code));
     }
 
     private void releaseReservation(
