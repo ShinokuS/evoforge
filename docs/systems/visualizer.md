@@ -59,7 +59,17 @@ Current focused scenarios are:
 - `Z-Level / Cutaway` — caves, roofs, lower surfaces and a deep shaft without movers;
 - `Ramp Navigation` — four directional ramps and a successive vertical ramp chain for F2/F3 inspection;
 - `Timed Movement` — slow and fast movers performing the same one-cell move on simple flat terrain;
-- `Occupancy Contention` — two exclusive movers competing for one immediate destination for F5 inspection.
+- `Occupancy Contention` — two exclusive movers competing for one immediate destination for F5 inspection;
+- `Pathfinding / Straight` — minimal flat exact route;
+- `Pathfinding / Structural Detour` — structural topology forces a detour;
+- `Pathfinding / Weighted Detour` — lower intrinsic cost wins over fewer cells;
+- `Pathfinding / 3D Ramps` — minimal two-level vertical route;
+- `Pathfinding / Multi-Level Climb` — four successive ramps climb from standing Z0 to Z4;
+- `Pathfinding / Z Switchback` — a multi-level route turns through +X, +Y and -X ramp orientations;
+- `Pathfinding / Vertical Overpass` — start and goal share Z0, but the only route climbs to Z2, crosses and descends;
+- `Pathfinding / Unreachable` — structured `NO_PATH`;
+- `Pathfinding / Hierarchy` — long route crosses derived hierarchy cluster boundaries;
+- `Pathfinding / Dynamic Invalidation` — a search starts on an open corridor, terrain changes on that corridor, and the suspended search becomes `STALE` rather than mixing traversal revisions.
 
 A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
 
@@ -175,7 +185,7 @@ Generic visualizer controls inside a scenario:
 - click: selected cell/object at the current standing Z;
 - HUD: tick, Z, FPS, zoom/sampling and inspector context.
 
-The active scenario title, description and `R`/`Esc` reminder remain visible at the bottom of the scenario screen.
+The active scenario title, description and `R`/`Esc` reminder remain visible at the bottom of the scenario screen. Pathfinding scenarios additionally use generic presentation-only cell markers for start, goal, route and scenario warnings; those markers do not become simulation state.
 
 The F5 overlay reads `OccupancyLookup` only when enabled:
 
@@ -223,6 +233,6 @@ Focused correctness scenarios and future representative performance scenarios ar
 
 Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
 
-Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention and catalog freshness. UI selection/restart aesthetics and interaction are manually inspected in the desktop visualizer.
+Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention and catalog freshness. Pathfinding scenario tests verify expected terminal outcomes and also require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices. UI selection/restart aesthetics and interaction are manually inspected in the desktop visualizer.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
