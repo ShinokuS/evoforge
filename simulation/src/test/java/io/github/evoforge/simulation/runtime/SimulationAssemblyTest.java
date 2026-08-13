@@ -167,6 +167,44 @@ final class SimulationAssemblyTest {
     }
 
     @Test
+    void moveToAndManualEdgesHaveEquivalentTimingCarryAndOccupancy() {
+        MovementRun routed = linearMovementRun(4, 300, true);
+        MovementRun manual = linearMovementRun(4, 300, true);
+        assertTrue(routed.runtime().submit(
+                new MoveToCommand(routed.objectId(), 3, 0, 0)).accepted());
+        assertTrue(manual.runtime().submit(
+                new MoveStepCommand(manual.objectId(), 1, 0, 0)).accepted());
+        advance(manual.runtime(), 3);
+        assertTrue(manual.runtime().submit(
+                new MoveStepCommand(manual.objectId(), 2, 0, 0)).accepted());
+        advance(manual.runtime(), 3);
+        assertTrue(manual.runtime().submit(
+                new MoveStepCommand(manual.objectId(), 3, 0, 0)).accepted());
+        advance(manual.runtime(), 4);
+        advance(routed.runtime(), 10);
+        assertEquals(10, routed.runtime().time().tick());
+        assertEquals(10, manual.runtime().time().tick());
+        assertEquals(3, routed.runtime().view().transforms().x(routed.objectId()));
+        assertEquals(3, manual.runtime().view().transforms().x(manual.objectId()));
+        assertEquals(routed.runtime().view().occupancy().state(3, 0, 0),
+                manual.runtime().view().occupancy().state(3, 0, 0));
+        assertTrue(routed.runtime().submit(
+                new MoveStepCommand(routed.objectId(), 4, 0, 0)).accepted());
+        assertTrue(manual.runtime().submit(
+                new MoveStepCommand(manual.objectId(), 4, 0, 0)).accepted());
+        advance(routed.runtime(), 2);
+        advance(manual.runtime(), 2);
+        assertEquals(3, routed.runtime().view().transforms().x(routed.objectId()));
+        assertEquals(3, manual.runtime().view().transforms().x(manual.objectId()));
+        advance(routed.runtime(), 1);
+        advance(manual.runtime(), 1);
+        assertEquals(4, routed.runtime().view().transforms().x(routed.objectId()));
+        assertEquals(4, manual.runtime().view().transforms().x(manual.objectId()));
+        assertEquals(13, routed.runtime().time().tick());
+        assertEquals(13, manual.runtime().time().tick());
+    }
+
+    @Test
     void moveToExecutesMultiZRouteThroughRamp() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ramp_ground");
