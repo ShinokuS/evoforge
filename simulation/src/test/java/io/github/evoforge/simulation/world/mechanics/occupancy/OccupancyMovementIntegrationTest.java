@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.world.mechanics.occupancy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepResult;
@@ -32,8 +34,7 @@ final class OccupancyMovementIntegrationTest {
 
         SimulationRuntime runtime = assembly.start();
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 runtime.submit(new MoveStepCommand(first, 1, 0, 0)));
         assertEquals(
                 OccupancyState.OCCUPIED,
@@ -42,9 +43,9 @@ final class OccupancyMovementIntegrationTest {
                 OccupancyState.RESERVED,
                 runtime.view().occupancy().state(1, 0, 0));
 
-        assertEquals(
-                MoveStepResult.DESTINATION_RESERVED,
-                runtime.submit(new MoveStepCommand(second, 1, 0, 0)));
+        assertRejected(
+                runtime.submit(new MoveStepCommand(second, 1, 0, 0)),
+                "movement:destination_reserved");
 
         advance(runtime, 4);
 
@@ -52,9 +53,9 @@ final class OccupancyMovementIntegrationTest {
         assertEquals(
                 OccupancyState.OCCUPIED,
                 runtime.view().occupancy().state(1, 0, 0));
-        assertEquals(
-                MoveStepResult.DESTINATION_OCCUPIED,
-                runtime.submit(new MoveStepCommand(second, 1, 0, 0)));
+        assertRejected(
+                runtime.submit(new MoveStepCommand(second, 1, 0, 0)),
+                "movement:destination_occupied");
         assertEquals(2, runtime.view().transforms().x(second));
     }
 
@@ -77,15 +78,13 @@ final class OccupancyMovementIntegrationTest {
 
         SimulationRuntime runtime = assembly.start();
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 runtime.submit(new MoveStepCommand(first, 1, 0, 0)));
-        assertEquals(
-                MoveStepResult.DESTINATION_RESERVED,
-                runtime.submit(new MoveStepCommand(second, 1, 0, 0)));
+        assertRejected(
+                runtime.submit(new MoveStepCommand(second, 1, 0, 0)),
+                "movement:destination_reserved");
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 runtime.submit(new MoveStepCommand(second, 3, 0, 0)));
 
         runtime.stepper().advance();
@@ -122,8 +121,7 @@ final class OccupancyMovementIntegrationTest {
         assertEquals(
                 OccupancyState.OCCUPIED,
                 runtime.view().occupancy().state(1, 0, 0));
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 runtime.submit(new MoveStepCommand(mover, 1, 0, 0)));
 
         advance(runtime, 4);
@@ -133,6 +131,18 @@ final class OccupancyMovementIntegrationTest {
         assertEquals(
                 OccupancyState.OCCUPIED,
                 runtime.view().occupancy().state(1, 0, 0));
+    }
+
+    private static void assertAccepted(
+            MoveStepResult result) {
+        assertTrue(result.accepted(), result.code().toString());
+    }
+
+    private static void assertRejected(
+            MoveStepResult result,
+            String code) {
+        assertFalse(result.accepted());
+        assertEquals(code, result.code().value());
     }
 
     private static void advance(
