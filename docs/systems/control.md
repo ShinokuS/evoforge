@@ -42,6 +42,8 @@ Result codes are namespaced data such as:
 ```text
 terrain:placed
 terrain:position_occupied
+terrain:replaced
+terrain:terrain_absent
 movement:started
 movement:already_moving
 movement:transition_unavailable
@@ -61,7 +63,7 @@ invalid programming/configuration/invariant state
     → exception
 ```
 
-Examples of ordinary rejection include occupied terrain placement, missing ordinary movement capability, an already active Movement action or an unavailable structural transition.
+Examples of ordinary rejection include occupied terrain placement, replacing terrain where none exists, missing ordinary movement capability, an already active Movement action or an unavailable structural transition.
 
 Examples of exceptional state include null dependencies/commands, missing or duplicate handler registration, a handler returning null, unknown trusted runtime ids or broken definition data required by an otherwise valid operation.
 
@@ -72,8 +74,9 @@ An internal producer can express that any rejection is unexpected using the gene
 One concrete command class has one registered handler:
 
 ```text
-PlaceTerrainCommand.class → PlaceTerrainHandler
-MoveStepCommand.class     → MoveStepHandler
+PlaceTerrainCommand.class   → PlaceTerrainHandler
+ReplaceTerrainCommand.class → ReplaceTerrainHandler
+MoveStepCommand.class       → MoveStepHandler
 ```
 
 The dispatcher does not search superclasses or interfaces for a “closest” handler. Missing and duplicate registrations are bootstrap/programming failures.
