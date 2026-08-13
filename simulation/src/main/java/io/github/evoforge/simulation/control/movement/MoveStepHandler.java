@@ -1,7 +1,6 @@
 package io.github.evoforge.simulation.control.movement;
 
 import io.github.evoforge.simulation.control.core.CommandHandler;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementStartResult;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
 
 public final class MoveStepHandler
@@ -31,26 +30,11 @@ public final class MoveStepHandler
                     "command must not be null");
         }
 
-        MovementStartResult result =
+        return MoveStepResult.from(
                 movement.startStep(
                         command.objectId(),
                         command.x(),
                         command.y(),
-                        command.z());
-
-        return switch (result) {
-            case STARTED -> MoveStepResult.STARTED;
-            case MOVEMENT_UNAVAILABLE ->
-                    MoveStepResult.MOVEMENT_UNAVAILABLE;
-            case NOT_PLACED -> MoveStepResult.NOT_PLACED;
-            case ALREADY_MOVING -> MoveStepResult.ALREADY_MOVING;
-            case NOT_ADJACENT -> MoveStepResult.NOT_ADJACENT;
-            case TRANSITION_UNAVAILABLE ->
-                    MoveStepResult.TRANSITION_UNAVAILABLE;
-            case DESTINATION_OCCUPIED ->
-                    MoveStepResult.DESTINATION_OCCUPIED;
-            case DESTINATION_RESERVED ->
-                    MoveStepResult.DESTINATION_RESERVED;
-        };
+                        command.z()));
     }
 }

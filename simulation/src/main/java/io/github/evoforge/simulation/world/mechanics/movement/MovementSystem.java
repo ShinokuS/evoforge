@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.movement;
 
+import io.github.evoforge.simulation.result.ResultCode;
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationAttempt;
@@ -14,6 +15,23 @@ import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
 
 public final class MovementSystem {
+
+    private static final ResultCode STARTED =
+            ResultCode.of("movement", "started");
+    private static final ResultCode MOVEMENT_UNAVAILABLE =
+            ResultCode.of("movement", "movement_unavailable");
+    private static final ResultCode NOT_PLACED =
+            ResultCode.of("movement", "not_placed");
+    private static final ResultCode ALREADY_MOVING =
+            ResultCode.of("movement", "already_moving");
+    private static final ResultCode NOT_ADJACENT =
+            ResultCode.of("movement", "not_adjacent");
+    private static final ResultCode TRANSITION_UNAVAILABLE =
+            ResultCode.of("movement", "transition_unavailable");
+    private static final ResultCode DESTINATION_OCCUPIED =
+            ResultCode.of("movement", "destination_occupied");
+    private static final ResultCode DESTINATION_RESERVED =
+            ResultCode.of("movement", "destination_reserved");
 
     private final ObjectLookup objects;
     private final TransformLookup transforms;
@@ -77,7 +95,7 @@ public final class MovementSystem {
         this.scheduler = scheduler;
     }
 
-    public MovementStartResult startStep(
+    public MovementStartAttempt startStep(
             ObjectId objectId,
             int toX,
             int toY,
@@ -96,15 +114,18 @@ public final class MovementSystem {
         }
 
         if (!definitions.has(object.definitionId())) {
-            return MovementStartResult.MOVEMENT_UNAVAILABLE;
+            return MovementStartAttempt.rejected(
+                    MOVEMENT_UNAVAILABLE);
         }
 
         if (!transforms.has(objectId)) {
-            return MovementStartResult.NOT_PLACED;
+            return MovementStartAttempt.rejected(
+                    NOT_PLACED);
         }
 
         if (state.isMoving(objectId)) {
-            return MovementStartResult.ALREADY_MOVING;
+            return MovementStartAttempt.rejected(
+                    ALREADY_MOVING);
         }
 
         int fromX = transforms.x(objectId);
@@ -119,7 +140,8 @@ public final class MovementSystem {
                 || dyLong < -1 || dyLong > 1
                 || dzLong < -1 || dzLong > 1
                 || dxLong == 0 && dyLong == 0 && dzLong == 0) {
-            return MovementStartResult.NOT_ADJACENT;
+            return MovementStartAttempt.rejected(
+                    NOT_ADJACENT);
         }
 
         int dx = (int) dxLong;
@@ -134,7 +156,8 @@ public final class MovementSystem {
                 dx,
                 dy,
                 dz)) {
-            return MovementStartResult.TRANSITION_UNAVAILABLE;
+            return MovementStartAttempt.rejected(
+                    TRANSITION_UNAVAILABLE);
         }
 
         long rate = definitions.rate(
@@ -169,10 +192,12 @@ public final class MovementSystem {
                 toZ);
 
         if (reservation.result() == OccupancyReservationResult.OCCUPIED) {
-            return MovementStartResult.DESTINATION_OCCUPIED;
+            return MovementStartAttempt.rejected(
+                    DESTINATION_OCCUPIED);
         }
         if (reservation.result() == OccupancyReservationResult.RESERVED) {
-            return MovementStartResult.DESTINATION_RESERVED;
+            return MovementStartAttempt.rejected(
+                    DESTINATION_RESERVED);
         }
 
         OccupancyReservationId reservationId = reservation.reservationId();
@@ -217,7 +242,9 @@ public final class MovementSystem {
                 objectId,
                 timing.nextCarry());
 
-        return MovementStartResult.STARTED;
+        return MovementStartAttempt.started(
+                STARTED,
+                action.id());
     }
 
     private void rollbackReservation(
