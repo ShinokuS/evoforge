@@ -18,7 +18,14 @@ final class ScenarioCatalogTest {
                         "cutaway",
                         "ramp-navigation",
                         "timed-movement",
-                        "occupancy-contention"),
+                        "occupancy-contention",
+                        "pathfinding-straight",
+                        "pathfinding-structural-detour",
+                        "pathfinding-weighted-detour",
+                        "pathfinding-ramp-3d",
+                        "pathfinding-unreachable",
+                        "pathfinding-hierarchy",
+                        "pathfinding-invalidation"),
                 catalog.scenarios().stream()
                         .map(VisualizerScenario::id)
                         .toList());
@@ -27,10 +34,8 @@ final class ScenarioCatalogTest {
     @Test
     void creatingTheSameScenarioTwiceProducesFreshRuntime() {
         VisualizerScenario scenario = ScenarioCatalog.standard().get(2);
-
         ScenarioSession first = scenario.create();
         ScenarioSession second = scenario.create();
-
         assertNotSame(first.runtime(), second.runtime());
         assertEquals(0, first.runtime().time().tick());
         assertEquals(0, second.runtime().time().tick());
@@ -40,27 +45,11 @@ final class ScenarioCatalogTest {
     @Test
     void duplicateIdsAreRejected() {
         VisualizerScenario duplicate = new VisualizerScenario() {
-            @Override
-            public String id() {
-                return "same";
-            }
-
-            @Override
-            public String title() {
-                return "Scenario";
-            }
-
-            @Override
-            public String description() {
-                return "Description";
-            }
-
-            @Override
-            public ScenarioSession create() {
-                return new CutawayScenario().create();
-            }
+            @Override public String id() { return "same"; }
+            @Override public String title() { return "Scenario"; }
+            @Override public String description() { return "Description"; }
+            @Override public ScenarioSession create() { return new CutawayScenario().create(); }
         };
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ScenarioCatalog(List.of(duplicate, duplicate)));
