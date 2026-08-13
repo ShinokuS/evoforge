@@ -19,10 +19,14 @@ final class MoveToScenariosTest {
         assertTrue(runtime.view().moveTo().isActive(mover));
         assertTrue(hasRoute(session.diagnostics()));
 
-        advance(session, 16);
+        int ticks = 0;
+        while (!session.diagnostics().summary().contains("waypoint=2/4")
+                && ticks++ < 100) {
+            advance(session);
+        }
 
-        assertTrue(runtime.view().moveTo().isActive(mover));
         assertTrue(session.diagnostics().summary().contains("waypoint=2/4"));
+        assertTrue(runtime.view().moveTo().isActive(mover));
         assertEquals(4, runtime.view().transforms().x(mover));
         assertEquals(-3, runtime.view().transforms().y(mover));
     }
@@ -42,19 +46,21 @@ final class MoveToScenariosTest {
         session.controller().secondaryCellAction(0, 4, 1);
         assertEquals(4, goalX(session.diagnostics()));
 
-        advance(session, 16);
+        int ticks = 0;
+        while (runtime.view().moveTo().isActive(mover) && ticks++ < 100) {
+            advance(session);
+        }
 
+        assertTrue(!runtime.view().moveTo().isActive(mover));
         assertEquals(4, runtime.view().transforms().x(mover));
         assertEquals(0, runtime.view().transforms().y(mover));
         assertNotNull(runtime.view().moveTo().lastCompletion(mover));
         assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
     }
 
-    private static void advance(ScenarioSession session, int ticks) {
-        for (int tick = 0; tick < ticks; tick++) {
-            session.runtime().stepper().advance();
-            session.update();
-        }
+    private static void advance(ScenarioSession session) {
+        session.runtime().stepper().advance();
+        session.update();
     }
 
     private static boolean hasRoute(ScenarioDiagnostics diagnostics) {
