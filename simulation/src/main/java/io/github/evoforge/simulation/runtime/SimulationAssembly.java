@@ -6,6 +6,8 @@ import io.github.evoforge.simulation.control.movement.MoveStepHandler;
 import io.github.evoforge.simulation.control.sync.SynchronousCommandGateway;
 import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
 import io.github.evoforge.simulation.control.terrain.PlaceTerrainHandler;
+import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.control.terrain.ReplaceTerrainHandler;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.result.OperationResults;
 import io.github.evoforge.simulation.time.BoundProcessScheduler;
@@ -201,6 +203,7 @@ public final class SimulationAssembly {
 
         CommandDispatcher dispatcher = new CommandDispatcher();
         dispatcher.register(PlaceTerrainCommand.class, new PlaceTerrainHandler(landscape));
+        dispatcher.register(ReplaceTerrainCommand.class, new ReplaceTerrainHandler(landscape));
         dispatcher.register(MoveStepCommand.class, new MoveStepHandler(movement));
 
         SimulationView view = new SimulationView(
