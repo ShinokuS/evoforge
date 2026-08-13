@@ -16,6 +16,8 @@ SimulationStepper
 
 An executable boundary test protects this constructor contract.
 
+`SimulationView` now also exposes read-only Occupancy state, so presentation can diagnose dynamic space conflicts without receiving the mutable Occupancy owner.
+
 ## Presentation ownership
 
 The accepted visualizer is split by existing responsibility:
@@ -26,7 +28,7 @@ VisualizerState              selected Z, overlay modes, selection
 VisualizerCamera             pan, zoom, viewport and coordinate conversion
 VisualizerInputController    physical input → presentation/time controls
 LandscapeRenderer            terrain/cutaway rendering + analysis cache
-VisualizerOverlayRenderer    grid, Z perimeter, F2/F3, object/selection overlays
+VisualizerOverlayRenderer    grid, Z perimeter, F2/F3/F5, object/selection overlays
 VisualizerHudRenderer        status and inspector screen-space UI
 ShapePresentationRegistry    exact-type Shape presentation dispatch
 ```
@@ -84,8 +86,19 @@ Near zoom uses `Nearest`; far zoom switches procedural textures to `Linear` to r
 - `F2`: authoritative Navigation transition overlay
 - `F3`: Shape direction diagnostics supplied through typed presentation bindings
 - `F4`: lower-surface visibility depth `0 / 1 / 4 / 8`
+- `F5`: Occupancy overlay at the selected standing Z
 - click: selected cell/object at the current standing Z
 - HUD: tick, Z, FPS, zoom/sampling and inspector context
+
+The F5 overlay reads `OccupancyLookup` only when enabled:
+
+```text
+OCCUPIED  bright outer cell frame
+RESERVED  inset amber frame + X marker
+FREE      no marker
+```
+
+The selected-cell inspector also reports the exact `FREE / OCCUPIED / RESERVED` state. This makes the distinction between physical presence and an in-flight destination claim directly observable while debugging Movement conflicts.
 
 ## Performance
 
@@ -95,6 +108,8 @@ Exposure uses a primitive dense distance field and primitive BFS queue. Analysis
 
 Hot sparse read paths avoid temporary coordinate-key allocation.
 
+Occupancy scanning is diagnostic-only and is performed over the visible selected-Z cells only while F5 is enabled. No Occupancy render cache is introduced without profiling evidence.
+
 ## Testing boundary
 
-Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Aesthetic acceptance remains manual.
+Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
