@@ -162,15 +162,6 @@ public final class MovementSystem {
                 rate,
                 carry);
 
-        MovementAction action = state.createAction(
-                objectId,
-                fromX,
-                fromY,
-                fromZ,
-                toX,
-                toY,
-                toZ);
-
         OccupancyReservationAttempt reservation = occupancy.tryReserve(
                 objectId,
                 toX,
@@ -178,18 +169,25 @@ public final class MovementSystem {
                 toZ);
 
         if (reservation.result() == OccupancyReservationResult.OCCUPIED) {
-            state.removeAction(action.id());
             return MovementStartResult.DESTINATION_OCCUPIED;
         }
         if (reservation.result() == OccupancyReservationResult.RESERVED) {
-            state.removeAction(action.id());
             return MovementStartResult.DESTINATION_RESERVED;
         }
 
-        OccupancyReservationId reservationId =
-                reservation.reservationId();
+        OccupancyReservationId reservationId = reservation.reservationId();
+        MovementAction action = null;
 
         try {
+            action = state.createAction(
+                    objectId,
+                    fromX,
+                    fromY,
+                    fromZ,
+                    toX,
+                    toY,
+                    toZ);
+
             if (reservationId != null) {
                 state.attachReservation(
                         action.id(),
@@ -209,7 +207,9 @@ public final class MovementSystem {
                         toZ,
                         exception);
             }
-            state.removeAction(action.id());
+            if (action != null) {
+                state.removeAction(action.id());
+            }
             throw exception;
         }
 
