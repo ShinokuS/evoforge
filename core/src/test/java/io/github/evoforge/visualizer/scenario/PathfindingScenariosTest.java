@@ -21,38 +21,54 @@ final class PathfindingScenariosTest {
         assertStatus(new PathfindingVerticalOverpassScenario(), "FOUND");
         assertStatus(new PathfindingUnreachableScenario(), "NO_PATH");
         assertStatus(new PathfindingHierarchyScenario(), "FOUND");
-        assertStatus(new PathfindingInvalidationScenario(), "RUNNING");
+        assertStatus(new PathfindingInvalidationScenario(), "FOUND");
     }
 
     @Test
-    void invalidationScenarioShowsStaleThenFreshDetourAcrossTicks() {
+    void invalidationScenarioKeepsVisibleInitialRouteThenReplans() {
         ScenarioSession session = new PathfindingInvalidationScenario().create();
+
+        assertRouteStaysOnCenter(session.diagnostics());
 
         for (int tick = 1; tick <= 3; tick++) {
             session.runtime().stepper().advance();
             session.update();
-            assertSummaryStartsWith(session, "status=RUNNING");
+            assertSummaryStartsWith(session, "status=FOUND");
+            assertRouteStaysOnCenter(session.diagnostics());
         }
 
         session.runtime().stepper().advance();
         session.update();
         assertSummaryStartsWith(session, "status=STALE");
+        assertRouteStaysOnCenter(session.diagnostics());
 
         session.runtime().stepper().advance();
         session.update();
         assertSummaryStartsWith(session, "status=FOUND");
 
-        boolean leavesDirectLine = false;
+        boolean usesSideLane = false;
+        boolean crossesSolid = false;
+        boolean crossesSlow = false;
         ScenarioDiagnostics diagnostics = session.diagnostics();
         for (int index = 0; index < diagnostics.cellCount(); index++) {
             ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() == ScenarioCellMarkerStyle.ROUTE
-                    && marker.y() != 0) {
-                leavesDirectLine = true;
-                break;
+            if (marker.style() != ScenarioCellMarkerStyle.ROUTE) {
+                continue;
+            }
+            if (marker.y() != 0) {
+                usesSideLane = true;
+            }
+            if (marker.y() == 0 && marker.x() == 8) {
+                crossesSolid = true;
+            }
+            if (marker.y() == 0 && marker.x() == 14) {
+                crossesSlow = true;
             }
         }
-        assertTrue(leavesDirectLine, "fresh route must detour around the new block");
+
+        assertTrue(usesSideLane, "fresh route must use one side lane");
+        assertTrue(!crossesSolid, "fresh route must avoid the new solid block");
+        assertTrue(!crossesSlow, "fresh route must avoid the expensive slow cell");
     }
 
     @Test
@@ -82,6 +98,20 @@ final class PathfindingScenariosTest {
             assertEquals(
                     first.diagnostics().cellCount(),
                     second.diagnostics().cellCount());
+        }
+    }
+
+    private static void assertRouteStaysOnCenter(
+            ScenarioDiagnostics diagnostics) {
+
+        for (int index = 0; index < diagnostics.cellCount(); index++) {
+            ScenarioCellMarker marker = diagnostics.cell(index);
+            if (marker.style() == ScenarioCellMarkerStyle.ROUTE) {
+                assertEquals(
+                        0,
+                        marker.y(),
+                        "visible pre-change route must stay on the center lane");
+            }
         }
     }
 
