@@ -29,6 +29,8 @@ import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
 import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
+import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundCalculator;
+import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -294,12 +296,16 @@ public final class SimulationAssembly {
                         landscape.terrain(),
                         landscape.geometry(),
                         landscapeTraversalDefinitions);
+        TransitionCostLowerBoundLookup transitionCostBounds =
+                new TransitionCostLowerBoundCalculator(
+                        landscapeTraversalDefinitions,
+                        landscape.shapeTraversalBounds());
 
         Pathfinder pathfinder = new ExactAStarPathfinder(
                 navigation.lookup(),
                 transitionCosts,
                 landscape.traversalRevision(),
-                PathHeuristics.chebyshev(1));
+                PathHeuristics.chebyshev(transitionCostBounds));
 
         MovementSystem movement =
                 new MovementSystem(

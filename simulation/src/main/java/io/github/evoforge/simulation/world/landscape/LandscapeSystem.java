@@ -13,6 +13,7 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
 import io.github.evoforge.simulation.world.mechanics.traversal.TraversalRevisionLookup;
 
 public final class LandscapeSystem implements LandscapeMutations {
@@ -75,6 +76,10 @@ public final class LandscapeSystem implements LandscapeMutations {
 
     public GeometryLookup geometry() {
         return geometry.lookup();
+    }
+
+    public ShapeTraversalLowerBoundLookup shapeTraversalBounds() {
+        return geometry.traversalBounds();
     }
 
     public void setShape(

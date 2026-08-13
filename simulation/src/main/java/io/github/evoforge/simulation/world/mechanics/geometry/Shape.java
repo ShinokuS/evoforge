@@ -15,6 +15,14 @@ public interface Shape {
         return TransitionMask.NONE;
     }
 
+    /**
+     * Guaranteed lower bound for every positive traversal factor this Shape may return.
+     * Implementations with factors below NEUTRAL must override this conservatively.
+     */
+    default int minimumTraversalFactor() {
+        return 1;
+    }
+
     default int departureTraversalFactor(
             int relativeX,
             int relativeY,

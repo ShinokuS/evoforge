@@ -23,6 +23,11 @@ public final class FullShape
     }
 
     @Override
+    public int minimumTraversalFactor() {
+        return ShapeTraversalFactor.NEUTRAL;
+    }
+
+    @Override
     public long transitionPorts(
             int relativeX,
             int relativeY,
