@@ -48,11 +48,15 @@ public final class VisualizerState {
         return selectedObject;
     }
 
+    public void setSelectedZ(int selectedZ) {
+        this.selectedZ = selectedZ;
+        clearSelection();
+    }
+
     public void selectZ(
             int delta) {
 
-        selectedZ += delta;
-        clearSelection();
+        setSelectedZ(selectedZ + delta);
     }
 
     public void cycleGridMode() {

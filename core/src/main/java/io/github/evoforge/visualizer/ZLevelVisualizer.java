@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
@@ -92,7 +93,23 @@ public final class ZLevelVisualizer {
 
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         updateLandscapeSampling();
-        Gdx.input.setInputProcessor(input);
+    }
+
+    /** Physical input owned by this presentation session. */
+    public InputProcessor inputProcessor() {
+        return input;
+    }
+
+    /** Applies presentation-only initial focus without changing simulation state. */
+    public void setView(
+            int selectedZ,
+            float cameraX,
+            float cameraY,
+            float zoom) {
+
+        state.setSelectedZ(selectedZ);
+        camera.setView(cameraX, cameraY, zoom);
+        updateLandscapeSampling();
     }
 
     public void render() {
@@ -152,9 +169,6 @@ public final class ZLevelVisualizer {
     }
 
     public void dispose() {
-        if (Gdx.input.getInputProcessor() == input) {
-            Gdx.input.setInputProcessor(null);
-        }
         hudRenderer.dispose();
         overlayRenderer.dispose();
         sliceArt.dispose();

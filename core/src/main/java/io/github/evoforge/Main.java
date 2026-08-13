@@ -1,46 +1,58 @@
 package io.github.evoforge;
 
-import com.badlogic.gdx.ApplicationAdapter;
-import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.visualizer.VisualizerDemoWorld;
-import io.github.evoforge.visualizer.ZLevelVisualizer;
+import com.badlogic.gdx.Game;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Screen;
+import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
+import io.github.evoforge.visualizer.scenario.VisualizerScenario;
+import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
+import io.github.evoforge.visualizer.screen.ScenarioScreen;
 
-/** Launches the minimal live simulation debug visualizer. */
-public final class Main extends ApplicationAdapter {
+/** Launches the scenario-driven simulation debug visualizer. */
+public final class Main extends Game {
 
-    private ZLevelVisualizer visualizer;
+    private ScenarioCatalog scenarios;
 
     @Override
     public void create() {
-        SimulationRuntime runtime = VisualizerDemoWorld.create();
-
-        visualizer = new ZLevelVisualizer(
-                runtime.view(),
-                runtime.time(),
-                runtime.stepper());
-    }
-
-    @Override
-    public void render() {
-        visualizer.render();
-    }
-
-    @Override
-    public void resize(
-            int width,
-            int height) {
-
-        if (visualizer != null) {
-            visualizer.resize(
-                    width,
-                    height);
-        }
+        scenarios = ScenarioCatalog.standard();
+        showScenarioMenuNow();
     }
 
     @Override
     public void dispose() {
-        if (visualizer != null) {
-            visualizer.dispose();
+        Screen current = getScreen();
+        if (current != null) {
+            current.dispose();
+        }
+    }
+
+    private void requestScenario(VisualizerScenario scenario) {
+        Gdx.app.postRunnable(() -> showScenarioNow(scenario));
+    }
+
+    private void requestScenarioMenu() {
+        Gdx.app.postRunnable(this::showScenarioMenuNow);
+    }
+
+    private void showScenarioMenuNow() {
+        replaceScreen(new ScenarioMenuScreen(
+                scenarios,
+                this::requestScenario));
+    }
+
+    private void showScenarioNow(VisualizerScenario scenario) {
+        replaceScreen(new ScenarioScreen(
+                scenario,
+                () -> requestScenario(scenario),
+                this::requestScenarioMenu));
+    }
+
+    private void replaceScreen(Screen next) {
+        Screen previous = getScreen();
+        setScreen(next);
+        if (previous != null) {
+            previous.dispose();
         }
     }
 }
