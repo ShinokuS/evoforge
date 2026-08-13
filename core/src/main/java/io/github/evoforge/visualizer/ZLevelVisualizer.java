@@ -19,13 +19,6 @@ import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
-/**
- * Orchestrates the debug presentation of the authoritative simulation view.
- *
- * <p>Camera, input, presentation state, world overlays and HUD each own their
- * existing responsibility. This class only coordinates their lifecycle and
- * render order; simulation mutation remains outside the presentation layer.</p>
- */
 public final class ZLevelVisualizer {
 
     private static final Color BACKGROUND =
@@ -37,138 +30,85 @@ public final class ZLevelVisualizer {
     private final VisualizerInputController input;
     private final VisualizerPerformanceTelemetry performance =
             new VisualizerPerformanceTelemetry();
-
     private final SpriteBatch landscapeBatch = new SpriteBatch();
-    private final ProceduralLandscapePack landscapePack =
-            new ProceduralLandscapePack();
-    private final ProceduralSliceArt sliceArt =
-            new ProceduralSliceArt();
+    private final ProceduralLandscapePack landscapePack = new ProceduralLandscapePack();
+    private final ProceduralSliceArt sliceArt = new ProceduralSliceArt();
     private final LandscapeSliceResolver sliceResolver;
     private final ShapePresentationRegistry shapePresentations;
     private final LandscapeRenderer landscapeRenderer;
     private final VisualizerOverlayRenderer overlayRenderer;
     private final VisualizerHudRenderer hudRenderer;
-
     private boolean smoothLandscapeSampling;
 
     public ZLevelVisualizer(
             SimulationView view,
             SimulationTime simulationTime,
             SimulationStepper stepper) {
-
-        if (view == null) {
-            throw new IllegalArgumentException("view must not be null");
+        if (view == null || simulationTime == null || stepper == null) {
+            throw new IllegalArgumentException("visualizer dependencies must not be null");
         }
-        if (simulationTime == null) {
-            throw new IllegalArgumentException(
-                    "simulationTime must not be null");
-        }
-        if (stepper == null) {
-            throw new IllegalArgumentException("stepper must not be null");
-        }
-
         time = new VisualizerTimeController(stepper, 0.25f);
         input = new VisualizerInputController(view, state, camera, time);
         sliceResolver = new LandscapeSliceResolver(view);
-        shapePresentations = ProceduralShapePresentations.create(
-                landscapePack,
-                sliceArt);
-        landscapeRenderer = new LandscapeRenderer(
-                view,
-                shapePresentations,
-                sliceResolver);
+        shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
+        landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
         overlayRenderer = new VisualizerOverlayRenderer(
-                view,
-                state,
-                camera,
-                sliceResolver,
-                shapePresentations);
+                view, state, camera, sliceResolver, shapePresentations);
         hudRenderer = new VisualizerHudRenderer(
-                view,
-                simulationTime,
-                time,
-                state,
-                camera,
-                sliceResolver,
-                shapePresentations);
-
+                view, simulationTime, time, state, camera, sliceResolver, shapePresentations);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         updateLandscapeSampling();
     }
 
-    /** Physical input owned by this presentation session. */
     public InputProcessor inputProcessor() {
         return input;
     }
 
-    /** Applies presentation-only initial focus without changing simulation state. */
-    public void setView(
-            int selectedZ,
-            float cameraX,
-            float cameraY,
-            float zoom) {
-
+    public void setView(int selectedZ, float cameraX, float cameraY, float zoom) {
         state.setSelectedZ(selectedZ);
         camera.setView(cameraX, cameraY, zoom);
         updateLandscapeSampling();
     }
 
-    /** Copies the current world projection for an external presentation-only overlay. */
-    public void copyWorldProjection(
-            Matrix4 target) {
-
+    public void copyWorldProjection(Matrix4 target) {
         if (target == null) {
-            throw new IllegalArgumentException(
-                    "target must not be null");
+            throw new IllegalArgumentException("target must not be null");
         }
-
         target.set(camera.projection());
     }
 
-    /** Current standing Z selected by presentation controls. */
     public int selectedZ() {
         return state.selectedZ();
+    }
+
+    public VisualizerCamera.Cell cellAt(int screenX, int screenY) {
+        return camera.cellAt(screenX, screenY);
     }
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
         long frameStart = System.nanoTime();
-
         input.update(delta);
         time.update(delta);
         camera.update();
         updateLandscapeSampling();
         long afterUpdate = System.nanoTime();
-
-        Gdx.gl.glClearColor(
-                BACKGROUND.r,
-                BACKGROUND.g,
-                BACKGROUND.b,
-                BACKGROUND.a);
+        Gdx.gl.glClearColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b, BACKGROUND.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
         VisualizerCamera.VisibleRange range = camera.visibleRange();
-
         long landscapeStart = System.nanoTime();
         landscapeBatch.setProjectionMatrix(camera.projection());
         landscapeBatch.begin();
         landscapeRenderer.draw(
                 landscapeBatch,
-                range.minX(),
-                range.maxX(),
-                range.minY(),
-                range.maxY(),
-                state.selectedZ(),
-                state.lowerDepth());
+                range.minX(), range.maxX(), range.minY(), range.maxY(),
+                state.selectedZ(), state.lowerDepth());
         landscapeBatch.end();
         long afterLandscape = System.nanoTime();
-
         overlayRenderer.draw(range);
         long afterOverlay = System.nanoTime();
-
         hudRenderer.draw();
         long frameEnd = System.nanoTime();
-
         performance.record(
                 delta,
                 frameEnd - frameStart,
@@ -178,10 +118,7 @@ public final class ZLevelVisualizer {
                 frameEnd - afterOverlay);
     }
 
-    public void resize(
-            int width,
-            int height) {
-
+    public void resize(int width, int height) {
         camera.resize(width, height);
         hudRenderer.resize(width, height);
     }
@@ -199,7 +136,6 @@ public final class ZLevelVisualizer {
         if (smooth == smoothLandscapeSampling) {
             return;
         }
-
         smoothLandscapeSampling = smooth;
         Texture.TextureFilter filter = smooth
                 ? Texture.TextureFilter.Linear
