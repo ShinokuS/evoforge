@@ -1,8 +1,8 @@
 package io.github.evoforge.visualizer.scenario;
 
 /**
- * Optional presentation-tooling lifecycle for scenarios whose diagnostics or
- * setup intentionally evolve with authoritative simulation ticks.
+ * Optional presentation-tooling lifecycle for scenarios whose diagnostics,
+ * setup or interaction evolve with authoritative simulation ticks.
  *
  * <p>This is not a simulation system. It exists only in the development
  * visualizer and must drive behavior from simulation time, never wall-clock
@@ -17,6 +17,16 @@ public interface ScenarioController {
 
     /** Current presentation-only diagnostics for this scenario. */
     ScenarioDiagnostics diagnostics();
+
+    /** Optional scenario reaction to the ordinary LMB world-cell selection. */
+    default void primaryCellAction(int x, int y, int z) {
+        // Most scenarios do not need cell interaction.
+    }
+
+    /** Optional scenario reaction to RMB on a world cell. */
+    default boolean secondaryCellAction(int x, int y, int z) {
+        return false;
+    }
 
     static ScenarioController fixed(ScenarioDiagnostics diagnostics) {
         if (diagnostics == null) {
