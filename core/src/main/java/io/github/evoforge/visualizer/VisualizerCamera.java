@@ -43,6 +43,26 @@ public final class VisualizerCamera {
         update();
     }
 
+    public void setView(
+            float x,
+            float y,
+            float zoom) {
+
+        if (!Float.isFinite(x) || !Float.isFinite(y)) {
+            throw new IllegalArgumentException(
+                    "camera coordinates must be finite");
+        }
+        if (!Float.isFinite(zoom) || zoom <= 0f) {
+            throw new IllegalArgumentException(
+                    "zoom must be finite and > 0");
+        }
+
+        targetX = x;
+        targetY = y;
+        camera.zoom = MathUtils.clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+        update();
+    }
+
     public void pan(
             int directionX,
             int directionY,

@@ -35,8 +35,10 @@ assets/       definition and presentation source data
 12. **Navigation is structural topology.** Transition cost prices valid edges; occupancy describes dynamic availability; movement executes a concrete actor transition.
 13. **Spatial position stays authoritative during timed movement.** An in-flight action does not create a second authoritative coordinate.
 14. **Presentation never defines simulation truth.** Camera visibility, cutaway rules, interpolation and debug overlays cannot determine authoritative mechanics.
-15. **Measure hot paths before changing representation.** Once a path is proven hot, avoid unnecessary scans, allocations, boxing and temporary collections.
-16. **Fundamental mechanics are observable and testable.** New systems arrive with headless correctness tests and a diagnostic strategy.
+15. **Simulation is observer-independent.** Camera visibility, rendering range, player proximity or whether a region is currently presented must not select different authoritative behavior rules or simulation fidelity. Observation alone is not a cause in the world.
+16. **Optimization preserves semantics.** Scheduling, sleeping processes, analytical progression, batching, indexing and compact representations may reduce computational work only when they preserve the authoritative outcome required by the mechanic; optimization must not replace distant-world behavior with different rules merely because nobody is watching.
+17. **Measure hot paths before changing representation.** Once a path is proven hot, avoid unnecessary scans, allocations, boxing and temporary collections.
+18. **Fundamental mechanics are observable and testable.** New systems arrive with headless correctness tests and a diagnostic strategy.
 
 ## Extension discipline
 
@@ -97,6 +99,8 @@ Simulation time is discrete. Scheduler/process infrastructure controls *when* wo
 
 External commands may initiate domain work. Continuing domain actions are owned by their mechanic and scheduled through narrow infrastructure contracts.
 
+Observer-independent simulation does not require every entity to execute work every tick. A sleeping, travelling, crafting or otherwise predictable process may be scheduled or advanced analytically when the mechanic can preserve the same authoritative semantics. Computational activity follows causal work, not camera distance.
+
 ## Testing and architectural guards
 
 Headless tests are the primary correctness mechanism. Important boundaries that are cheap to express structurally should be executable tests: module dependencies, constructor capabilities, generic/concrete dependency rules and other invariants that should fail immediately when violated.
@@ -111,7 +115,7 @@ Optimization is continuous but evidence-driven:
 instrument → reproduce → identify hot path → optimize behind contract → verify
 ```
 
-Do not postpone obvious measured regressions until release, and do not introduce chunks, caches, packed storage or concurrency without a representative workload.
+Do not postpone obvious measured regressions until release, and do not introduce chunks, caches, packed storage or concurrency without a representative workload. Prefer eliminating unnecessary work while preserving world semantics over changing the truth of the simulation according to observation or proximity.
 
 ## Documentation change rule
 
