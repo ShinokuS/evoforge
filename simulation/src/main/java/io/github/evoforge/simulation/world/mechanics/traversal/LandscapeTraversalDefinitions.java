@@ -10,7 +10,7 @@ public final class LandscapeTraversalDefinitions {
 
     private SurfaceTraversalCost[] costs =
             new SurfaceTraversalCost[DEFAULT_CAPACITY];
-
+    private long minimumCostUnits = Long.MAX_VALUE;
     private boolean frozen;
 
     public void put(
@@ -39,6 +39,9 @@ public final class LandscapeTraversalDefinitions {
         }
 
         costs[index] = cost;
+        minimumCostUnits = Math.min(
+                minimumCostUnits,
+                cost.units());
     }
 
     public boolean has(
@@ -63,6 +66,18 @@ public final class LandscapeTraversalDefinitions {
         }
 
         return costs[id.asInt()];
+    }
+
+    public boolean hasAny() {
+        return minimumCostUnits != Long.MAX_VALUE;
+    }
+
+    public long minimumCostUnits() {
+        if (!hasAny()) {
+            throw new IllegalStateException(
+                    "no landscape traversal definitions exist");
+        }
+        return minimumCostUnits;
     }
 
     public void freeze() {

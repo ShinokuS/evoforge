@@ -36,7 +36,17 @@ public final class ScenarioCatalog {
                 new CutawayScenario(),
                 new RampNavigationScenario(),
                 new TimedMovementScenario(),
-                new OccupancyContentionScenario()));
+                new OccupancyContentionScenario(),
+                new PathfindingStraightScenario(),
+                new PathfindingStructuralDetourScenario(),
+                new PathfindingWeightedDetourScenario(),
+                new PathfindingRampScenario(),
+                new PathfindingMultiLevelClimbScenario(),
+                new PathfindingZSwitchbackScenario(),
+                new PathfindingVerticalOverpassScenario(),
+                new PathfindingUnreachableScenario(),
+                new PathfindingHierarchyScenario(),
+                new PathfindingInvalidationScenario()));
     }
 
     public int size() {

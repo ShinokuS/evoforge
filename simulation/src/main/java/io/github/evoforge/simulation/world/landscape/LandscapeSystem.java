@@ -13,11 +13,17 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeLookup;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeTracker;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalRevisionLookup;
 
 public final class LandscapeSystem implements LandscapeMutations {
 
     private final TerrainSystem terrain;
     private final GeometrySystem geometry;
+    private final TraversalChangeTracker traversalChanges =
+            new TraversalChangeTracker();
 
     public LandscapeSystem(
             TerrainSystem terrain,
@@ -65,8 +71,20 @@ public final class LandscapeSystem implements LandscapeMutations {
         return terrain.revisions();
     }
 
+    public TraversalRevisionLookup traversalRevision() {
+        return traversalChanges;
+    }
+
+    public TraversalChangeLookup traversalChanges() {
+        return traversalChanges;
+    }
+
     public GeometryLookup geometry() {
         return geometry.lookup();
+    }
+
+    public ShapeTraversalLowerBoundLookup shapeTraversalBounds() {
+        return geometry.traversalBounds();
     }
 
     public void setShape(
@@ -80,6 +98,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                 y,
                 z,
                 shape);
+        traversalChanges.changed(x, y, z);
     }
 
     @Override
@@ -101,6 +120,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
+            traversalChanges.changed(x, y, z);
         }
 
         return result;
@@ -113,11 +133,17 @@ public final class LandscapeSystem implements LandscapeMutations {
             int z,
             LandscapeDefinitionId definitionId) {
 
-        return terrain.replace(
+        TerrainReplacementResult result = terrain.replace(
                 x,
                 y,
                 z,
                 definitionId);
+
+        if (result.accepted()) {
+            traversalChanges.changed(x, y, z);
+        }
+
+        return result;
     }
 
     @Override
@@ -137,6 +163,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
+            traversalChanges.changed(x, y, z);
         }
 
         return result;

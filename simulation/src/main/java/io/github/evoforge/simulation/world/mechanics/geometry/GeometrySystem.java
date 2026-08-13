@@ -1,13 +1,18 @@
 package io.github.evoforge.simulation.world.mechanics.geometry;
 
+import java.util.TreeMap;
+
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 
 public final class GeometrySystem {
 
     private final TerrainLookup terrain;
-    private final GeometryState state =
+    private final GeometryState overrides =
             new GeometryState();
+    private final TreeMap<Integer, Integer> overrideMinimumFactors =
+            new TreeMap<>();
     private final GeometryLookup lookup;
+    private final ShapeTraversalLowerBoundLookup traversalBounds;
 
     public GeometrySystem(
             TerrainLookup terrain) {
@@ -19,10 +24,15 @@ public final class GeometrySystem {
 
         this.terrain = terrain;
         lookup = this::find;
+        traversalBounds = this::minimumTraversalFactor;
     }
 
     public GeometryLookup lookup() {
         return lookup;
+    }
+
+    public ShapeTraversalLowerBoundLookup traversalBounds() {
+        return traversalBounds;
     }
 
     public void setShape(
@@ -35,36 +45,42 @@ public final class GeometrySystem {
             throw new IllegalArgumentException(
                     "shape must not be null");
         }
-
-        if (!terrain.contains(x, y, z)) {
+        if (terrain.find(x, y, z) == null) {
             throw new IllegalStateException(
-                    "terrain does not exist at "
-                            + position(x, y, z));
+                    "cannot set Shape without terrain");
         }
 
+        Shape previous = overrides.find(x, y, z);
+
         if (shape == FullShape.INSTANCE) {
-            clearShapeOverride(
-                    x,
-                    y,
-                    z);
+            if (previous != null) {
+                removeMinimum(previous);
+                overrides.remove(x, y, z);
+            }
             return;
         }
 
-        state.put(
-                x,
-                y,
-                z,
-                shape);
+        int minimum = ShapeTraversalFactor.requirePositive(
+                shape.minimumTraversalFactor());
+
+        if (previous != null) {
+            removeMinimum(previous);
+        }
+
+        overrides.put(x, y, z, shape);
+        addMinimum(minimum);
     }
 
     public void clearShapeOverride(
             int x,
             int y,
             int z) {
-        state.remove(
-                x,
-                y,
-                z);
+
+        Shape previous = overrides.find(x, y, z);
+        if (previous != null) {
+            removeMinimum(previous);
+            overrides.remove(x, y, z);
+        }
     }
 
     private Shape find(
@@ -72,34 +88,52 @@ public final class GeometrySystem {
             int y,
             int z) {
 
-        if (!terrain.contains(x, y, z)) {
+        if (terrain.find(x, y, z) == null) {
             return null;
         }
 
-        Shape shape =
-                state.find(
-                        x,
-                        y,
-                        z);
+        Shape override = overrides.find(x, y, z);
 
-        if (shape == null) {
-            return FullShape.INSTANCE;
-        }
-
-        return shape;
+        return override != null
+                ? override
+                : FullShape.INSTANCE;
     }
 
-    private static String position(
-            int x,
-            int y,
-            int z) {
+    private int minimumTraversalFactor() {
+        if (overrideMinimumFactors.isEmpty()) {
+            return ShapeTraversalFactor.NEUTRAL;
+        }
+        return Math.min(
+                ShapeTraversalFactor.NEUTRAL,
+                overrideMinimumFactors.firstKey());
+    }
 
-        return "("
-                + x
-                + ", "
-                + y
-                + ", "
-                + z
-                + ")";
+    private void addMinimum(
+            int minimum) {
+
+        overrideMinimumFactors.merge(
+                minimum,
+                1,
+                Integer::sum);
+    }
+
+    private void removeMinimum(
+            Shape shape) {
+
+        int minimum = ShapeTraversalFactor.requirePositive(
+                shape.minimumTraversalFactor());
+        Integer count = overrideMinimumFactors.get(minimum);
+
+        if (count == null) {
+            throw new IllegalStateException(
+                    "missing Shape traversal lower-bound count");
+        }
+        if (count == 1) {
+            overrideMinimumFactors.remove(minimum);
+        } else {
+            overrideMinimumFactors.put(
+                    minimum,
+                    count - 1);
+        }
     }
 }
