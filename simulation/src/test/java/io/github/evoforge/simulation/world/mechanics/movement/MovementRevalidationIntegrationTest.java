@@ -16,6 +16,9 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCost;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
@@ -24,12 +27,13 @@ import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
+import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 import org.junit.jupiter.api.Test;
 
 final class MovementRevalidationIntegrationTest {
 
     @Test
-    void interruptedTransitionDoesNotCommitDestination() {
+    void interruptedTransitionDoesNotCommitDestinationOrLeakReservation() {
         DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
                 new DefinitionRegistry<>(
                         LandscapeDefinitionId::of,
@@ -77,12 +81,22 @@ final class MovementRevalidationIntegrationTest {
         WorldObject object = objectFactory.create(walker);
         ObjectId objectId = object.id();
 
-        SpatialSystem spatial = new SpatialSystem();
+        CellSpatialIndex cells = new CellSpatialIndex();
+        SpatialSystem spatial = new SpatialSystem(cells);
         spatial.place(
                 objectId,
                 0,
                 0,
                 0);
+
+        OccupancyDefinitions occupancyDefinitions =
+                new OccupancyDefinitions();
+        occupancyDefinitions.put(walker, true);
+        occupancyDefinitions.freeze();
+        OccupancySystem occupancy = new OccupancySystem(
+                objects,
+                cells.lookup(),
+                occupancyDefinitions);
 
         MovementDefinitions movementDefinitions =
                 new MovementDefinitions();
@@ -106,6 +120,7 @@ final class MovementRevalidationIntegrationTest {
                         objects,
                         spatial.transforms(),
                         navigation.lookup(),
+                        occupancy,
                         spatial);
         HandlerId movementHandler =
                 handlers.register(actions::complete);
@@ -116,6 +131,7 @@ final class MovementRevalidationIntegrationTest {
                 movementDefinitions,
                 (fromX, fromY, fromZ, toX, toY, toZ) ->
                         TransitionCost.of(1000),
+                occupancy,
                 movementState,
                 new BoundProcessScheduler(
                         clock,
@@ -129,6 +145,9 @@ final class MovementRevalidationIntegrationTest {
                         1,
                         0,
                         0));
+        assertEquals(
+                OccupancyState.RESERVED,
+                occupancy.state(1, 0, 0));
 
         OperationResults.requireAccepted(
                 landscape.removeTerrain(
@@ -153,5 +172,9 @@ final class MovementRevalidationIntegrationTest {
         assertEquals(
                 0,
                 movementState.activeActionCount());
+        assertEquals(
+                OccupancyState.FREE,
+                occupancy.state(1, 0, 0));
+        assertEquals(0, occupancy.reservationCount());
     }
 }
