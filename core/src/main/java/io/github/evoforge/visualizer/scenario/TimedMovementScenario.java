@@ -12,14 +12,10 @@ import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 public final class TimedMovementScenario implements VisualizerScenario {
 
     @Override
-    public String id() {
-        return "timed-movement";
-    }
+    public String id() { return "timed-movement"; }
 
     @Override
-    public String title() {
-        return "Timed Movement";
-    }
+    public String title() { return "Timed Movement"; }
 
     @Override
     public String description() {
@@ -64,9 +60,10 @@ public final class TimedMovementScenario implements VisualizerScenario {
             MoveStepResult result,
             String label) {
 
-        if (result != MoveStepResult.STARTED) {
+        if (!result.accepted()) {
             throw new IllegalStateException(
-                    label + " scenario movement was rejected: " + result);
+                    label + " scenario movement was rejected: "
+                            + result.code());
         }
     }
 }
