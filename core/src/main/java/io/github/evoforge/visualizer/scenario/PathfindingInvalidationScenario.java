@@ -7,28 +7,49 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
 
+/** Demonstrates that a suspended search cannot continue across traversal revisions. */
 public final class PathfindingInvalidationScenario implements VisualizerScenario {
-    @Override public String id() { return "pathfinding-invalidation"; }
-    @Override public String title() { return "Pathfinding / Dynamic Invalidation"; }
-    @Override public String description() { return "Traversal mutation makes a sliced search STALE instead of mixing revisions."; }
+
+    @Override
+    public String id() {
+        return "pathfinding-invalidation";
+    }
+
+    @Override
+    public String title() {
+        return "Pathfinding / Dynamic Invalidation";
+    }
+
+    @Override
+    public String description() {
+        return "Search starts on an open corridor; orange terrain appears on the route mid-search, so the old search becomes STALE.";
+    }
 
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_invalidation_ground");
+        LandscapeDefinitionId ground = assembly.landscapeDefinition(
+                "scenario:path_invalidation_ground");
         ScenarioTerrain.fill(assembly, ground, 0, 20, 0, 0, -1);
+
         SimulationRuntime runtime = assembly.start();
         PathQuery query = PathQuery.between(0, 0, 0, 20, 0, 0);
         PathSearch search = runtime.view().pathfinder().begin(query);
+
         search.advance(1);
-        runtime.submit(new PlaceTerrainCommand(10, 1, -1, ground));
+        runtime.submit(new PlaceTerrainCommand(10, 0, 0, ground));
         search.advance(1);
+
         return new ScenarioSession(
                 runtime,
                 new ScenarioView(0, 10f, 0f, 1.0f),
                 PathfindingScenarioDiagnostics.fromSearch(
                         query,
                         search,
-                        new ScenarioCellMarker(10, 1, 0, ScenarioCellMarkerStyle.WARNING)));
+                        new ScenarioCellMarker(
+                                10,
+                                0,
+                                0,
+                                ScenarioCellMarkerStyle.WARNING)));
     }
 }
