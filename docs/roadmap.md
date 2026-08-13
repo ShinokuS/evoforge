@@ -20,9 +20,8 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal
 - Exclusive object Occupancy with immediate execution destination reservations
 - Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
-- Observable Movement edge completion with open diagnostic results and deterministic cleanup-before-continuation
-- Exclusive long-lived Movement claims for route-level locomotion ownership
-- Multi-step `MoveTo`: Pathfinder route advice composed over the existing timed Movement edge with same-tick continuation and bounded terminal outcome observation
+- Observable one-edge Movement completion and long-range `MoveTo` lifecycle over the existing edge primitive
+- Movement visualizer scenarios: closed waypoint patrol and interactive LMB-select / RMB-MoveTo with route diagnostics
 
 ## Next simulation sequence
 
@@ -51,15 +50,14 @@ The internal design of a future milestone is introduced by its first real consum
 ## Deferred movement/navigation work
 
 - early movement cancellation and reactive wake-up
-- automatic wait/retry/replan policy inside route-level movement
 - falling, climbing, jumping, swimming and flying
 - actor-specific terrain affinity/locomotion
+- automatic waiting/replanning inside `MoveTo`
 - persistent route cache
-- moving-target tracking
 - portal/multi-level hierarchy refinement beyond the current exact reachability preflight
 - incremental/replanning pathfinder strategies such as D*/LPA*
 - JPS/JPS-3D specializations where traversal properties permit correct pruning
-- background pathfinding threads and computation scheduling that preserves authoritative time semantics
+- background pathfinding threads
 - path-wide/space-time planning reservations
 - temporal/SIPP-like path planning
 - yielding, swap/displacement, pushing and multi-agent deadlock resolution
