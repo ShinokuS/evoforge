@@ -14,15 +14,16 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeLookup;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeTracker;
 import io.github.evoforge.simulation.world.mechanics.traversal.TraversalRevisionLookup;
 
 public final class LandscapeSystem implements LandscapeMutations {
 
     private final TerrainSystem terrain;
     private final GeometrySystem geometry;
-    private long traversalRevision;
-    private final TraversalRevisionLookup traversalRevisions =
-            () -> traversalRevision;
+    private final TraversalChangeTracker traversalChanges =
+            new TraversalChangeTracker();
 
     public LandscapeSystem(
             TerrainSystem terrain,
@@ -71,7 +72,11 @@ public final class LandscapeSystem implements LandscapeMutations {
     }
 
     public TraversalRevisionLookup traversalRevision() {
-        return traversalRevisions;
+        return traversalChanges;
+    }
+
+    public TraversalChangeLookup traversalChanges() {
+        return traversalChanges;
     }
 
     public GeometryLookup geometry() {
@@ -93,7 +98,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                 y,
                 z,
                 shape);
-        traversalRevision++;
+        traversalChanges.changed(x, y, z);
     }
 
     @Override
@@ -115,7 +120,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
-            traversalRevision++;
+            traversalChanges.changed(x, y, z);
         }
 
         return result;
@@ -135,7 +140,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                 definitionId);
 
         if (result.accepted()) {
-            traversalRevision++;
+            traversalChanges.changed(x, y, z);
         }
 
         return result;
@@ -158,7 +163,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
-            traversalRevision++;
+            traversalChanges.changed(x, y, z);
         }
 
         return result;
