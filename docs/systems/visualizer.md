@@ -35,7 +35,8 @@ VisualizerScenario
   ↓
 ScenarioSession
   ├─ fresh SimulationRuntime
-  └─ initial ScenarioView
+  ├─ initial ScenarioView
+  └─ optional ScenarioController
   ↓
 ScenarioScreen
   ↓
@@ -54,6 +55,8 @@ zoom
 
 It cannot alter simulation mechanics.
 
+`ScenarioController` is an optional visualizer-only lifecycle hook for scenarios whose setup or diagnostics intentionally evolve with simulation ticks. It receives the authoritative simulation tick, not wall-clock time. A controller may update presentation diagnostics or submit ordinary production commands to its scenario runtime; it is not a simulation system and does not become authoritative world state.
+
 Current focused scenarios are:
 
 - `Z-Level / Cutaway` — caves, roofs, lower surfaces and a deep shaft without movers;
@@ -69,7 +72,7 @@ Current focused scenarios are:
 - `Pathfinding / Vertical Overpass` — start and goal share Z0, but the only route climbs to Z2, crosses and descends;
 - `Pathfinding / Unreachable` — structured `NO_PATH`;
 - `Pathfinding / Hierarchy` — long route crosses derived hierarchy cluster boundaries;
-- `Pathfinding / Dynamic Invalidation` — a search starts on an open corridor, terrain changes on that corridor, and the suspended search becomes `STALE` rather than mixing traversal revisions.
+- `Pathfinding / Dynamic Invalidation` — tick-driven lifecycle: a sliced search runs on open terrain, a new block appears directly on its route, the old search becomes `STALE`, and the next tick starts a fresh search that returns a detour.
 
 A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
 
@@ -105,6 +108,7 @@ ScenarioMenuScreen           scenario selection
 ScenarioScreen               active scenario lifecycle + R/Esc controls
 ScenarioCatalog              ordered available scenarios
 VisualizerScenario           creates one fresh deterministic simulation world
+ScenarioController           optional tick-driven visualizer-only scenario tooling
 ZLevelVisualizer             generic render-order orchestration
 VisualizerState              selected Z, overlay modes, selection
 VisualizerCamera             pan, zoom, viewport and coordinate conversion
@@ -233,6 +237,6 @@ Focused correctness scenarios and future representative performance scenarios ar
 
 Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
 
-Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention and catalog freshness. Pathfinding scenario tests verify expected terminal outcomes and also require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices. UI selection/restart aesthetics and interaction are manually inspected in the desktop visualizer.
+Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. UI selection/restart aesthetics and interaction are manually inspected in the desktop visualizer.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
