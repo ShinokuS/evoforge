@@ -7,6 +7,7 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
+import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
 
@@ -22,7 +23,8 @@ public record SimulationView(
         GeometryLookup geometry,
         NavigationLookup navigation,
         OccupancyLookup occupancy,
-        CellObjectLookup cells) {
+        CellObjectLookup cells,
+        Pathfinder pathfinder) {
 
     public SimulationView {
         if (objects == null) {
@@ -60,6 +62,10 @@ public record SimulationView(
         if (cells == null) {
             throw new IllegalArgumentException(
                     "cells must not be null");
+        }
+        if (pathfinder == null) {
+            throw new IllegalArgumentException(
+                    "pathfinder must not be null");
         }
     }
 }

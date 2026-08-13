@@ -13,11 +13,15 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.traversal.TraversalRevisionLookup;
 
 public final class LandscapeSystem implements LandscapeMutations {
 
     private final TerrainSystem terrain;
     private final GeometrySystem geometry;
+    private long traversalRevision;
+    private final TraversalRevisionLookup traversalRevisions =
+            () -> traversalRevision;
 
     public LandscapeSystem(
             TerrainSystem terrain,
@@ -65,6 +69,10 @@ public final class LandscapeSystem implements LandscapeMutations {
         return terrain.revisions();
     }
 
+    public TraversalRevisionLookup traversalRevision() {
+        return traversalRevisions;
+    }
+
     public GeometryLookup geometry() {
         return geometry.lookup();
     }
@@ -80,6 +88,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                 y,
                 z,
                 shape);
+        traversalRevision++;
     }
 
     @Override
@@ -101,6 +110,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
+            traversalRevision++;
         }
 
         return result;
@@ -113,11 +123,17 @@ public final class LandscapeSystem implements LandscapeMutations {
             int z,
             LandscapeDefinitionId definitionId) {
 
-        return terrain.replace(
+        TerrainReplacementResult result = terrain.replace(
                 x,
                 y,
                 z,
                 definitionId);
+
+        if (result.accepted()) {
+            traversalRevision++;
+        }
+
+        return result;
     }
 
     @Override
@@ -137,6 +153,7 @@ public final class LandscapeSystem implements LandscapeMutations {
                     x,
                     y,
                     z);
+            traversalRevision++;
         }
 
         return result;

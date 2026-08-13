@@ -36,20 +36,16 @@ import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSystem;
+import io.github.evoforge.simulation.world.pathfinding.ExactAStarPathfinder;
+import io.github.evoforge.simulation.world.pathfinding.PathHeuristics;
+import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * Production composition root for a simulation instance.
- *
- * <p>The assembly itself is the setup phase. Once {@link #start()} succeeds,
- * all setup mutation methods reject further use and the caller receives a
- * separate {@link SimulationRuntime} containing only runtime control and
- * read-only observation capabilities.</p>
- */
+/** Production composition root for a simulation instance. */
 public final class SimulationAssembly {
 
     private final DefinitionRegistry<LandscapeDefinitionId>
@@ -154,7 +150,6 @@ public final class SimulationAssembly {
             long unitsPerTick) {
 
         requireNotStarted();
-
         requireObjectDefinition(definitionId);
 
         movementDefinitions.put(
@@ -164,11 +159,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /**
-     * Marks instances of the definition as requiring one exclusive cell.
-     * Occupancy semantics must be configured before any instance of this
-     * definition is spatially placed during setup.
-     */
     public SimulationAssembly exclusiveOccupancy(
             ObjectDefinitionId definitionId) {
 
@@ -305,6 +295,12 @@ public final class SimulationAssembly {
                         landscape.geometry(),
                         landscapeTraversalDefinitions);
 
+        Pathfinder pathfinder = new ExactAStarPathfinder(
+                navigation.lookup(),
+                transitionCosts,
+                landscape.traversalRevision(),
+                PathHeuristics.chebyshev(1));
+
         MovementSystem movement =
                 new MovementSystem(
                         objects,
@@ -336,7 +332,8 @@ public final class SimulationAssembly {
                 landscape.geometry(),
                 navigation.lookup(),
                 occupancy,
-                cells.lookup());
+                cells.lookup(),
+                pathfinder);
 
         return new SimulationRuntime(
                 new SynchronousCommandGateway(dispatcher),
