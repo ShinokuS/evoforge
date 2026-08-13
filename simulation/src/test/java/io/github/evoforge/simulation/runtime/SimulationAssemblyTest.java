@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepResult;
+import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.control.terrain.ReplaceTerrainResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -28,39 +30,37 @@ final class SimulationAssemblyTest {
 
         SimulationRuntime runtime = assembly.start();
 
-        assertEquals(
-                1,
-                runtime.view().cells().objectCount(
-                        2,
-                        3,
-                        0));
-        assertEquals(
-                objectId,
-                runtime.view().cells().objectAt(
-                        2,
-                        3,
-                        0,
-                        0));
-        assertEquals(
-                ground,
-                runtime.view().terrain().find(
-                        2,
-                        3,
-                        -1));
+        assertEquals(1, runtime.view().cells().objectCount(2, 3, 0));
+        assertEquals(objectId, runtime.view().cells().objectAt(2, 3, 0, 0));
+        assertEquals(ground, runtime.view().terrain().find(2, 3, -1));
 
         assertThrows(
                 IllegalStateException.class,
-                () -> assembly.placeTerrain(
-                        3,
-                        3,
-                        -1,
-                        ground));
+                () -> assembly.placeTerrain(3, 3, -1, ground));
         assertThrows(
                 IllegalStateException.class,
                 () -> assembly.createObject(walker));
-        assertThrows(
-                IllegalStateException.class,
-                assembly::start);
+        assertThrows(IllegalStateException.class, assembly::start);
+    }
+
+    @Test
+    void runtimeTerrainReplacementUsesControlBoundary() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        LandscapeDefinitionId ground =
+                assembly.landscapeDefinition("test:replace_ground", 1000);
+        LandscapeDefinitionId slow =
+                assembly.landscapeDefinition("test:replace_slow", 6000);
+        assembly.placeTerrain(1, 0, -1, ground);
+
+        SimulationRuntime runtime = assembly.start();
+
+        assertEquals(
+                ReplaceTerrainResult.REPLACED,
+                runtime.submit(new ReplaceTerrainCommand(1, 0, -1, slow)));
+        assertEquals(slow, runtime.view().terrain().find(1, 0, -1));
+        assertEquals(
+                ReplaceTerrainResult.TERRAIN_ABSENT,
+                runtime.submit(new ReplaceTerrainCommand(2, 0, -1, slow)));
     }
 
     @Test
@@ -81,47 +81,16 @@ final class SimulationAssemblyTest {
 
         assertEquals(
                 MoveStepResult.STARTED,
-                runtime.submit(
-                        new MoveStepCommand(
-                                objectId,
-                                1,
-                                0,
-                                0)));
+                runtime.submit(new MoveStepCommand(objectId, 1, 0, 0)));
 
-        assertEquals(
-                1,
-                runtime.view().cells().objectCount(
-                        0,
-                        0,
-                        0));
-        assertEquals(
-                0,
-                runtime.view().cells().objectCount(
-                        1,
-                        0,
-                        0));
+        assertEquals(1, runtime.view().cells().objectCount(0, 0, 0));
+        assertEquals(0, runtime.view().cells().objectCount(1, 0, 0));
 
         runtime.stepper().advance();
 
-        assertEquals(
-                0,
-                runtime.view().cells().objectCount(
-                        0,
-                        0,
-                        0));
-        assertEquals(
-                1,
-                runtime.view().cells().objectCount(
-                        1,
-                        0,
-                        0));
-        assertEquals(
-                objectId,
-                runtime.view().cells().objectAt(
-                        1,
-                        0,
-                        0,
-                        0));
+        assertEquals(0, runtime.view().cells().objectCount(0, 0, 0));
+        assertEquals(1, runtime.view().cells().objectCount(1, 0, 0));
+        assertEquals(objectId, runtime.view().cells().objectAt(1, 0, 0, 0));
     }
 
     @Test
