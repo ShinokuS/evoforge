@@ -19,12 +19,11 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Presentation ownership cleanup and typed Shape presentation bindings
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal
 - Exclusive object Occupancy with immediate execution destination reservations
+- Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
 
 ## Next simulation sequence
 
 ```text
-Pathfinder
-    ↓
 observable Movement/Action outcome
     ↓
 first agent / Cow vertical slice
@@ -54,10 +53,16 @@ The internal design of a future milestone is introduced by its first real consum
 - falling, climbing, jumping, swimming and flying
 - actor-specific terrain affinity/locomotion
 - multi-step `MoveTo` lifecycle
-- path cache, hierarchical pathfinding and background pathfinding
-- persistent Navigation cache and invalidation lifecycle
+- persistent route cache
+- portal/multi-level hierarchy refinement beyond the current exact reachability preflight
+- incremental/replanning pathfinder strategies such as D*/LPA*
+- JPS/JPS-3D specializations where traversal properties permit correct pruning
+- background pathfinding threads
 - path-wide/space-time planning reservations
+- temporal/SIPP-like path planning
 - yielding, swap/displacement, pushing and multi-agent deadlock resolution
+- bounded multi-agent planners such as WHCA*/CBS when local conflict cases require them
+- flow-field/group navigation
 - coordinated following/group movement and early source release
 
 ## Deferred world/storage work
