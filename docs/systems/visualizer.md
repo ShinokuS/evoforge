@@ -102,11 +102,31 @@ The selected-cell inspector also reports the exact `FREE / OCCUPIED / RESERVED` 
 
 ## Performance
 
-The renderer reports `VisualizerPerf` with FPS, visible-cell count, landscape/analysis average and max CPU time, cache hit/miss, padding, cache occupancy and cached Z radius.
+Two complementary telemetry streams are logged once per second:
 
-Exposure uses a primitive dense distance field and primitive BFS queue. Analysis windows are padded relative to viewport size, cached by authoritative visibility revision and built for a nearby standing-Z band so normal camera motion and Z switching reuse work.
+```text
+VisualizerPerf
+    visible cells
+    landscape CPU avg/max
+    exposure-analysis CPU avg/max
+    analysis cache hit/miss
+    padding / cache occupancy / cached Z radius
 
-Hot sparse read paths avoid temporary coordinate-key allocation.
+VisualizerFramePerf
+    observed frame interval avg/max
+    total CPU work inside ZLevelVisualizer.render avg/max
+    update / landscape / overlay / HUD CPU avg/max
+    Java heap min/max/current
+    native heap
+```
+
+The observed frame interval includes pacing/vsync effects, while the CPU stage timings cover work inside the visualizer render method. A large frame-time spike with low CPU-stage maxima therefore points outside those measured CPU stages; a matching landscape/analysis, overlay or HUD spike identifies the responsible presentation path directly.
+
+Exposure uses a primitive dense distance field. Its BFS queue is a reusable resolver-owned scratch buffer, so a camera-local analysis rebuild allocates the new cached distance field but does not also allocate another same-sized temporary queue. Analysis windows are padded relative to viewport size, cached by authoritative visibility revision and built for a nearby standing-Z band so normal camera motion and Z switching reuse work.
+
+The selected-cell inspector caches its expensive slice/exposure result by selected XYZ, F4 lower depth and visibility revision. Dynamic facts such as Occupancy are still read live every frame, while an unchanged inspected cell no longer rebuilds a private exposure field every render.
+
+Hot sparse read paths avoid temporary coordinate-key allocation. This includes Terrain, the Spatial cell index and Occupancy reservation lookup; immutable coordinate keys are still used for stored authoritative entries.
 
 Occupancy scanning is diagnostic-only and is performed over the visible selected-Z cells only while F5 is enabled. No Occupancy render cache is introduced without profiling evidence.
 
