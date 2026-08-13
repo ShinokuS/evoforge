@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Matrix4;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationStepper;
 import io.github.evoforge.simulation.time.SimulationTime;
@@ -110,6 +111,23 @@ public final class ZLevelVisualizer {
         state.setSelectedZ(selectedZ);
         camera.setView(cameraX, cameraY, zoom);
         updateLandscapeSampling();
+    }
+
+    /** Copies the current world projection for an external presentation-only overlay. */
+    public void copyWorldProjection(
+            Matrix4 target) {
+
+        if (target == null) {
+            throw new IllegalArgumentException(
+                    "target must not be null");
+        }
+
+        target.set(camera.projection());
+    }
+
+    /** Current standing Z selected by presentation controls. */
+    public int selectedZ() {
+        return state.selectedZ();
     }
 
     public void render() {
