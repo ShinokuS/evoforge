@@ -62,7 +62,7 @@ final class MoveToPatrolController implements ScenarioController {
     private void startTarget(int index) {
         targetIndex = index;
         int[] target = WAYPOINTS[index];
-        plan = MoveToScenarioRoutes.plan(
+        MoveToScenarioPlan candidate = MoveToScenarioRoutes.plan(
                 runtime.view(),
                 mover,
                 target[0],
@@ -74,6 +74,9 @@ final class MoveToPatrolController implements ScenarioController {
                 target[0],
                 target[1],
                 target[2]);
+        if (result.accepted()) {
+            plan = candidate;
+        }
         state = result.code().value();
         if (!result.accepted()) {
             stopped = true;
