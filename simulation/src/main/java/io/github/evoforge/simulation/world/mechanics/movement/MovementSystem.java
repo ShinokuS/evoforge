@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.movement;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationAttempt;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationResult;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
@@ -170,29 +171,26 @@ public final class MovementSystem {
                 toY,
                 toZ);
 
-        OccupancyReservationId reservationId =
-                OccupancyReservationId.of(action.id().asLong());
-        OccupancyReservationResult reservation = occupancy.tryReserve(
-                reservationId,
+        OccupancyReservationAttempt reservation = occupancy.tryReserve(
                 objectId,
                 toX,
                 toY,
                 toZ);
 
-        if (reservation == OccupancyReservationResult.OCCUPIED) {
+        if (reservation.result() == OccupancyReservationResult.OCCUPIED) {
             state.removeAction(action.id());
             return MovementStartResult.DESTINATION_OCCUPIED;
         }
-        if (reservation == OccupancyReservationResult.RESERVED) {
+        if (reservation.result() == OccupancyReservationResult.RESERVED) {
             state.removeAction(action.id());
             return MovementStartResult.DESTINATION_RESERVED;
         }
 
-        boolean acquired =
-                reservation == OccupancyReservationResult.ACQUIRED;
+        OccupancyReservationId reservationId =
+                reservation.reservationId();
 
         try {
-            if (acquired) {
+            if (reservationId != null) {
                 state.attachReservation(
                         action.id(),
                         reservationId);
@@ -202,7 +200,7 @@ public final class MovementSystem {
                     timing.ticks(),
                     action.id().asLong());
         } catch (RuntimeException exception) {
-            if (acquired) {
+            if (reservationId != null) {
                 rollbackReservation(
                         reservationId,
                         objectId,

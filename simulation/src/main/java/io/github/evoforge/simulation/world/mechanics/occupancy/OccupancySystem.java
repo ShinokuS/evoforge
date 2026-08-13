@@ -27,6 +27,8 @@ public final class OccupancySystem implements OccupancyLookup {
     private final Map<OccupancyReservationId, CellKey> cellsByReservation =
             new HashMap<>();
 
+    private long nextReservationId;
+
     public OccupancySystem(
             ObjectLookup objects,
             CellObjectLookup cells,
@@ -96,41 +98,37 @@ public final class OccupancySystem implements OccupancyLookup {
     }
 
     /** Claims one immediate destination for one execution process. */
-    public OccupancyReservationResult tryReserve(
-            OccupancyReservationId reservationId,
+    public OccupancyReservationAttempt tryReserve(
             ObjectId objectId,
             int x,
             int y,
             int z) {
 
-        if (reservationId == null) {
-            throw new IllegalArgumentException(
-                    "reservationId must not be null");
-        }
-
         if (!requiresExclusiveCell(objectId)) {
-            return OccupancyReservationResult.NOT_REQUIRED;
-        }
-
-        if (cellsByReservation.containsKey(reservationId)) {
-            throw new IllegalStateException(
-                    "reservation id already owns a cell: " + reservationId);
+            return OccupancyReservationAttempt.notRequired();
         }
 
         OccupancyState current = state(x, y, z);
         if (current == OccupancyState.OCCUPIED) {
-            return OccupancyReservationResult.OCCUPIED;
+            return OccupancyReservationAttempt.occupied();
         }
         if (current == OccupancyState.RESERVED) {
-            return OccupancyReservationResult.RESERVED;
+            return OccupancyReservationAttempt.reserved();
         }
 
+        if (nextReservationId == Long.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "occupancy reservation id space exhausted");
+        }
+
+        OccupancyReservationId reservationId =
+                OccupancyReservationId.of(nextReservationId++);
         CellKey cell = new CellKey(x, y, z);
         reservationsByCell.put(
                 cell,
                 new Reservation(reservationId, objectId));
         cellsByReservation.put(reservationId, cell);
-        return OccupancyReservationResult.ACQUIRED;
+        return OccupancyReservationAttempt.acquired(reservationId);
     }
 
     public boolean ownsReservation(

@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.occupancy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
@@ -71,17 +72,17 @@ final class OccupancySystemTest {
         ObjectId bush = fixture.factory.create(fixture.bush).id();
         fixture.placement.place(claimant, 0, 0, 0);
 
-        OccupancyReservationId reservationId =
-                OccupancyReservationId.of(7);
-
-        assertEquals(
-                OccupancyReservationResult.ACQUIRED,
+        OccupancyReservationAttempt attempt =
                 fixture.occupancy.tryReserve(
-                        reservationId,
                         claimant,
                         1,
                         0,
-                        0));
+                        0);
+        assertEquals(
+                OccupancyReservationResult.ACQUIRED,
+                attempt.result());
+        OccupancyReservationId reservationId = attempt.reservationId();
+
         assertEquals(
                 OccupancyState.RESERVED,
                 fixture.occupancy.state(1, 0, 0));
@@ -94,7 +95,8 @@ final class OccupancySystemTest {
                 fixture.placement.place(otherCow, 1, 0, 0));
 
         assertFalse(fixture.occupancy.release(
-                OccupancyReservationId.of(8),
+                OccupancyReservationId.of(
+                        reservationId.asLong() + 1),
                 claimant,
                 1,
                 0,
@@ -122,18 +124,42 @@ final class OccupancySystemTest {
         ObjectId bush = fixture.factory.create(fixture.bush).id();
         fixture.placement.place(cow, 2, 0, 0);
 
-        assertEquals(
-                OccupancyReservationResult.NOT_REQUIRED,
+        OccupancyReservationAttempt attempt =
                 fixture.occupancy.tryReserve(
-                        OccupancyReservationId.of(10),
                         bush,
                         2,
                         0,
-                        0));
+                        0);
+
+        assertEquals(
+                OccupancyReservationResult.NOT_REQUIRED,
+                attempt.result());
+        assertNull(attempt.reservationId());
         assertEquals(0, fixture.occupancy.reservationCount());
         assertEquals(
                 OccupancyState.FREE,
                 fixture.occupancy.admissionState(bush, 2, 0, 0));
+    }
+
+    @Test
+    void occupancyOwnsReservationIdentity() {
+        Fixture fixture = fixture();
+        ObjectId first = fixture.factory.create(fixture.cow).id();
+        ObjectId second = fixture.factory.create(fixture.cow).id();
+
+        OccupancyReservationAttempt firstAttempt =
+                fixture.occupancy.tryReserve(first, 7, 0, 0);
+        OccupancyReservationAttempt secondAttempt =
+                fixture.occupancy.tryReserve(second, 8, 0, 0);
+
+        assertEquals(
+                OccupancyReservationResult.ACQUIRED,
+                firstAttempt.result());
+        assertEquals(
+                OccupancyReservationResult.ACQUIRED,
+                secondAttempt.result());
+        assertFalse(firstAttempt.reservationId().equals(
+                secondAttempt.reservationId()));
     }
 
     private static Fixture fixture() {
