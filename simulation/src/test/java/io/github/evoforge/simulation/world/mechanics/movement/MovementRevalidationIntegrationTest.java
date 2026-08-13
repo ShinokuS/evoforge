@@ -2,6 +2,8 @@ package io.github.evoforge.simulation.world.mechanics.movement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.result.OperationResults;
@@ -54,17 +56,9 @@ final class MovementRevalidationIntegrationTest {
                 geometry.lookup());
 
         OperationResults.requireAccepted(
-                landscape.placeTerrain(
-                        0,
-                        0,
-                        -1,
-                        ground));
+                landscape.placeTerrain(0, 0, -1, ground));
         OperationResults.requireAccepted(
-                landscape.placeTerrain(
-                        1,
-                        0,
-                        -1,
-                        ground));
+                landscape.placeTerrain(1, 0, -1, ground));
 
         DefinitionRegistry<ObjectDefinitionId> objectDefinitions =
                 new DefinitionRegistry<>(
@@ -83,11 +77,7 @@ final class MovementRevalidationIntegrationTest {
 
         CellSpatialIndex cells = new CellSpatialIndex();
         SpatialSystem spatial = new SpatialSystem(cells);
-        spatial.place(
-                objectId,
-                0,
-                0,
-                0);
+        spatial.place(objectId, 0, 0, 0);
 
         OccupancyDefinitions occupancyDefinitions =
                 new OccupancyDefinitions();
@@ -113,6 +103,8 @@ final class MovementRevalidationIntegrationTest {
         SimulationStepper stepper = new SimulationStepper(
                 clock,
                 scheduler);
+        MovementStepCompletion[] completion =
+                new MovementStepCompletion[1];
 
         MovementActionProcessor actions =
                 new MovementActionProcessor(
@@ -121,7 +113,8 @@ final class MovementRevalidationIntegrationTest {
                         spatial.transforms(),
                         navigation.lookup(),
                         occupancy,
-                        spatial);
+                        spatial,
+                        value -> completion[0] = value);
         HandlerId movementHandler =
                 handlers.register(actions::complete);
         MovementSystem movement = new MovementSystem(
@@ -138,13 +131,13 @@ final class MovementRevalidationIntegrationTest {
                         scheduler,
                         movementHandler));
 
-        assertEquals(
-                MovementStartResult.STARTED,
+        assertTrue(
                 movement.startStep(
                         objectId,
                         1,
                         0,
-                        0));
+                        0)
+                        .accepted());
         assertEquals(
                 OccupancyState.RESERVED,
                 occupancy.state(1, 0, 0));
@@ -159,22 +152,20 @@ final class MovementRevalidationIntegrationTest {
             stepper.advance();
         }
 
-        assertEquals(
-                0,
-                spatial.transforms().x(objectId));
-        assertEquals(
-                0,
-                spatial.transforms().y(objectId));
-        assertEquals(
-                0,
-                spatial.transforms().z(objectId));
+        assertEquals(0, spatial.transforms().x(objectId));
+        assertEquals(0, spatial.transforms().y(objectId));
+        assertEquals(0, spatial.transforms().z(objectId));
         assertFalse(movementState.isMoving(objectId));
-        assertEquals(
-                0,
-                movementState.activeActionCount());
+        assertEquals(0, movementState.activeActionCount());
         assertEquals(
                 OccupancyState.FREE,
                 occupancy.state(1, 0, 0));
         assertEquals(0, occupancy.reservationCount());
+
+        assertNotNull(completion[0]);
+        assertFalse(completion[0].committed());
+        assertEquals(
+                "movement:transition_unavailable",
+                completion[0].code().value());
     }
 }
