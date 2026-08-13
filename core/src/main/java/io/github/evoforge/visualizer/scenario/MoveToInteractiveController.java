@@ -36,8 +36,13 @@ final class MoveToInteractiveController implements ScenarioController {
             state = "LMB select mover first";
             return true;
         }
-        plan = MoveToScenarioRoutes.plan(runtime.view(), mover, x, y, z);
+
+        MoveToScenarioPlan candidate =
+                MoveToScenarioRoutes.plan(runtime.view(), mover, x, y, z);
         var result = MoveToScenarioCommands.start(runtime, mover, x, y, z);
+        if (result.accepted()) {
+            plan = candidate;
+        }
         state = result.code().value();
         return true;
     }
