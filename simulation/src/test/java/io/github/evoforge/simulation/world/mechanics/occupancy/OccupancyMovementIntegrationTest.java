@@ -59,6 +59,46 @@ final class OccupancyMovementIntegrationTest {
     }
 
     @Test
+    void rejectedClaimLeavesMoverFreeAndDoesNotConsumeTimingCarry() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        ObjectDefinitionId walker = assembly.objectDefinition("test:walker");
+        assembly.movementRate(walker, 600);
+        assembly.exclusiveOccupancy(walker);
+
+        for (int x = 0; x <= 3; x++) {
+            assembly.placeTerrain(x, 0, -1, ground);
+        }
+
+        ObjectId first = assembly.createObject(walker);
+        ObjectId second = assembly.createObject(walker);
+        assembly.placeObject(first, 0, 0, 0);
+        assembly.placeObject(second, 2, 0, 0);
+
+        SimulationRuntime runtime = assembly.start();
+
+        assertEquals(
+                MoveStepResult.STARTED,
+                runtime.submit(new MoveStepCommand(first, 1, 0, 0)));
+        assertEquals(
+                MoveStepResult.DESTINATION_RESERVED,
+                runtime.submit(new MoveStepCommand(second, 1, 0, 0)));
+
+        assertEquals(
+                MoveStepResult.STARTED,
+                runtime.submit(new MoveStepCommand(second, 3, 0, 0)));
+
+        runtime.stepper().advance();
+
+        assertEquals(
+                3,
+                runtime.view().transforms().x(second));
+        assertEquals(
+                OccupancyState.OCCUPIED,
+                runtime.view().occupancy().state(3, 0, 0));
+    }
+
+    @Test
     void nonExclusiveMoverMayShareCellWithExclusiveObject() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
