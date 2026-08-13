@@ -26,6 +26,7 @@ public final class OccupancySystem implements OccupancyLookup {
             new HashMap<>();
     private final Map<OccupancyReservationId, CellKey> cellsByReservation =
             new HashMap<>();
+    private final CellProbe reservationLookupProbe = new CellProbe();
 
     private long nextReservationId;
 
@@ -68,7 +69,8 @@ public final class OccupancySystem implements OccupancyLookup {
             return OccupancyState.OCCUPIED;
         }
 
-        return reservationsByCell.containsKey(new CellKey(x, y, z))
+        reservationLookupProbe.set(x, y, z);
+        return reservationsByCell.containsKey(reservationLookupProbe)
                 ? OccupancyState.RESERVED
                 : OccupancyState.FREE;
     }
@@ -142,8 +144,8 @@ public final class OccupancySystem implements OccupancyLookup {
             return false;
         }
 
-        Reservation reservation = reservationsByCell.get(
-                new CellKey(x, y, z));
+        reservationLookupProbe.set(x, y, z);
+        Reservation reservation = reservationsByCell.get(reservationLookupProbe);
         return reservation != null
                 && reservationId.equals(reservation.id())
                 && objectId.equals(reservation.objectId());
@@ -181,20 +183,19 @@ public final class OccupancySystem implements OccupancyLookup {
             return false;
         }
 
-        CellKey expectedCell = new CellKey(x, y, z);
         CellKey ownedCell = cellsByReservation.get(reservationId);
-        if (!expectedCell.equals(ownedCell)) {
+        if (ownedCell == null || !ownedCell.matches(x, y, z)) {
             return false;
         }
 
-        Reservation reservation = reservationsByCell.get(expectedCell);
+        Reservation reservation = reservationsByCell.get(ownedCell);
         if (reservation == null
                 || !reservationId.equals(reservation.id())
                 || !objectId.equals(reservation.objectId())) {
             return false;
         }
 
-        reservationsByCell.remove(expectedCell);
+        reservationsByCell.remove(ownedCell);
         cellsByReservation.remove(reservationId);
         return true;
     }
@@ -243,10 +244,73 @@ public final class OccupancySystem implements OccupancyLookup {
         return object;
     }
 
+    private static int hash(
+            int x,
+            int y,
+            int z) {
+
+        int result = Integer.hashCode(x);
+        result = 31 * result + Integer.hashCode(y);
+        result = 31 * result + Integer.hashCode(z);
+        return result;
+    }
+
     private record CellKey(
             int x,
             int y,
             int z) {
+
+        private boolean matches(
+                int otherX,
+                int otherY,
+                int otherZ) {
+
+            return x == otherX && y == otherY && z == otherZ;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash(x, y, z);
+        }
+    }
+
+    /** Reused only for map reads; stored reservation keys remain immutable. */
+    private static final class CellProbe {
+        private int x;
+        private int y;
+        private int z;
+
+        private void set(
+                int x,
+                int y,
+                int z) {
+
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash(x, y, z);
+        }
+
+        @Override
+        public boolean equals(
+                Object other) {
+
+            if (other instanceof CellKey cell) {
+                return x == cell.x()
+                        && y == cell.y()
+                        && z == cell.z();
+            }
+            if (other instanceof CellProbe probe) {
+                return x == probe.x
+                        && y == probe.y
+                        && z == probe.z;
+            }
+            return false;
+        }
     }
 
     private record Reservation(
