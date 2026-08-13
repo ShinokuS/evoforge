@@ -26,7 +26,8 @@ Conceptually:
 {
   "key": "core:example",
   "aspects": {
-    "movement": { "rate": 100 }
+    "movement": { "rate": 100 },
+    "occupancy": { "exclusive": true }
   }
 }
 ```
@@ -60,15 +61,17 @@ Can it change independently for one runtime object/cell/process?
 Current examples:
 
 ```text
-MovementRate             object definition data
-SurfaceTraversalCost     landscape definition data
-MovementAction           mutable Movement runtime state
-per-object timing carry  mutable Movement runtime state
-Spatial XYZ              mutable Spatial runtime state
+MovementRate              object definition data
+exclusive-cell capability object definition data
+SurfaceTraversalCost      landscape definition data
+MovementAction            mutable Movement runtime state
+execution reservation     mutable Occupancy runtime state
+per-object timing carry   mutable Movement runtime state
+Spatial XYZ               mutable Spatial runtime state
 terrain presence          mutable Terrain runtime state
 ```
 
-Definitions never own object existence, positions, movement progress or terrain-cell lifetime.
+Definitions never own object existence, positions, movement progress, reservation lifetime or terrain-cell lifetime.
 
 ## Current compiled aspects
 
@@ -81,6 +84,18 @@ ObjectDefinitionId → MovementRate
 ```
 
 The value is a positive number of transition-cost units per simulation tick. Absence of the aspect means the current ordinary self-propelled Movement capability is unavailable; there is no implicit default speed.
+
+### Object occupancy
+
+Object definition `occupancy.exclusive` compiles to the immutable fact:
+
+```text
+ObjectDefinitionId → requires exclusive cell?
+```
+
+Absence of the aspect means the object is transparent to exclusive occupancy. This capability is independent from Movement and from physical mass: a movable object need not be exclusive, and a stationary object may later require exclusive space.
+
+The aspect intentionally does not encode traversal slowdown, concealment, multi-cell footprints or capacity. Those are separate semantics and require their own real consumers.
 
 ### Landscape traversal
 
@@ -124,6 +139,8 @@ real runtime consumer
 ```
 
 Do not reserve unused aspects for hypothetical mechanics. Runtime systems consume compiled data/read contracts rather than repeatedly parsing source JSON.
+
+One definition may contribute independently to several mechanics. For example, a future bush can have Spatial presence while being non-exclusive for Occupancy, and later contribute separately to traversal or concealment without any consumer branching on a concrete `Bush` type.
 
 ## Deferred
 

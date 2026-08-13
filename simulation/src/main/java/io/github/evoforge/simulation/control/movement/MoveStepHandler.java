@@ -47,6 +47,10 @@ public final class MoveStepHandler
             case NOT_ADJACENT -> MoveStepResult.NOT_ADJACENT;
             case TRANSITION_UNAVAILABLE ->
                     MoveStepResult.TRANSITION_UNAVAILABLE;
+            case DESTINATION_OCCUPIED ->
+                    MoveStepResult.DESTINATION_OCCUPIED;
+            case DESTINATION_RESERVED ->
+                    MoveStepResult.DESTINATION_RESERVED;
         };
     }
 }

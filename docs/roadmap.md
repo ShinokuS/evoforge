@@ -18,12 +18,11 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Live multi-Z procedural visualizer with geometric cutaway, diagnostics and performance telemetry
 - Presentation ownership cleanup and typed Shape presentation bindings
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal
+- Exclusive object Occupancy with immediate execution destination reservations
 
 ## Next simulation sequence
 
 ```text
-Occupancy
-    ↓
 Pathfinder
     ↓
 observable Movement/Action outcome
@@ -51,13 +50,15 @@ The internal design of a future milestone is introduced by its first real consum
 
 ## Deferred movement/navigation work
 
-- final occupancy/reservation semantics
 - early movement cancellation and reactive wake-up
 - falling, climbing, jumping, swimming and flying
 - actor-specific terrain affinity/locomotion
 - multi-step `MoveTo` lifecycle
 - path cache, hierarchical pathfinding and background pathfinding
 - persistent Navigation cache and invalidation lifecycle
+- path-wide/space-time planning reservations
+- yielding, swap/displacement, pushing and multi-agent deadlock resolution
+- coordinated following/group movement and early source release
 
 ## Deferred world/storage work
 

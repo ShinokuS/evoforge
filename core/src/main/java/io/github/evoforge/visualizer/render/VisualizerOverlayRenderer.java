@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.visualizer.VisualizerCamera;
@@ -20,6 +21,7 @@ public final class VisualizerOverlayRenderer {
     private static final float ACTIVE_SLICE_RIM_PIXELS = 2.25f;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5.0f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
+    private static final float OCCUPANCY_STROKE_PIXELS = 3.0f;
 
     private static final Color GRID_SUBTLE =
             new Color(0.12f, 0.16f, 0.14f, 1f);
@@ -39,6 +41,10 @@ public final class VisualizerOverlayRenderer {
             new Color(0.90f, 0.44f, 0.56f, 1f);
     private static final Color SELECTED =
             new Color(1f, 0.93f, 0.34f, 1f);
+    private static final Color OCCUPIED_CELL =
+            new Color(1f, 0.20f, 0.52f, 1f);
+    private static final Color RESERVED_CELL =
+            new Color(1f, 0.72f, 0.10f, 1f);
     private static final Color TRANSITION_FLAT =
             new Color(0.10f, 1f, 0.92f, 1f);
     private static final Color TRANSITION_UP =
@@ -86,6 +92,9 @@ public final class VisualizerOverlayRenderer {
         shapes.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
+        if (state.showOccupancy()) {
+            drawOccupancyOverlay(range);
+        }
         if (state.showShapeDirections()) {
             drawShapeDirections(range, state.selectedZ() - 1);
             drawShapeDirections(range, state.selectedZ());
@@ -238,6 +247,66 @@ public final class VisualizerOverlayRenderer {
         for (int y = range.minY(); y <= range.maxY() + 1; y++) {
             shapes.line(range.minX(), y, range.maxX() + 1f, y);
         }
+    }
+
+    private void drawOccupancyOverlay(
+            VisualizerCamera.VisibleRange range) {
+
+        float thickness = camera.worldUnitsPerPixel()
+                * OCCUPANCY_STROKE_PIXELS;
+
+        for (int x = range.minX(); x <= range.maxX(); x++) {
+            for (int y = range.minY(); y <= range.maxY(); y++) {
+                OccupancyState occupancyState = view.occupancy().state(
+                        x,
+                        y,
+                        state.selectedZ());
+                if (occupancyState == OccupancyState.FREE) {
+                    continue;
+                }
+
+                float inset = occupancyState == OccupancyState.OCCUPIED
+                        ? 0.08f
+                        : 0.18f;
+                shapes.setColor(
+                        occupancyState == OccupancyState.OCCUPIED
+                                ? OCCUPIED_CELL
+                                : RESERVED_CELL);
+                drawCellFrame(x, y, inset, thickness);
+
+                if (occupancyState == OccupancyState.RESERVED) {
+                    shapes.rectLine(
+                            x + 0.32f,
+                            y + 0.32f,
+                            x + 0.68f,
+                            y + 0.68f,
+                            thickness);
+                    shapes.rectLine(
+                            x + 0.32f,
+                            y + 0.68f,
+                            x + 0.68f,
+                            y + 0.32f,
+                            thickness);
+                }
+            }
+        }
+    }
+
+    private void drawCellFrame(
+            int x,
+            int y,
+            float inset,
+            float thickness) {
+
+        float minX = x + inset;
+        float minY = y + inset;
+        float maxX = x + 1f - inset;
+        float maxY = y + 1f - inset;
+
+        shapes.rectLine(minX, minY, maxX, minY, thickness);
+        shapes.rectLine(maxX, minY, maxX, maxY, thickness);
+        shapes.rectLine(maxX, maxY, minX, maxY, thickness);
+        shapes.rectLine(minX, maxY, minX, minY, thickness);
     }
 
     private void drawShapeDirections(

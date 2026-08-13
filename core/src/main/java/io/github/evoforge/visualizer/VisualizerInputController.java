@@ -87,6 +87,10 @@ public final class VisualizerInputController extends InputAdapter {
                 state.cycleLowerDepth();
                 return true;
             }
+            case Input.Keys.F5 -> {
+                state.toggleOccupancy();
+                return true;
+            }
             default -> {
                 return false;
             }

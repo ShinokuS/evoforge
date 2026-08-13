@@ -42,6 +42,14 @@ public final class VisualizerHudRenderer {
     private int width = 1;
     private int height = 1;
 
+    private boolean inspectorSliceCached;
+    private int inspectorSliceX;
+    private int inspectorSliceY;
+    private int inspectorSliceZ;
+    private int inspectorLowerDepth;
+    private long inspectorVisibilityRevision;
+    private LandscapeSliceResolver.Cell inspectorSlice;
+
     public VisualizerHudRenderer(
             SimulationView view,
             SimulationTime simulationTime,
@@ -86,7 +94,7 @@ public final class VisualizerHudRenderer {
         ObjectId selectedObject = state.selectedObject();
         boolean hasInspector = selectedCell != null;
         float inspectorWidth = Math.min(380f, width - margin * 2f);
-        float inspectorHeight = selectedObject == null ? 150f : 216f;
+        float inspectorHeight = selectedObject == null ? 172f : 238f;
         float inspectorX = width - margin - inspectorWidth;
         float inspectorY = height - margin - inspectorHeight;
 
@@ -149,7 +157,8 @@ public final class VisualizerHudRenderer {
                 batch,
                 "F2 transitions " + onOff(state.showTransitions())
                         + " | F3 ramps " + onOff(state.showShapeDirections())
-                        + " | F4 lower depth " + state.lowerDepth(),
+                        + " | F4 lower depth " + state.lowerDepth()
+                        + " | F5 occupancy " + onOff(state.showOccupancy()),
                 textX,
                 top - 66f);
 
@@ -186,15 +195,7 @@ public final class VisualizerHudRenderer {
             float x,
             float top) {
 
-        LandscapeSliceResolver.Cell slice = sliceResolver.analyze(
-                selectedCell.x(),
-                selectedCell.x(),
-                selectedCell.y(),
-                selectedCell.y(),
-                selectedCell.z(),
-                state.lowerDepth(),
-                INSPECT_EXPOSURE_DISTANCE)
-                .resolve(selectedCell.x(), selectedCell.y());
+        LandscapeSliceResolver.Cell slice = inspectorSlice(selectedCell);
         int transitions = view.navigation().transitions(
                 selectedCell.x(),
                 selectedCell.y(),
@@ -219,6 +220,14 @@ public final class VisualizerHudRenderer {
                 "transitions: " + Integer.bitCount(transitions),
                 x,
                 top - 88f);
+        font.draw(
+                batch,
+                "occupancy: " + view.occupancy().state(
+                        selectedCell.x(),
+                        selectedCell.y(),
+                        selectedCell.z()),
+                x,
+                top - 110f);
 
         if (selectedObject == null) {
             return;
@@ -229,12 +238,12 @@ public final class VisualizerHudRenderer {
             return;
         }
 
-        font.draw(batch, "OBJECT   " + selectedObject, x, top - 118f);
+        font.draw(batch, "OBJECT   " + selectedObject, x, top - 140f);
         font.draw(
                 batch,
                 "definition: " + object.definitionId(),
                 x,
-                top - 140f);
+                top - 162f);
         font.draw(
                 batch,
                 "XYZ: "
@@ -244,7 +253,43 @@ public final class VisualizerHudRenderer {
                         + ", "
                         + view.transforms().z(selectedObject),
                 x,
-                top - 162f);
+                top - 184f);
+    }
+
+    private LandscapeSliceResolver.Cell inspectorSlice(
+            VisualizerState.CellSelection selectedCell) {
+
+        int lowerDepth = state.lowerDepth();
+        long visibilityRevision = sliceResolver.visibilityRevision();
+        boolean cacheable = visibilityRevision >= 0L;
+
+        if (!cacheable
+                || !inspectorSliceCached
+                || inspectorSliceX != selectedCell.x()
+                || inspectorSliceY != selectedCell.y()
+                || inspectorSliceZ != selectedCell.z()
+                || inspectorLowerDepth != lowerDepth
+                || inspectorVisibilityRevision != visibilityRevision) {
+
+            inspectorSlice = sliceResolver.analyze(
+                    selectedCell.x(),
+                    selectedCell.x(),
+                    selectedCell.y(),
+                    selectedCell.y(),
+                    selectedCell.z(),
+                    lowerDepth,
+                    INSPECT_EXPOSURE_DISTANCE)
+                    .resolve(selectedCell.x(), selectedCell.y());
+
+            inspectorSliceX = selectedCell.x();
+            inspectorSliceY = selectedCell.y();
+            inspectorSliceZ = selectedCell.z();
+            inspectorLowerDepth = lowerDepth;
+            inspectorVisibilityRevision = visibilityRevision;
+            inspectorSliceCached = cacheable;
+        }
+
+        return inspectorSlice;
     }
 
     private static String sliceLabel(

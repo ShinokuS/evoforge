@@ -84,7 +84,7 @@ Navigation     does a directed structural edge exist?
     ↓
 TransitionCost what is the actor-independent intrinsic price of that edge?
     ↓
-Occupancy      is relevant space dynamically available/claimed?   [next]
+Occupancy      is relevant space dynamically available/claimed?
     ↓
 Movement       can this actor start and complete the concrete move?
 ```

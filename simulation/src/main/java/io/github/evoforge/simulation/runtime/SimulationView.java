@@ -4,6 +4,7 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
@@ -20,6 +21,7 @@ public record SimulationView(
         TerrainRevisionLookup terrainRevision,
         GeometryLookup geometry,
         NavigationLookup navigation,
+        OccupancyLookup occupancy,
         CellObjectLookup cells) {
 
     public SimulationView {
@@ -50,6 +52,10 @@ public record SimulationView(
         if (navigation == null) {
             throw new IllegalArgumentException(
                     "navigation must not be null");
+        }
+        if (occupancy == null) {
+            throw new IllegalArgumentException(
+                    "occupancy must not be null");
         }
         if (cells == null) {
             throw new IllegalArgumentException(

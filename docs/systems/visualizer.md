@@ -16,6 +16,8 @@ SimulationStepper
 
 An executable boundary test protects this constructor contract.
 
+`SimulationView` now also exposes read-only Occupancy state, so presentation can diagnose dynamic space conflicts without receiving the mutable Occupancy owner.
+
 ## Presentation ownership
 
 The accepted visualizer is split by existing responsibility:
@@ -26,7 +28,7 @@ VisualizerState              selected Z, overlay modes, selection
 VisualizerCamera             pan, zoom, viewport and coordinate conversion
 VisualizerInputController    physical input → presentation/time controls
 LandscapeRenderer            terrain/cutaway rendering + analysis cache
-VisualizerOverlayRenderer    grid, Z perimeter, F2/F3, object/selection overlays
+VisualizerOverlayRenderer    grid, Z perimeter, F2/F3/F5, object/selection overlays
 VisualizerHudRenderer        status and inspector screen-space UI
 ShapePresentationRegistry    exact-type Shape presentation dispatch
 ```
@@ -84,17 +86,50 @@ Near zoom uses `Nearest`; far zoom switches procedural textures to `Linear` to r
 - `F2`: authoritative Navigation transition overlay
 - `F3`: Shape direction diagnostics supplied through typed presentation bindings
 - `F4`: lower-surface visibility depth `0 / 1 / 4 / 8`
+- `F5`: Occupancy overlay at the selected standing Z
 - click: selected cell/object at the current standing Z
 - HUD: tick, Z, FPS, zoom/sampling and inspector context
 
+The F5 overlay reads `OccupancyLookup` only when enabled:
+
+```text
+OCCUPIED  bright outer cell frame
+RESERVED  inset amber frame + X marker
+FREE      no marker
+```
+
+The selected-cell inspector also reports the exact `FREE / OCCUPIED / RESERVED` state. This makes the distinction between physical presence and an in-flight destination claim directly observable while debugging Movement conflicts.
+
 ## Performance
 
-The renderer reports `VisualizerPerf` with FPS, visible-cell count, landscape/analysis average and max CPU time, cache hit/miss, padding, cache occupancy and cached Z radius.
+Two complementary telemetry streams are logged once per second:
 
-Exposure uses a primitive dense distance field and primitive BFS queue. Analysis windows are padded relative to viewport size, cached by authoritative visibility revision and built for a nearby standing-Z band so normal camera motion and Z switching reuse work.
+```text
+VisualizerPerf
+    visible cells
+    landscape CPU avg/max
+    exposure-analysis CPU avg/max
+    analysis cache hit/miss
+    padding / cache occupancy / cached Z radius
 
-Hot sparse read paths avoid temporary coordinate-key allocation.
+VisualizerFramePerf
+    observed frame interval avg/max
+    total CPU work inside ZLevelVisualizer.render avg/max
+    update / landscape / overlay / HUD CPU avg/max
+    Java heap min/max/current
+    native heap
+```
+
+The observed frame interval includes pacing/vsync effects, while the CPU stage timings cover work inside the visualizer render method. A large frame-time spike with low CPU-stage maxima therefore points outside those measured CPU stages; a matching landscape/analysis, overlay or HUD spike identifies the responsible presentation path directly.
+
+Exposure uses a primitive dense distance field. Its BFS queue is a reusable resolver-owned scratch buffer, so a camera-local analysis rebuild allocates the new cached distance field but does not also allocate another same-sized temporary queue. Analysis windows are padded relative to viewport size, cached by authoritative visibility revision and built for a nearby standing-Z band so normal camera motion and Z switching reuse work.
+
+The selected-cell inspector caches its expensive slice/exposure result by selected XYZ, F4 lower depth and visibility revision. Dynamic facts such as Occupancy are still read live every frame, while an unchanged inspected cell no longer rebuilds a private exposure field every render.
+
+Hot sparse read paths avoid temporary coordinate-key allocation. This includes Terrain, the Spatial cell index and Occupancy reservation lookup; immutable coordinate keys are still used for stored authoritative entries.
+
+Occupancy scanning is diagnostic-only and is performed over the visible selected-Z cells only while F5 is enabled. No Occupancy render cache is introduced without profiling evidence.
 
 ## Testing boundary
 
-Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Aesthetic acceptance remains manual.
+Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
