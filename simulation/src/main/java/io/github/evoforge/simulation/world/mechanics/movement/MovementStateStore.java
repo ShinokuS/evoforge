@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.movement;
 
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 
 import java.util.HashMap;
@@ -11,6 +12,9 @@ public final class MovementStateStore {
             new HashMap<>();
 
     private final Map<MovementActionId, MovementAction> actions =
+            new HashMap<>();
+
+    private final Map<MovementActionId, OccupancyReservationId> reservations =
             new HashMap<>();
 
     private long nextActionId;
@@ -103,6 +107,37 @@ public final class MovementStateStore {
         return action;
     }
 
+    public void attachReservation(
+            MovementActionId actionId,
+            OccupancyReservationId reservationId) {
+
+        if (actionId == null) {
+            throw new IllegalArgumentException(
+                    "actionId must not be null");
+        }
+        if (reservationId == null) {
+            throw new IllegalArgumentException(
+                    "reservationId must not be null");
+        }
+        if (!actions.containsKey(actionId)) {
+            throw new IllegalArgumentException(
+                    "movement action not found: " + actionId);
+        }
+        if (reservations.putIfAbsent(actionId, reservationId) != null) {
+            throw new IllegalStateException(
+                    "movement action already has a reservation: " + actionId);
+        }
+    }
+
+    public OccupancyReservationId reservationId(
+            MovementActionId actionId) {
+
+        if (actionId == null) {
+            return null;
+        }
+        return reservations.get(actionId);
+    }
+
     public MovementAction get(
             MovementActionId actionId) {
 
@@ -125,6 +160,8 @@ public final class MovementStateStore {
         if (action == null) {
             return null;
         }
+
+        reservations.remove(actionId);
 
         ObjectState state = states.get(
                 action.objectId());
@@ -149,6 +186,7 @@ public final class MovementStateStore {
         if (state != null
                 && state.activeActionId != null) {
             actions.remove(state.activeActionId);
+            reservations.remove(state.activeActionId);
         }
     }
 

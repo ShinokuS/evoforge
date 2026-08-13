@@ -23,7 +23,13 @@ public enum MovementStartResult
             ResultCode.of("movement", "not_adjacent")),
     TRANSITION_UNAVAILABLE(
             false,
-            ResultCode.of("movement", "transition_unavailable"));
+            ResultCode.of("movement", "transition_unavailable")),
+    DESTINATION_OCCUPIED(
+            false,
+            ResultCode.of("movement", "destination_occupied")),
+    DESTINATION_RESERVED(
+            false,
+            ResultCode.of("movement", "destination_reserved"));
 
     private final boolean accepted;
     private final ResultCode code;

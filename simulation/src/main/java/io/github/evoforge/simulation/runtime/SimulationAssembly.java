@@ -24,6 +24,8 @@ import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinition
 import io.github.evoforge.simulation.world.mechanics.movement.MovementRate;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementStateStore;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
 import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
@@ -33,6 +35,7 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
+import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSystem;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 
@@ -53,12 +56,15 @@ public final class SimulationAssembly {
     private final DefinitionRegistry<ObjectDefinitionId>
             objectDefinitions;
     private final MovementDefinitions movementDefinitions;
+    private final OccupancyDefinitions occupancyDefinitions;
     private final LandscapeSystem landscape;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
     private final ObjectFactory objectFactory;
     private final CellSpatialIndex cells;
     private final SpatialSystem spatial;
+    private final OccupancySystem occupancy;
+    private final ObjectPlacementSystem objectPlacement;
     private final MovementStateStore movementState;
 
     private boolean started;
@@ -75,6 +81,7 @@ public final class SimulationAssembly {
                 ObjectDefinitionId::asInt);
 
         movementDefinitions = new MovementDefinitions();
+        occupancyDefinitions = new OccupancyDefinitions();
 
         landscape = LandscapeSystem.create(
                 new SparseTerrainStorage(),
@@ -90,6 +97,14 @@ public final class SimulationAssembly {
 
         cells = new CellSpatialIndex();
         spatial = new SpatialSystem(cells);
+        occupancy = new OccupancySystem(
+                objects,
+                cells.lookup(),
+                occupancyDefinitions);
+        objectPlacement = new ObjectPlacementSystem(
+                objects,
+                occupancy,
+                spatial);
         movementState = new MovementStateStore();
     }
 
@@ -135,14 +150,25 @@ public final class SimulationAssembly {
 
         requireNotStarted();
 
-        if (!objectDefinitions.contains(definitionId)) {
-            throw new IllegalArgumentException(
-                    "unknown object definition: " + definitionId);
-        }
+        requireObjectDefinition(definitionId);
 
         movementDefinitions.put(
                 definitionId,
                 MovementRate.of(unitsPerTick));
+
+        return this;
+    }
+
+    /** Marks instances of the definition as requiring one exclusive cell. */
+    public SimulationAssembly exclusiveOccupancy(
+            ObjectDefinitionId definitionId) {
+
+        requireNotStarted();
+        requireObjectDefinition(definitionId);
+
+        occupancyDefinitions.put(
+                definitionId,
+                true);
 
         return this;
     }
@@ -166,16 +192,12 @@ public final class SimulationAssembly {
 
         requireNotStarted();
 
-        if (!objects.isAlive(objectId)) {
-            throw new IllegalArgumentException(
-                    "unknown object: " + objectId);
-        }
-
-        spatial.place(
-                objectId,
-                x,
-                y,
-                z);
+        OperationResults.requireAccepted(
+                objectPlacement.place(
+                        objectId,
+                        x,
+                        y,
+                        z));
 
         return this;
     }
@@ -223,6 +245,7 @@ public final class SimulationAssembly {
         landscapeTraversalDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
+        occupancyDefinitions.freeze();
 
         HandlerRegistry scheduledHandlers =
                 new HandlerRegistry();
@@ -241,6 +264,7 @@ public final class SimulationAssembly {
                         objects,
                         spatial.transforms(),
                         navigation.lookup(),
+                        occupancy,
                         spatial);
 
         HandlerId movementHandlerId =
@@ -266,6 +290,7 @@ public final class SimulationAssembly {
                         navigation.lookup(),
                         movementDefinitions,
                         transitionCosts,
+                        occupancy,
                         movementState,
                         movementScheduler);
 
@@ -288,6 +313,7 @@ public final class SimulationAssembly {
                 landscape.terrainRevision(),
                 landscape.geometry(),
                 navigation.lookup(),
+                occupancy,
                 cells.lookup());
 
         return new SimulationRuntime(
@@ -295,6 +321,15 @@ public final class SimulationAssembly {
                 clock,
                 stepper,
                 view);
+    }
+
+    private void requireObjectDefinition(
+            ObjectDefinitionId definitionId) {
+
+        if (!objectDefinitions.contains(definitionId)) {
+            throw new IllegalArgumentException(
+                    "unknown object definition: " + definitionId);
+        }
     }
 
     private void requireNotStarted() {

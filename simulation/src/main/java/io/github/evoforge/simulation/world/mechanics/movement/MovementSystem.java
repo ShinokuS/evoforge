@@ -2,6 +2,9 @@ package io.github.evoforge.simulation.world.mechanics.movement;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationResult;
+import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -16,6 +19,7 @@ public final class MovementSystem {
     private final NavigationLookup navigation;
     private final MovementDefinitions definitions;
     private final TransitionCostLookup transitionCosts;
+    private final OccupancySystem occupancy;
     private final MovementStateStore state;
     private final ProcessScheduler scheduler;
 
@@ -25,6 +29,7 @@ public final class MovementSystem {
             NavigationLookup navigation,
             MovementDefinitions definitions,
             TransitionCostLookup transitionCosts,
+            OccupancySystem occupancy,
             MovementStateStore state,
             ProcessScheduler scheduler) {
 
@@ -48,6 +53,10 @@ public final class MovementSystem {
             throw new IllegalArgumentException(
                     "transitionCosts must not be null");
         }
+        if (occupancy == null) {
+            throw new IllegalArgumentException(
+                    "occupancy must not be null");
+        }
         if (state == null) {
             throw new IllegalArgumentException(
                     "state must not be null");
@@ -62,6 +71,7 @@ public final class MovementSystem {
         this.navigation = navigation;
         this.definitions = definitions;
         this.transitionCosts = transitionCosts;
+        this.occupancy = occupancy;
         this.state = state;
         this.scheduler = scheduler;
     }
@@ -160,11 +170,47 @@ public final class MovementSystem {
                 toY,
                 toZ);
 
+        OccupancyReservationId reservationId =
+                OccupancyReservationId.of(action.id().asLong());
+        OccupancyReservationResult reservation = occupancy.tryReserve(
+                reservationId,
+                objectId,
+                toX,
+                toY,
+                toZ);
+
+        if (reservation == OccupancyReservationResult.OCCUPIED) {
+            state.removeAction(action.id());
+            return MovementStartResult.DESTINATION_OCCUPIED;
+        }
+        if (reservation == OccupancyReservationResult.RESERVED) {
+            state.removeAction(action.id());
+            return MovementStartResult.DESTINATION_RESERVED;
+        }
+
+        boolean acquired =
+                reservation == OccupancyReservationResult.ACQUIRED;
+
         try {
+            if (acquired) {
+                state.attachReservation(
+                        action.id(),
+                        reservationId);
+            }
+
             scheduler.scheduleAfter(
                     timing.ticks(),
                     action.id().asLong());
         } catch (RuntimeException exception) {
+            if (acquired) {
+                rollbackReservation(
+                        reservationId,
+                        objectId,
+                        toX,
+                        toY,
+                        toZ,
+                        exception);
+            }
             state.removeAction(action.id());
             throw exception;
         }
@@ -174,6 +220,32 @@ public final class MovementSystem {
                 timing.nextCarry());
 
         return MovementStartResult.STARTED;
+    }
+
+    private void rollbackReservation(
+            OccupancyReservationId reservationId,
+            ObjectId objectId,
+            int x,
+            int y,
+            int z,
+            RuntimeException failure) {
+
+        try {
+            if (!occupancy.release(
+                    reservationId,
+                    objectId,
+                    x,
+                    y,
+                    z)) {
+                failure.addSuppressed(new IllegalStateException(
+                        "failed to roll back occupancy reservation: "
+                                + reservationId));
+            }
+        } catch (RuntimeException rollbackFailure) {
+            if (rollbackFailure != failure) {
+                failure.addSuppressed(rollbackFailure);
+            }
+        }
     }
 
     private static Timing timing(
