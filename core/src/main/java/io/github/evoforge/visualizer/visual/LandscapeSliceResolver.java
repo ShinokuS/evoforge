@@ -246,6 +246,7 @@ public final class LandscapeSliceResolver {
 
     private final SimulationView view;
     private final VisibilityVolumeLookup volume;
+    private int[] exposureQueue = new int[0];
 
     public LandscapeSliceResolver(
             SimulationView view) {
@@ -392,7 +393,7 @@ public final class LandscapeSliceResolver {
                 expandedMaxY,
                 minZ,
                 maxZ);
-        int[] queue = new int[field.size()];
+        int[] queue = exposureQueue(field.size());
         int head = 0;
         int tail = 0;
 
@@ -450,6 +451,15 @@ public final class LandscapeSliceResolver {
         }
 
         return field;
+    }
+
+    private int[] exposureQueue(
+            int requiredSize) {
+
+        if (exposureQueue.length < requiredSize) {
+            exposureQueue = new int[requiredSize];
+        }
+        return exposureQueue;
     }
 
     private boolean openForExposure(
