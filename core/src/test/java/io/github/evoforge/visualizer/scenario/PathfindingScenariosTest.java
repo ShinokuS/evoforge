@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 final class PathfindingScenariosTest {
 
     @Test
-    void focusedScenariosExposeExpectedTerminalStatus() {
+    void focusedScenariosExposeExpectedInitialStatus() {
         assertStatus(new PathfindingStraightScenario(), "FOUND");
         assertStatus(new PathfindingStructuralDetourScenario(), "FOUND");
         assertStatus(new PathfindingWeightedDetourScenario(), "FOUND");
@@ -21,7 +21,38 @@ final class PathfindingScenariosTest {
         assertStatus(new PathfindingVerticalOverpassScenario(), "FOUND");
         assertStatus(new PathfindingUnreachableScenario(), "NO_PATH");
         assertStatus(new PathfindingHierarchyScenario(), "FOUND");
-        assertStatus(new PathfindingInvalidationScenario(), "STALE");
+        assertStatus(new PathfindingInvalidationScenario(), "RUNNING");
+    }
+
+    @Test
+    void invalidationScenarioShowsStaleThenFreshDetourAcrossTicks() {
+        ScenarioSession session = new PathfindingInvalidationScenario().create();
+
+        for (int tick = 1; tick <= 3; tick++) {
+            session.runtime().stepper().advance();
+            session.update();
+            assertSummaryStartsWith(session, "status=RUNNING");
+        }
+
+        session.runtime().stepper().advance();
+        session.update();
+        assertSummaryStartsWith(session, "status=STALE");
+
+        session.runtime().stepper().advance();
+        session.update();
+        assertSummaryStartsWith(session, "status=FOUND");
+
+        boolean leavesDirectLine = false;
+        ScenarioDiagnostics diagnostics = session.diagnostics();
+        for (int index = 0; index < diagnostics.cellCount(); index++) {
+            ScenarioCellMarker marker = diagnostics.cell(index);
+            if (marker.style() == ScenarioCellMarkerStyle.ROUTE
+                    && marker.y() != 0) {
+                leavesDirectLine = true;
+                break;
+            }
+        }
+        assertTrue(leavesDirectLine, "fresh route must detour around the new block");
     }
 
     @Test
@@ -38,7 +69,8 @@ final class PathfindingScenariosTest {
                 new PathfindingWeightedDetourScenario(),
                 new PathfindingMultiLevelClimbScenario(),
                 new PathfindingVerticalOverpassScenario(),
-                new PathfindingHierarchyScenario())) {
+                new PathfindingHierarchyScenario(),
+                new PathfindingInvalidationScenario())) {
 
             ScenarioSession first = scenario.create();
             ScenarioSession second = scenario.create();
@@ -76,13 +108,17 @@ final class PathfindingScenariosTest {
             VisualizerScenario scenario,
             String expectedStatus) {
 
-        String summary = scenario.create()
-                .diagnostics()
-                .summary();
+        ScenarioSession session = scenario.create();
+        assertSummaryStartsWith(session, "status=" + expectedStatus);
+    }
 
+    private static void assertSummaryStartsWith(
+            ScenarioSession session,
+            String expectedPrefix) {
+
+        String summary = session.diagnostics().summary();
         assertTrue(
-                summary.startsWith(
-                        "status=" + expectedStatus),
-                scenario.id() + ": " + summary);
+                summary.startsWith(expectedPrefix),
+                expectedPrefix + " expected, got: " + summary);
     }
 }

@@ -22,8 +22,8 @@ public final class ScenarioScreen extends ScreenAdapter {
     private final VisualizerScenario scenario;
     private final Runnable restart;
     private final Runnable backToScenarios;
+    private final ScenarioSession session;
     private final ZLevelVisualizer visualizer;
-    private final ScenarioDiagnostics diagnostics;
     private final ScenarioDiagnosticRenderer diagnosticRenderer =
             new ScenarioDiagnosticRenderer();
     private final InputMultiplexer input;
@@ -52,9 +52,8 @@ public final class ScenarioScreen extends ScreenAdapter {
         this.restart = restart;
         this.backToScenarios = backToScenarios;
 
-        ScenarioSession session = scenario.create();
+        session = scenario.create();
         SimulationRuntime runtime = session.runtime();
-        diagnostics = session.diagnostics();
         visualizer = new ZLevelVisualizer(
                 runtime.view(),
                 runtime.time(),
@@ -81,12 +80,15 @@ public final class ScenarioScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         visualizer.render();
+        session.update();
+
+        ScenarioDiagnostics diagnostics = session.diagnostics();
         visualizer.copyWorldProjection(worldProjection);
         diagnosticRenderer.draw(
                 diagnostics,
                 worldProjection,
                 visualizer.selectedZ());
-        drawScenarioLabel();
+        drawScenarioLabel(diagnostics);
     }
 
     @Override
@@ -114,7 +116,9 @@ public final class ScenarioScreen extends ScreenAdapter {
         font.dispose();
     }
 
-    private void drawScenarioLabel() {
+    private void drawScenarioLabel(
+            ScenarioDiagnostics diagnostics) {
+
         batch.setProjectionMatrix(screenProjection);
         batch.begin();
         font.getData().setScale(0.9f);
