@@ -2,9 +2,9 @@ package io.github.evoforge.simulation.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.movement.MoveStepResult;
 import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
 import io.github.evoforge.simulation.control.terrain.ReplaceTerrainResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
@@ -79,9 +79,9 @@ final class SimulationAssemblyTest {
 
         SimulationRuntime runtime = assembly.start();
 
-        assertEquals(
-                MoveStepResult.STARTED,
-                runtime.submit(new MoveStepCommand(objectId, 1, 0, 0)));
+        assertTrue(
+                runtime.submit(new MoveStepCommand(objectId, 1, 0, 0))
+                        .accepted());
 
         assertEquals(1, runtime.view().cells().objectCount(0, 0, 0));
         assertEquals(0, runtime.view().cells().objectCount(1, 0, 0));
