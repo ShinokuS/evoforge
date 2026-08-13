@@ -18,6 +18,8 @@ public final class MovementSystem {
 
     private static final ResultCode STARTED =
             ResultCode.of("movement", "started");
+    private static final ResultCode CLAIM_ACQUIRED =
+            ResultCode.of("movement", "claim_acquired");
     private static final ResultCode MOVEMENT_UNAVAILABLE =
             ResultCode.of("movement", "movement_unavailable");
     private static final ResultCode NOT_PLACED =
@@ -95,23 +97,93 @@ public final class MovementSystem {
         this.scheduler = scheduler;
     }
 
+    public MovementClaimAttempt acquireClaim(
+            ObjectId objectId) {
+
+        WorldObject object = requireObject(objectId);
+
+        if (!definitions.has(object.definitionId())) {
+            return MovementClaimAttempt.rejected(
+                    MOVEMENT_UNAVAILABLE);
+        }
+        if (!transforms.has(objectId)) {
+            return MovementClaimAttempt.rejected(
+                    NOT_PLACED);
+        }
+        if (state.isMoving(objectId)
+                || state.hasClaim(objectId)) {
+            return MovementClaimAttempt.rejected(
+                    ALREADY_MOVING);
+        }
+
+        MovementClaimId claimId =
+                state.tryAcquireClaim(objectId);
+        if (claimId == null) {
+            throw new IllegalStateException(
+                    "movement claim became unavailable during acquisition: "
+                            + objectId);
+        }
+
+        return MovementClaimAttempt.acquired(
+                CLAIM_ACQUIRED,
+                claimId);
+    }
+
+    public boolean releaseClaim(
+            MovementClaimId claimId,
+            ObjectId objectId) {
+        return state.releaseClaim(
+                claimId,
+                objectId);
+    }
+
     public MovementStartAttempt startStep(
             ObjectId objectId,
             int toX,
             int toY,
             int toZ) {
 
-        if (objectId == null) {
+        return startStep(
+                null,
+                objectId,
+                toX,
+                toY,
+                toZ);
+    }
+
+    public MovementStartAttempt startClaimedStep(
+            MovementClaimId claimId,
+            ObjectId objectId,
+            int toX,
+            int toY,
+            int toZ) {
+
+        if (claimId == null) {
             throw new IllegalArgumentException(
-                    "objectId must not be null");
+                    "claimId must not be null");
+        }
+        if (!state.ownsClaim(claimId, objectId)) {
+            throw new IllegalStateException(
+                    "movement claim is not owned by object: claim="
+                            + claimId + ", object=" + objectId);
         }
 
-        WorldObject object = objects.get(objectId);
+        return startStep(
+                claimId,
+                objectId,
+                toX,
+                toY,
+                toZ);
+    }
 
-        if (object == null) {
-            throw new IllegalArgumentException(
-                    "unknown object: " + objectId);
-        }
+    private MovementStartAttempt startStep(
+            MovementClaimId claimId,
+            ObjectId objectId,
+            int toX,
+            int toY,
+            int toZ) {
+
+        WorldObject object = requireObject(objectId);
 
         if (!definitions.has(object.definitionId())) {
             return MovementStartAttempt.rejected(
@@ -121,6 +193,11 @@ public final class MovementSystem {
         if (!transforms.has(objectId)) {
             return MovementStartAttempt.rejected(
                     NOT_PLACED);
+        }
+
+        if (claimId == null && state.hasClaim(objectId)) {
+            return MovementStartAttempt.rejected(
+                    ALREADY_MOVING);
         }
 
         if (state.isMoving(objectId)) {
@@ -245,6 +322,21 @@ public final class MovementSystem {
         return MovementStartAttempt.started(
                 STARTED,
                 action.id());
+    }
+
+    private WorldObject requireObject(
+            ObjectId objectId) {
+
+        if (objectId == null) {
+            throw new IllegalArgumentException(
+                    "objectId must not be null");
+        }
+        WorldObject object = objects.get(objectId);
+        if (object == null) {
+            throw new IllegalArgumentException(
+                    "unknown object: " + objectId);
+        }
+        return object;
     }
 
     private void rollbackReservation(

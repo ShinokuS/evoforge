@@ -17,7 +17,11 @@ public final class MovementStateStore {
     private final Map<MovementActionId, OccupancyReservationId> reservations =
             new HashMap<>();
 
+    private final Map<ObjectId, MovementClaimId> claims =
+            new HashMap<>();
+
     private long nextActionId;
+    private long nextClaimId;
 
     public boolean isMoving(
             ObjectId objectId) {
@@ -26,6 +30,61 @@ public final class MovementStateStore {
 
         return state != null
                 && state.activeActionId != null;
+    }
+
+    public boolean hasClaim(
+            ObjectId objectId) {
+        return objectId != null
+                && claims.containsKey(objectId);
+    }
+
+    public MovementClaimId tryAcquireClaim(
+            ObjectId objectId) {
+
+        if (objectId == null) {
+            throw new IllegalArgumentException(
+                    "objectId must not be null");
+        }
+        if (isMoving(objectId)
+                || claims.containsKey(objectId)) {
+            return null;
+        }
+        if (nextClaimId == Long.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "movement claim id space exhausted");
+        }
+
+        MovementClaimId claimId =
+                MovementClaimId.of(nextClaimId++);
+        claims.put(objectId, claimId);
+        return claimId;
+    }
+
+    public boolean ownsClaim(
+            MovementClaimId claimId,
+            ObjectId objectId) {
+
+        if (claimId == null || objectId == null) {
+            return false;
+        }
+        return claimId.equals(
+                claims.get(objectId));
+    }
+
+    /** Releases only the exact locomotion claim supplied by its owner. */
+    public boolean releaseClaim(
+            MovementClaimId claimId,
+            ObjectId objectId) {
+
+        if (!ownsClaim(claimId, objectId)) {
+            return false;
+        }
+        claims.remove(objectId);
+        return true;
+    }
+
+    public int activeClaimCount() {
+        return claims.size();
     }
 
     public long carry(
