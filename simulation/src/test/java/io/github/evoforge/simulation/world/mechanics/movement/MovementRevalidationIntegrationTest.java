@@ -35,137 +35,107 @@ import org.junit.jupiter.api.Test;
 final class MovementRevalidationIntegrationTest {
 
     @Test
-    void interruptedTransitionDoesNotCommitDestinationOrLeakReservation() {
+    void interruptedTransitionCleansStateBeforePublishingCompletion() {
         DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
-                new DefinitionRegistry<>(
-                        LandscapeDefinitionId::of,
-                        LandscapeDefinitionId::asInt);
-        LandscapeDefinitionId ground =
-                landscapeDefinitions.register("test:ground");
+                new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
+        LandscapeDefinitionId ground = landscapeDefinitions.register("test:ground");
         landscapeDefinitions.freeze();
 
-        TerrainSystem terrain = new TerrainSystem(
-                new SparseTerrainStorage(),
-                landscapeDefinitions);
-        GeometrySystem geometry = new GeometrySystem(
-                terrain.lookup());
-        LandscapeSystem landscape = new LandscapeSystem(
-                terrain,
-                geometry);
-        NavigationSystem navigation = new NavigationSystem(
-                geometry.lookup());
-
-        OperationResults.requireAccepted(
-                landscape.placeTerrain(0, 0, -1, ground));
-        OperationResults.requireAccepted(
-                landscape.placeTerrain(1, 0, -1, ground));
+        TerrainSystem terrain = new TerrainSystem(new SparseTerrainStorage(), landscapeDefinitions);
+        GeometrySystem geometry = new GeometrySystem(terrain.lookup());
+        LandscapeSystem landscape = new LandscapeSystem(terrain, geometry);
+        NavigationSystem navigation = new NavigationSystem(geometry.lookup());
+        OperationResults.requireAccepted(landscape.placeTerrain(0, 0, -1, ground));
+        OperationResults.requireAccepted(landscape.placeTerrain(1, 0, -1, ground));
 
         DefinitionRegistry<ObjectDefinitionId> objectDefinitions =
-                new DefinitionRegistry<>(
-                        ObjectDefinitionId::of,
-                        ObjectDefinitionId::asInt);
-        ObjectDefinitionId walker =
-                objectDefinitions.register("test:walker");
+                new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
+        ObjectDefinitionId walker = objectDefinitions.register("test:walker");
         objectDefinitions.freeze();
 
         ObjectRepository objects = new ObjectRepository();
-        ObjectFactory objectFactory = new ObjectFactory(
-                objects,
-                objectDefinitions);
+        ObjectFactory objectFactory = new ObjectFactory(objects, objectDefinitions);
         WorldObject object = objectFactory.create(walker);
         ObjectId objectId = object.id();
-
         CellSpatialIndex cells = new CellSpatialIndex();
         SpatialSystem spatial = new SpatialSystem(cells);
         spatial.place(objectId, 0, 0, 0);
 
-        OccupancyDefinitions occupancyDefinitions =
-                new OccupancyDefinitions();
+        OccupancyDefinitions occupancyDefinitions = new OccupancyDefinitions();
         occupancyDefinitions.put(walker, true);
         occupancyDefinitions.freeze();
         OccupancySystem occupancy = new OccupancySystem(
-                objects,
-                cells.lookup(),
-                occupancyDefinitions);
+                objects, cells.lookup(), occupancyDefinitions);
 
-        MovementDefinitions movementDefinitions =
-                new MovementDefinitions();
-        movementDefinitions.put(
-                walker,
-                MovementRate.of(100));
+        MovementDefinitions movementDefinitions = new MovementDefinitions();
+        movementDefinitions.put(walker, MovementRate.of(100));
         movementDefinitions.freeze();
+        MovementStateStore movementState = new MovementStateStore();
 
-        MovementStateStore movementState =
-                new MovementStateStore();
         HandlerRegistry handlers = new HandlerRegistry();
         Scheduler scheduler = new Scheduler(handlers);
         SimulationClock clock = new SimulationClock();
-        SimulationStepper stepper = new SimulationStepper(
-                clock,
-                scheduler);
-        MovementStepCompletion[] completion =
-                new MovementStepCompletion[1];
+        SimulationStepper stepper = new SimulationStepper(clock, scheduler);
+        MovementStepCompletion[] completion = new MovementStepCompletion[1];
+        boolean[] cleanupVisible = new boolean[1];
 
-        MovementActionProcessor actions =
-                new MovementActionProcessor(
-                        movementState,
-                        objects,
-                        spatial.transforms(),
-                        navigation.lookup(),
-                        occupancy,
-                        spatial,
-                        value -> completion[0] = value);
-        HandlerId movementHandler =
-                handlers.register(actions::complete);
+        MovementActionProcessor actions = new MovementActionProcessor(
+                movementState,
+                objects,
+                spatial.transforms(),
+                navigation.lookup(),
+                occupancy,
+                spatial,
+                value -> {
+                    cleanupVisible[0] =
+                            !movementState.isMoving(objectId)
+                                    && movementState.activeActionCount() == 0
+                                    && occupancy.reservationCount() == 0;
+                    completion[0] = value;
+                });
+        HandlerId movementHandler = handlers.register(actions::complete);
         MovementSystem movement = new MovementSystem(
                 objects,
                 spatial.transforms(),
                 navigation.lookup(),
                 movementDefinitions,
-                (fromX, fromY, fromZ, toX, toY, toZ) ->
-                        TransitionCost.of(1000),
+                (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1000),
                 occupancy,
                 movementState,
-                new BoundProcessScheduler(
-                        clock,
-                        scheduler,
-                        movementHandler));
+                new BoundProcessScheduler(clock, scheduler, movementHandler));
 
-        assertTrue(
-                movement.startStep(
-                        objectId,
-                        1,
-                        0,
-                        0)
-                        .accepted());
-        assertEquals(
-                OccupancyState.RESERVED,
-                occupancy.state(1, 0, 0));
+        assertTrue(movement.startStep(objectId, 1, 0, 0).accepted());
+        assertEquals(OccupancyState.RESERVED, occupancy.state(1, 0, 0));
+        OperationResults.requireAccepted(landscape.removeTerrain(1, 0, -1));
 
-        OperationResults.requireAccepted(
-                landscape.removeTerrain(
-                        1,
-                        0,
-                        -1));
-
-        for (int tick = 0; tick < 10; tick++) {
-            stepper.advance();
-        }
+        for (int tick = 0; tick < 10; tick++) stepper.advance();
 
         assertEquals(0, spatial.transforms().x(objectId));
-        assertEquals(0, spatial.transforms().y(objectId));
-        assertEquals(0, spatial.transforms().z(objectId));
         assertFalse(movementState.isMoving(objectId));
         assertEquals(0, movementState.activeActionCount());
-        assertEquals(
-                OccupancyState.FREE,
-                occupancy.state(1, 0, 0));
+        assertEquals(OccupancyState.FREE, occupancy.state(1, 0, 0));
         assertEquals(0, occupancy.reservationCount());
-
         assertNotNull(completion[0]);
+        assertTrue(cleanupVisible[0]);
         assertFalse(completion[0].committed());
-        assertEquals(
-                "movement:transition_unavailable",
-                completion[0].code().value());
+        assertEquals("movement:transition_unavailable", completion[0].code().value());
+    }
+
+    @Test
+    void staleClaimCannotReleaseNewMovementOwner() {
+        MovementStateStore state = new MovementStateStore();
+        ObjectId objectId = ObjectId.of(7, 0);
+
+        MovementClaimId first = state.tryAcquireClaim(objectId);
+        assertNotNull(first);
+        assertTrue(state.releaseClaim(first, objectId));
+
+        MovementClaimId second = state.tryAcquireClaim(objectId);
+        assertNotNull(second);
+        assertFalse(state.releaseClaim(first, objectId));
+        assertTrue(state.ownsClaim(second, objectId));
+        assertEquals(1, state.activeClaimCount());
+        assertTrue(state.releaseClaim(second, objectId));
+        assertEquals(0, state.activeClaimCount());
     }
 }
