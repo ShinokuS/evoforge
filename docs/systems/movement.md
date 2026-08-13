@@ -61,16 +61,18 @@ calculate shared TransitionCost
     ↓
 convert cost to ticks using MovementRate + carry
     ↓
+exclusive mover: claim immediate destination through Occupancy
+    ↓
 create MovementAction identity
     ↓
-exclusive mover: claim immediate destination through Occupancy
+attach reservation handle if one was acquired
     ↓
 schedule completion
 ```
 
 Movement never reimplements Ramp/Shape rules. Structural validity comes from Navigation. It also never scans Spatial objects to invent its own occupancy rule; destination admission/claiming comes from Occupancy.
 
-If an exclusive destination is `OCCUPIED` or `RESERVED`, the provisional action is removed and the command is rejected. The object's timing carry is not changed by that rejected attempt.
+If an exclusive destination is `OCCUPIED` or `RESERVED`, the command is rejected before Movement action state is created. The object's timing carry is not changed by that rejected attempt.
 
 ## Movement capability
 
@@ -159,7 +161,7 @@ domain processor resumes processId
 
 Scheduler owns activation timing; Movement owns the meaning and state of the action.
 
-If scheduling the accepted action itself fails exceptionally, Movement rolls back an already acquired destination reservation and removes the provisional action before propagating the programming/infrastructure failure.
+If action creation or scheduling fails exceptionally after Occupancy already granted a destination claim, Movement rolls back the exact reservation and removes any created action state before propagating the programming/infrastructure failure.
 
 ## Authoritative position and execution claim
 
@@ -248,8 +250,9 @@ Scenario coverage includes:
 - completion revalidation interrupts stale edges;
 - terrain/Shape traversal contributions affect duration through shared TransitionCost;
 - batching `advanceTicks(N)` is equivalent to N production steps;
-- exclusive destination claim exists for the timed move window;
+- source remains physical `OCCUPIED` while the immediate destination is `RESERVED`;
 - same-destination contention returns `destination_reserved` to the later starter;
+- rejected occupancy claims leave action/timing state unchanged;
 - after completion that destination is physical `OCCUPIED` rather than `RESERVED`;
 - occupied destinations return `destination_occupied`;
 - interrupted completion releases its reservation;
