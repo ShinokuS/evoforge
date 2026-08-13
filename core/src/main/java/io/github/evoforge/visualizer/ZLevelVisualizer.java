@@ -33,6 +33,8 @@ public final class ZLevelVisualizer {
     private final VisualizerState state = new VisualizerState();
     private final VisualizerCamera camera = new VisualizerCamera();
     private final VisualizerInputController input;
+    private final VisualizerPerformanceTelemetry performance =
+            new VisualizerPerformanceTelemetry();
 
     private final SpriteBatch landscapeBatch = new SpriteBatch();
     private final ProceduralLandscapePack landscapePack =
@@ -95,10 +97,13 @@ public final class ZLevelVisualizer {
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
+        long frameStart = System.nanoTime();
+
         input.update(delta);
         time.update(delta);
         camera.update();
         updateLandscapeSampling();
+        long afterUpdate = System.nanoTime();
 
         Gdx.gl.glClearColor(
                 BACKGROUND.r,
@@ -109,6 +114,7 @@ public final class ZLevelVisualizer {
 
         VisualizerCamera.VisibleRange range = camera.visibleRange();
 
+        long landscapeStart = System.nanoTime();
         landscapeBatch.setProjectionMatrix(camera.projection());
         landscapeBatch.begin();
         landscapeRenderer.draw(
@@ -120,9 +126,21 @@ public final class ZLevelVisualizer {
                 state.selectedZ(),
                 state.lowerDepth());
         landscapeBatch.end();
+        long afterLandscape = System.nanoTime();
 
         overlayRenderer.draw(range);
+        long afterOverlay = System.nanoTime();
+
         hudRenderer.draw();
+        long frameEnd = System.nanoTime();
+
+        performance.record(
+                delta,
+                frameEnd - frameStart,
+                afterUpdate - frameStart,
+                afterLandscape - landscapeStart,
+                afterOverlay - afterLandscape,
+                frameEnd - afterOverlay);
     }
 
     public void resize(
