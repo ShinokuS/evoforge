@@ -16,7 +16,7 @@ final class SimulationPathfindingIntegrationTest {
     void runtimeExposesPathfinderOverProductionTraversalFacts() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground =
-                assembly.landscapeDefinition("ground");
+                assembly.landscapeDefinition("test:ground");
 
         for (int x = 0; x <= 5; x++) {
             assembly.placeTerrain(x, 0, -1, ground);
@@ -41,7 +41,7 @@ final class SimulationPathfindingIntegrationTest {
     void runtimeTerrainMutationInvalidatesResumableSearch() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground =
-                assembly.landscapeDefinition("ground");
+                assembly.landscapeDefinition("test:ground");
 
         for (int x = 0; x <= 20; x++) {
             assembly.placeTerrain(x, 0, -1, ground);
