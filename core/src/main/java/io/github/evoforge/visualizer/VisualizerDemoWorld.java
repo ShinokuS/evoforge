@@ -30,6 +30,8 @@ public final class VisualizerDemoWorld {
 
         assembly.movementRate(slowWalker, 125);
         assembly.movementRate(fastWalker, 500);
+        assembly.exclusiveOccupancy(slowWalker);
+        assembly.exclusiveOccupancy(fastWalker);
 
         buildLowerMeadowAndDeepShaft(assembly, ground);
         buildBasePlateau(assembly, ground);

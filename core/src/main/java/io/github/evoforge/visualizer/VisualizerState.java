@@ -12,6 +12,7 @@ public final class VisualizerState {
     private int lowerDepthIndex = 3;
     private boolean showTransitions;
     private boolean showShapeDirections;
+    private boolean showOccupancy;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
@@ -33,6 +34,10 @@ public final class VisualizerState {
 
     public boolean showShapeDirections() {
         return showShapeDirections;
+    }
+
+    public boolean showOccupancy() {
+        return showOccupancy;
     }
 
     public CellSelection selectedCell() {
@@ -60,6 +65,10 @@ public final class VisualizerState {
 
     public void toggleShapeDirections() {
         showShapeDirections = !showShapeDirections;
+    }
+
+    public void toggleOccupancy() {
+        showOccupancy = !showOccupancy;
     }
 
     public void cycleLowerDepth() {
