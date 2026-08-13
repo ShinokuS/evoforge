@@ -36,6 +36,9 @@ final class OccupancyMovementIntegrationTest {
                 MoveStepResult.STARTED,
                 runtime.submit(new MoveStepCommand(first, 1, 0, 0)));
         assertEquals(
+                OccupancyState.OCCUPIED,
+                runtime.view().occupancy().state(0, 0, 0));
+        assertEquals(
                 OccupancyState.RESERVED,
                 runtime.view().occupancy().state(1, 0, 0));
 
