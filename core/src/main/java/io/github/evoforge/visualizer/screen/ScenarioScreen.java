@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Matrix4;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.visualizer.ZLevelVisualizer;
+import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
@@ -22,13 +23,14 @@ public final class ScenarioScreen extends ScreenAdapter {
     private final Runnable restart;
     private final Runnable backToScenarios;
     private final ZLevelVisualizer visualizer;
+    private final ScenarioDiagnostics diagnostics;
+    private final ScenarioDiagnosticRenderer diagnosticRenderer =
+            new ScenarioDiagnosticRenderer();
     private final InputMultiplexer input;
     private final SpriteBatch batch = new SpriteBatch();
     private final BitmapFont font = new BitmapFont();
-    private final Matrix4 projection = new Matrix4();
-
-    private int width = 1;
-    private int height = 1;
+    private final Matrix4 screenProjection = new Matrix4();
+    private final Matrix4 worldProjection = new Matrix4();
 
     public ScenarioScreen(
             VisualizerScenario scenario,
@@ -52,6 +54,7 @@ public final class ScenarioScreen extends ScreenAdapter {
 
         ScenarioSession session = scenario.create();
         SimulationRuntime runtime = session.runtime();
+        diagnostics = session.diagnostics();
         visualizer = new ZLevelVisualizer(
                 runtime.view(),
                 runtime.time(),
@@ -78,6 +81,11 @@ public final class ScenarioScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         visualizer.render();
+        visualizer.copyWorldProjection(worldProjection);
+        diagnosticRenderer.draw(
+                diagnostics,
+                worldProjection,
+                visualizer.selectedZ());
         drawScenarioLabel();
     }
 
@@ -86,10 +94,8 @@ public final class ScenarioScreen extends ScreenAdapter {
         if (width <= 0 || height <= 0) {
             return;
         }
-        this.width = width;
-        this.height = height;
         visualizer.resize(width, height);
-        projection.setToOrtho2D(0f, 0f, width, height);
+        screenProjection.setToOrtho2D(0f, 0f, width, height);
     }
 
     @Override
@@ -103,21 +109,29 @@ public final class ScenarioScreen extends ScreenAdapter {
     public void dispose() {
         hide();
         visualizer.dispose();
+        diagnosticRenderer.dispose();
         batch.dispose();
         font.dispose();
     }
 
     private void drawScenarioLabel() {
-        batch.setProjectionMatrix(projection);
+        batch.setProjectionMatrix(screenProjection);
         batch.begin();
         font.getData().setScale(0.9f);
 
         String title = "SCENARIO  " + scenario.title();
         String detail = scenario.description()
                 + "   |   R restart   |   Esc scenarios";
+        String summary = diagnostics.summary();
 
-        drawShadowed(title, 14f, 48f, Color.WHITE);
-        drawShadowed(detail, 14f, 24f, Color.LIGHT_GRAY);
+        if (summary.isEmpty()) {
+            drawShadowed(title, 14f, 48f, Color.WHITE);
+            drawShadowed(detail, 14f, 24f, Color.LIGHT_GRAY);
+        } else {
+            drawShadowed(title, 14f, 70f, Color.WHITE);
+            drawShadowed(detail, 14f, 46f, Color.LIGHT_GRAY);
+            drawShadowed(summary, 14f, 22f, Color.LIGHT_GRAY);
+        }
         batch.end();
     }
 
@@ -126,7 +140,6 @@ public final class ScenarioScreen extends ScreenAdapter {
             float x,
             float y,
             Color color) {
-
         font.setColor(Color.BLACK);
         font.draw(batch, text, x + 1f, y - 1f);
         font.setColor(color);
