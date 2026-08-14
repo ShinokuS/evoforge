@@ -9,6 +9,7 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Object Spatial ownership and cell index
 - Landscape/Terrain ownership and coordinated landscape mutations
 - Geometry contract, `FullShape`, cardinal `RampShape` and transition algebra
+- Neutral deterministic cell-volume Geometry contract with `FullShape` / `RampShape` volumetric semantics
 - Structural Navigation
 - Actor-independent TransitionCost
 - Generic Control/Command backbone
@@ -29,11 +30,20 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Generic scheduled Need progression for open NeedIds with narrow deficit mutation and an external effective-rate resolver
 - Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation
 - Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth, timed grazing, state-driven presentation and full developer inspector
+- Finite authoritative Water quantity with sparse storage and Shape-derived cell capacity
 
 ## Current living-world sequence
 
 ```text
-Water + Thirst
+deterministic local Water flow
+    ↓
+rain + soil moisture + simple evaporation
+    ↓
+water-aware traversal / Pathfinding integration
+    ↓
+hydrology visual acceptance
+    ↓
+Thirst + Drink
     ↓
 real Utility competition
     ↓
@@ -62,7 +72,9 @@ cycle continues
 
 The visualizer exposes authoritative cell/object selection, stacked objects, Vision, routes, Needs, Need progression, resources, Growth, decisions and timed-use progress. Grass, Clover and Dandelion share production mechanics while differing through definition and presentation data.
 
-The next direct world/agent consumer is **Water + Thirst**. It should introduce only the minimum physical water quantity/interaction semantics needed for a real second motivation. That milestone then creates the first meaningful consumer for cross-motivation Utility comparison.
+Water now has the first two foundation pieces required by the hydrology milestone: neutral cell-local solid-volume Geometry and finite authoritative liquid quantity. The next direct consumer is the **deterministic local flow solver**. That solver must prove the smallest neutral physical boundary/opening geometry required for redistribution rather than reusing Navigation ports or introducing a Water-specific Shape hierarchy.
+
+The Water milestone then proceeds through explicit external inputs/sinks and environmental coupling before Thirst becomes the first real second physiological motivation. Water-state churn and traversal-semantic change remain separate concerns so microscopic fluid updates cannot globally stale unrelated PathSearch work.
 
 Representative scale profiling remains mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
 
@@ -74,7 +86,7 @@ The following remain outside the mandatory immediate sequence and require their 
 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
-- multi-cell fluid evolution, redistribution and derived water-body identity;
+- richer fluid mechanics beyond the baseline deterministic local solver, including derived water-body identity;
 - deterministic World Generation and authoritative RNG-stream policy;
 - broader plant lifecycle semantics such as age, reproduction, withering and death.
 
