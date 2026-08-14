@@ -60,8 +60,8 @@ public final class ScenarioScreen extends ScreenAdapter {
                 runtime.view(),
                 runtime.time(),
                 runtime.stepper(),
-                session.objectPresentations(),
-                session.weather());
+                session.objectPresentations());
+        visualizer.setWeatherPresentation(session.weather());
 
         ScenarioView initial = session.view();
         visualizer.setView(
