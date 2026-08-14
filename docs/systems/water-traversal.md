@@ -4,7 +4,7 @@
 
 Let current finite Water influence terrestrial movement without turning Water into Navigation state or invalidating pathfinding on every hydraulic micro-change.
 
-The first slice models **wading passability only**. It deliberately does not model swimming, boats, drowning, current forces or shallow-water speed penalties.
+This foundation slice models **authoritative wading passability only**. Planner integration follows separately once the execution contract is stable. Swimming, boats, drowning, current forces and shallow-water speed penalties remain outside this slice.
 
 ## Ownership
 
@@ -17,7 +17,7 @@ Geometry                 -> free-space height profile
 WaterWadingProfile       -> mover definition tolerance
 MoverTraversalConstraint -> may this mover use this edge now?
 Movement                 -> authoritative edge execution
-Pathfinding              -> disposable advisory route
+Pathfinding              -> disposable advisory route (next slice)
 ```
 
 Water does not publish Navigation edges and raw Water changes do not increment `TraversalRevisionLookup`.
@@ -51,20 +51,17 @@ This slice intentionally represents terrestrial wading rather than a universal f
 
 `WaterWadingConstraint` reads Water at the destination standing coordinate and converts its finite volume into a local surface height through neutral `CellSpace.surfaceHeight(...)` geometry.
 
-Therefore the rule is not `water amount == depth`: a future/nontrivial Shape may distribute free volume differently over height.
+Therefore the rule is not `water amount == depth`: a nontrivial Shape may distribute free volume differently over height.
 
 If the destination standing cell is full and the cell above also contains Water, the destination is classified as deeper than one cell. Existing Water that exceeds newly changed Geometry capacity is also classified conservatively as too deep until hydraulic flow relocates it.
 
 Only the **destination** is constrained. A mover already standing in water deeper than its tolerance may still leave for a shallower or dry destination. This avoids mechanically trapping an actor merely because Water rose around it.
 
-## Planning versus execution
+## Authoritative execution
 
-The same `MoverTraversalConstraint` is used at three points:
+The same `MoverTraversalConstraint` is checked at both execution boundaries:
 
 ```text
-MoveTo PathQuery
-      -> advisory filtering
-
 MovementSystem.startStep
       -> authoritative start validation
 
@@ -72,22 +69,23 @@ MovementActionProcessor.complete
       -> authoritative commit revalidation
 ```
 
-A route therefore avoids water that is already too deep when it is planned. If Water rises after planning, the next real edge is rejected. If Water rises while a timed edge is in progress, commit is rejected and the mover remains at the source.
+If Water is already too deep, the edge is never scheduled. If Water rises while a timed edge is in progress, commit is rejected and the mover remains at the source.
 
-Pathfinding remains advice; Movement remains authority.
+The existing constructors preserve `ALLOW_ALL`, so movers/systems that do not opt into a dynamic traversal constraint keep previous behavior exactly.
 
-## Revisions and high-churn Water
+## Pathfinding and revisions
 
-Mover/environment constraints are intentionally **not** folded into the landscape traversal revision. Hydraulic relaxation can change Water every tick, while a mover's semantic result may remain unchanged throughout those micro-changes.
+Pathfinding remains disposable advice. This foundation deliberately leaves `MoveToSystem` unchanged; the next slice will feed the mover-specific Water constraint through its existing query-local `PathTransitionConstraint` boundary without changing the authoritative Movement rules established here.
 
-`MoveToSystem` composes Water/mover permission into its query-local `PathTransitionConstraint` but preserves only an explicit caller-provided constraint revision. Current production MoveTo path searches run synchronously on the simulation thread, then every executed edge is revalidated live.
+Mover/environment facts must **not** be folded into the landscape traversal revision. Hydraulic relaxation can change Water every tick while a mover's semantic passability band remains unchanged.
 
-If path search later becomes genuinely resumable across simulation ticks, the next step should be a local/semantic invalidation mechanism for relevant water-depth threshold crossings, not a global raw-Water revision.
+Current production MoveTo searches are synchronous. When planner integration is added, raw Water amount changes should still not create global path staleness. If path search later becomes genuinely resumable across simulation ticks, invalidation should be local/semantic and based on relevant threshold crossings rather than a global raw-Water revision.
 
 ## Deliberately absent
 
 The current slice does not implement:
 
+- Water-aware PathQuery composition;
 - shallow-water movement cost or speed penalties;
 - swimming locomotion;
 - boat/water-surface Navigation;
@@ -110,5 +108,4 @@ Headless tests cover:
 - generic Shape free-space depth without concrete Shape checks;
 - definition compiler validation/freezing;
 - Movement rejection before scheduling;
-- Movement commit revalidation after environmental change;
-- MoveTo query composition without replacing caller revision semantics.
+- Movement commit revalidation after environmental change.
