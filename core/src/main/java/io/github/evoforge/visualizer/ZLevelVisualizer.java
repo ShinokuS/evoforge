@@ -13,6 +13,7 @@ import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
+import io.github.evoforge.visualizer.render.MoveToRouteDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.VisionDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.VisualizerHudRenderer;
 import io.github.evoforge.visualizer.render.VisualizerOverlayRenderer;
@@ -35,6 +36,7 @@ public final class ZLevelVisualizer {
     private final ShapePresentationRegistry shapePresentations;
     private final LandscapeRenderer landscapeRenderer;
     private final VisionDiagnosticRenderer visionDiagnostics;
+    private final MoveToRouteDiagnosticRenderer moveToRouteDiagnostics;
     private final VisualizerOverlayRenderer overlayRenderer;
     private final VisualizerHudRenderer hudRenderer;
     private boolean smoothLandscapeSampling;
@@ -49,6 +51,7 @@ public final class ZLevelVisualizer {
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
         visionDiagnostics = new VisionDiagnosticRenderer(view, state, camera);
+        moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
         overlayRenderer = new VisualizerOverlayRenderer(view, state, camera, sliceResolver, shapePresentations);
         hudRenderer = new VisualizerHudRenderer(view, simulationTime, time, state, camera, sliceResolver, shapePresentations);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -82,6 +85,7 @@ public final class ZLevelVisualizer {
         landscapeBatch.end();
         long afterLandscape = System.nanoTime();
         visionDiagnostics.draw(range);
+        moveToRouteDiagnostics.draw(range);
         overlayRenderer.draw(range);
         long afterOverlay = System.nanoTime();
         hudRenderer.draw();
@@ -92,7 +96,7 @@ public final class ZLevelVisualizer {
 
     public void resize(int width, int height) { camera.resize(width, height); hudRenderer.resize(width, height); }
     public void dispose() {
-        hudRenderer.dispose(); overlayRenderer.dispose(); visionDiagnostics.dispose(); sliceArt.dispose();
+        hudRenderer.dispose(); overlayRenderer.dispose(); moveToRouteDiagnostics.dispose(); visionDiagnostics.dispose(); sliceArt.dispose();
         landscapePack.dispose(); landscapeBatch.dispose();
     }
 
