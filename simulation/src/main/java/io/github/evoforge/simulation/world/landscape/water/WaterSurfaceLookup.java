@@ -8,4 +8,7 @@ public interface WaterSurfaceLookup {
     int topZ(int x, int y);
 
     int columnCount();
+
+    /** Iterates wet columns in deterministic X/Y order. */
+    void forEach(WaterSurfaceConsumer consumer);
 }
