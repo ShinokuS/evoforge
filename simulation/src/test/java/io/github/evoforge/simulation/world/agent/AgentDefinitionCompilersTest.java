@@ -72,12 +72,13 @@ final class AgentDefinitionCompilersTest {
         NeedSatisfactionDefinitions definitions = new NeedSatisfactionDefinitions();
         NeedSatisfactionDefinitionCompiler compiler = new NeedSatisfactionDefinitionCompiler(definitions);
         ObjectDefinitionId id = ObjectDefinitionId.of(6);
-        compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"consumesQuantity\":4,\"requiresCapability\":\"core:graze\"}}"), null);
+        compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"consumesQuantity\":4,\"useDurationTicks\":7,\"requiresCapability\":\"core:graze\"}}"), null);
         assertEquals(1, definitions.count(id));
         var satisfaction = definitions.satisfactionAt(id, 0);
         assertEquals(NeedId.of("core:hunger"), satisfaction.needId());
         assertEquals(35, satisfaction.amount());
         assertEquals(4, satisfaction.consumedQuantity());
+        assertEquals(7, satisfaction.useDurationTicks());
         assertEquals(CapabilityId.of("core:graze"), satisfaction.requiredCapability());
     }
 
