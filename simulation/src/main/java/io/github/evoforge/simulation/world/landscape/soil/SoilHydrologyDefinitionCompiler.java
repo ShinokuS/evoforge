@@ -46,7 +46,7 @@ public final class SoilHydrologyDefinitionCompiler
                 definitionId,
                 new SoilHydrology(
                         integer(data, "capacity"),
-                        integer(data, "infiltrationPerTick")));
+                        integer(data, "infiltrationLimit")));
     }
 
     @Override
