@@ -1,4 +1,4 @@
-package io.github.evoforge.visualizer.scenario;
+package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.control.movement.MoveToCommand;
 import io.github.evoforge.simulation.control.movement.MoveToResult;
@@ -14,8 +14,6 @@ final class MoveToScenarioCommands {
             int x,
             int y,
             int z) {
-        MoveToCommand command = new MoveToCommand(objectId, x, y, z);
-        MoveToResult result = runtime.submit(command);
-        return result;
+        return runtime.submit(new MoveToCommand(objectId, x, y, z));
     }
 }
