@@ -37,6 +37,8 @@ import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinit
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitions;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionSystem;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
+import io.github.evoforge.simulation.world.agent.search.CorrelatedRandomWalkExplorationPolicy;
+import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
@@ -314,7 +316,16 @@ public final class SimulationAssembly {
                 orientations,
                 visionDefinitions,
                 new TerrainSightOcclusionLookup(landscape.terrain()));
-        AgentSearchSystem searches = new AgentSearchSystem(orientations, orientations, vision);
+        AgentSearchSystem searches = new AgentSearchSystem(
+                orientations,
+                orientations,
+                vision,
+                CorrelatedRandomWalkExplorationPolicy.standard());
+        RelativeSearchLocomotion searchLocomotion = new RelativeSearchLocomotion(
+                spatial.transforms(),
+                navigation.lookup(),
+                moveTo,
+                moveTo);
         AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
                 objects,
                 spatial.transforms(),
@@ -331,6 +342,7 @@ public final class SimulationAssembly {
                 moveTo,
                 vision,
                 searches,
+                searchLocomotion,
                 clock);
         HandlerId agentHandlerId = scheduledHandlers.register(agents::resume);
         ProcessScheduler agentScheduler = new BoundProcessScheduler(clock, scheduler, agentHandlerId);
