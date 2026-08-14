@@ -87,6 +87,7 @@ VisualizerInputController    physical input -> presentation/time controls
 LandscapeRenderer            terrain/cutaway rendering
 VisualizerOverlayRenderer    grid/navigation/occupancy/object overlays
 VisionDiagnosticRenderer     authoritative selected-object Vision overlay
+MoveToRouteDiagnosticRenderer authoritative selected-object active-route overlay
 VisualizerHudRenderer        status and inspector UI
 ShapePresentationRegistry    typed Shape presentation dispatch
 ```
@@ -114,6 +115,30 @@ This is intentionally cell-based because it answers the development question dir
 
 Occlusion, FOV and range changes therefore appear automatically because presentation reads the same result used by autonomous decision making.
 
+## Active route diagnostics
+
+Selecting any object with an active production `MoveTo` automatically shows its current planned route.
+
+`MoveToRouteDiagnosticRenderer` reads `MoveToLookup.activeRoute(...)`; it does not invoke Pathfinder or reproduce route logic in presentation.
+
+Current route presentation:
+
+```text
+route cell frame      each cell in the active PathRoute on selected Z
+goal frame            route goal
+```
+
+The overlay is reason-agnostic. The same presentation works for:
+
+```text
+search exploration
+movement toward food/water
+future autonomous intents
+external MoveTo consumers
+```
+
+This keeps route observability attached to the movement contract rather than to Cow-specific scenarios.
+
 ## Agent diagnostics
 
 `Cow Foraging` reads authoritative Need and Decision state. It shows competing perceived sources, the selected winner and the current hunger/score context.
@@ -126,9 +151,11 @@ EXPLORING
 RELOCATION_BLOCKED
 ```
 
+The scenario now uses a larger world and Vision radius. Grass starts well outside the initial field of view. After a local sweep the Cow chooses a multi-cell relative exploration leg inside its current visual horizon; the generic MoveTo route overlay shows that leg while it is being executed.
+
 Search presentation never knows hidden Grass coordinates on behalf of the Cow. A target marker appears only after ordinary autonomous decision has selected a concrete source.
 
-The generic Vision overlay remains active during these scenarios, so clicking the Cow immediately shows exactly what it can currently see while the search trace explains what it is doing about missing information.
+The generic Vision and route overlays remain active during these scenarios, so clicking the Cow shows what it currently sees, where it is currently moving, and why Search/Decision selected that process.
 
 ## Typed Shape presentation
 
@@ -206,6 +233,6 @@ Focused correctness scenarios and representative performance scenarios remain se
 
 Headless simulation tests own semantic correctness for Geometry, Navigation, Occupancy, Movement, Pathfinding, Vision, Needs, Decision and Search.
 
-Visualizer scenario tests verify meaningful setup and that presentation exposes the same authoritative diagnostic state. Final appearance/readability remains a manual desktop check.
+Visualizer scenario tests verify meaningful setup and that presentation exposes the same authoritative diagnostic state. The Cow visual-search scenario additionally verifies that a multi-cell exploration `PathRoute` becomes observable through `MoveToLookup` before a concrete food target is known. Final appearance/readability remains a manual desktop check.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
