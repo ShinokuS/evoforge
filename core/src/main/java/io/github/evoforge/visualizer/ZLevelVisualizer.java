@@ -60,8 +60,7 @@ public final class ZLevelVisualizer {
                 view,
                 simulationTime,
                 stepper,
-                ObjectPresentationBindings.empty(),
-                WeatherPresentationLookup.CLEAR_LOOKUP);
+                ObjectPresentationBindings.empty());
     }
 
     public ZLevelVisualizer(
@@ -69,28 +68,11 @@ public final class ZLevelVisualizer {
             SimulationTime simulationTime,
             SimulationStepper stepper,
             ObjectPresentationBindings objectPresentations) {
-        this(
-                view,
-                simulationTime,
-                stepper,
-                objectPresentations,
-                WeatherPresentationLookup.CLEAR_LOOKUP);
-    }
-
-    public ZLevelVisualizer(
-            SimulationView view,
-            SimulationTime simulationTime,
-            SimulationStepper stepper,
-            ObjectPresentationBindings objectPresentations,
-            WeatherPresentationLookup weather) {
         if (view == null) throw new IllegalArgumentException("view must not be null");
         if (simulationTime == null) throw new IllegalArgumentException("simulationTime must not be null");
         if (stepper == null) throw new IllegalArgumentException("stepper must not be null");
         if (objectPresentations == null) {
             throw new IllegalArgumentException("objectPresentations must not be null");
-        }
-        if (weather == null) {
-            throw new IllegalArgumentException("weather must not be null");
         }
         time = new VisualizerTimeController(stepper, 0.25f);
         input = new VisualizerInputController(view, state, camera, time);
@@ -98,7 +80,7 @@ public final class ZLevelVisualizer {
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
         waterRenderer = new WaterRenderer(view, waterArt);
-        rainRenderer = new RainRenderer(weather);
+        rainRenderer = new RainRenderer(WeatherPresentationLookup.CLEAR_LOOKUP);
         visionDiagnostics = new VisionDiagnosticRenderer(view, simulationTime, state, camera);
         moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
         overlayRenderer = new VisualizerOverlayRenderer(view, state, camera, sliceResolver, shapePresentations);
@@ -118,6 +100,12 @@ public final class ZLevelVisualizer {
     }
 
     public InputProcessor inputProcessor() { return input; }
+
+    public void setWeatherPresentation(
+            WeatherPresentationLookup weather) {
+        rainRenderer.setWeather(weather);
+    }
+
     public void setView(int selectedZ, float cameraX, float cameraY, float zoom) {
         state.setSelectedZ(selectedZ); camera.setView(cameraX, cameraY, zoom); updateLandscapeSampling();
     }
