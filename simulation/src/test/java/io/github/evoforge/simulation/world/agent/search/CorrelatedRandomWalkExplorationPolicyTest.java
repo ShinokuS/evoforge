@@ -1,7 +1,6 @@
 package io.github.evoforge.simulation.world.agent.search;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -13,44 +12,45 @@ import org.junit.jupiter.api.Test;
 final class CorrelatedRandomWalkExplorationPolicyTest {
 
     @Test
-    void standardExplorationSamplesDifferentDirectionsNearVisibleHorizon() {
+    void standardExplorationSamplesArbitraryPointsOnOuterVisionRing() {
         CorrelatedRandomWalkExplorationPolicy policy = CorrelatedRandomWalkExplorationPolicy.standard();
         ObjectId agent = ObjectId.of(7, 0);
         FacingDirection east = FacingDirection.of(1, 0);
-        Set<FacingDirection> headings = new HashSet<>();
+        Set<String> points = new HashSet<>();
+        boolean sawPointBetweenExactGridRays = false;
 
-        for (long ordinal = 0; ordinal < 10; ordinal++) {
-            SearchRelocationRequest request = policy.nextRelocation(agent, east, ordinal, 8);
-            headings.add(request.heading());
-            if (request.heading().x() != 0 && request.heading().y() != 0) {
-                assertTrue(request.distance() >= 4 && request.distance() <= 5);
-            } else {
-                assertEquals(7, request.distance());
+        int range = 8;
+        long outerSquared = (long) range * range;
+        long innerSquared = (long) (range - 1) * (range - 1);
+        for (long ordinal = 0; ordinal < 24; ordinal++) {
+            SearchRelocationRequest request = policy.nextRelocation(agent, east, ordinal, range);
+            points.add(request.offsetX() + "," + request.offsetY());
+            long distanceSquared = (long) request.offsetX() * request.offsetX()
+                    + (long) request.offsetY() * request.offsetY();
+            assertTrue(distanceSquared <= outerSquared);
+            assertTrue(distanceSquared >= innerSquared);
+            if (request.offsetX() != 0
+                    && request.offsetY() != 0
+                    && Math.abs(request.offsetX()) != Math.abs(request.offsetY())) {
+                sawPointBetweenExactGridRays = true;
             }
         }
 
-        assertTrue(headings.size() >= 3, "unguided exploration should not collapse to one straight ray");
-        assertTrue(headings.stream().anyMatch(heading -> !heading.equals(east)));
+        assertTrue(points.size() >= 8, "unguided exploration should sample many frontier cells");
+        assertTrue(sawPointBetweenExactGridRays,
+                "frontier selection must not collapse to the eight cardinal/diagonal rays");
     }
 
     @Test
-    void diagonalLegUsesShorterGridDistanceToStayNearCircularVisionFrontier() {
-        CorrelatedRandomWalkExplorationPolicy policy = CorrelatedRandomWalkExplorationPolicy.standard();
-        ObjectId agent = ObjectId.of(3, 1);
-        SearchRelocationRequest request = policy.nextRelocation(
-                agent,
-                FacingDirection.of(1, 1),
-                0,
-                7);
+    void selectedPointKeepsCoarseFacingTowardItsQuadrant() {
+        SearchRelocationRequest request = new SearchRelocationRequest(6, 3);
 
-        assertTrue(request.distance() <= 6);
-        if (request.heading().x() != 0 && request.heading().y() != 0) {
-            assertNotEquals(6, request.distance());
-        }
+        assertEquals(FacingDirection.of(1, 1), request.heading());
+        assertEquals(6, request.distance());
     }
 
     @Test
-    void sameIdentityOrdinalAndVisionProduceSameLeg() {
+    void sameIdentityOrdinalAndVisionProduceSamePoint() {
         CorrelatedRandomWalkExplorationPolicy policy = CorrelatedRandomWalkExplorationPolicy.standard();
         ObjectId agent = ObjectId.of(11, 2);
         FacingDirection northEast = FacingDirection.of(1, 1);
