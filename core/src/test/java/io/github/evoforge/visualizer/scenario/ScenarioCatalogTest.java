@@ -10,13 +10,23 @@ import org.junit.jupiter.api.Test;
 final class ScenarioCatalogTest {
 
     @Test
-    void standardCatalogKeepsFocusedScenarioOrder() {
+    void standardCatalogKeepsDomainGroupsAndFocusedScenarioOrder() {
         ScenarioCatalog catalog = ScenarioCatalog.standard();
+
+        assertEquals(
+                List.of(
+                        "geometry",
+                        "movement",
+                        "occupancy",
+                        "pathfinding"),
+                catalog.groups().stream()
+                        .map(ScenarioGroup::id)
+                        .toList());
         assertEquals(
                 List.of(
                         "cutaway", "ramp-navigation", "timed-movement",
-                        "occupancy-contention", "movement-patrol",
-                        "movement-click-to-move", "pathfinding-straight",
+                        "movement-patrol", "movement-click-to-move",
+                        "occupancy-contention", "pathfinding-straight",
                         "pathfinding-structural-detour", "pathfinding-weighted-detour",
                         "pathfinding-ramp-3d", "pathfinding-multi-level-climb",
                         "pathfinding-z-switchback", "pathfinding-vertical-overpass",
@@ -39,15 +49,30 @@ final class ScenarioCatalogTest {
     }
 
     @Test
-    void duplicateIdsAreRejected() {
-        VisualizerScenario duplicate = new VisualizerScenario() {
-            @Override public String id() { return "same"; }
-            @Override public String title() { return "Scenario"; }
-            @Override public String description() { return "Description"; }
-            @Override public ScenarioSession create() { return new CutawayScenario().create(); }
-        };
+    void duplicateIdsAcrossGroupsAreRejected() {
+        VisualizerScenario duplicate = stub("same");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new ScenarioCatalog(List.of(duplicate, duplicate)));
+                () -> ScenarioCatalog.ofGroups(
+                        ScenarioGroup.of("first", "First", duplicate),
+                        ScenarioGroup.of("second", "Second", duplicate)));
+    }
+
+    @Test
+    void duplicateGroupIdsAreRejected() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ScenarioCatalog.ofGroups(
+                        ScenarioGroup.of("same", "First", stub("one")),
+                        ScenarioGroup.of("same", "Second", stub("two"))));
+    }
+
+    private static VisualizerScenario stub(String id) {
+        return new VisualizerScenario() {
+            @Override public String id() { return id; }
+            @Override public String title() { return "Scenario " + id; }
+            @Override public String description() { return "Description " + id; }
+            @Override public ScenarioSession create() { return new CutawayScenario().create(); }
+        };
     }
 }
