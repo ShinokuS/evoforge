@@ -7,6 +7,17 @@ public interface Shape {
             int relativeY,
             int relativeZ);
 
+    /**
+     * Approximate solid volume occupied by this terrain Shape inside its anchor cell.
+     *
+     * <p>The value uses the material-agnostic {@link CellVolume} fixed-point scale.
+     * It describes occupied volume only; it does not define free-space connectivity,
+     * hydraulic behavior or traversal topology.
+     */
+    default int solidVolume() {
+        return CellVolume.FULL;
+    }
+
     default int transitionBlocks(
             int relativeX,
             int relativeY,
