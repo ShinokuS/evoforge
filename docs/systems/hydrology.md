@@ -10,9 +10,9 @@ The current slice supports both explicit single-surface precipitation and an opt
 periodic external precipitation
         |
         v
-cached sky-exposed XY surfaces
+cached sky-addressable XY surfaces
         |
-        +--> exposed Water above terrain -> Water directly
+        +--> exposed Water -> Water directly
         |
         v
 exposed terrain
@@ -116,23 +116,26 @@ Unknown Shapes are conservative: Shape's default physical boundary is closed, so
 
 `TerrainSurfaceLookup` exposes one topmost terrain anchor per occupied XY column and deterministic X/Y iteration. Internally `TerrainSystem` maintains this index during accepted place/remove mutations; rain never scans vertical world space to rediscover column tops.
 
-`WaterSurfaceLookup` exposes the top positive-water cell per wet XY column. `WaterSystem` updates it when a cell becomes wet or dry, including simultaneous Water flow commits.
+`WaterSurfaceLookup` exposes the top positive-water cell per wet XY column and deterministic X/Y iteration. `WaterSystem` updates it when a cell becomes wet or dry, including simultaneous Water flow commits.
 
-`SkyPrecipitationSystem` resolves a column as:
+`SkyPrecipitationSystem` works over the union of occupied Terrain columns and wet Water columns. A shared XY column is processed exactly once:
 
 ```text
-highest wet Z > highest terrain Z
+terrain exists and highest wet Z > highest terrain Z
         -> exposed Water target
-otherwise
+terrain exists otherwise
         -> exposed terrain target
+water exists without terrain
+        -> exposed Water target
 ```
 
 This gives several useful emergent semantics without special object types:
 
 - a cave roof, bridge-like terrain layer or other higher terrain anchor shields lower terrain from vertical precipitation;
 - a lake whose Water rises above terrain receives rainfall at its liquid surface;
+- runoff, a stream or a waterfall occupying a wet column without terrain still receives vertical precipitation;
 - Water sharing the same anchor Z as a partial terrain Shape keeps terrain-first semantics because the coarse cell model cannot yet resolve subcell exposed area;
-- a column with no terrain is outside the current periodic precipitation domain and receives no generated source.
+- a column containing neither Terrain nor Water is outside the current precipitation domain and creates no state merely because rain exists globally.
 
 The indexes are caches of authoritative Terrain/Water mutations, not a separate weather grid.
 
@@ -144,13 +147,13 @@ The indexes are caches of authoritative Terrain/Water mutations, not a separate 
 assembly.periodicPrecipitation(amountPerColumn, intervalTicks);
 ```
 
-The first event occurs after `intervalTicks`; later events repeat at that cadence. `amountPerColumn` is a finite source quantity applied independently to every currently occupied terrain column.
+The first event occurs after `intervalTicks`; later events repeat at that cadence. `amountPerColumn` is a finite source quantity applied independently once to every currently sky-addressable Terrain/Water column.
 
 `PeriodicPrecipitationSystem` owns only recurrence. It delegates surface selection and transfer accounting to `SkyPrecipitationSystem`.
 
 Production composition also installs `WaterFlowProcess`. After each precipitation event the composition root asks that process to wake. Wakeups coalesce, and the process advances one local `WaterFlowSystem` update per simulation tick until the active frontier reaches dormancy. Soil-only precipitation therefore schedules no unnecessary hydraulic work.
 
-No fixed global Water scan is introduced.
+No fixed global Water scan or vertical Z scan is introduced.
 
 ## Conservation
 
@@ -160,7 +163,7 @@ No fixed global Water scan is introduced.
 input = infiltrated + surfaceWater + unplaced
 ```
 
-`PrecipitationBatchResult` carries the same invariant using `long` totals across a complete exposed-column pass.
+`PrecipitationBatchResult` carries the same invariant using `long` totals across the complete union of exposed Terrain/Water columns.
 
 Precipitation is an external source, so `input` may increase total world water. No part of that source is silently lost inside the transfer operation.
 
@@ -192,9 +195,10 @@ Headless tests cover:
 - Ramp anchor-space reception without concrete Shape checks;
 - conservative unknown-Shape top boundaries;
 - direct exposed-Water precipitation;
+- exposed Water columns without Terrain;
 - explicit unplaced remainder on blocked surfaces;
-- exact single-target and batch precipitation balance;
-- deterministic cached terrain-surface iteration;
+- exact single-target and union-batch precipitation balance;
+- deterministic cached terrain/water-surface iteration;
 - top wet-cell tracking through external and flow mutations;
 - cave-roof shielding and lake-surface targeting;
 - scheduled flow dormancy;
