@@ -8,16 +8,27 @@ import java.util.Map;
 
 /** Authoritative owner of mutable consumable quantities for object instances. */
 public final class ConsumableStockSystem implements ConsumableStockLookup, ConsumableStockReplenishment {
+    private static final ConsumableStockReductionSink IGNORE_REDUCTIONS = objectId -> { };
+
     private final ObjectLookup objects;
     private final ConsumableStockDefinitions definitions;
+    private final ConsumableStockReductionSink reductions;
     private final Map<ObjectId, State> states = new HashMap<>();
 
     public ConsumableStockSystem(ObjectLookup objects, ConsumableStockDefinitions definitions) {
-        if (objects == null || definitions == null) {
+        this(objects, definitions, IGNORE_REDUCTIONS);
+    }
+
+    public ConsumableStockSystem(
+            ObjectLookup objects,
+            ConsumableStockDefinitions definitions,
+            ConsumableStockReductionSink reductions) {
+        if (objects == null || definitions == null || reductions == null) {
             throw new IllegalArgumentException("consumable stock dependencies must not be null");
         }
         this.objects = objects;
         this.definitions = definitions;
+        this.reductions = reductions;
     }
 
     public void attach(ObjectId objectId) {
@@ -36,6 +47,7 @@ public final class ConsumableStockSystem implements ConsumableStockLookup, Consu
         State state = requireState(objectId);
         if (state.quantity < requestedQuantity) return false;
         state.quantity -= requestedQuantity;
+        reductions.stockReduced(objectId);
         return true;
     }
 
