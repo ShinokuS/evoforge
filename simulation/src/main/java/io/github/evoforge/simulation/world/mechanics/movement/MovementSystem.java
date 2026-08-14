@@ -7,6 +7,7 @@ import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservat
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationResult;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
+import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalConstraint;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -30,6 +31,8 @@ public final class MovementSystem {
             ResultCode.of("movement", "not_adjacent");
     private static final ResultCode TRANSITION_UNAVAILABLE =
             ResultCode.of("movement", "transition_unavailable");
+    private static final ResultCode TRAVERSAL_RESTRICTED =
+            ResultCode.of("movement", "traversal_restricted");
     private static final ResultCode DESTINATION_OCCUPIED =
             ResultCode.of("movement", "destination_occupied");
     private static final ResultCode DESTINATION_RESERVED =
@@ -40,6 +43,7 @@ public final class MovementSystem {
     private final NavigationLookup navigation;
     private final MovementDefinitions definitions;
     private final TransitionCostLookup transitionCosts;
+    private final MoverTraversalConstraint traversalConstraint;
     private final OccupancySystem occupancy;
     private final MovementStateStore state;
     private final ProcessScheduler scheduler;
@@ -50,6 +54,29 @@ public final class MovementSystem {
             NavigationLookup navigation,
             MovementDefinitions definitions,
             TransitionCostLookup transitionCosts,
+            OccupancySystem occupancy,
+            MovementStateStore state,
+            ProcessScheduler scheduler) {
+
+        this(
+                objects,
+                transforms,
+                navigation,
+                definitions,
+                transitionCosts,
+                MoverTraversalConstraint.ALLOW_ALL,
+                occupancy,
+                state,
+                scheduler);
+    }
+
+    public MovementSystem(
+            ObjectLookup objects,
+            TransformLookup transforms,
+            NavigationLookup navigation,
+            MovementDefinitions definitions,
+            TransitionCostLookup transitionCosts,
+            MoverTraversalConstraint traversalConstraint,
             OccupancySystem occupancy,
             MovementStateStore state,
             ProcessScheduler scheduler) {
@@ -74,6 +101,10 @@ public final class MovementSystem {
             throw new IllegalArgumentException(
                     "transitionCosts must not be null");
         }
+        if (traversalConstraint == null) {
+            throw new IllegalArgumentException(
+                    "traversalConstraint must not be null");
+        }
         if (occupancy == null) {
             throw new IllegalArgumentException(
                     "occupancy must not be null");
@@ -92,6 +123,7 @@ public final class MovementSystem {
         this.navigation = navigation;
         this.definitions = definitions;
         this.transitionCosts = transitionCosts;
+        this.traversalConstraint = traversalConstraint;
         this.occupancy = occupancy;
         this.state = state;
         this.scheduler = scheduler;
@@ -235,6 +267,18 @@ public final class MovementSystem {
                 dz)) {
             return MovementStartAttempt.rejected(
                     TRANSITION_UNAVAILABLE);
+        }
+
+        if (!traversalConstraint.allows(
+                objectId,
+                fromX,
+                fromY,
+                fromZ,
+                toX,
+                toY,
+                toZ)) {
+            return MovementStartAttempt.rejected(
+                    TRAVERSAL_RESTRICTED);
         }
 
         long rate = definitions.rate(
