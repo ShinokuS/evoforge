@@ -1,53 +1,33 @@
 package io.github.evoforge.simulation.world.environment.precipitation;
 
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
+import io.github.evoforge.simulation.world.environment.sky.SkySurface;
+import io.github.evoforge.simulation.world.environment.sky.SkySurfaceLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
-/**
- * Resolves uniform vertical precipitation against cached top surfaces per XY column.
- *
- * <p>The target domain is the deterministic union of occupied Terrain columns and
- * wet Water columns. Positive Water strictly above terrain becomes the exposed target,
- * so rain falling on a lake enters Water directly rather than infiltrating soil
- * underneath the lake. A wet column without terrain is also sky-addressable, allowing
- * runoff or a waterfall over empty space to continue receiving precipitation.
- * Water at the same Z as a partial terrain Shape retains terrain-first semantics of
- * that shared anchor cell.
- */
+/** Applies uniform vertical precipitation to shared sky-exposed surfaces. */
 public final class SkyPrecipitationSystem {
 
-    private final TerrainSurfaceLookup terrainSurfaces;
-    private final WaterSurfaceLookup waterSurfaces;
+    private final SkySurfaceLookup surfaces;
     private final PrecipitationSystem precipitation;
 
     public SkyPrecipitationSystem(
-            TerrainSurfaceLookup terrainSurfaces,
-            WaterSurfaceLookup waterSurfaces,
+            SkySurfaceLookup surfaces,
             PrecipitationSystem precipitation) {
 
-        if (terrainSurfaces == null) {
+        if (surfaces == null) {
             throw new IllegalArgumentException(
-                    "terrainSurfaces must not be null");
-        }
-        if (waterSurfaces == null) {
-            throw new IllegalArgumentException(
-                    "waterSurfaces must not be null");
+                    "surfaces must not be null");
         }
         if (precipitation == null) {
             throw new IllegalArgumentException(
                     "precipitation must not be null");
         }
 
-        this.terrainSurfaces = terrainSurfaces;
-        this.waterSurfaces = waterSurfaces;
+        this.surfaces = surfaces;
         this.precipitation = precipitation;
     }
 
-    /**
-     * Applies the same finite source volume once to every currently sky-addressable
-     * Terrain/Water XY column.
-     */
+    /** Applies the same finite source volume once to every current sky surface. */
     public PrecipitationBatchResult applyUniform(
             int amountPerColumn) {
 
@@ -55,39 +35,20 @@ public final class SkyPrecipitationSystem {
         int[] columns = {0};
         long[] totals = new long[4];
 
-        terrainSurfaces.forEach((x, y, terrainZ) -> {
-            PrecipitationResult result;
-
-            if (waterSurfaces.hasColumn(x, y)
-                    && waterSurfaces.topZ(x, y) > terrainZ) {
-                result = precipitation.applyWaterSurface(
-                        x,
-                        y,
-                        waterSurfaces.topZ(x, y),
-                        amount);
-            } else {
-                result = precipitation.applyTerrainSurface(
-                        x,
-                        y,
-                        terrainZ,
-                        amount);
-            }
-
-            columns[0] = Math.incrementExact(columns[0]);
-            add(totals, result);
-        });
-
-        waterSurfaces.forEach((x, y, waterZ) -> {
-            if (terrainSurfaces.hasColumn(x, y)) {
-                return;
-            }
-
+        surfaces.forEach(surface -> {
             PrecipitationResult result =
-                    precipitation.applyWaterSurface(
-                            x,
-                            y,
-                            waterZ,
-                            amount);
+                    surface.kind() == SkySurface.Kind.WATER
+                            ? precipitation.applyWaterSurface(
+                                    surface.x(),
+                                    surface.y(),
+                                    surface.z(),
+                                    amount)
+                            : precipitation.applyTerrainSurface(
+                                    surface.x(),
+                                    surface.y(),
+                                    surface.z(),
+                                    amount);
+
             columns[0] = Math.incrementExact(columns[0]);
             add(totals, result);
         });
