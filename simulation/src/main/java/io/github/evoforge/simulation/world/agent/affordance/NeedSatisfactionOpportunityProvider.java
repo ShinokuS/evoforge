@@ -35,15 +35,6 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             TransformLookup transforms,
             AgentDefinitions agents,
             NeedSatisfactionDefinitions definitions,
-            NeedSystem needs) {
-        this(objects, transforms, agents, definitions, new NeedSolutionKnowledgeDefinitions(), needs);
-    }
-
-    public NeedSatisfactionOpportunityProvider(
-            ObjectLookup objects,
-            TransformLookup transforms,
-            AgentDefinitions agents,
-            NeedSatisfactionDefinitions definitions,
             NeedSolutionKnowledgeDefinitions knowledge,
             NeedSystem needs) {
         if (objects == null || transforms == null || agents == null || definitions == null
