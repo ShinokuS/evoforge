@@ -41,9 +41,9 @@ public final class SoilMoistureSystem {
     }
 
     /**
-     * Infiltrates precipitation for one simulation tick, bounded by both the
-     * landscape material's infiltration rate and remaining moisture capacity.
-     * Missing soil hydrology means that the terrain does not absorb water.
+     * Infiltrates no more than one material-defined transfer limit and the remaining
+     * moisture capacity. Missing soil hydrology means that the terrain does not
+     * absorb water.
      */
     public int infiltrateAtMost(
             int x,
@@ -70,7 +70,7 @@ public final class SoilMoistureSystem {
         int infiltrated = Math.min(
                 requested,
                 Math.min(
-                        definition.infiltrationPerTick(),
+                        definition.infiltrationLimit(),
                         available));
 
         if (infiltrated == CellVolume.EMPTY) {
