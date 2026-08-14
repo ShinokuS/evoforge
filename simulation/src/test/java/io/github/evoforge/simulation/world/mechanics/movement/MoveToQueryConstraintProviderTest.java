@@ -14,7 +14,6 @@ import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
 import io.github.evoforge.simulation.world.pathfinding.PathSearchMetrics;
@@ -59,7 +58,7 @@ final class MoveToQueryConstraintProviderTest {
         MovementSystem movement = new MovementSystem(
                 objects,
                 spatial.transforms(),
-                (x, y, z) -> 0L,
+                (x, y, z) -> 0,
                 movementDefinitions,
                 (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1),
                 occupancy,
