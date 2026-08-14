@@ -11,6 +11,8 @@ public final class TerrainSystem {
     private final DefinitionCatalog<LandscapeDefinitionId> definitions;
     private final TerrainLookup lookup;
     private final TreeMap<Integer, Integer> zCounts = new TreeMap<>();
+    private final TerrainSurfaceIndex surfaceIndex =
+            new TerrainSurfaceIndex();
     private long revision;
     private final TerrainRevisionLookup revisions = () -> revision;
     private final TerrainExtentLookup extents = new TerrainExtentLookup() {
@@ -65,6 +67,10 @@ public final class TerrainSystem {
         return extents;
     }
 
+    public TerrainSurfaceLookup surfaces() {
+        return surfaceIndex.lookup();
+    }
+
     public TerrainRevisionLookup revisions() {
         return revisions;
     }
@@ -83,6 +89,7 @@ public final class TerrainSystem {
 
         storage.put(x, y, z, definitionId);
         zCounts.merge(z, 1, Integer::sum);
+        surfaceIndex.add(x, y, z);
         revision++;
         return TerrainPlacementResult.PLACED;
     }
@@ -117,6 +124,7 @@ public final class TerrainSystem {
         zCounts.computeIfPresent(
                 z,
                 (ignored, count) -> count == 1 ? null : count - 1);
+        surfaceIndex.remove(x, y, z);
         revision++;
         return TerrainRemovalResult.REMOVED;
     }

@@ -31,7 +31,7 @@ final class PrecipitationSystemTest {
                 new SoilHydrology(500_000, 200_000),
                 fullTerrainGeometry());
 
-        PrecipitationResult result = fixture.precipitation.applyTick(
+        PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
                 0, 0, 0, 300_000);
 
         assertEquals(
@@ -55,8 +55,8 @@ final class PrecipitationSystemTest {
                 new SoilHydrology(250_000, 200_000),
                 fullTerrainGeometry());
 
-        fixture.precipitation.applyTick(0, 0, 0, 200_000);
-        PrecipitationResult result = fixture.precipitation.applyTick(
+        fixture.precipitation.applyTerrainSurface(0, 0, 0, 200_000);
+        PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
                 0, 0, 0, 200_000);
 
         assertEquals(50_000, result.infiltrated());
@@ -71,7 +71,7 @@ final class PrecipitationSystemTest {
                 null,
                 fullTerrainGeometry());
 
-        PrecipitationResult result = fixture.precipitation.applyTick(
+        PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
                 0, 0, 0, 180_000);
 
         assertEquals(0, result.infiltrated());
@@ -86,7 +86,7 @@ final class PrecipitationSystemTest {
                 z == 0 ? RampShape.POSITIVE_X : null;
         Fixture fixture = fixture(null, geometry);
 
-        PrecipitationResult result = fixture.precipitation.applyTick(
+        PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
                 0, 0, 0, CellVolume.FULL);
 
         assertEquals(CellVolume.FULL, result.surfaceWater());
@@ -120,7 +120,7 @@ final class PrecipitationSystemTest {
                 z == 0 ? closedHalfCell : null;
         Fixture fixture = fixture(null, geometry);
 
-        fixture.precipitation.applyTick(0, 0, 0, 400_000);
+        fixture.precipitation.applyTerrainSurface(0, 0, 0, 400_000);
 
         assertEquals(0, fixture.water.lookup().amount(0, 0, 0));
         assertEquals(400_000, fixture.water.lookup().amount(0, 0, 1));
@@ -132,7 +132,7 @@ final class PrecipitationSystemTest {
                 z == 0 || z == 1 ? FullShape.INSTANCE : null;
         Fixture fixture = fixture(null, geometry);
 
-        PrecipitationResult result = fixture.precipitation.applyTick(
+        PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
                 0, 0, 0, 300_000);
 
         assertEquals(
@@ -145,7 +145,24 @@ final class PrecipitationSystemTest {
     }
 
     @Test
-    void precipitationRequiresAnExplicitTerrainSurface() {
+    void exposedWaterTargetBypassesSoilAndCanGrowIntoCellAbove() {
+        Fixture fixture = fixture(
+                new SoilHydrology(CellVolume.FULL, CellVolume.FULL),
+                fullTerrainGeometry());
+        fixture.water.addAtMost(0, 0, 1, 900_000);
+
+        PrecipitationResult result = fixture.precipitation.applyWaterSurface(
+                0, 0, 1, 250_000);
+
+        assertEquals(0, result.infiltrated());
+        assertEquals(250_000, result.surfaceWater());
+        assertEquals(0, fixture.soil.lookup().amount(0, 0, 0));
+        assertEquals(CellVolume.FULL, fixture.water.lookup().amount(0, 0, 1));
+        assertEquals(150_000, fixture.water.lookup().amount(0, 0, 2));
+    }
+
+    @Test
+    void precipitationRequiresExplicitExistingTargets() {
         SoilHydrologyDefinitions definitions = new SoilHydrologyDefinitions();
         TerrainLookup terrain = (x, y, z) -> null;
         GeometryLookup geometry = (x, y, z) -> null;
@@ -164,7 +181,10 @@ final class PrecipitationSystemTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> precipitation.applyTick(0, 0, 0, 1));
+                () -> precipitation.applyTerrainSurface(0, 0, 0, 1));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> precipitation.applyWaterSurface(0, 0, 0, 1));
     }
 
     private static Fixture fixture(

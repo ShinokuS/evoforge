@@ -9,6 +9,7 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainRemovalResul
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainReplacementResult;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainStorage;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
@@ -65,6 +66,10 @@ public final class LandscapeSystem implements LandscapeMutations {
 
     public TerrainExtentLookup terrainExtents() {
         return terrain.extents();
+    }
+
+    public TerrainSurfaceLookup terrainSurfaces() {
+        return terrain.surfaces();
     }
 
     public TerrainRevisionLookup terrainRevision() {
