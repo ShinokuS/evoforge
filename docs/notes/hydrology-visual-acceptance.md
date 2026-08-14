@@ -10,7 +10,7 @@ The visualizer reads authoritative `WaterLookup` and `WaterSurfaceLookup` only f
 
 - one shared procedural 16x16 atlas contains four Water animation frames;
 - cell opacity is derived from current finite Water amount divided by neutral geometric capacity;
-- neighbouring cells share one global animation phase with a deterministic coordinate offset;
+- all visible neighbouring Water cells share one global animation phase so tile boundaries read as one coherent surface;
 - no Water animation component/state is stored in simulation or per rendered cell;
 - no reflections, refractions, fluid mesh, framebuffer post-processing or flow-vector field are used in this slice.
 
