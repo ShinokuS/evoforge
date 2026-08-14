@@ -10,13 +10,12 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 
 /**
- * Applies an external precipitation source to an explicitly exposed terrain cell.
+ * Applies an external precipitation source to an explicitly resolved exposed surface.
  *
  * <p>This system does not discover sky exposure and does not know about the water
- * flow solver. Soil receives water first; remaining volume is offered to physical
- * free space at the terrain anchor when that space is open from above, then to the
- * cell directly above. Any volume that still cannot be placed is returned to the
- * caller instead of being silently destroyed.
+ * flow solver. Terrain targets route through soil first. Water targets add directly
+ * to the exposed liquid column so rainfall over a lake does not repeatedly infiltrate
+ * the terrain below it. Any volume that cannot be placed is returned to the caller.
  */
 public final class PrecipitationSystem {
 
@@ -54,7 +53,7 @@ public final class PrecipitationSystem {
         this.water = water;
     }
 
-    public PrecipitationResult applyTick(
+    public PrecipitationResult applyTerrainSurface(
             int x,
             int y,
             int terrainZ,
@@ -66,11 +65,7 @@ public final class PrecipitationSystem {
                     "precipitation target must contain terrain");
         }
         if (input == CellVolume.EMPTY) {
-            return new PrecipitationResult(
-                    CellVolume.EMPTY,
-                    CellVolume.EMPTY,
-                    CellVolume.EMPTY,
-                    CellVolume.EMPTY);
+            return emptyResult();
         }
 
         int infiltrated = soilMoisture.infiltrateAtMost(
@@ -109,6 +104,55 @@ public final class PrecipitationSystem {
                 infiltrated,
                 surfaceWater,
                 remaining);
+    }
+
+    public PrecipitationResult applyWaterSurface(
+            int x,
+            int y,
+            int waterZ,
+            int amount) {
+
+        int input = CellVolume.requireValid(amount);
+        if (water.lookup().amount(x, y, waterZ) <= CellVolume.EMPTY) {
+            throw new IllegalArgumentException(
+                    "precipitation water target must contain water");
+        }
+        if (input == CellVolume.EMPTY) {
+            return emptyResult();
+        }
+
+        int remaining = input;
+        int surfaceWater = water.addAtMost(
+                x,
+                y,
+                waterZ,
+                remaining);
+        remaining -= surfaceWater;
+
+        if (remaining > CellVolume.EMPTY
+                && waterZ < Integer.MAX_VALUE) {
+            int addedAbove = water.addAtMost(
+                    x,
+                    y,
+                    waterZ + 1,
+                    remaining);
+            surfaceWater += addedAbove;
+            remaining -= addedAbove;
+        }
+
+        return new PrecipitationResult(
+                input,
+                CellVolume.EMPTY,
+                surfaceWater,
+                remaining);
+    }
+
+    private static PrecipitationResult emptyResult() {
+        return new PrecipitationResult(
+                CellVolume.EMPTY,
+                CellVolume.EMPTY,
+                CellVolume.EMPTY,
+                CellVolume.EMPTY);
     }
 
     private static boolean opensFromAbove(
