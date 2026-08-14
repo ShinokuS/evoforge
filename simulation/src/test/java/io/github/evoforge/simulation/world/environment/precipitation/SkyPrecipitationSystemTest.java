@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
@@ -144,8 +145,9 @@ final class SkyPrecipitationSystemTest {
 
         private SkyPrecipitationSystem sky() {
             return new SkyPrecipitationSystem(
-                    landscape.terrainSurfaces(),
-                    water.surfaces(),
+                    new VerticalSkySurfaceSystem(
+                            landscape.terrainSurfaces(),
+                            water.surfaces()),
                     precipitation);
         }
     }
