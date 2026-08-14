@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.agent.search;
 
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
+import io.github.evoforge.simulation.world.agent.perception.vision.VisionSnapshot;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 import io.github.evoforge.simulation.world.spatial.orientation.OrientationLookup;
@@ -10,7 +11,7 @@ import java.util.Map;
 
 /**
  * Owns epistemic search state. Search first sweeps local Vision and, when unguided,
- * may request one egocentric exploration step without receiving or storing world coordinates.
+ * may request an egocentric exploration leg without receiving or storing world coordinates.
  */
 public final class AgentSearchSystem implements AgentSearchLookup {
     private static final int HEADINGS_IN_LOCAL_SWEEP = 4;
@@ -45,7 +46,8 @@ public final class AgentSearchSystem implements AgentSearchLookup {
                 || motivation == null || motivation.isBlank()) {
             throw new IllegalArgumentException("search request must not be null/blank");
         }
-        if (!supports(agentId)) {
+        VisionSnapshot currentVision = vision.snapshot(agentId);
+        if (agentId == null || !orientations.has(agentId) || currentVision == null) {
             throw new IllegalStateException("visual search requires orientation and vision: " + agentId);
         }
 
@@ -63,16 +65,17 @@ public final class AgentSearchSystem implements AgentSearchLookup {
         }
 
         if (state.headingsObserved >= HEADINGS_IN_LOCAL_SWEEP) {
-            FacingDirection nextHeading = explorationPolicy.nextHeading(
+            SearchRelocationRequest relocation = explorationPolicy.nextRelocation(
                     agentId,
                     state.explorationHeading,
-                    state.explorationStepOrdinal++);
-            state.explorationHeading = nextHeading;
+                    state.explorationStepOrdinal++,
+                    currentVision.range());
+            state.explorationHeading = relocation.heading();
             state.relocationPending = true;
             state.status = AgentSearchStatus.EXPLORING;
             AgentSearchTrace trace = trace(agentId, state);
             last.put(agentId, trace);
-            return new SearchAdvanceResult(true, trace, new SearchRelocationRequest(nextHeading));
+            return new SearchAdvanceResult(true, trace, relocation);
         }
 
         FacingDirection current = orientations.facing(agentId);
@@ -85,15 +88,15 @@ public final class AgentSearchSystem implements AgentSearchLookup {
         return new SearchAdvanceResult(true, trace, null);
     }
 
-    /** Completes the search-owned epistemic step after AgentSystem finishes its locomotion intent. */
-    public void relocationFinished(ObjectId agentId, boolean reachedAdjacentPosition) {
+    /** Completes the search-owned epistemic leg after AgentSystem finishes its locomotion intent. */
+    public void relocationFinished(ObjectId agentId, boolean reachedPlannedPosition) {
         SearchState state = agentId == null ? null : active.get(agentId);
         if (state == null || !state.relocationPending) {
             throw new IllegalStateException("search relocation completion has no pending request: " + agentId);
         }
         state.relocationPending = false;
         state.headingsObserved = 1;
-        if (reachedAdjacentPosition) {
+        if (reachedPlannedPosition) {
             state.explorationHeading = orientations.facing(agentId);
             state.status = AgentSearchStatus.SWEEPING;
         } else {
