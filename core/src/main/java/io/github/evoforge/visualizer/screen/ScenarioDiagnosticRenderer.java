@@ -72,16 +72,17 @@ final class ScenarioDiagnosticRenderer {
                     0.32f);
             case START, GOAL -> drawEndpointFrame(x, y);
             case WARNING -> {
+                // Occupied route cell: keep the object's central footprint clear.
                 shapes.rect(
-                        x + 0.72f,
-                        y + 0.02f,
-                        0.26f,
-                        ENDPOINT_FRAME);
+                        x + 0.14f,
+                        y + 0.78f,
+                        0.16f,
+                        0.04f);
                 shapes.rect(
-                        x + 0.94f,
-                        y + 0.02f,
-                        ENDPOINT_FRAME,
-                        0.26f);
+                        x + 0.14f,
+                        y + 0.78f,
+                        0.04f,
+                        0.10f);
             }
         }
     }
