@@ -1,39 +1,44 @@
-package io.github.evoforge.simulation.world.environment.precipitation;
+package io.github.evoforge.simulation.world.environment.evaporation;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.time.SimulationTime;
+import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationEventLookup;
 
-/** Owns cadence for one configured world-level precipitation source. */
-public final class PeriodicPrecipitationSystem
-        implements PrecipitationEventLookup {
+/** Owns cadence for the simple world-level evaporation sink. */
+public final class PeriodicEvaporationSystem {
 
     private static final long PROCESS_ID = 0L;
 
-    private final SkyPrecipitationSystem precipitation;
-    private final PrecipitationSchedule schedule;
+    private final EvaporationSystem evaporation;
+    private final EvaporationSchedule schedule;
     private final SimulationTime time;
+    private final PrecipitationEventLookup precipitation;
     private ProcessScheduler scheduler;
     private boolean started;
     private boolean scheduled;
+    private boolean lastSuppressed;
     private long nextEvaluationTick = -1L;
     private long lastEvaluationTick = -1L;
-    private PrecipitationBatchResult lastResult;
+    private EvaporationBatchResult lastResult;
 
-    public PeriodicPrecipitationSystem(
-            SkyPrecipitationSystem precipitation,
-            PrecipitationSchedule schedule,
-            SimulationTime time) {
+    public PeriodicEvaporationSystem(
+            EvaporationSystem evaporation,
+            EvaporationSchedule schedule,
+            SimulationTime time,
+            PrecipitationEventLookup precipitation) {
 
-        if (precipitation == null
+        if (evaporation == null
                 || schedule == null
-                || time == null) {
+                || time == null
+                || precipitation == null) {
             throw new IllegalArgumentException(
-                    "periodic precipitation dependencies must not be null");
+                    "periodic evaporation dependencies must not be null");
         }
 
-        this.precipitation = precipitation;
+        this.evaporation = evaporation;
         this.schedule = schedule;
         this.time = time;
+        this.precipitation = precipitation;
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -43,7 +48,7 @@ public final class PeriodicPrecipitationSystem
         }
         if (this.scheduler != null) {
             throw new IllegalStateException(
-                    "precipitation scheduler is already bound");
+                    "evaporation scheduler is already bound");
         }
         this.scheduler = scheduler;
     }
@@ -52,7 +57,7 @@ public final class PeriodicPrecipitationSystem
         requireScheduler();
         if (started) {
             throw new IllegalStateException(
-                    "periodic precipitation has already started");
+                    "periodic evaporation has already started");
         }
         started = true;
         scheduleNext();
@@ -62,29 +67,25 @@ public final class PeriodicPrecipitationSystem
         requireScheduler();
         if (!started) {
             throw new IllegalStateException(
-                    "periodic precipitation has not started");
+                    "periodic evaporation has not started");
         }
         if (processId != PROCESS_ID) {
             throw new IllegalStateException(
-                    "unknown precipitation process: " + processId);
+                    "unknown evaporation process: " + processId);
         }
         if (!scheduled) {
             throw new IllegalStateException(
-                    "precipitation process is not scheduled");
+                    "evaporation process is not scheduled");
         }
 
         scheduled = false;
         nextEvaluationTick = -1L;
         lastEvaluationTick = time.tick();
-        lastResult = precipitation.applyUniform(
-                schedule.amountPerColumn());
+        lastSuppressed = precipitation.occursAt(lastEvaluationTick);
+        lastResult = lastSuppressed
+                ? EvaporationBatchResult.empty()
+                : evaporation.applyUniform(schedule.amountPerColumn());
         scheduleNext();
-    }
-
-    @Override
-    public boolean occursAt(long tick) {
-        return tick == lastEvaluationTick
-                || (scheduled && tick == nextEvaluationTick);
     }
 
     public boolean scheduled() {
@@ -99,14 +100,18 @@ public final class PeriodicPrecipitationSystem
         return lastEvaluationTick;
     }
 
-    public PrecipitationBatchResult lastResult() {
+    public boolean lastSuppressed() {
+        return lastSuppressed;
+    }
+
+    public EvaporationBatchResult lastResult() {
         return lastResult;
     }
 
     private void scheduleNext() {
         if (scheduled) {
             throw new IllegalStateException(
-                    "precipitation process is already scheduled");
+                    "evaporation process is already scheduled");
         }
 
         try {
@@ -115,7 +120,7 @@ public final class PeriodicPrecipitationSystem
                     schedule.intervalTicks());
         } catch (ArithmeticException exception) {
             throw new IllegalStateException(
-                    "precipitation schedule tick overflow",
+                    "evaporation schedule tick overflow",
                     exception);
         }
 
@@ -128,7 +133,7 @@ public final class PeriodicPrecipitationSystem
     private void requireScheduler() {
         if (scheduler == null) {
             throw new IllegalStateException(
-                    "precipitation scheduler is not bound");
+                    "evaporation scheduler is not bound");
         }
     }
 }
