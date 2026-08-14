@@ -2,48 +2,54 @@
 
 ## Purpose
 
-The current agent subsystem is the first production proof that autonomous behavior can emerge from composable world mechanics rather than from a species-specific behavior script.
+The agent subsystem is the first production proof that autonomous behavior can emerge from composable world mechanics rather than from species-specific behavior scripts.
 
-The first consumer is a Cow foraging slice. It deliberately proves only three things:
+The current Cow slice proves five concrete properties:
 
 ```text
-A. current perception -> visible opportunity -> MoveTo -> interaction
-B. a new compatible food source works without editing Cow/Decision code
-C. competing visible sources are evaluated and one is selected deterministically
+A. actual perception -> opportunity -> MoveTo -> interaction
+B. a new compatible source works without Cow/Decision code changes
+C. competing perceived sources are evaluated deterministically
+D. current perception is constrained by physical facing, FOV, range and occlusion
+E. general solution knowledge can trigger information-seeking without revealing a concrete source
 ```
 
-Persistent beliefs, memory and unknown-source search are not part of the current implemented contract. The broader research direction is preserved in [Agent AI foundations](../notes/2026-08-14-agent-ai-foundations.md).
+The implementation is intentionally smaller than the long-term AI design. Persistent beliefs, episodic memory, personality, social reasoning and multi-step planning remain later consumers.
 
-## Current boundary
+## Core boundary
 
-There is no `CowAI`, species behavior list or central action enum.
+There is no `CowAI`, species behavior list, global `ActionType`, global `NeedType`, or central affordance switch.
 
 ```text
 Object definition
-  ├─ AgentDefinition
-  │    ├─ perception radius
-  │    └─ capabilities
-  └─ Need definitions
-       └─ mutable runtime deficits
+  ├─ AgentDefinition              capabilities
+  ├─ VisionDefinition             range + horizontal FOV
+  ├─ NeedDefinitions              physiological deficits
+  └─ NeedSolutionKnowledge        general solution knowledge
 
-Perceived world objects
-       ↓
-registered AgentOpportunityProvider implementations
-       ↓
-current candidates
-       ↓
-deterministic evaluation
-       ↓
-selected intent
-       ↓
-production MoveTo
-       ↓
-provider revalidation/use
-       ↓
-authoritative mechanic mutation
+Physical world
+  ├─ Spatial XYZ
+  └─ Orientation / facing
+          ↓
+       Vision
+          ↓
+   PerceptionSnapshot
+          ↓
+AgentOpportunityProvider implementations
+          ↓
+current candidates / unresolved search demands
+          ↓
+        Decision
+       /        \
+ concrete       no concrete
+ candidate      candidate
+    ↓               ↓
+ MoveTo         AgentSearch
+    ↓               ↓
+provider use    new perception
 ```
 
-Generic agent code does not know that a source is Grass, Hay or any other concrete content type. It knows only that a registered mechanic provider returned a currently valid opportunity.
+The generic agent code never asks for Grass, Hay or any other concrete content type. Concrete objects become relevant only when mechanic data makes them compatible with the current agent state.
 
 ## Ownership
 
@@ -51,17 +57,23 @@ Generic agent code does not know that a source is Grass, Hay or any other concre
 | --- | --- |
 | object existence and definition identity | `ObjectRepository` / `ObjectLookup` |
 | object XYZ | `SpatialSystem` / `TransformLookup` |
-| objects currently present in a cell | `CellSpatialIndex` / `CellObjectLookup` |
-| immutable autonomous-object composition | `AgentDefinitions` |
+| physical facing | `OrientationSystem` / `OrientationLookup` + `OrientationMutations` |
+| immutable vision configuration | `VisionDefinitions` |
+| current visual visibility | `VisionSystem` / `VisionLookup` |
+| sensor-neutral current perception | `PerceptionLookup` |
+| immutable autonomous composition | `AgentDefinitions` |
 | immutable need declarations | `NeedDefinitions` |
 | mutable per-object need deficit | `NeedSystem` |
 | immutable need-satisfaction source data | `NeedSatisfactionDefinitions` |
-| meaning of one opportunity family | its `AgentOpportunityProvider` implementation |
-| currently selected autonomous intent | `AgentSystem` |
+| general knowledge that a need has environmental solutions | `NeedSolutionKnowledgeDefinitions` |
+| meaning of one opportunity family | its `AgentOpportunityProvider` |
+| current autonomous intent | `AgentSystem` |
+| current local information-seeking process | `AgentSearchSystem` |
 | locomotion to a selected source | existing `MoveToSystem` / Movement stack |
-| developer-facing decision explanation | immutable `AgentDecisionTrace` observed through `AgentDecisionLookup` |
+| decision diagnostics | `AgentDecisionTrace` / `AgentDecisionLookup` |
+| search diagnostics | `AgentSearchTrace` / `AgentSearchLookup` |
 
-`AgentSystem` does not mutate need levels. `NeedSystem` does not decide behavior. An opportunity provider does not move an agent. `MoveTo` does not decide why a destination is desirable.
+`AgentSystem` does not mutate need state, calculate line of sight, or change authoritative XYZ. `VisionSystem` does not decide what an agent wants. `AgentSearchSystem` does not invent a target. `MoveTo` does not know why a destination is desirable.
 
 ## Open semantic identifiers
 
@@ -72,35 +84,27 @@ NeedId("core:hunger")
 CapabilityId("core:graze")
 ```
 
-They are intentionally not global enums. Adding a new semantic identifier does not require editing one project-wide switch or catalog enum.
+They are not project-wide enums. Adding a new semantic identifier does not require editing a central switch.
 
-An identifier alone does not define behavior. Its meaning comes from the mechanic that owns the corresponding definition/state/provider contract.
+An identifier alone does not define behavior. Meaning comes from the mechanic that owns the corresponding definition/state/provider contract.
 
-## Agent definition
+## Agent composition
 
-The current `AgentDefinition` contains only:
-
-```text
-perceptionRadius
-capabilities[]
-```
-
-Capabilities are sorted and unique in immutable runtime definition data.
-
-Example data aspect:
+`AgentDefinition` currently owns only autonomous capabilities. Sensory parameters deliberately do not live in a generic agent property bag.
 
 ```json
 {
   "agent": {
-    "perceptionRadius": 8,
     "capabilities": ["core:graze"]
+  },
+  "vision": {
+    "range": 8,
+    "horizontalFovDegrees": 120
   }
 }
 ```
 
-`AgentDefinitionCompiler` owns the `agent` definition aspect. The definition bootstrap remains composition-driven: a composition root registers the compiler when that definition source is used.
-
-The first slice does not claim that all future agent cognition belongs inside `AgentDefinition`. Personality, knowledge, skills, relationships and other future semantics get their own owner when a real consumer requires them.
+`VisionDefinition` is independent because vision has its own semantics and can evolve without expanding `AgentDefinition`. The same rule applies to future personality, skill, memory and other real subsystems: they receive their own owner when a concrete consumer requires them.
 
 ## Needs
 
@@ -119,65 +123,9 @@ Runtime semantics are deficit-oriented:
 maxLevel       maximum configured deficit
 ```
 
-`NeedSystem` is the only owner of mutable need levels. It initializes state from immutable definition data and exposes read-only state through `NeedLookup`.
+`NeedSystem` is the only owner of mutable need levels. The current slice models an initially hungry Cow; need progression over time does not exist yet.
 
-The current mutation is:
-
-```text
-satisfy(agent, need, amount)
-  -> reduce deficit by min(current deficit, amount)
-  -> return amount actually applied
-```
-
-Need decay/progression over time does not exist yet. Therefore the current Cow starts hungry because its initial definition state says so; this slice does not yet model becoming hungry later.
-
-Example definition aspect:
-
-```json
-{
-  "needs": {
-    "core:hunger": {
-      "max": 100,
-      "initial": 60
-    }
-  }
-}
-```
-
-`NeedDefinitionCompiler` sorts open need keys before compiling them so definition order is stable.
-
-## Mechanics expose opportunities
-
-`AgentOpportunityProvider` is the current narrow extension point between a mechanic and generic autonomous decision making:
-
-```java
-String id();
-
-OpportunityEvaluation evaluate(
-    ObjectId agentId,
-    ObjectId sourceId,
-    int distance);
-
-OpportunityUseResult use(
-    ObjectId agentId,
-    ObjectId sourceId);
-```
-
-`evaluate(...)` answers only:
-
-> Does this currently perceived source offer a meaningful possibility to this agent, and what provider-owned evidence should the generic selector compare?
-
-Returning `null` means that this provider currently offers nothing for that agent/source pair.
-
-`use(...)` revalidates and applies the selected interaction after locomotion. Normal world invalidation is a structured `OpportunityUseResult`; broken configuration/programming invariants remain exceptions.
-
-This interface is intentionally smaller than a generalized action/planning framework. A future mechanic with genuinely different semantics may provide another implementation without adding a case to `AgentSystem`.
-
-## First provider: need satisfaction
-
-`NeedSatisfactionOpportunityProvider` is the first concrete provider.
-
-A source definition may advertise that it can reduce one need deficit:
+A source can advertise need satisfaction independently:
 
 ```json
 {
@@ -190,64 +138,85 @@ A source definition may advertise that it can reduce one need deficit:
 }
 ```
 
-A source is currently eligible when all required facts hold:
+Grass and Hay therefore do not need special AI cases. They are ordinary object definitions carrying compatible mechanic data.
+
+## Orientation
+
+Facing is physical simulation state, separate from position.
 
 ```text
-source definition has NeedSatisfaction data
-agent definition is autonomous
-required capability is present, if one is required
-agent actually owns the advertised NeedId
-current deficit > 0
+TransformLookup    -> where the object is
+OrientationLookup  -> where the object faces
 ```
 
-No Grass/Hay names occur in generic decision code or in this provider. Grass and Hay are just object definitions carrying compatible mechanic data.
+`OrientationSystem` is the authoritative owner. Objects with Vision receive an orientation during runtime assembly. Movement updates facing only after a movement step successfully commits; a failed movement does not silently rotate the object.
 
-The current source is persistent. Using it does not consume, deplete or destroy the source. Resource quantity, harvesting, depletion and consumption ownership are separate future mechanics rather than hidden behavior inside the first opportunity contract.
+The current orientation is a 2D direction used by horizontal FOV. This contract is intentionally separate from renderer-facing sprite orientation.
 
-## Current perception
+## Vision
 
-The first slice has **current perception only**.
-
-`AgentSystem` reads the agent's authoritative XYZ and performs a deterministic bounded scan through `CellObjectLookup` around that position. It does not enumerate `ObjectRepository` and does not ask a global `findFood()` query.
-
-The current range shape is a Chebyshev cube:
+`VisionSystem` owns current visual visibility. It reads:
 
 ```text
-max(|dx|, |dy|, |dz|) <= perceptionRadius
+ObjectLookup
+TransformLookup
+CellObjectLookup
+OrientationLookup
+VisionDefinitions
+SightOcclusionLookup
 ```
 
-Each encountered object is considered at most once per decision pass. Every registered opportunity provider may evaluate that perceived object.
+For an observer with Vision, the current implementation evaluates cells inside a 3D Euclidean range sphere, applies horizontal FOV around authoritative facing, and rejects cells whose sampled sight line crosses an occluding cell.
 
-Consequences:
+`TerrainSightOcclusionLookup` is the first occlusion adapter: terrain occupying a sampled sight cell is opaque. `VisionSystem` depends only on `SightOcclusionLookup`, so walls, doors, vegetation or other future occluders can change the occlusion implementation without teaching Decision about concrete world types.
 
-- a food source outside the perception radius is not a candidate;
-- the agent has no current way to remember a source after it leaves perception;
-- the agent has no current general knowledge such as "grass exists somewhere";
-- there is no line-of-sight/occlusion rule yet;
-- camera visibility is irrelevant and cannot affect perception.
+A `VisionSnapshot` contains the exact visible cells and visible objects. It is current sensory truth only; it is not memory or a belief store.
 
-The current bounded cell scan is a semantic implementation, not a permanent storage/index promise. A specialized range index may replace it later if representative profiling proves this scan hot while preserving the same authoritative perception semantics.
+## Sensor-neutral perception
 
-## Candidate evaluation
+`AgentSystem` does not depend on `VisionSystem` directly. It reads `PerceptionLookup`:
 
-The first provider uses a deliberately provisional score. It exists to prove competition between opportunities, not to freeze EvoForge's final utility mathematics.
+```text
+Vision today ─────────┐
+future hearing ───────┼─> PerceptionLookup -> AgentSystem
+future smell ─────────┘
+```
 
-For one need-satisfaction advertisement:
+Today `VisionSystem` also implements `PerceptionLookup`, so the current perceived object set is exactly the visual object set. This seam exists because multiple senses are already a real architectural requirement, not as a generic event framework.
+
+The important invariant is:
+
+> Candidate generation may use only the agent's current perception, never a hidden global object search.
+
+`AgentSystem` iterates `PerceptionSnapshot.objects()` and offers those objects to registered opportunity providers. It does not enumerate `ObjectRepository` and there is no `findFood()` API.
+
+## Opportunity providers
+
+`AgentOpportunityProvider` is the mechanic-owned bridge into autonomous reasoning:
+
+```java
+String id();
+OpportunityEvaluation evaluate(ObjectId agentId, ObjectId sourceId, int distance);
+OpportunityUseResult use(ObjectId agentId, ObjectId sourceId);
+List<OpportunitySearchDemand> searchDemands(ObjectId agentId);
+```
+
+`evaluate(...)` may only interpret a concrete perceived source. `use(...)` revalidates the chosen interaction after locomotion. `searchDemands(...)` may describe an unresolved motivation, but it does not provide a hidden source or location.
+
+Normal world invalidation is returned as structured result data. Broken configuration/programming invariants remain exceptions.
+
+## Current utility comparison
+
+The first need-satisfaction provider uses a deliberately provisional integer score:
 
 ```text
 effectiveBenefit = min(currentDeficit, advertisedAmount)
-
-score = max(
-    1,
-    effectiveBenefit * 1024 / (distance + 1)
-)
+score = max(1, effectiveBenefit * 1024 / (distance + 1))
 ```
 
-The integer scale keeps evaluation deterministic and avoids making floating-point curve design part of the first slice.
+This proves competition between opportunities without freezing the final utility model.
 
-A farther source can therefore beat a nearby weak source when its expected benefit is sufficiently larger.
-
-The generic candidate order is stable:
+Generic candidate ordering is deterministic:
 
 ```text
 1. score descending
@@ -256,13 +225,79 @@ The generic candidate order is stable:
 4. provider registration order
 ```
 
-There is no random tie break and no dependence on `HashMap`/`HashSet` iteration order.
+There is no random tie break and no dependence on hash iteration order.
 
-Response curves, geometric-mean consideration aggregation, personality modifiers, risk, hysteresis and richer utility semantics remain design hypotheses until additional real motivations/providers give enough evidence to choose a contract.
+## General solution knowledge
+
+The first semantic-knowledge slice deliberately stores less information than a belief system.
+
+```json
+{
+  "needSolutionKnowledge": {
+    "needs": ["core:hunger"]
+  }
+}
+```
+
+For a Cow definition this means only:
+
+> this kind of agent generally knows that an environmental solution for hunger exists.
+
+It does **not** encode:
+
+```text
+Grass
+Hay
+ObjectDefinitionId of a source
+source ObjectId
+XYZ
+last-seen location
+```
+
+`NeedSolutionKnowledgeDefinitions` is immutable definition-level baseline knowledge for the first consumer. Learned individual knowledge, confidence, false beliefs and episodic memory require separate mutable ownership later; they must not be hidden inside this definition store.
+
+## Information-seeking search
+
+When no concrete candidate is perceived, each opportunity provider may emit `OpportunitySearchDemand` values. The need-satisfaction provider emits one only when:
+
+```text
+the agent owns the need
+current deficit > 0
+general solution knowledge says the need has environmental solutions
+```
+
+A demand contains only:
+
+```text
+motivation
+urgency
+```
+
+It contains no source identity or position.
+
+`AgentSystem` deterministically selects the most urgent demand and delegates information acquisition to `AgentSearchSystem`.
+
+The first search strategy is intentionally small: a local 360-degree visual sweep.
+
+```text
+current heading is already perceived
+        ↓
+turn to next cardinal heading
+        ↓
+next scheduled think perceives again
+        ↓
+repeat until four headings were observed
+```
+
+If a compatible source enters actual Vision during the sweep, normal candidate evaluation resumes, the current search is cancelled, and the agent starts the ordinary MoveTo intent.
+
+If all four headings are observed without a source, the search records `LOCAL_SWEEP_EXHAUSTED`, leaves the agent at its current XYZ and returns to the normal idle recheck cadence. The current slice does not yet move between observation points.
+
+This is intentional. Random wandering would hide the missing semantics. A later spatial exploration strategy should extend the same information-seeking process with explicit observation-point choice and movement, without adding `SearchForGrass` or world-truth lookup.
 
 ## Intent and execution
 
-When a candidate wins, `AgentSystem` starts the existing production `MoveToSystem` directly:
+When a concrete candidate wins:
 
 ```text
 Agent decision
@@ -276,172 +311,102 @@ MovementClaim
 per-edge Movement / Occupancy revalidation
 ```
 
-The autonomous process does **not** submit a `MoveToCommand` through Control. This preserves the existing global rule:
+The autonomous process calls the domain boundary directly rather than submitting an external `MoveToCommand`, preserving the architecture rule that Commands represent external intent while continuing internal processes remain domain-owned.
 
-> Commands are external intent; internal continuing processes call their domain boundaries directly.
+If movement fails, the intent ends and the agent later reconsiders. If movement reaches the source, the selected provider revalidates current facts before applying its mechanic mutation.
 
-The selected opportunity becomes an `ActiveIntent` owned by `AgentSystem`. It records only the provider/source/MoveTo identity needed to continue this first interaction.
-
-If movement fails, the intent ends and the agent reconsiders on a later scheduled pass. `AgentSystem` does not branch on Movement result-code catalogs and does not implement automatic MoveTo replanning/waiting policy.
-
-If the goal is reached, the selected provider receives `use(agent, source)`. The provider revalidates current world facts before mutating its own mechanic. For need satisfaction this includes current object existence, transforms, co-location, capability, need presence and remaining deficit.
-
-The route/arrival result therefore does not make a stale opportunity authoritative.
+For need satisfaction, use currently requires both objects to remain alive and co-located, the capability/need relation to remain valid, and a positive remaining deficit.
 
 ## Scheduling
 
-The current autonomous process is Scheduler-driven rather than updated every render frame.
-
-Current timings are intentionally simple:
+The first autonomous process is Scheduler-driven:
 
 ```text
-activation -> first think after 1 simulation tick
-active MoveTo intent -> recheck after 1 tick
-no candidate -> recheck after 10 ticks
+activation -> first think after 1 tick
+active MoveTo -> poll after 1 tick
+active local visual search -> perceive again after 1 tick
+idle / exhausted local search -> recheck after 10 ticks
 terminal interaction -> reconsider after 1 tick
 ```
 
-While travelling, the first implementation polls `MoveToLookup` once per tick. This is a conscious simplicity choice, not a long-term performance guarantee.
+This polling cadence is a current implementation, not a long-term performance contract. Optimization follows representative profiling rather than speculative concurrency or AI-specific indexes.
 
-A direct MoveTo completion callback was considered for this slice and deliberately not introduced. `MoveTo.start()` may terminate synchronously during planning/first-edge start, so adding an external callback would change MoveTo reentrancy and failure-cleanup semantics. There is not yet a representative agent workload proving that one lookup/scheduled activation per active traveller is a hot path.
+## Developer observability
 
-The optimization rule remains:
-
-```text
-instrument representative agents
-    -> identify actual scheduling/perception hot paths
-    -> optimize behind the existing semantic contracts
-```
-
-Future threshold-predicted wake times and event-driven early wakeups remain expected directions, not current behavior.
-
-## Decision trace and developer observability
-
-Every decision pass stores an immutable `AgentDecisionTrace`:
+`SimulationView` exposes read-only:
 
 ```text
-tick
-agentId
-all evaluated candidate traces
-selected candidate, if any
+NeedLookup
+AgentDecisionLookup
+OrientationLookup
+VisionLookup
+AgentSearchLookup
 ```
 
-Each `AgentCandidateTrace` currently includes:
+`AgentDecisionTrace` records the candidate set and selected winner for a decision pass. `AgentSearchTrace` records provider, motivation, search status, headings observed and current facing.
+
+The visualizer reads these authoritative diagnostics; it does not recompute AI semantics.
+
+When an object with Vision is selected, `VisionDiagnosticRenderer` draws the same `VisionSnapshot` produced by simulation:
 
 ```text
-provider id
-source object id + XYZ
-distance
-expected benefit
-score
-motivation label
+soft highlight -> cells actually visible now
+object frame   -> objects actually visible now
+facing arrow   -> authoritative physical orientation
 ```
 
-`SimulationView` exposes this through read-only `AgentDecisionLookup`, alongside read-only `NeedLookup`.
+This makes the development UI answer the exact question: "what does this selected object currently see?"
 
-The visualizer does not recompute AI reasoning. The `Agents -> Cow Foraging` scenario reads the authoritative trace and shows:
+Agent scenarios currently include:
 
-```text
-current hunger
-current target
-candidate count
-winner
-expected benefit
-distance
-score
-```
-
-Alternative candidates use warning markers; the selected winner uses a goal marker. This is the first small piece of the future AI Inspector described in the research note.
-
-## Cow proof
-
-The production headless slice proves these cases.
-
-### Visible food
-
-```text
-Cow hunger = 80
-Grass perceived at x=2
-Grass advertises hunger reduction 30
-
-Cow decision
-  -> selects Grass
-  -> production MoveTo
-  -> reaches source
-  -> provider revalidates
-  -> NeedSystem changes hunger 80 -> 50
-```
-
-### Plug-in Hay
-
-A separate Hay definition advertises the same need through the same provider contract.
-
-No Cow-specific behavior or `AgentSystem` code changes are needed. The hungry Cow selects and uses Hay because the mechanic data makes it a compatible opportunity.
-
-This is the first direct proof of the plug-in requirement.
-
-### Competing sources
-
-```text
-near Grass: benefit 10
-far Hay:    benefit 60
-```
-
-The current scoring selects the farther Hay when its benefit outweighs distance. The visualizer scenario demonstrates the same type of competition with both candidates visible in the authoritative trace.
-
-### No omniscient source lookup
-
-Food outside the Cow's current perception radius does not appear in the candidate set and does not cause movement.
-
-This is only the absence of omniscience. It is **not yet** the richer behavior "I know food exists but do not know where, therefore search for it".
+- `Cow Foraging` — visible competing opportunities and deterministic winner;
+- `Cow Visual Search` — Cow starts facing away from food, has only general hunger-solution knowledge, turns until Grass actually enters Vision, then selects it normally.
 
 ## Definition compilation
 
-The first slice adds three independent object-definition compilers:
+The current independent object-definition aspects are:
 
 ```text
-agent                 -> AgentDefinitionCompiler
-needs                 -> NeedDefinitionCompiler
-needSatisfaction      -> NeedSatisfactionDefinitionCompiler
+agent                  -> AgentDefinitionCompiler
+vision                 -> VisionDefinitionCompiler
+needs                  -> NeedDefinitionCompiler
+needSatisfaction       -> NeedSatisfactionDefinitionCompiler
+needSolutionKnowledge  -> NeedSolutionKnowledgeDefinitionCompiler
 ```
 
-They are independent `DefinitionAspectCompiler<ObjectDefinitionId>` implementations. `ObjectDefinitionBootstrap` remains generic and receives concrete compilers from its composition root.
+`ObjectDefinitionBootstrap` remains generic and receives concrete compilers from its composition root. There is no central behavior catalog.
 
-There is deliberately no central:
+`SimulationAssembly` exposes focused programmatic helpers for headless tests and debug scenarios that populate the same runtime concepts.
 
-```text
-AffordanceType
-ActionType
-NeedType enum
-Cow behavior registry
-```
+## Tests that pin the current contract
 
-A future mechanic that cannot honestly fit `NeedSatisfactionOpportunityProvider` should introduce its own definition semantics/provider rather than expanding a central type switch.
+Headless tests prove, among other cases:
 
-`SimulationAssembly` also exposes focused programmatic configuration helpers for headless/scenario composition. Both routes populate the same runtime definition/state concepts.
+- visible food is selected, reached through production MoveTo and satisfies hunger;
+- a new Hay definition works without Cow/Decision changes;
+- stronger farther food can beat weaker nearby food;
+- food outside Vision range is not a candidate;
+- food behind the Cow is not a visual candidate;
+- opaque terrain blocks a source from Vision;
+- semantic hunger-solution knowledge can start search without revealing the source;
+- a source behind the Cow becomes selectable only after the sweep turns Vision toward it;
+- without general solution knowledge, unseen food does not trigger search;
+- a complete unsuccessful local sweep ends as `LOCAL_SWEEP_EXHAUSTED` without inventing a target or moving the Cow;
+- equal candidates use stable ObjectId ordering;
+- independent definition aspects compile and freeze their stores.
 
-## Testing
-
-Current headless integration tests prove:
-
-- a hungry Cow perceives a visible source, reaches it through production `MoveTo`, and changes the authoritative need;
-- a newly defined Hay source is used without editing Cow/Decision code;
-- a farther high-benefit source can beat a nearby weak source;
-- a source outside current perception does not become known through global state;
-- equal candidates use a stable ObjectId tie break;
-- agent/need/need-satisfaction definition aspects compile independently and freeze their stores.
-
-The visualizer scenario test verifies that the Cow scenario exposes the same authoritative two-candidate decision and winner diagnostics used by presentation.
+Scenario tests verify that developer diagnostics expose the same authoritative decision/search state used by simulation.
 
 ## Explicitly deferred
 
-The following are intentionally outside the current contract:
+The following remain outside the current contract:
 
 - need decay and physiological progression;
-- persistent `Belief` / memory ownership;
-- general semantic knowledge such as "food exists";
-- information-seeking and unknown-source search;
-- line of sight, hearing, smell or uncertainty;
+- persistent individual beliefs and episodic memory;
+- learned semantic knowledge, confidence, forgetting and misinformation;
+- movement between observation points / broader spatial exploration;
+- hearing, smell and multi-sense perception aggregation;
+- richer vertical vision/body/eye-height semantics and advanced occluders;
 - personality, values, skill, relationships and moods;
 - motivation sources broader than physiological needs;
 - intent inertia/hysteresis and interruption policy;
@@ -450,17 +415,6 @@ The following are intentionally outside the current contract:
 - GOAP/HTN/BT planning beneath selected intents;
 - resource consumption, depletion, harvesting and production lifecycle;
 - mating, pregnancy, birth, aging, lactation, excretion and herd/social behavior;
-- behavior-scale optimization or AI-specific spatial indexes before profiling.
+- AI-scale optimization before representative profiling.
 
-The next conceptual proof from the research note is the first persistent subjective-knowledge slice:
-
-```text
-motivation exists
-+ no concrete source is currently known
-+ general knowledge says a source category exists
--> information-seeking/search intent
--> perception discovers a concrete source
--> ordinary opportunity evaluation resumes
-```
-
-That slice must introduce its own knowledge/belief ownership rather than giving `AgentSystem` hidden access to world truth.
+The next search-specific extension should not add a Cow behavior. It should give the existing epistemic search process a spatial exploration strategy that chooses reachable observation points from known traversal facts, moves through the ordinary Movement stack, and keeps discovering concrete sources only through perception.
