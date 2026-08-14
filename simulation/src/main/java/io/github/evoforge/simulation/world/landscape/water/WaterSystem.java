@@ -12,6 +12,8 @@ public final class WaterSystem {
     private final WaterLookup lookup;
     private final WaterFlowActivity flowActivity =
             new WaterFlowActivity();
+    private final WaterSurfaceIndex surfaceIndex =
+            new WaterSurfaceIndex();
 
     public WaterSystem(
             WaterStorage storage,
@@ -33,6 +35,10 @@ public final class WaterSystem {
 
     public WaterLookup lookup() {
         return lookup;
+    }
+
+    public WaterSurfaceLookup surfaces() {
+        return surfaceIndex.lookup();
     }
 
     /**
@@ -62,7 +68,7 @@ public final class WaterSystem {
             return CellVolume.EMPTY;
         }
 
-        storage.put(
+        replaceStoredAmount(
                 x,
                 y,
                 z,
@@ -124,10 +130,20 @@ public final class WaterSystem {
             int amount) {
 
         int validated = CellVolume.requireValid(amount);
+        int previous = currentAmount(x, y, z);
+
         if (validated == CellVolume.EMPTY) {
             storage.remove(x, y, z);
         } else {
             storage.put(x, y, z, validated);
+        }
+
+        if (previous == CellVolume.EMPTY
+                && validated > CellVolume.EMPTY) {
+            surfaceIndex.becameWet(x, y, z);
+        } else if (previous > CellVolume.EMPTY
+                && validated == CellVolume.EMPTY) {
+            surfaceIndex.becameDry(x, y, z);
         }
     }
 
