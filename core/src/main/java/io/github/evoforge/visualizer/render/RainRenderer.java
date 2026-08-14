@@ -18,7 +18,7 @@ public final class RainRenderer {
     private static final int FAR_STREAKS = 32;
     private static final float OFFSCREEN_MARGIN = 32f;
 
-    private final WeatherPresentationLookup weather;
+    private WeatherPresentationLookup weather;
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final Matrix4 projection = new Matrix4();
     private final float[] seedX = new float[MAX_STREAKS];
@@ -29,12 +29,18 @@ public final class RainRenderer {
     public RainRenderer(
             WeatherPresentationLookup weather) {
 
+        setWeather(weather);
+        initializeSeeds();
+    }
+
+    public void setWeather(
+            WeatherPresentationLookup weather) {
+
         if (weather == null) {
             throw new IllegalArgumentException(
                     "weather must not be null");
         }
         this.weather = weather;
-        initializeSeeds();
     }
 
     public void resize(
