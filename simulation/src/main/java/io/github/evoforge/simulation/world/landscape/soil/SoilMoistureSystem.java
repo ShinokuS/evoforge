@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.landscape.soil;
 
+import java.util.TreeSet;
+
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
@@ -11,6 +13,24 @@ public final class SoilMoistureSystem {
     private final TerrainLookup terrain;
     private final SoilHydrologyDefinitions hydrology;
     private final SoilMoistureLookup lookup;
+    private final TreeSet<MoistureCell> wetCells = new TreeSet<>();
+    private final SoilMoistureCellsLookup cells = new SoilMoistureCellsLookup() {
+        @Override
+        public int wetCellCount() {
+            return wetCells.size();
+        }
+
+        @Override
+        public void forEach(SoilMoistureCellConsumer consumer) {
+            if (consumer == null) {
+                throw new IllegalArgumentException(
+                        "consumer must not be null");
+            }
+            for (MoistureCell cell : wetCells) {
+                consumer.accept(cell.x(), cell.y(), cell.z());
+            }
+        }
+    };
 
     public SoilMoistureSystem(
             SoilMoistureStorage storage,
@@ -38,6 +58,10 @@ public final class SoilMoistureSystem {
 
     public SoilMoistureLookup lookup() {
         return lookup;
+    }
+
+    public SoilMoistureCellsLookup cells() {
+        return cells;
     }
 
     /**
@@ -82,6 +106,9 @@ public final class SoilMoistureSystem {
                 y,
                 z,
                 current + infiltrated);
+        if (current == CellVolume.EMPTY) {
+            wetCells.add(new MoistureCell(x, y, z));
+        }
         return infiltrated;
     }
 
@@ -105,6 +132,7 @@ public final class SoilMoistureSystem {
         int remaining = current - removed;
         if (remaining == CellVolume.EMPTY) {
             storage.remove(x, y, z);
+            wetCells.remove(new MoistureCell(x, y, z));
         } else {
             storage.put(x, y, z, remaining);
         }
@@ -127,6 +155,22 @@ public final class SoilMoistureSystem {
             throw new IllegalArgumentException(
                     "requested soil moisture volume must not be negative: "
                             + requested);
+        }
+    }
+
+    private record MoistureCell(int x, int y, int z)
+            implements Comparable<MoistureCell> {
+
+        @Override
+        public int compareTo(MoistureCell other) {
+            int xOrder = Integer.compare(x, other.x);
+            if (xOrder != 0) {
+                return xOrder;
+            }
+            int yOrder = Integer.compare(y, other.y);
+            return yOrder != 0
+                    ? yOrder
+                    : Integer.compare(z, other.z);
         }
     }
 }
