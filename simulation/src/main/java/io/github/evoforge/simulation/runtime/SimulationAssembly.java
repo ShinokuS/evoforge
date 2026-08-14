@@ -84,10 +84,14 @@ import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalQueryConstraintProvider;
 import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundCalculator;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundLookup;
+import io.github.evoforge.simulation.world.mechanics.traversal.water.WaterWadingConstraint;
+import io.github.evoforge.simulation.world.mechanics.traversal.water.WaterWadingDefinitions;
+import io.github.evoforge.simulation.world.mechanics.traversal.water.WaterWadingProfile;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -119,6 +123,7 @@ public final class SimulationAssembly {
     private final SoilHydrologyDefinitions soilHydrologyDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
+    private final WaterWadingDefinitions waterWadingDefinitions;
     private final OccupancyDefinitions occupancyDefinitions;
     private final AgentDefinitions agentDefinitions;
     private final VisionDefinitions visionDefinitions;
@@ -154,6 +159,7 @@ public final class SimulationAssembly {
         soilHydrologyDefinitions = new SoilHydrologyDefinitions();
         objectDefinitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
         movementDefinitions = new MovementDefinitions();
+        waterWadingDefinitions = new WaterWadingDefinitions();
         occupancyDefinitions = new OccupancyDefinitions();
         agentDefinitions = new AgentDefinitions();
         visionDefinitions = new VisionDefinitions();
@@ -236,6 +242,17 @@ public final class SimulationAssembly {
     public SimulationAssembly movementRate(ObjectDefinitionId definitionId, long unitsPerTick) {
         requireNotStarted(); requireObjectDefinition(definitionId);
         movementDefinitions.put(definitionId, MovementRate.of(unitsPerTick));
+        return this;
+    }
+
+    public SimulationAssembly waterWading(
+            ObjectDefinitionId definitionId,
+            int maxDepth) {
+        requireNotStarted();
+        requireObjectDefinition(definitionId);
+        waterWadingDefinitions.put(
+                definitionId,
+                new WaterWadingProfile(maxDepth));
         return this;
     }
 
@@ -401,6 +418,7 @@ public final class SimulationAssembly {
         soilHydrologyDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
+        waterWadingDefinitions.freeze();
         occupancyDefinitions.freeze();
         agentDefinitions.freeze();
         visionDefinitions.freeze();
@@ -495,12 +513,19 @@ public final class SimulationAssembly {
             periodicEvaporation.start();
         }
 
+        WaterWadingConstraint waterWading = new WaterWadingConstraint(
+                objects,
+                waterWadingDefinitions,
+                water.lookup(),
+                landscape.geometry());
+
         MovementStepCompletionRelay movementCompletions = new MovementStepCompletionRelay();
         MovementActionProcessor movementActions = new MovementActionProcessor(
                 movementState,
                 objects,
                 spatial.transforms(),
                 navigation.lookup(),
+                waterWading,
                 occupancy,
                 spatial,
                 orientations,
@@ -528,10 +553,15 @@ public final class SimulationAssembly {
                 navigation.lookup(),
                 movementDefinitions,
                 transitionCosts,
+                waterWading,
                 occupancy,
                 movementState,
                 movementScheduler);
-        MoveToSystem moveTo = new MoveToSystem(spatial.transforms(), pathfinder, movement);
+        MoveToSystem moveTo = new MoveToSystem(
+                spatial.transforms(),
+                pathfinder,
+                movement,
+                new MoverTraversalQueryConstraintProvider(waterWading));
         movementCompletions.bind(moveTo);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
