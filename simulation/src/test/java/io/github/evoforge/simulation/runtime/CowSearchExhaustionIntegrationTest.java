@@ -70,15 +70,16 @@ final class CowSearchExhaustionIntegrationTest {
         assertNull(runtime.view().agents().lastDecision(cowId).selected());
 
         boolean moved = false;
-        boolean sawConcreteTarget = false;
+        boolean sawConcreteSelection = false;
         for (int tick = 0; tick < 120 && runtime.view().needs().level(cowId, HUNGER) == 80; tick++) {
             runtime.stepper().advance();
             moved |= chebyshevDistanceFromOrigin(runtime, cowId) >= 2;
-            sawConcreteTarget |= runtime.view().agents().currentTarget(cowId) != null;
+            sawConcreteSelection |= runtime.view().agents().lastDecision(cowId) != null
+                    && runtime.view().agents().lastDecision(cowId).selected() != null;
         }
 
         assertTrue(moved);
-        assertTrue(sawConcreteTarget);
+        assertTrue(sawConcreteSelection);
         assertTrue(runtime.view().needs().level(cowId, HUNGER) < 80);
     }
 
