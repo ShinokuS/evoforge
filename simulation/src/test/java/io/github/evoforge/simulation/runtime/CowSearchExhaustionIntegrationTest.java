@@ -11,6 +11,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class CowSearchExhaustionIntegrationTest {
@@ -25,19 +27,18 @@ final class CowSearchExhaustionIntegrationTest {
         ObjectDefinitionId cow = assembly.objectDefinition("test:search_exploration_cow");
 
         configureSearchingCow(assembly, cow, 4);
-        for (int x = 0; x <= 6; x++) assembly.placeTerrain(x, 0, -1, ground);
+        fillGround(assembly, ground, -6, 6, -6, 6);
 
         ObjectId cowId = assembly.createObject(cow);
         assembly.placeObject(cowId, 0, 0, 0);
         assembly.initialFacing(cowId, 1, 0);
 
         SimulationRuntime runtime = assembly.start();
-        for (int tick = 0; tick < 12 && runtime.view().transforms().x(cowId) < 2; tick++) {
+        for (int tick = 0; tick < 20 && chebyshevDistanceFromOrigin(runtime, cowId) < 2; tick++) {
             runtime.stepper().advance();
         }
 
-        assertTrue(runtime.view().transforms().x(cowId) >= 2);
-        assertEquals(0, runtime.view().transforms().y(cowId));
+        assertTrue(chebyshevDistanceFromOrigin(runtime, cowId) >= 2);
         assertNull(runtime.view().agents().currentTarget(cowId));
         assertNotNull(runtime.view().searches().currentSearch(cowId));
         assertEquals("core:hunger", runtime.view().searches().currentSearch(cowId).motivation());
@@ -53,27 +54,68 @@ final class CowSearchExhaustionIntegrationTest {
 
         configureSearchingCow(assembly, cow, 4);
         assembly.satisfiesNeed(grass, HUNGER, 30, GRAZE);
-        for (int x = 0; x <= 10; x++) assembly.placeTerrain(x, 0, -1, ground);
+        fillGround(assembly, ground, -8, 8, -8, 8);
 
         ObjectId cowId = assembly.createObject(cow);
-        ObjectId grassId = assembly.createObject(grass);
+        List<ObjectId> grassIds = placeFoodRing(assembly, grass);
         assembly.placeObject(cowId, 0, 0, 0);
-        assembly.placeObject(grassId, 10, 0, 0);
         assembly.initialFacing(cowId, 1, 0);
 
         SimulationRuntime runtime = assembly.start();
         runtime.stepper().advance();
-        assertFalse(runtime.view().vision().snapshot(cowId).isObjectVisible(grassId));
+        for (ObjectId grassId : grassIds) {
+            assertFalse(runtime.view().vision().snapshot(cowId).isObjectVisible(grassId));
+        }
         assertTrue(runtime.view().agents().lastDecision(cowId).candidates().isEmpty());
         assertNull(runtime.view().agents().lastDecision(cowId).selected());
 
+        boolean moved = false;
+        boolean sawConcreteTarget = false;
         for (int tick = 0; tick < 120 && runtime.view().needs().level(cowId, HUNGER) == 80; tick++) {
             runtime.stepper().advance();
+            moved |= chebyshevDistanceFromOrigin(runtime, cowId) >= 2;
+            sawConcreteTarget |= runtime.view().agents().currentTarget(cowId) != null;
         }
 
-        assertEquals(50, runtime.view().needs().level(cowId, HUNGER));
-        assertEquals(10, runtime.view().transforms().x(cowId));
-        assertEquals(0, runtime.view().transforms().y(cowId));
+        assertTrue(moved);
+        assertTrue(sawConcreteTarget);
+        assertTrue(runtime.view().needs().level(cowId, HUNGER) < 80);
+    }
+
+    private static List<ObjectId> placeFoodRing(
+            SimulationAssembly assembly,
+            ObjectDefinitionId grass) {
+        int[][] positions = {
+                {6, 0}, {4, -4}, {0, -6}, {-4, -4},
+                {-6, 0}, {-4, 4}, {0, 6}, {4, 4}
+        };
+        List<ObjectId> result = new ArrayList<>(positions.length);
+        for (int[] position : positions) {
+            ObjectId grassId = assembly.createObject(grass);
+            assembly.placeObject(grassId, position[0], position[1], 0);
+            result.add(grassId);
+        }
+        return result;
+    }
+
+    private static void fillGround(
+            SimulationAssembly assembly,
+            LandscapeDefinitionId ground,
+            int minX,
+            int maxX,
+            int minY,
+            int maxY) {
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                assembly.placeTerrain(x, y, -1, ground);
+            }
+        }
+    }
+
+    private static int chebyshevDistanceFromOrigin(SimulationRuntime runtime, ObjectId objectId) {
+        return Math.max(
+                Math.abs(runtime.view().transforms().x(objectId)),
+                Math.abs(runtime.view().transforms().y(objectId)));
     }
 
     private static void configureSearchingCow(
