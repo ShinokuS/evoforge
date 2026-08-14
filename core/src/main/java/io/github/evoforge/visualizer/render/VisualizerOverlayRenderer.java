@@ -22,6 +22,8 @@ public final class VisualizerOverlayRenderer {
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5.0f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final float OCCUPANCY_STROKE_PIXELS = 3.0f;
+    private static final float OCCUPIED_FRAME_INSET = 0.10f;
+    private static final float RESERVED_FRAME_INSET = 0.20f;
 
     private static final Color GRID_SUBTLE =
             new Color(0.12f, 0.16f, 0.14f, 1f);
@@ -266,28 +268,13 @@ public final class VisualizerOverlayRenderer {
                 }
 
                 float inset = occupancyState == OccupancyState.OCCUPIED
-                        ? 0.08f
-                        : 0.18f;
+                        ? OCCUPIED_FRAME_INSET
+                        : RESERVED_FRAME_INSET;
                 shapes.setColor(
                         occupancyState == OccupancyState.OCCUPIED
                                 ? OCCUPIED_CELL
                                 : RESERVED_CELL);
                 drawCellFrame(x, y, inset, thickness);
-
-                if (occupancyState == OccupancyState.RESERVED) {
-                    shapes.rectLine(
-                            x + 0.32f,
-                            y + 0.32f,
-                            x + 0.68f,
-                            y + 0.68f,
-                            thickness);
-                    shapes.rectLine(
-                            x + 0.32f,
-                            y + 0.68f,
-                            x + 0.68f,
-                            y + 0.32f,
-                            thickness);
-                }
             }
         }
     }
@@ -340,10 +327,10 @@ public final class VisualizerOverlayRenderer {
 
         shapes.setColor(SELECTED);
         shapes.rect(
-                selected.x() + 0.03f,
-                selected.y() + 0.03f,
-                0.94f,
-                0.94f);
+                selected.x() - 0.02f,
+                selected.y() - 0.02f,
+                1.04f,
+                1.04f);
     }
 
     private void drawTransitionOverlay() {
