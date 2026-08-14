@@ -3,6 +3,7 @@ package io.github.evoforge.simulation.world.mechanics.growth;
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockLookup;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionSink;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReplenishment;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
@@ -11,7 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Owns scheduled growth processes while delegating environmental rate semantics to a resolver. */
-public final class GrowthSystem implements GrowthLookup {
+public final class GrowthSystem implements GrowthLookup, ConsumableStockReductionSink {
     private final ObjectLookup objects;
     private final GrowthDefinitions definitions;
     private final ConsumableStockLookup stocks;
@@ -61,17 +62,25 @@ public final class GrowthSystem implements GrowthLookup {
             throw new IllegalStateException("growing object must own consumable stock: " + objectId);
         }
         if (nextProcessId == Long.MAX_VALUE) throw new IllegalStateException("growth process id space exhausted");
-        GrowthDefinition definition = definitions.get(object.definitionId());
         ActiveGrowth active = new ActiveGrowth(nextProcessId++, objectId);
         byProcessId.put(active.processId, active);
         byObjectId.put(objectId, active);
-        schedule(active, definition.intervalTicks());
+        if (isFull(objectId)) {
+            setDormant(active);
+        } else {
+            schedule(active, definitions.get(object.definitionId()).intervalTicks());
+        }
     }
 
     public void resume(long processId) {
         requireScheduler();
         ActiveGrowth active = byProcessId.get(processId);
         if (active == null) throw new IllegalStateException("unknown growth process: " + processId);
+        if (!active.scheduled) {
+            throw new IllegalStateException("dormant growth process was resumed: " + active.objectId);
+        }
+        active.scheduled = false;
+
         WorldObject object = objects.get(active.objectId);
         if (object == null) {
             byProcessId.remove(processId);
@@ -88,12 +97,32 @@ public final class GrowthSystem implements GrowthLookup {
                 applied,
                 stocks.quantity(active.objectId),
                 stocks.capacity(active.objectId));
-        schedule(active, definition.intervalTicks());
+
+        if (isFull(active.objectId)) {
+            setDormant(active);
+        } else {
+            schedule(active, definition.intervalTicks());
+        }
+    }
+
+    /** Wakes a full dormant growable object only after authoritative stock actually decreases. */
+    @Override
+    public void stockReduced(ObjectId objectId) {
+        ActiveGrowth active = objectId == null ? null : byObjectId.get(objectId);
+        if (active == null || active.scheduled || isFull(objectId)) return;
+        WorldObject object = objects.get(objectId);
+        if (object == null) return;
+        schedule(active, definitions.get(object.definitionId()).intervalTicks());
     }
 
     @Override
     public boolean has(ObjectId objectId) {
         return objectId != null && byObjectId.containsKey(objectId);
+    }
+
+    @Override
+    public GrowthStatus status(ObjectId objectId) {
+        return requireActive(objectId).status;
     }
 
     @Override
@@ -106,12 +135,25 @@ public final class GrowthSystem implements GrowthLookup {
         return requireActive(objectId).lastEvaluation;
     }
 
+    private boolean isFull(ObjectId objectId) {
+        return stocks.quantity(objectId) >= stocks.capacity(objectId);
+    }
+
+    private void setDormant(ActiveGrowth active) {
+        active.scheduled = false;
+        active.status = GrowthStatus.DORMANT_FULL;
+        active.nextEvaluationTick = -1L;
+    }
+
     private void schedule(ActiveGrowth active, long delayTicks) {
+        if (active.scheduled) throw new IllegalStateException("growth is already scheduled: " + active.objectId);
         try {
             active.nextEvaluationTick = Math.addExact(time.tick(), delayTicks);
         } catch (ArithmeticException exception) {
             throw new IllegalStateException("growth schedule tick overflow", exception);
         }
+        active.status = GrowthStatus.GROWING;
+        active.scheduled = true;
         scheduler.scheduleAfter(delayTicks, active.processId);
     }
 
@@ -128,7 +170,9 @@ public final class GrowthSystem implements GrowthLookup {
     private static final class ActiveGrowth {
         private final long processId;
         private final ObjectId objectId;
-        private long nextEvaluationTick;
+        private boolean scheduled;
+        private GrowthStatus status = GrowthStatus.GROWING;
+        private long nextEvaluationTick = -1L;
         private GrowthTrace lastEvaluation;
 
         private ActiveGrowth(long processId, ObjectId objectId) {
