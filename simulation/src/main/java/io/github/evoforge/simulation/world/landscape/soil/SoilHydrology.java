@@ -7,15 +7,16 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
  *
  * <p>Both values use the same normalized fixed-point volume scale as surface water.
  * {@code capacity} is the maximum moisture retained by one terrain cell and
- * {@code infiltrationPerTick} bounds how much precipitation may enter that soil in
- * one simulation tick.
+ * {@code infiltrationLimit} bounds one requested infiltration transfer. Time-based
+ * rainfall rates remain the responsibility of a future weather process that owns
+ * simulation cadence.
  */
 public record SoilHydrology(
         int capacity,
-        int infiltrationPerTick) {
+        int infiltrationLimit) {
 
     public SoilHydrology {
         CellVolume.requireValid(capacity);
-        CellVolume.requireValid(infiltrationPerTick);
+        CellVolume.requireValid(infiltrationLimit);
     }
 }
