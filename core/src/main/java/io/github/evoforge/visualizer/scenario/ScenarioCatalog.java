@@ -6,6 +6,16 @@ import io.github.evoforge.visualizer.scenario.movement.MoveToInteractiveScenario
 import io.github.evoforge.visualizer.scenario.movement.MoveToPatrolScenario;
 import io.github.evoforge.visualizer.scenario.movement.TimedMovementScenario;
 import io.github.evoforge.visualizer.scenario.occupancy.OccupancyContentionScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingHierarchyScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingInvalidationScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingMultiLevelClimbScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingRampScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingStraightScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingStructuralDetourScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingUnreachableScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingVerticalOverpassScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingWeightedDetourScenario;
+import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingZSwitchbackScenario;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -21,23 +31,17 @@ public final class ScenarioCatalog {
     }
 
     private ScenarioCatalog(List<ScenarioGroup> groups, boolean grouped) {
-        if (groups == null || groups.isEmpty()) {
-            throw new IllegalArgumentException("scenario groups must not be empty");
-        }
+        if (groups == null || groups.isEmpty()) throw new IllegalArgumentException("scenario groups must not be empty");
         List<ScenarioGroup> groupCopy = List.copyOf(groups);
         Set<String> groupIds = new HashSet<>();
         Set<String> scenarioIds = new HashSet<>();
         List<VisualizerScenario> flattened = new ArrayList<>();
         for (ScenarioGroup group : groupCopy) {
             if (group == null) throw new IllegalArgumentException("scenario group must not be null");
-            if (!groupIds.add(group.id())) {
-                throw new IllegalArgumentException("duplicate scenario group id: " + group.id());
-            }
+            if (!groupIds.add(group.id())) throw new IllegalArgumentException("duplicate scenario group id: " + group.id());
             for (VisualizerScenario scenario : group.scenarios()) {
                 validateScenario(scenario);
-                if (!scenarioIds.add(scenario.id())) {
-                    throw new IllegalArgumentException("duplicate scenario id: " + scenario.id());
-                }
+                if (!scenarioIds.add(scenario.id())) throw new IllegalArgumentException("duplicate scenario id: " + scenario.id());
                 flattened.add(scenario);
             }
         }
@@ -56,19 +60,13 @@ public final class ScenarioCatalog {
                         new CutawayScenario(), new RampNavigationScenario()),
                 ScenarioGroup.of("movement", "Movement",
                         new TimedMovementScenario(), new MoveToPatrolScenario(), new MoveToInteractiveScenario()),
-                ScenarioGroup.of("occupancy", "Occupancy",
-                        new OccupancyContentionScenario()),
+                ScenarioGroup.of("occupancy", "Occupancy", new OccupancyContentionScenario()),
                 ScenarioGroup.of("pathfinding", "Pathfinding",
-                        new PathfindingStraightScenario(),
-                        new PathfindingStructuralDetourScenario(),
-                        new PathfindingWeightedDetourScenario(),
-                        new PathfindingRampScenario(),
-                        new PathfindingMultiLevelClimbScenario(),
-                        new PathfindingZSwitchbackScenario(),
-                        new PathfindingVerticalOverpassScenario(),
-                        new PathfindingUnreachableScenario(),
-                        new PathfindingHierarchyScenario(),
-                        new PathfindingInvalidationScenario()));
+                        new PathfindingStraightScenario(), new PathfindingStructuralDetourScenario(),
+                        new PathfindingWeightedDetourScenario(), new PathfindingRampScenario(),
+                        new PathfindingMultiLevelClimbScenario(), new PathfindingZSwitchbackScenario(),
+                        new PathfindingVerticalOverpassScenario(), new PathfindingUnreachableScenario(),
+                        new PathfindingHierarchyScenario(), new PathfindingInvalidationScenario()));
     }
 
     public int size() { return scenarios.size(); }

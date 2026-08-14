@@ -1,15 +1,20 @@
-package io.github.evoforge.visualizer.scenario;
+package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
+import io.github.evoforge.visualizer.scenario.ScenarioSession;
+import io.github.evoforge.visualizer.scenario.ScenarioView;
+import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 
 public final class PathfindingStructuralDetourScenario implements VisualizerScenario {
     @Override public String id() { return "pathfinding-structural-detour"; }
     @Override public String title() { return "Pathfinding / Structural Detour"; }
-    @Override public String description() { return "Missing support forces Navigation to route through the upper opening."; }
+    @Override public String description() {
+        return "Missing support forces Navigation to route through the upper opening.";
+    }
 
     @Override
     public ScenarioSession create() {

@@ -1,18 +1,24 @@
-package io.github.evoforge.visualizer.scenario;
-
-import java.util.ArrayList;
-import java.util.List;
+package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
+import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
+import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
+import io.github.evoforge.visualizer.scenario.ScenarioSession;
+import io.github.evoforge.visualizer.scenario.ScenarioView;
+import io.github.evoforge.visualizer.scenario.VisualizerScenario;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class PathfindingWeightedDetourScenario implements VisualizerScenario {
     @Override public String id() { return "pathfinding-weighted-detour"; }
     @Override public String title() { return "Pathfinding / Weighted Detour"; }
-    @Override public String description() { return "Orange cells are valid but expensive; the cheapest route should avoid them."; }
+    @Override public String description() {
+        return "Orange cells are valid but expensive; the cheapest route should avoid them.";
+    }
 
     @Override
     public ScenarioSession create() {
@@ -33,6 +39,7 @@ public final class PathfindingWeightedDetourScenario implements VisualizerScenar
         return new ScenarioSession(
                 runtime,
                 new ScenarioView(0, 6f, 0f, 0.8f),
-                PathfindingScenarioDiagnostics.fromSearch(query, search, warnings.toArray(ScenarioCellMarker[]::new)));
+                PathfindingScenarioDiagnostics.fromSearch(
+                        query, search, warnings.toArray(ScenarioCellMarker[]::new)));
     }
 }

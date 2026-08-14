@@ -1,15 +1,18 @@
-package io.github.evoforge.visualizer.scenario;
+package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
+import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
+import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
+import io.github.evoforge.visualizer.scenario.ScenarioSession;
+import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class PathfindingScenariosTest {
-
     @Test
     void focusedScenariosExposeExpectedInitialStatus() {
         assertStatus(new PathfindingStraightScenario(), "FOUND");
@@ -27,21 +30,17 @@ final class PathfindingScenariosTest {
     @Test
     void invalidationScenarioKeepsVisibleInitialRouteThenReplans() {
         ScenarioSession session = new PathfindingInvalidationScenario().create();
-
         assertRouteStaysOnCenter(session.diagnostics());
-
         for (int tick = 1; tick <= 3; tick++) {
             session.runtime().stepper().advance();
             session.update();
             assertSummaryStartsWith(session, "status=FOUND");
             assertRouteStaysOnCenter(session.diagnostics());
         }
-
         session.runtime().stepper().advance();
         session.update();
         assertSummaryStartsWith(session, "status=STALE");
         assertRouteStaysOnCenter(session.diagnostics());
-
         session.runtime().stepper().advance();
         session.update();
         assertSummaryStartsWith(session, "status=FOUND");
@@ -52,20 +51,11 @@ final class PathfindingScenariosTest {
         ScenarioDiagnostics diagnostics = session.diagnostics();
         for (int index = 0; index < diagnostics.cellCount(); index++) {
             ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() != ScenarioCellMarkerStyle.ROUTE) {
-                continue;
-            }
-            if (marker.y() != 0) {
-                usesSideLane = true;
-            }
-            if (marker.y() == 0 && marker.x() == 8) {
-                crossesSolid = true;
-            }
-            if (marker.y() == 0 && marker.x() == 14) {
-                crossesSlow = true;
-            }
+            if (marker.style() != ScenarioCellMarkerStyle.ROUTE) continue;
+            if (marker.y() != 0) usesSideLane = true;
+            if (marker.y() == 0 && marker.x() == 8) crossesSolid = true;
+            if (marker.y() == 0 && marker.x() == 14) crossesSlow = true;
         }
-
         assertTrue(usesSideLane, "fresh route must use one side lane");
         assertTrue(!crossesSolid, "fresh route must avoid the new solid block");
         assertTrue(!crossesSlow, "fresh route must avoid the expensive slow cell");
@@ -87,68 +77,39 @@ final class PathfindingScenariosTest {
                 new PathfindingVerticalOverpassScenario(),
                 new PathfindingHierarchyScenario(),
                 new PathfindingInvalidationScenario())) {
-
             ScenarioSession first = scenario.create();
             ScenarioSession second = scenario.create();
-
             assertEquals(first.view(), second.view());
-            assertEquals(
-                    first.diagnostics().summary(),
-                    second.diagnostics().summary());
-            assertEquals(
-                    first.diagnostics().cellCount(),
-                    second.diagnostics().cellCount());
+            assertEquals(first.diagnostics().summary(), second.diagnostics().summary());
+            assertEquals(first.diagnostics().cellCount(), second.diagnostics().cellCount());
         }
     }
 
-    private static void assertRouteStaysOnCenter(
-            ScenarioDiagnostics diagnostics) {
-
+    private static void assertRouteStaysOnCenter(ScenarioDiagnostics diagnostics) {
         for (int index = 0; index < diagnostics.cellCount(); index++) {
             ScenarioCellMarker marker = diagnostics.cell(index);
             if (marker.style() == ScenarioCellMarkerStyle.ROUTE) {
-                assertEquals(
-                        0,
-                        marker.y(),
-                        "visible pre-change route must stay on the center lane");
+                assertEquals(0, marker.y(), "visible pre-change route must stay on the center lane");
             }
         }
     }
 
-    private static void assertRouteZSlices(
-            VisualizerScenario scenario,
-            int minimumSlices) {
-
+    private static void assertRouteZSlices(VisualizerScenario scenario, int minimumSlices) {
         ScenarioDiagnostics diagnostics = scenario.create().diagnostics();
         Set<Integer> routeZ = new HashSet<>();
-
         for (int index = 0; index < diagnostics.cellCount(); index++) {
             ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() == ScenarioCellMarkerStyle.ROUTE) {
-                routeZ.add(marker.z());
-            }
+            if (marker.style() == ScenarioCellMarkerStyle.ROUTE) routeZ.add(marker.z());
         }
-
-        assertTrue(
-                routeZ.size() >= minimumSlices,
-                scenario.id() + ": route Z slices=" + routeZ);
+        assertTrue(routeZ.size() >= minimumSlices, scenario.id() + ": route Z slices=" + routeZ);
     }
 
-    private static void assertStatus(
-            VisualizerScenario scenario,
-            String expectedStatus) {
-
-        ScenarioSession session = scenario.create();
-        assertSummaryStartsWith(session, "status=" + expectedStatus);
+    private static void assertStatus(VisualizerScenario scenario, String expectedStatus) {
+        assertSummaryStartsWith(scenario.create(), "status=" + expectedStatus);
     }
 
-    private static void assertSummaryStartsWith(
-            ScenarioSession session,
-            String expectedPrefix) {
-
+    private static void assertSummaryStartsWith(ScenarioSession session, String expectedPrefix) {
         String summary = session.diagnostics().summary();
-        assertTrue(
-                summary.startsWith(expectedPrefix),
-                expectedPrefix + " expected, got: " + summary);
+        assertTrue(summary.startsWith(expectedPrefix), expectedPrefix + " expected, got: " + summary);
     }
 }
