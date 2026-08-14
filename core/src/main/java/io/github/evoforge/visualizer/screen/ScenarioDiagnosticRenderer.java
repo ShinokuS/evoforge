@@ -7,17 +7,17 @@ import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 
-/** Draws generic presentation-only cell diagnostics for the selected standing Z. */
+/** Draws minimal presentation-only cell diagnostics for the selected standing Z. */
 final class ScenarioDiagnosticRenderer {
 
     private static final Color START =
-            new Color(0.35f, 0.95f, 0.45f, 1f);
+            new Color(0.35f, 0.95f, 0.45f, 0.9f);
     private static final Color GOAL =
-            new Color(0.95f, 0.35f, 0.35f, 1f);
+            new Color(0.95f, 0.35f, 0.35f, 0.9f);
     private static final Color ROUTE =
-            new Color(1f, 0.85f, 0.2f, 1f);
+            new Color(1f, 0.85f, 0.2f, 0.85f);
     private static final Color WARNING =
-            new Color(1f, 0.55f, 0.15f, 1f);
+            new Color(1f, 0.55f, 0.15f, 0.9f);
 
     private final ShapeRenderer shapes =
             new ShapeRenderer();
@@ -32,41 +32,6 @@ final class ScenarioDiagnosticRenderer {
         }
 
         shapes.setProjectionMatrix(worldProjection);
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        for (int index = 0;
-                index < diagnostics.cellCount();
-                index++) {
-
-            ScenarioCellMarker marker =
-                    diagnostics.cell(index);
-
-            if (marker.z() != selectedZ) {
-                continue;
-            }
-
-            shapes.setColor(color(marker.style()));
-
-            switch (marker.style()) {
-                case ROUTE -> shapes.rect(
-                        marker.x() + 0.34f,
-                        marker.y() + 0.34f,
-                        0.32f,
-                        0.32f);
-                case START, GOAL -> shapes.rect(
-                        marker.x() + 0.18f,
-                        marker.y() + 0.18f,
-                        0.64f,
-                        0.64f);
-                case WARNING -> shapes.rect(
-                        marker.x() + 0.08f,
-                        marker.y() + 0.08f,
-                        0.84f,
-                        0.10f);
-            }
-        }
-
-        shapes.end();
         shapes.begin(ShapeRenderer.ShapeType.Line);
 
         for (int index = 0;
@@ -75,31 +40,12 @@ final class ScenarioDiagnosticRenderer {
 
             ScenarioCellMarker marker =
                     diagnostics.cell(index);
-
             if (marker.z() != selectedZ) {
                 continue;
             }
 
             shapes.setColor(color(marker.style()));
-            shapes.rect(
-                    marker.x() + 0.08f,
-                    marker.y() + 0.08f,
-                    0.84f,
-                    0.84f);
-
-            if (marker.style()
-                    == ScenarioCellMarkerStyle.GOAL) {
-                shapes.line(
-                        marker.x() + 0.18f,
-                        marker.y() + 0.18f,
-                        marker.x() + 0.82f,
-                        marker.y() + 0.82f);
-                shapes.line(
-                        marker.x() + 0.82f,
-                        marker.y() + 0.18f,
-                        marker.x() + 0.18f,
-                        marker.y() + 0.82f);
-            }
+            drawMarker(marker);
         }
 
         shapes.end();
@@ -107,6 +53,57 @@ final class ScenarioDiagnosticRenderer {
 
     void dispose() {
         shapes.dispose();
+    }
+
+    private void drawMarker(
+            ScenarioCellMarker marker) {
+
+        float x = marker.x();
+        float y = marker.y();
+
+        switch (marker.style()) {
+            case ROUTE -> shapes.line(
+                    x + 0.38f,
+                    y + 0.08f,
+                    x + 0.62f,
+                    y + 0.08f);
+            case START -> {
+                shapes.line(
+                        x + 0.08f,
+                        y + 0.08f,
+                        x + 0.30f,
+                        y + 0.08f);
+                shapes.line(
+                        x + 0.08f,
+                        y + 0.08f,
+                        x + 0.08f,
+                        y + 0.30f);
+            }
+            case GOAL -> {
+                shapes.line(
+                        x + 0.70f,
+                        y + 0.92f,
+                        x + 0.92f,
+                        y + 0.92f);
+                shapes.line(
+                        x + 0.92f,
+                        y + 0.70f,
+                        x + 0.92f,
+                        y + 0.92f);
+            }
+            case WARNING -> {
+                shapes.line(
+                        x + 0.70f,
+                        y + 0.08f,
+                        x + 0.92f,
+                        y + 0.08f);
+                shapes.line(
+                        x + 0.92f,
+                        y + 0.08f,
+                        x + 0.92f,
+                        y + 0.30f);
+            }
+        }
     }
 
     private static Color color(
