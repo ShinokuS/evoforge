@@ -35,7 +35,7 @@ final class MoveToScenariosTest {
     }
 
     @Test
-    void interactiveScenarioMovesSelectedObjectUpAndDownAcrossZLevels() {
+    void interactiveScenarioResolvesVisibleStandingSurfacesAcrossZLevels() {
         ScenarioSession session = new MoveToInteractiveScenario().create();
         SimulationRuntime runtime = session.runtime();
         ObjectId mover = runtime.view().cells().objectAt(-4, -2, 0, 0);
@@ -59,7 +59,10 @@ final class MoveToScenariosTest {
         assertNotNull(runtime.view().moveTo().lastCompletion(mover));
         assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
 
-        assertTrue(session.controller().secondaryCellAction(-4, 0, 0));
+        // The camera may remain on standing Z4 while the lower Z0 surface is
+        // visible through the cutaway. RMB must target that visible surface,
+        // not blindly reinterpret the click as an impossible Z4 destination.
+        assertTrue(session.controller().secondaryCellAction(-4, 0, 4));
         assertEquals(0, goalZ(session.diagnostics()));
         advanceUntilIdle(session, mover);
 
