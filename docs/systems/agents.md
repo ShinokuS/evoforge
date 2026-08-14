@@ -10,6 +10,7 @@ The current production slice proves:
 perception -> opportunity generation -> deterministic choice -> intent -> MoveTo -> interaction
 unresolved motivation -> semantic search demand -> visual search -> relative exploration -> discovery
 finite source quantity -> availability -> interaction cost -> authoritative depletion
+Need progression -> changing motivation -> ordinary agent reconsideration
 ```
 
 There is no `CowAI`, `EatGrassAction`, source-type switch, global action enum or omniscient `findFood()`.
@@ -36,7 +37,13 @@ AgentSystem
                          └─ unguided relative exploration
 ```
 
-Simulation may internally represent physical state with XYZ coordinates. Agent cognition/search does not receive a global coordinate map or an absolute self-position.
+Need progression is independent of this cognition path:
+
+```text
+NeedProgressionSystem -> NeedSystem authoritative deficit -> read on ordinary Agent think
+```
+
+Simulation may internally represent physical state with XYZ coordinates. Agent cognition/search does not receive a global coordinate map or absolute self-position.
 
 ## Ownership
 
@@ -51,6 +58,8 @@ Simulation may internally represent physical state with XYZ coordinates. Agent c
 | sensor-neutral current perception | `PerceptionLookup` |
 | immutable Need declarations | `NeedDefinitions` |
 | mutable Need deficit | `NeedSystem` / `NeedLookup` |
+| immutable Need progression data | `NeedProgressionDefinitions` |
+| continuing Need progression process | `NeedProgressionSystem` / `NeedProgressionLookup` |
 | immutable source Need effects | `NeedSatisfactionDefinitions` |
 | bounded consumable source configuration | `ConsumableStockDefinitions` |
 | mutable consumable source quantity | `ConsumableStockSystem` / `ConsumableStockLookup` |
@@ -64,7 +73,7 @@ Simulation may internally represent physical state with XYZ coordinates. Agent c
 | decision diagnostics | `AgentDecisionTrace` |
 | search diagnostics | `AgentSearchTrace` |
 
-Decision does not mutate physiology directly. Need does not choose behavior. Search does not own movement. Presentation does not recreate simulation truth.
+Decision does not mutate physiology directly. Need does not choose behavior. Need progression does not call Agent. Search does not own movement. Presentation does not recreate simulation truth.
 
 ## Open semantic identifiers
 
@@ -79,25 +88,25 @@ Adding another identifier does not require editing a central enum or switch. An 
 
 ## Agent composition
 
-`AgentDefinition` currently contains autonomous capabilities only.
-
-Other properties remain independent definition aspects:
+`AgentDefinition` contains autonomous capabilities only. Other concerns are independent definition aspects:
 
 ```text
 object definition
   ├─ agent
   ├─ vision
   ├─ needs
+  ├─ needProgression
   ├─ needSolutionKnowledge
   ├─ needSatisfaction
-  └─ optional world-mechanic aspects such as consumableStock
+  ├─ consumableStock
+  └─ growth
 ```
 
-This prevents `AgentDefinition` from becoming a universal bag of every sensory, physiological and cognitive property.
+This prevents `AgentDefinition` from becoming a universal bag of sensory, physiological and cognitive properties.
 
-## Needs
+## Needs and physiology progression
 
-`NeedSpec` defines:
+`NeedSpec` declares:
 
 ```text
 NeedId
@@ -112,27 +121,34 @@ Runtime levels are deficit-oriented:
 maxLevel  maximum configured deficit
 ```
 
-`NeedSystem` exclusively owns mutable deficits.
-
-Current mutation:
+`NeedSystem` exclusively owns mutable levels. Current owner mutations are intentionally narrow:
 
 ```text
 satisfy(agent, need, amount)
-    -> reduce by min(current deficit, amount)
+    -> reduce deficit toward 0
+
+NeedDeficitIncrease.increase(agent, need, amount)
+    -> increase deficit toward maxLevel
 ```
 
-Need progression over time is not implemented yet.
+Automatic time dynamics are a separate aspect, not fields on `NeedSpec`:
+
+```text
+NeedProgressionDefinition
+  NeedId
+  baseAmount
+  intervalTicks
+```
+
+`NeedProgressionSystem` owns scheduling only. It asks `NeedProgressionRateResolver` for the effective increase each interval and then uses the narrow Need mutation capability. The current resolver returns intrinsic `baseAmount` unchanged.
+
+Future activity, temperature, illness, sleep or other physiological state may influence a richer resolver without adding `if (HUNGER)` / `if (THIRST)` branches to progression code.
+
+See [Need Progression](./need-progression.md).
 
 ## Vision and physical orientation
 
-Vision is an independent sensory mechanic.
-
-`VisionDefinition` currently supplies:
-
-```text
-range
-horizontal FOV degrees
-```
+Vision is an independent sensory mechanic. `VisionDefinition` currently supplies range and horizontal FOV degrees.
 
 `VisionSystem` reads authoritative position, facing, current cell contents and `SightOcclusionLookup`, then produces immutable `VisionSnapshot` data containing cells and objects actually visible now.
 
@@ -161,32 +177,20 @@ List<OpportunitySearchDemand> searchDemands(ObjectId agentId);
 
 A source definition may advertise a Need effect and optionally require a capability.
 
-`NeedSatisfaction` now keeps physiological effect and physical source cost separate:
+`NeedSatisfaction` keeps physiological effect and physical source cost separate:
 
 ```text
 amount             Need deficit reduction
 consumedQuantity   ConsumableStock units spent per successful use
 ```
 
-A zero `consumedQuantity` means a persistent/non-depleting effect. A positive value requires the source instance to own `ConsumableStock`.
+A zero `consumedQuantity` means a persistent/non-depleting effect. A positive value requires authoritative finite stock.
 
-Eligibility includes:
-
-```text
-source carries NeedSatisfaction data
-agent carries the relevant Need
-current deficit > 0
-required capability is present, if configured
-finite source has at least consumedQuantity available
-```
-
-If a finite source is empty, it is not advertised as an opportunity. Arrival/use revalidates stock before mutation.
-
-A satisfaction that declares positive consumption while its source has no consumable stock is a configuration/invariant failure, not a normal world outcome.
+Eligibility includes source effect data, the relevant Need, positive current deficit, optional capability and enough current finite stock. Empty finite sources are not advertised. Arrival/use revalidates stock before mutation.
 
 Grass, Hay and future compatible content remain data. Generic Decision does not know their names.
 
-See [Consumable Stock](./consumable-stock.md) for quantity ownership and current stock semantics.
+See [Consumable Stock](./consumable-stock.md).
 
 ## General semantic knowledge
 
@@ -196,25 +200,13 @@ See [Consumable Stock](./consumable-stock.md) for quantity ownership and current
 "this definition knows that environmental solutions exist for NeedId X"
 ```
 
-Example:
-
-```text
-core:hunger -> environmental solutions exist
-```
-
 It does not contain Grass/Hay IDs, ObjectIds, XYZ coordinates, routes or last-known positions.
 
 This is intentionally not a universal Knowledge framework. Other knowledge families should receive their own owner only when real consumers appear.
 
 ## Unknown-source search
 
-When no concrete perceived opportunity exists, providers may emit:
-
-```text
-OpportunitySearchDemand
-  motivation
-  urgency
-```
+When no concrete perceived opportunity exists, providers may emit `OpportunitySearchDemand(motivation, urgency)`.
 
 For the Cow proof this means approximately:
 
@@ -230,80 +222,26 @@ not:
 
 `AgentSystem` chooses among search demands deterministically and delegates the epistemic process to `AgentSearchSystem`.
 
-### Local visual sweep
+Search first performs a local visual sweep. If nothing is found, `UnguidedExplorationPolicy` returns only observer-relative heading + distance. The current correlated-random-walk policy uses stable identity, previous heading, exploration ordinal and visual range; it receives no XYZ.
 
-Search first observes the current heading and rotates through four 90-degree headings. Every heading is evaluated through ordinary authoritative Vision on a later scheduled think.
-
-If a compatible source enters Perception, normal opportunity evaluation resumes and Search is cancelled.
-
-### Unguided exploration
-
-If the local sweep finds nothing, Search falls back to `UnguidedExplorationPolicy`.
-
-The current `CorrelatedRandomWalkExplorationPolicy` receives only:
-
-```text
-stable agent identity
-previous exploration heading
-exploration-leg ordinal
-current visual range
-```
-
-and returns an observer-relative request:
-
-```text
-SearchRelocationRequest(
-    heading,
-    distance
-)
-```
-
-No XYZ is passed to the policy or stored in search state.
-
-Directional persistence is favored; deterministic pseudo-random variation later chooses straight/left/right alternatives. Current weights are provisional algorithm parameters, not Cow semantics.
-
-## Relative search locomotion
-
-`RelativeSearchLocomotion` is the execution boundary between cognition and physical movement.
-
-Flow:
-
-```text
-relative heading + requested distance
-    ↓
-face chosen heading
-    ↓
-read fresh VisionSnapshot
-    ↓
-inspect consecutive currently visible cells on that ray
-    ↓
-truncate to locally traversable visible extent
-    ↓
-production MoveTo to the resulting local destination
-```
-
-The adapter may read authoritative XYZ internally because Movement requires physical coordinates. Those coordinates are never returned to Search/Knowledge.
-
-Search therefore cannot ask Pathfinder for an arbitrary destination through unknown world space.
+`RelativeSearchLocomotion` converts the relative request into a currently visible, locally traversable multi-cell leg and executes it through production `MoveTo`. Coordinates required by Movement remain behind this execution boundary and are never returned to cognition/search.
 
 ## Continuing intents
 
-`AgentSystem` owns long-running autonomous execution.
-
-Current intent families are:
+`AgentSystem` currently owns:
 
 ```text
 opportunity intent
 search relocation intent
 ```
 
-While a MoveTo is active, no duplicate search relocation or opportunity use is issued. Completion is matched by `MoveToActionId` before continuing the domain process.
+While a MoveTo is active, no duplicate relocation or opportunity use is issued. Completion is matched by `MoveToActionId` before continuing the domain process.
 
-Intent interruption/competition is not implemented yet.
+Intent interruption/competition is deliberately deferred until multiple real motivations compete.
 
 ## Candidate evaluation
 
-The first provider uses a deliberately provisional score:
+The first provider still uses a provisional score:
 
 ```text
 effectiveBenefit = min(currentDeficit, advertisedAmount)
@@ -319,60 +257,30 @@ Stable order:
 4. provider registration order
 ```
 
-This is not the final Utility AI algebra. Multiple real motivations are required before response curves and cross-motivation normalization are promoted into a stronger contract.
+This is not final Utility AI algebra. Hunger + Thirst will provide the first real consumer for cross-motivation comparison.
 
-## Determinism
+## Determinism and scheduling
 
-Current agent/search determinism depends on:
+Current determinism depends on stable perceived-object ordering, stable candidate/search tie breaks, simulation ticks instead of wall-clock time, and deterministic exploration variation from stable identity + ordinal.
 
-```text
-stable perceived-object ordering
-stable candidate tie breaks
-stable search-demand ordering
-simulation ticks, never wall-clock time
-deterministic exploration variation from stable identity + ordinal
-```
-
-Authoritative hash-map iteration is not used as decision order.
-
-## Scheduling
-
-Current timings are intentionally simple implementation choices:
+Current scheduling remains intentionally simple:
 
 ```text
-first think                    +1 tick
-active MoveTo                  poll each tick
-active visual sweep            advance each tick
-search exploration leg         one MoveTo per leg
-idle/no search demand          recheck after 10 ticks
+Agent first think                +1 tick
+active MoveTo                    poll each tick
+active visual sweep              advance each tick
+idle/no search demand            recheck after 10 ticks
+Need progression                 its definition interval
+Growth                           its definition interval
 ```
 
-Representative profiling must precede specialized AI scheduling/index structures.
+Need changes do not currently trigger a special Agent wake-up. The agent observes them on its next ordinary think. Representative profiling must precede reactive wake-up or specialized scheduling/index structures.
 
 ## Developer observability
 
-`SimulationView` exposes read-only Orientation, Vision, Need, ConsumableStock, Decision, Search and MoveTo state.
+`SimulationView` exposes read-only Orientation, Vision, Need, NeedProgression, ConsumableStock, Growth, Decision, Search and MoveTo state.
 
-The visualizer can show for a selected object:
-
-```text
-actual visible cells
-actually visible objects
-physical facing
-active MoveTo route
-decision/search diagnostics
-```
-
-`AgentDecisionTrace` records candidates and the winner. `AgentSearchTrace` records current/last search motivation and phase.
-
-Agent debug scenarios currently include:
-
-```text
-Agents -> Cow Foraging
-Agents -> Cow Visual Search
-```
-
-Both scenarios now use finite food stock; presentation never recreates Vision, Decision or Pathfinding logic.
+Current visualizer diagnostics can show actual visible cells, actually visible objects, physical facing, active MoveTo route and decision/search state. The integrated living-Cow slice is the next milestone that will combine these with full object/cell inspection, resources, progression, growth and timed state-dependent animation.
 
 ## Current proofs
 
@@ -380,21 +288,20 @@ Headless coverage proves, among other invariants:
 
 - visible compatible source -> MoveTo -> Need reduction;
 - new compatible source definition works without Cow/Decision changes;
-- stronger farther source can beat weaker nearer source;
 - outside-range / behind-observer / occluded sources are not visual candidates;
 - general Need-solution knowledge starts search without source identity/location;
 - search discovers concrete food only through Perception;
 - unguided exploration expands observation through multi-cell visible relative legs;
-- exploration variation and candidate ties remain deterministic;
-- finite source use decreases authoritative stock;
-- empty finite source is no longer a candidate.
+- finite source use decreases authoritative stock and empty stock removes the opportunity;
+- plant Growth restores finite stock independently;
+- open NeedIds progress on independent schedules and clamp at their configured maxima;
+- progression resolver substitution changes effective rate without changing `NeedProgressionSystem`;
+- an initially satisfied Cow can become hungry and enter the existing generic food interaction flow without a Hunger-specific AI hook.
 
 ## Deferred work
 
-Not required for the current first Cow foundation:
+Not required before the integrated visual Cow acceptance slice:
 
-- plant growth/regrowth;
-- Need progression / metabolism;
 - water/thirst;
 - cross-motivation Utility algebra;
 - intent persistence/interruption;
@@ -405,4 +312,4 @@ Not required for the current first Cow foundation:
 - advanced Vision/body geometry;
 - AI-specific optimization before representative profiling.
 
-The next direct world-mechanic consumer is plant growth: it will justify a narrow replenishment mutation for `ConsumableStockSystem` and make finite plant biomass recover over simulation time.
+Persistent memory, richer senses and fluid evolution remain separate research milestones rather than prerequisites for the current living-world path.

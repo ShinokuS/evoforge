@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.runtime;
 
 import io.github.evoforge.simulation.world.agent.decision.AgentDecisionLookup;
 import io.github.evoforge.simulation.world.agent.need.NeedLookup;
+import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionLookup;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
@@ -35,6 +36,7 @@ public record SimulationView(
         Pathfinder pathfinder,
         MoveToLookup moveTo,
         NeedLookup needs,
+        NeedProgressionLookup needProgression,
         ConsumableStockLookup consumableStocks,
         GrowthLookup growth,
         AgentDecisionLookup agents,
@@ -44,8 +46,8 @@ public record SimulationView(
         if (objects == null || transforms == null || orientations == null || vision == null
                 || terrain == null || terrainExtents == null || terrainRevision == null
                 || geometry == null || navigation == null || occupancy == null || cells == null
-                || pathfinder == null || moveTo == null || needs == null || consumableStocks == null
-                || growth == null || agents == null || searches == null) {
+                || pathfinder == null || moveTo == null || needs == null || needProgression == null
+                || consumableStocks == null || growth == null || agents == null || searches == null) {
             throw new IllegalArgumentException("simulation view capabilities must not be null");
         }
     }

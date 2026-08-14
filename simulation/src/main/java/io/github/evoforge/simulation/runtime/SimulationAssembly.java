@@ -31,6 +31,10 @@ import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
+import io.github.evoforge.simulation.world.agent.need.progression.IntrinsicNeedProgressionRateResolver;
+import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinition;
+import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinitions;
+import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionSystem;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
 import io.github.evoforge.simulation.world.agent.perception.vision.TerrainSightOcclusionLookup;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinition;
@@ -98,6 +102,7 @@ public final class SimulationAssembly {
     private final AgentDefinitions agentDefinitions;
     private final VisionDefinitions visionDefinitions;
     private final NeedDefinitions needDefinitions;
+    private final NeedProgressionDefinitions needProgressionDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
     private final ConsumableStockDefinitions consumableStockDefinitions;
@@ -126,6 +131,7 @@ public final class SimulationAssembly {
         agentDefinitions = new AgentDefinitions();
         visionDefinitions = new VisionDefinitions();
         needDefinitions = new NeedDefinitions();
+        needProgressionDefinitions = new NeedProgressionDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
         consumableStockDefinitions = new ConsumableStockDefinitions();
@@ -202,6 +208,18 @@ public final class SimulationAssembly {
             long initialLevel) {
         requireNotStarted(); requireObjectDefinition(definitionId);
         needDefinitions.add(definitionId, new NeedSpec(needId, maxLevel, initialLevel));
+        return this;
+    }
+
+    public SimulationAssembly needProgression(
+            ObjectDefinitionId definitionId,
+            NeedId needId,
+            long baseAmount,
+            long intervalTicks) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        needProgressionDefinitions.add(
+                definitionId,
+                new NeedProgressionDefinition(needId, baseAmount, intervalTicks));
         return this;
     }
 
@@ -292,6 +310,7 @@ public final class SimulationAssembly {
         agentDefinitions.freeze();
         visionDefinitions.freeze();
         needDefinitions.freeze();
+        needProgressionDefinitions.freeze();
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
         consumableStockDefinitions.freeze();
@@ -353,6 +372,24 @@ public final class SimulationAssembly {
         for (ObjectId objectId : createdObjects) {
             needs.attach(objectId);
             consumableStocks.attach(objectId);
+        }
+
+        NeedProgressionSystem needProgression = new NeedProgressionSystem(
+                objects,
+                needProgressionDefinitions,
+                needs,
+                needs,
+                new IntrinsicNeedProgressionRateResolver(),
+                clock);
+        HandlerId needProgressionHandlerId = scheduledHandlers.register(needProgression::resume);
+        ProcessScheduler needProgressionScheduler =
+                new BoundProcessScheduler(clock, scheduler, needProgressionHandlerId);
+        needProgression.bindScheduler(needProgressionScheduler);
+        for (ObjectId objectId : createdObjects) {
+            WorldObject object = objects.get(objectId);
+            if (object != null && needProgressionDefinitions.has(object.definitionId())) {
+                needProgression.activate(objectId);
+            }
         }
 
         GrowthSystem growth = new GrowthSystem(
@@ -436,6 +473,7 @@ public final class SimulationAssembly {
                 pathfinder,
                 moveTo,
                 needs,
+                needProgression,
                 consumableStocks,
                 growth,
                 agents,

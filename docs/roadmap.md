@@ -25,14 +25,12 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Generic autonomous-agent foundation: open Needs/capabilities, directed Vision, physical orientation, deterministic decision traces and mechanic-owned opportunities
 - Coordinate-free unknown-source Search with local visual sweep, correlated multi-cell exploration and generic active-route diagnostics
 - Finite authoritative Consumable Stock separated from physiological benefit
+- Definition-driven scheduled Growth with narrow stock replenishment and an external effective-rate resolver
+- Generic scheduled Need progression for open NeedIds with narrow deficit mutation and an external effective-rate resolver
 
 ## Current living-world sequence
 
 ```text
-Plant Growth / regrowth
-    ↓
-Physiology progression
-    ↓
 Integrated living Cow slice + full developer visualization
     ↓
 Water + Thirst
@@ -44,7 +42,25 @@ Intent persistence / interruption
 representative scale profiling
 ```
 
-The integrated Cow slice is the first mandatory visual acceptance point for the current sequence. It should expose authoritative state, cell/object selection, Vision, routes, Needs, resources, Growth and timed interactions with state-dependent presentation/animation.
+The integrated Cow slice is the first mandatory visual acceptance point for the current sequence. It should expose authoritative state, cell/object selection, Vision, routes, Needs, Need progression, resources, Growth and timed interactions with state-dependent presentation/animation.
+
+The slice should visibly demonstrate the closed loop:
+
+```text
+plant regrows finite biomass
+    ↓
+Hunger progresses over time
+    ↓
+Cow perceives/searches/selects food
+    ↓
+MoveTo route
+    ↓
+timed consumption interaction
+    ↓
+Hunger decreases + biomass decreases
+    ↓
+cycle continues
+```
 
 Representative scale profiling is mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
 
