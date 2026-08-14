@@ -45,10 +45,15 @@ import io.github.evoforge.simulation.world.agent.perception.vision.VisionSystem;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
 import io.github.evoforge.simulation.world.agent.search.CorrelatedRandomWalkExplorationPolicy;
 import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion;
+import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
+import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
+import io.github.evoforge.simulation.world.environment.evaporation.PeriodicEvaporationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.PeriodicPrecipitationSystem;
+import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationEventLookup;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipitationSystem;
+import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
@@ -140,6 +145,7 @@ public final class SimulationAssembly {
     private final List<ObjectId> createdObjects = new ArrayList<>();
     private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
     private PrecipitationSchedule precipitationSchedule;
+    private EvaporationSchedule evaporationSchedule;
     private boolean started;
 
     private SimulationAssembly() {
@@ -207,6 +213,16 @@ public final class SimulationAssembly {
             long intervalTicks) {
         requireNotStarted();
         precipitationSchedule = new PrecipitationSchedule(
+                amountPerColumn,
+                intervalTicks);
+        return this;
+    }
+
+    public SimulationAssembly periodicEvaporation(
+            int amountPerColumn,
+            long intervalTicks) {
+        requireNotStarted();
+        evaporationSchedule = new EvaporationSchedule(
                 amountPerColumn,
                 intervalTicks);
         return this;
@@ -417,6 +433,11 @@ public final class SimulationAssembly {
                 new BoundProcessScheduler(clock, scheduler, waterFlowHandlerId);
         waterFlowProcess.bindScheduler(waterFlowScheduler);
 
+        VerticalSkySurfaceSystem skySurfaces = new VerticalSkySurfaceSystem(
+                landscape.terrainSurfaces(),
+                water.surfaces());
+        PrecipitationEventLookup precipitationEvents = tick -> false;
+
         if (precipitationSchedule != null) {
             PrecipitationSystem precipitation = new PrecipitationSystem(
                     landscape.terrain(),
@@ -424,14 +445,14 @@ public final class SimulationAssembly {
                     soilMoisture,
                     water);
             SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
-                    landscape.terrainSurfaces(),
-                    water.surfaces(),
+                    skySurfaces,
                     precipitation);
             PeriodicPrecipitationSystem periodicPrecipitation =
                     new PeriodicPrecipitationSystem(
                             skyPrecipitation,
                             precipitationSchedule,
                             clock);
+            precipitationEvents = periodicPrecipitation;
             HandlerId precipitationHandlerId = scheduledHandlers.register(processId -> {
                 periodicPrecipitation.resume(processId);
                 waterFlowProcess.activate();
@@ -443,6 +464,35 @@ public final class SimulationAssembly {
                             precipitationHandlerId);
             periodicPrecipitation.bindScheduler(precipitationScheduler);
             periodicPrecipitation.start();
+        }
+
+        if (evaporationSchedule != null) {
+            EvaporationSystem evaporation = new EvaporationSystem(
+                    skySurfaces,
+                    water.surfaces(),
+                    soilMoisture.cells(),
+                    landscape.geometry(),
+                    water,
+                    soilMoisture);
+            PeriodicEvaporationSystem periodicEvaporation =
+                    new PeriodicEvaporationSystem(
+                            evaporation,
+                            evaporationSchedule,
+                            clock,
+                            precipitationEvents);
+            HandlerId evaporationHandlerId = scheduledHandlers.register(processId -> {
+                periodicEvaporation.resume(processId);
+                if (periodicEvaporation.lastResult().surfaceWaterRemoved() > 0L) {
+                    waterFlowProcess.activate();
+                }
+            });
+            ProcessScheduler evaporationScheduler =
+                    new BoundProcessScheduler(
+                            clock,
+                            scheduler,
+                            evaporationHandlerId);
+            periodicEvaporation.bindScheduler(evaporationScheduler);
+            periodicEvaporation.start();
         }
 
         MovementStepCompletionRelay movementCompletions = new MovementStepCompletionRelay();
