@@ -45,9 +45,21 @@ import io.github.evoforge.simulation.world.agent.perception.vision.VisionSystem;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
 import io.github.evoforge.simulation.world.agent.search.CorrelatedRandomWalkExplorationPolicy;
 import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion;
+import io.github.evoforge.simulation.world.environment.precipitation.PeriodicPrecipitationSystem;
+import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
+import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSystem;
+import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipitationSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
+import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.landscape.water.WaterFlowProcess;
+import io.github.evoforge.simulation.world.landscape.water.WaterFlowSystem;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
+import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
@@ -99,6 +111,7 @@ import java.util.Set;
 public final class SimulationAssembly {
     private final DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions;
     private final LandscapeTraversalDefinitions landscapeTraversalDefinitions;
+    private final SoilHydrologyDefinitions soilHydrologyDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
     private final OccupancyDefinitions occupancyDefinitions;
@@ -112,6 +125,8 @@ public final class SimulationAssembly {
     private final ConsumableStockDefinitions consumableStockDefinitions;
     private final GrowthDefinitions growthDefinitions;
     private final LandscapeSystem landscape;
+    private final SoilMoistureSystem soilMoisture;
+    private final WaterSystem water;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
     private final ObjectFactory objectFactory;
@@ -124,11 +139,13 @@ public final class SimulationAssembly {
     private final Set<ObjectDefinitionId> placedObjectDefinitions = new HashSet<>();
     private final List<ObjectId> createdObjects = new ArrayList<>();
     private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
+    private PrecipitationSchedule precipitationSchedule;
     private boolean started;
 
     private SimulationAssembly() {
         landscapeDefinitions = new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
         landscapeTraversalDefinitions = new LandscapeTraversalDefinitions();
+        soilHydrologyDefinitions = new SoilHydrologyDefinitions();
         objectDefinitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
         movementDefinitions = new MovementDefinitions();
         occupancyDefinitions = new OccupancyDefinitions();
@@ -142,6 +159,13 @@ public final class SimulationAssembly {
         consumableStockDefinitions = new ConsumableStockDefinitions();
         growthDefinitions = new GrowthDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
+        soilMoisture = new SoilMoistureSystem(
+                new SparseSoilMoistureStorage(),
+                landscape.terrain(),
+                soilHydrologyDefinitions);
+        water = new WaterSystem(
+                new SparseWaterStorage(),
+                landscape.geometry());
         navigation = new NavigationSystem(landscape.geometry());
         objects = new ObjectRepository();
         objectFactory = new ObjectFactory(objects, objectDefinitions);
@@ -164,6 +188,28 @@ public final class SimulationAssembly {
         LandscapeDefinitionId definitionId = landscapeDefinitions.register(key);
         landscapeTraversalDefinitions.put(definitionId, SurfaceTraversalCost.of(traversalCostUnits));
         return definitionId;
+    }
+
+    public SimulationAssembly soilHydrology(
+            LandscapeDefinitionId definitionId,
+            int capacity,
+            int infiltrationLimit) {
+        requireNotStarted();
+        requireLandscapeDefinition(definitionId);
+        soilHydrologyDefinitions.put(
+                definitionId,
+                new SoilHydrology(capacity, infiltrationLimit));
+        return this;
+    }
+
+    public SimulationAssembly periodicPrecipitation(
+            int amountPerColumn,
+            long intervalTicks) {
+        requireNotStarted();
+        precipitationSchedule = new PrecipitationSchedule(
+                amountPerColumn,
+                intervalTicks);
+        return this;
     }
 
     public ObjectDefinitionId objectDefinition(String key) {
@@ -336,6 +382,7 @@ public final class SimulationAssembly {
         started = true;
         landscapeDefinitions.freeze();
         landscapeTraversalDefinitions.freeze();
+        soilHydrologyDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
         occupancyDefinitions.freeze();
@@ -360,6 +407,43 @@ public final class SimulationAssembly {
         Scheduler scheduler = new Scheduler(scheduledHandlers);
         SimulationClock clock = new SimulationClock();
         SimulationStepper stepper = new SimulationStepper(clock, scheduler);
+
+        WaterFlowSystem waterFlow = new WaterFlowSystem(
+                water,
+                landscape.geometry());
+        WaterFlowProcess waterFlowProcess = new WaterFlowProcess(waterFlow);
+        HandlerId waterFlowHandlerId = scheduledHandlers.register(waterFlowProcess::resume);
+        ProcessScheduler waterFlowScheduler =
+                new BoundProcessScheduler(clock, scheduler, waterFlowHandlerId);
+        waterFlowProcess.bindScheduler(waterFlowScheduler);
+
+        if (precipitationSchedule != null) {
+            PrecipitationSystem precipitation = new PrecipitationSystem(
+                    landscape.terrain(),
+                    landscape.geometry(),
+                    soilMoisture,
+                    water);
+            SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
+                    landscape.terrainSurfaces(),
+                    water.surfaces(),
+                    precipitation);
+            PeriodicPrecipitationSystem periodicPrecipitation =
+                    new PeriodicPrecipitationSystem(
+                            skyPrecipitation,
+                            precipitationSchedule,
+                            clock);
+            HandlerId precipitationHandlerId = scheduledHandlers.register(processId -> {
+                periodicPrecipitation.resume(processId);
+                waterFlowProcess.activate();
+            });
+            ProcessScheduler precipitationScheduler =
+                    new BoundProcessScheduler(
+                            clock,
+                            scheduler,
+                            precipitationHandlerId);
+            periodicPrecipitation.bindScheduler(precipitationScheduler);
+            periodicPrecipitation.start();
+        }
 
         MovementStepCompletionRelay movementCompletions = new MovementStepCompletionRelay();
         MovementActionProcessor movementActions = new MovementActionProcessor(
@@ -512,8 +596,12 @@ public final class SimulationAssembly {
                 vision,
                 landscape.terrain(),
                 landscape.terrainExtents(),
+                landscape.terrainSurfaces(),
                 landscape.terrainRevision(),
                 landscape.geometry(),
+                soilMoisture.lookup(),
+                water.lookup(),
+                water.surfaces(),
                 navigation.lookup(),
                 occupancy,
                 cells.lookup(),
@@ -527,6 +615,13 @@ public final class SimulationAssembly {
                 searches);
         return new SimulationRuntime(
                 new SynchronousCommandGateway(dispatcher), clock, stepper, view);
+    }
+
+    private void requireLandscapeDefinition(LandscapeDefinitionId definitionId) {
+        if (!landscapeDefinitions.contains(definitionId)) {
+            throw new IllegalArgumentException(
+                    "unknown landscape definition: " + definitionId);
+        }
     }
 
     private void requireObjectDefinition(ObjectDefinitionId definitionId) {
