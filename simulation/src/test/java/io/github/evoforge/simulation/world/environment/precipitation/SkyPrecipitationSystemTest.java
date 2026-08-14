@@ -49,10 +49,27 @@ final class SkyPrecipitationSystemTest {
         PrecipitationBatchResult result =
                 fixture.sky().applyUniform(150_000);
 
+        assertEquals(1, result.columns());
         assertEquals(0L, result.infiltrated());
         assertEquals(150_000L, result.surfaceWater());
         assertEquals(0, fixture.moisture.lookup().amount(2, 5, 0));
         assertEquals(550_000, fixture.water.lookup().amount(2, 5, 1));
+    }
+
+    @Test
+    void exposedWaterWithoutTerrainStillReceivesRain() {
+        Fixture fixture = new Fixture();
+        fixture.water.addAtMost(9, -2, 5, 100_000);
+
+        PrecipitationBatchResult result =
+                fixture.sky().applyUniform(20_000);
+
+        assertEquals(1, result.columns());
+        assertEquals(20_000L, result.input());
+        assertEquals(0L, result.infiltrated());
+        assertEquals(20_000L, result.surfaceWater());
+        assertEquals(0L, result.unplaced());
+        assertEquals(120_000, fixture.water.lookup().amount(9, -2, 5));
     }
 
     @Test
@@ -73,18 +90,20 @@ final class SkyPrecipitationSystemTest {
     }
 
     @Test
-    void batchAccountingCoversEveryOccupiedTerrainColumn() {
+    void batchAccountingCoversUnionWithoutDoubleCountingSharedColumns() {
         Fixture fixture = new Fixture();
         fixture.landscape.placeTerrain(0, 0, 0, fixture.roof);
         fixture.landscape.placeTerrain(1, 0, 2, fixture.roof);
         fixture.landscape.placeTerrain(1, 0, 5, fixture.roof);
         fixture.landscape.placeTerrain(-1, 3, -2, fixture.roof);
+        fixture.water.addAtMost(0, 0, 1, 100_000);
+        fixture.water.addAtMost(8, 8, 4, 100_000);
 
         PrecipitationBatchResult result =
                 fixture.sky().applyUniform(10_000);
 
-        assertEquals(3, result.columns());
-        assertEquals(30_000L, result.input());
+        assertEquals(4, result.columns());
+        assertEquals(40_000L, result.input());
         assertEquals(
                 result.input(),
                 result.infiltrated()
