@@ -43,7 +43,47 @@ final class SurfaceHydrologyIntegrationTest {
     }
 
     @Test
-    void runtimeWithoutPrecipitationScheduleRemainsHydrologicallyIdle() {
+    void periodicEvaporationDriesSoilAndSkipsSharedRainTicks() {
+        SimulationAssembly assembly = SimulationAssembly.create();
+        LandscapeDefinitionId soil =
+                assembly.landscapeDefinition("test:soil");
+        assembly.soilHydrology(
+                soil,
+                1_000_000,
+                1_000_000);
+        assembly.periodicPrecipitation(
+                100_000,
+                2L);
+        assembly.periodicEvaporation(
+                30_000,
+                3L);
+        assembly.placeTerrain(0, 0, 0, soil);
+
+        SimulationRuntime runtime = assembly.start();
+
+        runtime.stepper().advance();
+        runtime.stepper().advance();
+        assertEquals(2L, runtime.time().tick());
+        assertEquals(100_000, runtime.view().soilMoisture().amount(0, 0, 0));
+
+        runtime.stepper().advance();
+        assertEquals(3L, runtime.time().tick());
+        assertEquals(70_000, runtime.view().soilMoisture().amount(0, 0, 0));
+
+        runtime.stepper().advance();
+        assertEquals(4L, runtime.time().tick());
+        assertEquals(170_000, runtime.view().soilMoisture().amount(0, 0, 0));
+
+        runtime.stepper().advance();
+        runtime.stepper().advance();
+        assertEquals(6L, runtime.time().tick());
+        assertEquals(
+                270_000,
+                runtime.view().soilMoisture().amount(0, 0, 0));
+    }
+
+    @Test
+    void runtimeWithoutEnvironmentSchedulesRemainsHydrologicallyIdle() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId terrain =
                 assembly.landscapeDefinition("test:terrain");
