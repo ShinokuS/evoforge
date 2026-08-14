@@ -6,7 +6,6 @@ import io.github.evoforge.simulation.world.mechanics.movement.MoveToActionId;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToLookup;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToStartAttempt;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToStarter;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -24,7 +23,7 @@ public final class RelativeSearchLocomotion {
     private final TransformLookup transforms;
     private final NavigationLookup navigation;
     private final VisionLookup vision;
-    private final MoveToStarter moveTo;
+    private final MoveToSystem moveTo;
     private final MoveToLookup moveToLookup;
 
     public RelativeSearchLocomotion(
@@ -32,20 +31,6 @@ public final class RelativeSearchLocomotion {
             NavigationLookup navigation,
             VisionLookup vision,
             MoveToSystem moveTo,
-            MoveToLookup moveToLookup) {
-        this(
-                transforms,
-                navigation,
-                vision,
-                MoveToStarter.direct(moveTo),
-                moveToLookup);
-    }
-
-    public RelativeSearchLocomotion(
-            TransformLookup transforms,
-            NavigationLookup navigation,
-            VisionLookup vision,
-            MoveToStarter moveTo,
             MoveToLookup moveToLookup) {
         if (transforms == null || navigation == null || vision == null || moveTo == null || moveToLookup == null) {
             throw new IllegalArgumentException("search locomotion dependencies must not be null");
