@@ -18,6 +18,43 @@ public interface Shape {
         return CellVolume.FULL;
     }
 
+    /**
+     * Approximate free geometric volume below a normalized local height.
+     *
+     * <p>The default preserves lightweight Shape implementations by distributing the
+     * free volume implied by {@link #solidVolume()} uniformly over height. Shapes with
+     * meaningful internal geometry should override this objective physical profile.
+     * Consumers must not infer traversal roles from it.
+     */
+    default int freeVolumeBelow(
+            int localHeight) {
+
+        int height = CellSpace.requireHeight(localHeight);
+        int freeCapacity = CellVolume.FULL
+                - CellVolume.requireValid(solidVolume());
+
+        return (int) (((long) height * freeCapacity)
+                / CellSpace.FULL_HEIGHT);
+    }
+
+    /**
+     * Lowest local elevation at which this Shape's free space opens through a cell
+     * face, or {@link CellSpace#CLOSED} if the face is physically closed.
+     *
+     * <p>The default is conservative: an unknown Shape does not expose cross-cell
+     * physical connectivity merely because it has spare volume. This contract is
+     * independent from navigation {@link #transitionPorts(int, int, int)}.
+     */
+    default int boundaryOpeningFloor(
+            CellFace face) {
+
+        if (face == null) {
+            throw new IllegalArgumentException(
+                    "face must not be null");
+        }
+        return CellSpace.CLOSED;
+    }
+
     default int transitionBlocks(
             int relativeX,
             int relativeY,
