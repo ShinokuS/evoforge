@@ -17,11 +17,12 @@ import io.github.evoforge.visualizer.presentation.object.ObjectVisualFamily;
 
 /** Presentation-only procedural object art driven exclusively by read-only simulation state. */
 public final class ObjectPresentationRenderer {
+    private static final Color GENERIC_EVEN = new Color(0.30f, 0.78f, 0.94f, 1f);
+    private static final Color GENERIC_ODD = new Color(0.90f, 0.44f, 0.56f, 1f);
     private static final Color COW_BODY = new Color(0.92f, 0.88f, 0.76f, 1f);
     private static final Color COW_SPOT = new Color(0.18f, 0.16f, 0.14f, 1f);
     private static final Color COW_MUZZLE = new Color(0.78f, 0.57f, 0.50f, 1f);
     private static final Color OUTLINE = new Color(0.07f, 0.08f, 0.07f, 0.92f);
-    private static final Color SELECTED = new Color(1f, 0.91f, 0.30f, 1f);
     private static final Color GRASS = new Color(0.30f, 0.66f, 0.29f, 1f);
     private static final Color CLOVER = new Color(0.25f, 0.58f, 0.31f, 1f);
     private static final Color DANDELION = new Color(0.37f, 0.64f, 0.25f, 1f);
@@ -61,11 +62,14 @@ public final class ObjectPresentationRenderer {
                     WorldObject object = view.objects().get(id);
                     if (object == null) continue;
                     ObjectPresentation presentation = bindings.get(object.definitionId());
-                    if (presentation == null || presentation.family() == ObjectVisualFamily.GENERIC) continue;
-                    float stack = Math.min(index, 3) * 0.055f;
+                    boolean generic = presentation == null
+                            || presentation.family() == ObjectVisualFamily.GENERIC;
+                    float stack = Math.min(index, 3) * (generic ? 0.12f : 0.055f);
                     float cx = x + 0.5f + stack;
                     float cy = y + 0.5f - stack;
-                    if (presentation.family() == ObjectVisualFamily.CREATURE) {
+                    if (generic) {
+                        drawGeneric(object, cx, cy);
+                    } else if (presentation.family() == ObjectVisualFamily.CREATURE) {
                         drawCreature(id, cx, cy);
                     } else if (presentation.family() == ObjectVisualFamily.VEGETATION) {
                         drawVegetation(id, presentation.variant(), cx, cy);
@@ -74,27 +78,15 @@ public final class ObjectPresentationRenderer {
             }
         }
         shapes.end();
-
-        ObjectId selected = state.selectedObject();
-        if (selected != null && view.transforms().has(selected)) {
-            WorldObject object = view.objects().get(selected);
-            ObjectPresentation presentation = object == null ? null : bindings.get(object.definitionId());
-            if (presentation != null && presentation.family() != ObjectVisualFamily.GENERIC
-                    && view.transforms().z(selected) == state.selectedZ()) {
-                shapes.begin(ShapeRenderer.ShapeType.Line);
-                shapes.setColor(SELECTED);
-                shapes.circle(
-                        view.transforms().x(selected) + 0.5f,
-                        view.transforms().y(selected) + 0.5f,
-                        0.39f,
-                        24);
-                shapes.end();
-            }
-        }
     }
 
     public void dispose() {
         shapes.dispose();
+    }
+
+    private void drawGeneric(WorldObject object, float cx, float cy) {
+        shapes.setColor(object.definitionId().asInt() % 2 == 0 ? GENERIC_EVEN : GENERIC_ODD);
+        shapes.circle(cx, cy, 0.22f, 16);
     }
 
     private void drawCreature(ObjectId id, float cx, float cy) {
