@@ -11,7 +11,7 @@ public final class MoveToInteractiveScenario implements VisualizerScenario {
     @Override public String id() { return "movement-click-to-move"; }
     @Override public String title() { return "Click To Move"; }
     @Override public String description() {
-        return "LMB select mover; RMB choose destination; PgUp/PgDn change Z; route remains visible.";
+        return "LMB select mover; PgUp/PgDn inspect Z; RMB a visible walkable surface.";
     }
 
     @Override
