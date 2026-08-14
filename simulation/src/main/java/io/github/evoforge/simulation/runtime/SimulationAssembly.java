@@ -46,6 +46,10 @@ import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStock
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinitions;
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthSystem;
+import io.github.evoforge.simulation.world.mechanics.growth.IntrinsicGrowthRateResolver;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
@@ -97,6 +101,7 @@ public final class SimulationAssembly {
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
     private final ConsumableStockDefinitions consumableStockDefinitions;
+    private final GrowthDefinitions growthDefinitions;
     private final LandscapeSystem landscape;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
@@ -124,6 +129,7 @@ public final class SimulationAssembly {
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
         consumableStockDefinitions = new ConsumableStockDefinitions();
+        growthDefinitions = new GrowthDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
         navigation = new NavigationSystem(landscape.geometry());
         objects = new ObjectRepository();
@@ -217,6 +223,15 @@ public final class SimulationAssembly {
         return this;
     }
 
+    public SimulationAssembly growth(
+            ObjectDefinitionId definitionId,
+            long baseAmount,
+            long intervalTicks) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        growthDefinitions.put(definitionId, new GrowthDefinition(baseAmount, intervalTicks));
+        return this;
+    }
+
     public SimulationAssembly satisfiesNeed(
             ObjectDefinitionId sourceDefinitionId,
             NeedId needId,
@@ -280,6 +295,7 @@ public final class SimulationAssembly {
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
         consumableStockDefinitions.freeze();
+        growthDefinitions.freeze();
 
         for (ObjectId objectId : createdObjects) {
             WorldObject object = objects.get(objectId);
@@ -337,6 +353,21 @@ public final class SimulationAssembly {
         for (ObjectId objectId : createdObjects) {
             needs.attach(objectId);
             consumableStocks.attach(objectId);
+        }
+
+        GrowthSystem growth = new GrowthSystem(
+                objects,
+                growthDefinitions,
+                consumableStocks,
+                consumableStocks,
+                new IntrinsicGrowthRateResolver(),
+                clock);
+        HandlerId growthHandlerId = scheduledHandlers.register(growth::resume);
+        ProcessScheduler growthScheduler = new BoundProcessScheduler(clock, scheduler, growthHandlerId);
+        growth.bindScheduler(growthScheduler);
+        for (ObjectId objectId : createdObjects) {
+            WorldObject object = objects.get(objectId);
+            if (object != null && growthDefinitions.has(object.definitionId())) growth.activate(objectId);
         }
 
         VisionSystem vision = new VisionSystem(
@@ -406,6 +437,7 @@ public final class SimulationAssembly {
                 moveTo,
                 needs,
                 consumableStocks,
+                growth,
                 agents,
                 searches);
         return new SimulationRuntime(
