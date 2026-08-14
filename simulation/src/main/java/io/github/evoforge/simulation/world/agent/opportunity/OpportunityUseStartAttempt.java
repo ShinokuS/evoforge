@@ -7,12 +7,22 @@ import io.github.evoforge.simulation.result.ResultCode;
 public record OpportunityUseStartAttempt(
         boolean accepted,
         OpportunityUseActionId actionId,
+        long startedTick,
+        long expectedCompletionTick,
         ResultCode code) implements OperationResult {
 
     public OpportunityUseStartAttempt {
         if (code == null) throw new IllegalArgumentException("code must not be null");
-        if (accepted != (actionId != null)) {
-            throw new IllegalArgumentException("accepted opportunity use must have an actionId and rejection must not");
+        if (accepted) {
+            if (actionId == null || startedTick < 0 || expectedCompletionTick < startedTick) {
+                throw new IllegalArgumentException("accepted opportunity use requires valid identity and timing");
+            }
+        } else if (actionId != null || startedTick != -1L || expectedCompletionTick != -1L) {
+            throw new IllegalArgumentException("rejected opportunity use must not expose identity or timing");
         }
+    }
+
+    public static OpportunityUseStartAttempt rejected(ResultCode code) {
+        return new OpportunityUseStartAttempt(false, null, -1L, -1L, code);
     }
 }
