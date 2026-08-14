@@ -91,6 +91,43 @@ public final class RampShape
         return CellVolume.FULL / 2;
     }
 
+    /**
+     * Free wedge volume below height h for a unit ramp whose solid surface rises
+     * linearly from local height 0 to 1.
+     */
+    @Override
+    public int freeVolumeBelow(
+            int localHeight) {
+
+        int height = CellSpace.requireHeight(localHeight);
+        return (int) (((long) height * height)
+                / (2L * CellSpace.FULL_HEIGHT));
+    }
+
+    @Override
+    public int boundaryOpeningFloor(
+            CellFace face) {
+
+        if (face == null) {
+            throw new IllegalArgumentException(
+                    "face must not be null");
+        }
+
+        if (face == CellFace.POSITIVE_Z) {
+            return CellSpace.FULL_HEIGHT;
+        }
+        if (face == CellFace.NEGATIVE_Z) {
+            return CellSpace.CLOSED;
+        }
+
+        if (face.dx() == riseX
+                && face.dy() == riseY) {
+            return CellSpace.CLOSED;
+        }
+
+        return CellSpace.EMPTY_HEIGHT;
+    }
+
     @Override
     public int minimumTraversalFactor() {
         return ShapeTraversalFactor.NEUTRAL;
