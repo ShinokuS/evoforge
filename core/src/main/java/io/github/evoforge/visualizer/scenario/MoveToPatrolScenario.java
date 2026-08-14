@@ -6,7 +6,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
-/** World fixture for the closed-loop MoveTo patrol demonstration. */
+/** World fixture for the closed-loop multi-level MoveTo patrol demonstration. */
 public final class MoveToPatrolScenario implements VisualizerScenario {
 
     @Override
@@ -21,7 +21,7 @@ public final class MoveToPatrolScenario implements VisualizerScenario {
 
     @Override
     public String description() {
-        return "One mover loops through four MoveTo waypoints; the remaining route is shown live.";
+        return "One mover loops across Z0-Z4; use PgUp/PgDn to follow its remaining MoveTo route.";
     }
 
     @Override
@@ -34,15 +34,15 @@ public final class MoveToPatrolScenario implements VisualizerScenario {
 
         assembly.movementRate(moverDefinition, 500);
         assembly.exclusiveOccupancy(moverDefinition);
-        ScenarioTerrain.fill(assembly, ground, -6, 6, -4, 4, 0);
+        MoveToScenarioCourse.build(assembly, ground);
 
         ObjectId mover = assembly.createObject(moverDefinition);
-        assembly.placeObject(mover, -4, -3, 1);
+        assembly.placeObject(mover, -4, -2, 0);
 
         SimulationRuntime runtime = assembly.start();
         return new ScenarioSession(
                 runtime,
-                new ScenarioView(1, 0f, 0f, 0.75f),
+                new ScenarioView(0, 5f, 0f, 0.85f),
                 new MoveToPatrolController(runtime, mover));
     }
 }
