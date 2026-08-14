@@ -87,6 +87,11 @@ public final class RampShape
     }
 
     @Override
+    public int solidVolume() {
+        return CellVolume.FULL / 2;
+    }
+
+    @Override
     public int minimumTraversalFactor() {
         return ShapeTraversalFactor.NEUTRAL;
     }
