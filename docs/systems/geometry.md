@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Describe local structural geometry over existing terrain without coupling generic consumers to concrete Shape classes.
+Describe local structural and physical geometry over existing terrain without coupling generic consumers to concrete Shape classes.
 
 ## Ownership
 
@@ -12,19 +12,24 @@ A terrain coordinate is the Shape **anchor**. Under the current model, the ordin
 
 ## Shape contract
 
-`Shape` is an open declarative local contract. Its public responsibilities are:
+`Shape` is an open declarative local contract. Its public responsibilities now include two independent families of facts:
 
 ```text
-solidVolume()
-transitionPorts(relative source)
-transitionBlocks(relative source)
-departureTraversalFactor(relative source, direction)
-arrivalTraversalFactor(relative source, direction)
+physical cell geometry
+    solidVolume()
+    freeVolumeBelow(localHeight)
+    boundaryOpeningFloor(CellFace)
+
+structural traversal geometry
+    transitionPorts(relative source)
+    transitionBlocks(relative source)
+    departureTraversalFactor(relative source, direction)
+    arrivalTraversalFactor(relative source, direction)
 ```
 
-`solidVolume()` is objective cell-local geometry. Transition ports/blocks/factors are structural traversal geometry. A consumer must not reinterpret one contract as the other simply because both describe the same Shape.
+The physical methods describe objective cell-local occupied/free space. Transition ports/blocks/factors describe structural traversal roles. A consumer must not reinterpret one contract as the other simply because both describe the same Shape.
 
-The relative source is:
+The relative traversal source is:
 
 ```text
 source standing XYZ - Shape terrain anchor XYZ
@@ -38,9 +43,9 @@ destination XYZ - source XYZ
 
 with each delta in `[-1,1]` and not all zero.
 
-A Shape receives no absolute World, neighbor lookup, Navigation, ObjectId or pathfinder. The same Shape value can therefore be reused at any translation.
+A Shape receives no absolute World, neighbor lookup, Navigation, ObjectId, Water or pathfinder. The same Shape value can therefore be reused at any translation.
 
-## Cell-local solid volume
+## Cell-local volume and height
 
 `CellVolume` is a deterministic material-agnostic fixed-point scale:
 
@@ -51,6 +56,17 @@ CellVolume.FULL  = 1_000_000
 
 The number is a fraction of one discrete world-cell volume. It is deliberately **not** a statement that one cell is one cubic metre, one litre or any other physical unit. A future physical scale can convert the normalized cell volume without changing Shape geometry.
 
+`CellSpace` uses the same numeric resolution for normalized local height:
+
+```text
+CellSpace.EMPTY_HEIGHT = 0
+CellSpace.FULL_HEIGHT  = 1_000_000
+```
+
+Height and volume are different quantities even though they intentionally share one fixed-point resolution.
+
+## Solid volume
+
 `Shape.solidVolume()` reports the approximate amount of the Shape anchor cell occupied by solid terrain geometry:
 
 ```text
@@ -58,13 +74,67 @@ FullShape = 1.0 cell
 RampShape = 0.5 cell
 ```
 
-The current ramp value is intentionally coarse. It captures the useful geometric fact that a wedge occupies approximately half of its anchor cell without introducing meshes, voxel subcells or water-specific code.
+The ramp value is intentionally coarse. It captures the useful geometric fact that a wedge occupies approximately half of its anchor cell without introducing meshes or voxel subcells.
 
-This contract is reusable by future liquid, gas, snow, displacement or other volume consumers. It does **not** describe where the remaining free space connects to neighboring cells. A single scalar volume cannot encode boundary topology or opening height, so fluid code must not infer that information from `solidVolume()` alone.
+## Free-space profile
 
-Likewise, navigation `transitionPorts()` are not hydraulic/fluid openings. If the first real flow solver needs boundary connectivity, that capability must be introduced as neutral physical geometry with the solver as evidence rather than by coupling Water to navigation roles.
+A scalar solid volume is not enough for consumers that care where free volume lies. `Shape.freeVolumeBelow(localHeight)` therefore answers how much free cell-local volume exists below a normalized height.
 
-`Shape` keeps a full-cell default volume to preserve existing full-terrain semantics and lightweight/test Shape implementations. Any partial-production Shape must override the value and is covered by production Shape volume contract tests.
+For an empty coordinate with no Shape:
+
+```text
+freeVolumeBelow(h) = h
+```
+
+For `FullShape` it is always zero.
+
+For a cardinal `RampShape`, the solid surface rises linearly from local height `0` to `1`, so the free wedge below height `h` follows the triangular profile:
+
+```text
+freeVolumeBelow(h) = h^2 / 2
+```
+
+on the normalized fixed-point scale. At full height the result is `0.5` cell, matching `solidVolume()`.
+
+The default Shape implementation remains deliberately lightweight: it derives total free capacity from `solidVolume()` and distributes that free capacity uniformly over height. This preserves existing/custom test Shapes without pretending that unknown geometry has richer physical detail. Production Shapes whose internal geometry matters should override the profile.
+
+`CellSpace.surfaceHeight(shape, volume)` deterministically inverts the monotonic profile with integer binary search. It is a neutral geometry helper; Water is only the first consumer.
+
+## Physical face openings
+
+`CellFace` names the six objective faces of one discrete cell. It is not a movement direction enum and carries no traversal permission.
+
+`Shape.boundaryOpeningFloor(face)` reports the lowest local elevation at which the Shape's free space connects through that physical face, or:
+
+```text
+CellSpace.CLOSED
+```
+
+when the face exposes no connection.
+
+The default Shape implementation is conservative and returns `CLOSED`: spare volume alone does not prove that it connects to another cell.
+
+Current empty-space semantics are:
+
+```text
+horizontal faces  opening floor = 0
+bottom face       opening floor = 0
+top face          opening floor = full cell height
+```
+
+Current `RampShape` semantics are:
+
+```text
+low face          opening floor = 0
+perpendicular side faces = 0
+high face         CLOSED
+bottom face       CLOSED
+top face          full cell height
+```
+
+This is intentionally a first-order boundary model. It is enough for the first finite Water flow solver while remaining objective and reusable. A future Shape with an arch, tunnel, multiple separated holes or another important opening that cannot be represented by one lower sill must drive a richer **neutral physical boundary profile**. The correct extension is not an `instanceof` branch in Water and not reuse of navigation ports.
+
+Navigation `transitionPorts()` remain categorically separate from these physical openings.
 
 ## Current supported-position law
 
@@ -151,24 +221,24 @@ destination support = destination standing XYZ - (0,0,1)
 
 ### FullShape
 
-`FullShape.INSTANCE` represents the default full solid terrain cell. It occupies the whole anchor-cell volume, supports the standing position above the cell, participates in ordinary horizontal topology and compatible local vertical/ramp connections through the generic role law, and blocks traversal through its solid volume.
+`FullShape.INSTANCE` represents the default full solid terrain cell. It occupies the whole anchor-cell volume, exposes no free physical cell space, supports the standing position above the cell, participates in ordinary horizontal topology and compatible local vertical/ramp connections through the generic traversal role law, and blocks traversal through its solid volume.
 
 ### RampShape
 
-`RampShape` has four cardinal singleton orientations. `riseX()` / `riseY()` expose the objective cardinal direction in which it rises. The same vector drives its topology and its specialized presentation binding.
+`RampShape` has four cardinal singleton orientations. `riseX()` / `riseY()` expose the objective cardinal direction in which it rises. The same objective vector drives its traversal topology, free-space wedge orientation and specialized presentation binding without coupling those consumers to one another.
 
-A ramp occupies approximately half of its anchor-cell volume. It remains terrain with Shape geometry; it is not an empty navigation node. Its departure/arrival contributions create a local lower/ramp/upper connection only when neighboring support Shapes independently provide the matching roles.
+A ramp occupies approximately half of its anchor-cell volume. Its free space is the complementary upper wedge. It remains terrain with Shape geometry; it is not an empty navigation node.
 
 ## Generic-consumer rule
 
-Navigation, TransitionCost and generic presentation renderers do not branch on `RampShape`, `FullShape` or future concrete Shape classes.
+Navigation, TransitionCost, Water and generic presentation renderers do not branch on `RampShape`, `FullShape` or future concrete Shape classes.
 
-In simulation, generic behavior comes from the `Shape` contract. In presentation, concrete visual/debug knowledge is localized to typed `ShapePresentation<S>` bindings registered by the presentation composition root.
+In simulation, generic behavior comes from the `Shape` / `CellSpace` contracts. In presentation, concrete visual/debug knowledge is localized to typed `ShapePresentation<S>` bindings registered by the presentation composition root.
 
 If a future Shape fits the current contract, existing generic consumers must not need modification simply to recognize its concrete class.
 
 ## Diagnostics and tests
 
-Geometry tests cover concrete Shape ports/blocks, cell-local solid volume, role algebra, traversal-factor ownership, terrain lifecycle interaction and hardening around supported positions. Navigation and TransitionCost integration tests verify that the same local role law is consumed consistently.
+Geometry tests cover concrete Shape ports/blocks, solid volume, free-volume profiles, physical face-opening floors, role algebra, traversal-factor ownership, terrain lifecycle interaction and hardening around supported positions. Navigation, TransitionCost and Water integration tests verify that the independent contracts are consumed consistently.
 
 See [Shape Transition Algebra decision](../decisions/002-shape-transition-algebra.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Water Foundation note](../notes/water-foundation.md) and [Adding a Shape](../guides/adding-a-shape.md).

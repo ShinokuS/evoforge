@@ -31,12 +31,11 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation
 - Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth, timed grazing, state-driven presentation and full developer inspector
 - Finite authoritative Water quantity with sparse storage and Shape-derived cell capacity
+- Neutral free-space Shape geometry plus deterministic local Water redistribution with hydraulic head, exact conservation and dormant active-frontier processing
 
 ## Current living-world sequence
 
 ```text
-deterministic local Water flow
-    ↓
 rain + soil moisture + simple evaporation
     ↓
 water-aware traversal / Pathfinding integration
@@ -72,9 +71,11 @@ cycle continues
 
 The visualizer exposes authoritative cell/object selection, stacked objects, Vision, routes, Needs, Need progression, resources, Growth, decisions and timed-use progress. Grass, Clover and Dandelion share production mechanics while differing through definition and presentation data.
 
-Water now has the first two foundation pieces required by the hydrology milestone: neutral cell-local solid-volume Geometry and finite authoritative liquid quantity. The next direct consumer is the **deterministic local flow solver**. That solver must prove the smallest neutral physical boundary/opening geometry required for redistribution rather than reusing Navigation ports or introducing a Water-specific Shape hierarchy.
+Water now has the first complete redistribution foundation: finite authoritative quantity, neutral Shape free-space geometry, one-law hydraulic-head flow, deterministic two-phase commit, integer convergence and local dormancy. Stable water is not scanned globally, and navigation ports remain independent from physical fluid openings.
 
-The Water milestone then proceeds through explicit external inputs/sinks and environmental coupling before Thirst becomes the first real second physiological motivation. Water-state churn and traversal-semantic change remain separate concerns so microscopic fluid updates cannot globally stale unrelated PathSearch work.
+The next Water slice introduces explicit environmental inputs and sinks: rain, soil moisture/infiltration and deliberately simple exposed-surface evaporation. That work should use the existing finite source/sink arithmetic and wake the local flow frontier rather than teaching the solver about weather or soil.
+
+Water-state churn and traversal-semantic change remain separate concerns so microscopic fluid updates cannot globally stale unrelated PathSearch work. Water-aware traversal comes only after environmental hydrology is visually accepted.
 
 Representative scale profiling remains mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
 
@@ -86,7 +87,7 @@ The following remain outside the mandatory immediate sequence and require their 
 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
-- richer fluid mechanics beyond the baseline deterministic local solver, including derived water-body identity;
+- richer fluid mechanics beyond the baseline deterministic local solver, including richer boundary profiles, derived water-body identity, detailed pressure/inertia/viscosity and erosion;
 - deterministic World Generation and authoritative RNG-stream policy;
 - broader plant lifecycle semantics such as age, reproduction, withering and death.
 

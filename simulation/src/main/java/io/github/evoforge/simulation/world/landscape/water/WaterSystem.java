@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
+import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -9,6 +10,8 @@ public final class WaterSystem {
     private final WaterStorage storage;
     private final GeometryLookup geometry;
     private final WaterLookup lookup;
+    private final WaterFlowActivity flowActivity =
+            new WaterFlowActivity();
 
     public WaterSystem(
             WaterStorage storage,
@@ -64,6 +67,7 @@ public final class WaterSystem {
                 y,
                 z,
                 current + added);
+        flowActivity.activate(x, y, z);
         return added;
     }
 
@@ -89,13 +93,42 @@ public final class WaterSystem {
         }
 
         int remaining = current - removed;
-        if (remaining == CellVolume.EMPTY) {
+        replaceStoredAmount(
+                x,
+                y,
+                z,
+                remaining);
+        flowActivity.activate(x, y, z);
+        return removed;
+    }
+
+    WaterFlowActivity flowActivity() {
+        return flowActivity;
+    }
+
+    void replaceFromFlow(
+            WaterCell cell,
+            int amount) {
+
+        replaceStoredAmount(
+                cell.x(),
+                cell.y(),
+                cell.z(),
+                amount);
+    }
+
+    private void replaceStoredAmount(
+            int x,
+            int y,
+            int z,
+            int amount) {
+
+        int validated = CellVolume.requireValid(amount);
+        if (validated == CellVolume.EMPTY) {
             storage.remove(x, y, z);
         } else {
-            storage.put(x, y, z, remaining);
+            storage.put(x, y, z, validated);
         }
-
-        return removed;
     }
 
     private int currentAmount(
@@ -113,13 +146,7 @@ public final class WaterSystem {
             int z) {
 
         Shape shape = geometry.find(x, y, z);
-        if (shape == null) {
-            return CellVolume.FULL;
-        }
-
-        int solid = CellVolume.requireValid(
-                shape.solidVolume());
-        return CellVolume.FULL - solid;
+        return CellSpace.capacity(shape);
     }
 
     private static void requireNonNegative(
