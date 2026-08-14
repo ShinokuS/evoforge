@@ -46,6 +46,10 @@ public final class NeedSatisfactionDefinitionCompiler
             long consumedQuantity = consumed == null
                     ? 0L
                     : integer(consumed, "needSatisfaction." + key + ".consumesQuantity");
+            JsonElement duration = entry.get("useDurationTicks");
+            long useDurationTicks = duration == null
+                    ? 0L
+                    : integer(duration, "needSatisfaction." + key + ".useDurationTicks");
             CapabilityId required = null;
             JsonElement capability = entry.get("requiresCapability");
             if (capability != null) {
@@ -57,7 +61,8 @@ public final class NeedSatisfactionDefinitionCompiler
             }
             definitions.add(
                     definitionId,
-                    new NeedSatisfaction(NeedId.of(key), amount, consumedQuantity, required));
+                    new NeedSatisfaction(
+                            NeedId.of(key), amount, consumedQuantity, useDurationTicks, required));
         }
     }
 
