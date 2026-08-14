@@ -13,15 +13,19 @@ import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
+import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLookup;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
 import io.github.evoforge.visualizer.render.MoveToRouteDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.ObjectPresentationRenderer;
+import io.github.evoforge.visualizer.render.RainRenderer;
 import io.github.evoforge.visualizer.render.VisionDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.VisualizerHudRenderer;
 import io.github.evoforge.visualizer.render.VisualizerOverlayRenderer;
+import io.github.evoforge.visualizer.render.WaterRenderer;
 import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
+import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
 
 /** Orchestrates the debug presentation of the authoritative simulation view. */
 public final class ZLevelVisualizer {
@@ -34,21 +38,30 @@ public final class ZLevelVisualizer {
     private final SpriteBatch landscapeBatch = new SpriteBatch();
     private final ProceduralLandscapePack landscapePack = new ProceduralLandscapePack();
     private final ProceduralSliceArt sliceArt = new ProceduralSliceArt();
+    private final ProceduralWaterArt waterArt = new ProceduralWaterArt();
     private final LandscapeSliceResolver sliceResolver;
     private final ShapePresentationRegistry shapePresentations;
     private final LandscapeRenderer landscapeRenderer;
+    private final WaterRenderer waterRenderer;
+    private final RainRenderer rainRenderer;
     private final VisionDiagnosticRenderer visionDiagnostics;
     private final MoveToRouteDiagnosticRenderer moveToRouteDiagnostics;
     private final VisualizerOverlayRenderer overlayRenderer;
     private final ObjectPresentationRenderer objectRenderer;
     private final VisualizerHudRenderer hudRenderer;
     private boolean smoothLandscapeSampling;
+    private float presentationSeconds;
 
     public ZLevelVisualizer(
             SimulationView view,
             SimulationTime simulationTime,
             SimulationStepper stepper) {
-        this(view, simulationTime, stepper, ObjectPresentationBindings.empty());
+        this(
+                view,
+                simulationTime,
+                stepper,
+                ObjectPresentationBindings.empty(),
+                WeatherPresentationLookup.CLEAR_LOOKUP);
     }
 
     public ZLevelVisualizer(
@@ -56,17 +69,36 @@ public final class ZLevelVisualizer {
             SimulationTime simulationTime,
             SimulationStepper stepper,
             ObjectPresentationBindings objectPresentations) {
+        this(
+                view,
+                simulationTime,
+                stepper,
+                objectPresentations,
+                WeatherPresentationLookup.CLEAR_LOOKUP);
+    }
+
+    public ZLevelVisualizer(
+            SimulationView view,
+            SimulationTime simulationTime,
+            SimulationStepper stepper,
+            ObjectPresentationBindings objectPresentations,
+            WeatherPresentationLookup weather) {
         if (view == null) throw new IllegalArgumentException("view must not be null");
         if (simulationTime == null) throw new IllegalArgumentException("simulationTime must not be null");
         if (stepper == null) throw new IllegalArgumentException("stepper must not be null");
         if (objectPresentations == null) {
             throw new IllegalArgumentException("objectPresentations must not be null");
         }
+        if (weather == null) {
+            throw new IllegalArgumentException("weather must not be null");
+        }
         time = new VisualizerTimeController(stepper, 0.25f);
         input = new VisualizerInputController(view, state, camera, time);
         sliceResolver = new LandscapeSliceResolver(view);
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
+        waterRenderer = new WaterRenderer(view, waterArt);
+        rainRenderer = new RainRenderer(weather);
         visionDiagnostics = new VisionDiagnosticRenderer(view, simulationTime, state, camera);
         moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
         overlayRenderer = new VisualizerOverlayRenderer(view, state, camera, sliceResolver, shapePresentations);
@@ -98,6 +130,7 @@ public final class ZLevelVisualizer {
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
+        presentationSeconds += Math.min(delta, 0.1f);
         long frameStart = System.nanoTime();
         input.update(delta); time.update(delta); camera.update(); updateLandscapeSampling();
         long afterUpdate = System.nanoTime();
@@ -109,12 +142,20 @@ public final class ZLevelVisualizer {
         landscapeBatch.begin();
         landscapeRenderer.draw(landscapeBatch, range.minX(), range.maxX(), range.minY(), range.maxY(),
                 state.selectedZ(), state.lowerDepth());
+        waterRenderer.draw(
+                landscapeBatch,
+                range.minX(),
+                range.maxX(),
+                range.minY(),
+                range.maxY(),
+                state.selectedZ());
         landscapeBatch.end();
         long afterLandscape = System.nanoTime();
         objectRenderer.draw(range);
         visionDiagnostics.draw(range);
         moveToRouteDiagnostics.draw(range);
         overlayRenderer.draw(range);
+        rainRenderer.draw(presentationSeconds);
         long afterOverlay = System.nanoTime();
         hudRenderer.draw();
         long frameEnd = System.nanoTime();
@@ -122,13 +163,20 @@ public final class ZLevelVisualizer {
                 afterLandscape - landscapeStart, afterOverlay - afterLandscape, frameEnd - afterOverlay);
     }
 
-    public void resize(int width, int height) { camera.resize(width, height); hudRenderer.resize(width, height); }
+    public void resize(int width, int height) {
+        camera.resize(width, height);
+        rainRenderer.resize(width, height);
+        hudRenderer.resize(width, height);
+    }
+
     public void dispose() {
         hudRenderer.dispose();
         objectRenderer.dispose();
         overlayRenderer.dispose();
         moveToRouteDiagnostics.dispose();
         visionDiagnostics.dispose();
+        rainRenderer.dispose();
+        waterArt.dispose();
         sliceArt.dispose();
         landscapePack.dispose();
         landscapeBatch.dispose();
@@ -141,5 +189,6 @@ public final class ZLevelVisualizer {
         Texture.TextureFilter filter = smooth ? Texture.TextureFilter.Linear : Texture.TextureFilter.Nearest;
         landscapePack.surface(0, 0).getTexture().setFilter(filter, filter);
         sliceArt.solid(0, 0).getTexture().setFilter(filter, filter);
+        waterArt.setFilter(filter);
     }
 }
