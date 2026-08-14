@@ -255,7 +255,7 @@ public final class SimulationAssembly {
             NeedId needId,
             long amount,
             CapabilityId requiredCapability) {
-        return satisfiesNeed(sourceDefinitionId, needId, amount, 0L, requiredCapability);
+        return satisfiesNeed(sourceDefinitionId, needId, amount, 0L, 0L, requiredCapability);
     }
 
     public SimulationAssembly satisfiesNeed(
@@ -264,10 +264,25 @@ public final class SimulationAssembly {
             long amount,
             long consumedQuantity,
             CapabilityId requiredCapability) {
+        return satisfiesNeed(sourceDefinitionId, needId, amount, consumedQuantity, 0L, requiredCapability);
+    }
+
+    public SimulationAssembly satisfiesNeed(
+            ObjectDefinitionId sourceDefinitionId,
+            NeedId needId,
+            long amount,
+            long consumedQuantity,
+            long useDurationTicks,
+            CapabilityId requiredCapability) {
         requireNotStarted(); requireObjectDefinition(sourceDefinitionId);
         needSatisfactionDefinitions.add(
                 sourceDefinitionId,
-                new NeedSatisfaction(needId, amount, consumedQuantity, requiredCapability));
+                new NeedSatisfaction(
+                        needId,
+                        amount,
+                        consumedQuantity,
+                        useDurationTicks,
+                        requiredCapability));
         return this;
     }
 
@@ -425,19 +440,27 @@ public final class SimulationAssembly {
                 vision,
                 moveTo,
                 moveTo);
-        AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
+
+        NeedSatisfactionOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
                 objects,
                 spatial.transforms(),
                 agentDefinitions,
                 needSatisfactionDefinitions,
                 needSolutionKnowledgeDefinitions,
                 needs,
-                consumableStocks);
+                consumableStocks,
+                clock);
+        HandlerId needSatisfactionHandlerId = scheduledHandlers.register(needSatisfaction::resume);
+        ProcessScheduler needSatisfactionScheduler =
+                new BoundProcessScheduler(clock, scheduler, needSatisfactionHandlerId);
+        needSatisfaction.bindScheduler(needSatisfactionScheduler);
+        AgentOpportunityProvider needSatisfactionProvider = needSatisfaction;
+
         AgentSystem agents = new AgentSystem(
                 objects,
                 spatial.transforms(),
                 agentDefinitions,
-                List.of(needSatisfaction),
+                List.of(needSatisfactionProvider),
                 moveTo,
                 moveTo,
                 vision,
