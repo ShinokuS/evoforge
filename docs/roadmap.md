@@ -22,27 +22,52 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
 - Observable one-edge Movement completion and long-range `MoveTo` lifecycle over the existing edge primitive
 - Movement visualizer scenarios: multi-level waypoint patrol and interactive visible-surface LMB-select / RMB-MoveTo with route diagnostics
+- Generic autonomous-agent foundation: open Needs/capabilities, directed Vision, physical orientation, deterministic decision traces and mechanic-owned opportunities
+- Coordinate-free unknown-source Search with local visual sweep, correlated multi-cell exploration and generic active-route diagnostics
+- Finite authoritative Consumable Stock separated from physiological benefit
 
-## Next simulation sequence
+## Current living-world sequence
 
 ```text
-first agent / Cow vertical slice
+Plant Growth / regrowth
     ↓
-deterministic World Generation
+Physiology progression
+    ↓
+Integrated living Cow slice + full developer visualization
+    ↓
+Water + Thirst
+    ↓
+real Utility competition
+    ↓
+Intent persistence / interruption
     ↓
 representative scale profiling
 ```
 
+The integrated Cow slice is the first mandatory visual acceptance point for the current sequence. It should expose authoritative state, cell/object selection, Vision, routes, Needs, resources, Growth and timed interactions with state-dependent presentation/animation.
+
+Representative scale profiling is mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
+
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
+
+## Separate research / large future milestones
+
+The following are intentionally outside the mandatory living-Cow path and require their own design work when a real consumer appears:
+
+- persistent Belief / Memory and landmark/topological navigation;
+- richer sensory mechanics such as hearing and smell;
+- multi-cell fluid evolution, redistribution and derived water-body identity;
+- deterministic World Generation and authoritative RNG-stream policy;
+- broader plant lifecycle semantics such as age, reproduction, withering and death.
 
 ## Deferred presentation work
 
 - explicit adjacent-layer X-ray/build mode
 - real roofs/structures/large objects contributing to presentation visibility volume
 - partial optical transmission for glass/water/smoke/foliage
-- actor line-of-sight and lighting as separate authoritative mechanics
+- lighting as a separate authoritative mechanic
 - additional terrain materials and material transitions
-- larger creature/tree/building/equipment art
+- larger creature/tree/building/equipment art beyond the active vertical slice
 - richer shadows/compositing
 - generated-atlas export tooling
 - visual chunk/dirty caches until profiling requires them

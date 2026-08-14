@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Authoritative owner of mutable consumable quantities for object instances. */
-public final class ConsumableStockSystem implements ConsumableStockLookup {
+public final class ConsumableStockSystem implements ConsumableStockLookup, ConsumableStockReplenishment {
     private final ObjectLookup objects;
     private final ConsumableStockDefinitions definitions;
     private final Map<ObjectId, State> states = new HashMap<>();
@@ -37,6 +37,17 @@ public final class ConsumableStockSystem implements ConsumableStockLookup {
         if (state.quantity < requestedQuantity) return false;
         state.quantity -= requestedQuantity;
         return true;
+    }
+
+    /** Adds up to requested quantity without exceeding authoritative capacity and returns the actual addition. */
+    @Override
+    public long replenish(ObjectId objectId, long requestedQuantity) {
+        if (requestedQuantity <= 0) throw new IllegalArgumentException("requestedQuantity must be > 0");
+        State state = requireState(objectId);
+        long available = state.capacity - state.quantity;
+        long added = Math.min(requestedQuantity, available);
+        state.quantity += added;
+        return added;
     }
 
     @Override

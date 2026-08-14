@@ -9,6 +9,7 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthLookup;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToLookup;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
@@ -35,6 +36,7 @@ public record SimulationView(
         MoveToLookup moveTo,
         NeedLookup needs,
         ConsumableStockLookup consumableStocks,
+        GrowthLookup growth,
         AgentDecisionLookup agents,
         AgentSearchLookup searches) {
 
@@ -43,7 +45,7 @@ public record SimulationView(
                 || terrain == null || terrainExtents == null || terrainRevision == null
                 || geometry == null || navigation == null || occupancy == null || cells == null
                 || pathfinder == null || moveTo == null || needs == null || consumableStocks == null
-                || agents == null || searches == null) {
+                || growth == null || agents == null || searches == null) {
             throw new IllegalArgumentException("simulation view capabilities must not be null");
         }
     }
