@@ -12,11 +12,11 @@ import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 /** Visual acceptance scene for finite surface Water and low-cost rain presentation. */
 public final class RainHydrologyScenario implements VisualizerScenario {
 
-    private static final int MIN_X = -15;
-    private static final int MAX_X = 15;
-    private static final int MIN_Y = -10;
-    private static final int MAX_Y = 10;
-    private static final int PREWARM_TICKS = 7;
+    private static final int MIN_X = -12;
+    private static final int MAX_X = 12;
+    private static final int MIN_Y = -8;
+    private static final int MAX_Y = 8;
+    private static final int PREWARM_TICKS = 5;
 
     @Override public String id() { return "rain-hydrology"; }
     @Override public String title() { return "Rain & Water"; }
@@ -34,9 +34,9 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         LandscapeDefinitionId stone =
                 assembly.landscapeDefinition("scenario:rain_stone");
 
-        // The wide absorbent margin is deliberate: until world generation owns
-        // finite world bounds, visual hydrology scenarios keep free Water away
-        // from the temporary sandbox edge instead of inventing invisible walls.
+        // The absorbent margin is wider than the prewarm propagation distance.
+        // Until world generation owns finite bounds, this keeps the acceptance
+        // scene away from the temporary sandbox edge without invisible walls.
         assembly.soilHydrology(absorbent, 1_000_000, 60_000);
         assembly.soilHydrology(clay, 500_000, 24_000);
         assembly.periodicPrecipitation(60_000, 1L);
@@ -72,7 +72,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
             LandscapeDefinitionId clay,
             LandscapeDefinitionId stone) {
 
-        if (Math.abs(x) > 10 || Math.abs(y) > 6) {
+        if (Math.abs(x) > 5 || Math.abs(y) > 3) {
             return absorbent;
         }
 
