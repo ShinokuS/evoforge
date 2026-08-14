@@ -7,13 +7,12 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.utils.Align;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
-import io.github.evoforge.visualizer.scenario.ScenarioGroup;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import java.util.function.Consumer;
 
@@ -44,9 +43,9 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     private final Consumer<VisualizerScenario> openScenario;
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer shapes = new ShapeRenderer();
-    private final BitmapFont font = new BitmapFont(
-            Gdx.files.internal("ui/font-window.fnt"));
-    private final GlyphLayout layout = new GlyphLayout();
+    private final Skin skin = new Skin(
+            Gdx.files.internal("ui/uiskin.json"));
+    private final BitmapFont font = skin.getFont("window");
     private final Matrix4 projection = new Matrix4();
     private final InputAdapter input = new MenuInput();
 
@@ -114,7 +113,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         hide();
         shapes.dispose();
         batch.dispose();
-        font.dispose();
+        skin.dispose();
     }
 
     private void drawPanels() {
