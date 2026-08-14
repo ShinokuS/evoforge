@@ -24,8 +24,7 @@ public final class ScenarioScreen extends ScreenAdapter {
     private final Runnable backToScenarios;
     private final ScenarioSession session;
     private final ZLevelVisualizer visualizer;
-    private final ScenarioDiagnosticRenderer diagnosticRenderer =
-            new ScenarioDiagnosticRenderer();
+    private final ScenarioDiagnosticRenderer diagnosticRenderer = new ScenarioDiagnosticRenderer();
     private final InputMultiplexer input;
     private final SpriteBatch batch = new SpriteBatch();
     private final BitmapFont font = new BitmapFont();
@@ -37,15 +36,10 @@ public final class ScenarioScreen extends ScreenAdapter {
             Runnable restart,
             Runnable backToScenarios) {
 
-        if (scenario == null) {
-            throw new IllegalArgumentException("scenario must not be null");
-        }
-        if (restart == null) {
-            throw new IllegalArgumentException("restart must not be null");
-        }
+        if (scenario == null) throw new IllegalArgumentException("scenario must not be null");
+        if (restart == null) throw new IllegalArgumentException("restart must not be null");
         if (backToScenarios == null) {
-            throw new IllegalArgumentException(
-                    "backToScenarios must not be null");
+            throw new IllegalArgumentException("backToScenarios must not be null");
         }
 
         this.scenario = scenario;
@@ -57,7 +51,8 @@ public final class ScenarioScreen extends ScreenAdapter {
         visualizer = new ZLevelVisualizer(
                 runtime.view(),
                 runtime.time(),
-                runtime.stepper());
+                runtime.stepper(),
+                session.objectPresentations());
 
         ScenarioView initial = session.view();
         visualizer.setView(
@@ -94,18 +89,14 @@ public final class ScenarioScreen extends ScreenAdapter {
 
     @Override
     public void resize(int width, int height) {
-        if (width <= 0 || height <= 0) {
-            return;
-        }
+        if (width <= 0 || height <= 0) return;
         visualizer.resize(width, height);
         screenProjection.setToOrtho2D(0f, 0f, width, height);
     }
 
     @Override
     public void hide() {
-        if (Gdx.input.getInputProcessor() == input) {
-            Gdx.input.setInputProcessor(null);
-        }
+        if (Gdx.input.getInputProcessor() == input) Gdx.input.setInputProcessor(null);
     }
 
     @Override
@@ -117,16 +108,13 @@ public final class ScenarioScreen extends ScreenAdapter {
         font.dispose();
     }
 
-    private void drawScenarioLabel(
-            ScenarioDiagnostics diagnostics) {
-
+    private void drawScenarioLabel(ScenarioDiagnostics diagnostics) {
         batch.setProjectionMatrix(screenProjection);
         batch.begin();
         font.getData().setScale(0.9f);
 
         String title = "SCENARIO  " + scenario.title();
-        String detail = scenario.description()
-                + "   |   R restart   |   Esc scenarios";
+        String detail = scenario.description() + "   |   R restart   |   Esc scenarios";
         String summary = diagnostics.summary();
 
         if (summary.isEmpty()) {
@@ -140,11 +128,7 @@ public final class ScenarioScreen extends ScreenAdapter {
         batch.end();
     }
 
-    private void drawShadowed(
-            String text,
-            float x,
-            float y,
-            Color color) {
+    private void drawShadowed(String text, float x, float y, Color color) {
         font.setColor(Color.BLACK);
         font.draw(batch, text, x + 1f, y - 1f);
         font.setColor(color);
