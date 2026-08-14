@@ -50,6 +50,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
@@ -400,7 +401,11 @@ public final class SimulationAssembly {
         movementCompletions.bind(moveTo);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
-        ConsumableStockSystem consumableStocks = new ConsumableStockSystem(objects, consumableStockDefinitions);
+        ConsumableStockReductionRelay stockReductions = new ConsumableStockReductionRelay();
+        ConsumableStockSystem consumableStocks = new ConsumableStockSystem(
+                objects,
+                consumableStockDefinitions,
+                stockReductions);
         for (ObjectId objectId : createdObjects) {
             needs.attach(objectId);
             consumableStocks.attach(objectId);
@@ -434,6 +439,7 @@ public final class SimulationAssembly {
         HandlerId growthHandlerId = scheduledHandlers.register(growth::resume);
         ProcessScheduler growthScheduler = new BoundProcessScheduler(clock, scheduler, growthHandlerId);
         growth.bindScheduler(growthScheduler);
+        stockReductions.bind(growth);
         for (ObjectId objectId : createdObjects) {
             WorldObject object = objects.get(objectId);
             if (object != null && growthDefinitions.has(object.definitionId())) growth.activate(objectId);
