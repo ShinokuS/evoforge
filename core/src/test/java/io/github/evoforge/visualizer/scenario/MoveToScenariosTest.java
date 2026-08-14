@@ -72,6 +72,28 @@ final class MoveToScenariosTest {
         assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
     }
 
+    @Test
+    void occupiedRouteCellUsesWarningMarkerInsteadOfCoveringTheObject() {
+        ScenarioSession session = new MoveToInteractiveScenario().create();
+        SimulationRuntime runtime = session.runtime();
+
+        session.controller().primaryCellAction(-4, -2, 0);
+        assertTrue(session.controller().secondaryCellAction(14, -2, 4));
+
+        assertTrue(hasMarker(
+                session.diagnostics(),
+                14,
+                -2,
+                4,
+                ScenarioCellMarkerStyle.WARNING));
+        assertTrue(hasMarker(
+                session.diagnostics(),
+                14,
+                -2,
+                4,
+                ScenarioCellMarkerStyle.GOAL));
+    }
+
     private static void advanceUntilIdle(
             ScenarioSession session,
             ObjectId mover) {
@@ -92,6 +114,25 @@ final class MoveToScenariosTest {
     private static boolean hasRoute(ScenarioDiagnostics diagnostics) {
         for (int index = 0; index < diagnostics.cellCount(); index++) {
             if (diagnostics.cell(index).style() == ScenarioCellMarkerStyle.ROUTE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasMarker(
+            ScenarioDiagnostics diagnostics,
+            int x,
+            int y,
+            int z,
+            ScenarioCellMarkerStyle style) {
+
+        for (int index = 0; index < diagnostics.cellCount(); index++) {
+            ScenarioCellMarker marker = diagnostics.cell(index);
+            if (marker.x() == x
+                    && marker.y() == y
+                    && marker.z() == z
+                    && marker.style() == style) {
                 return true;
             }
         }
