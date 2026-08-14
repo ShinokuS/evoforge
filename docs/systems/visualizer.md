@@ -18,7 +18,7 @@ SimulationStepper
 
 An executable boundary test protects this constructor contract.
 
-`SimulationView` also exposes read-only Occupancy state, so presentation can diagnose dynamic space conflicts without receiving the mutable Occupancy owner.
+`SimulationView` also exposes read-only Occupancy, Need and autonomous Decision state, so presentation can diagnose dynamic space conflicts and agent reasoning without receiving mutable domain owners.
 
 `ZLevelVisualizer` exposes its presentation input processor to the application shell, but it does not own global `Gdx.input` routing. This allows scenario-level controls such as restart/back to compose with the existing camera/time/debug controls without teaching the simulation visualizer about scenario lifecycle.
 
@@ -33,6 +33,7 @@ ScenarioCatalog
   ├─ ScenarioGroup (Geometry & Navigation)
   ├─ ScenarioGroup (Movement)
   ├─ ScenarioGroup (Occupancy)
+  ├─ ScenarioGroup (Agents)
   └─ ScenarioGroup (Pathfinding)
   ↓
 VisualizerScenario
@@ -66,6 +67,7 @@ Scenario implementations and their tests mirror the same domain organization use
 - **Geometry & Navigation** — `Z-Level / Cutaway`, `Ramp Navigation`;
 - **Movement** — `Timed Movement`, `Movement Patrol`, `Click To Move`;
 - **Occupancy** — `Occupancy Contention`;
+- **Agents** — `Cow Foraging`, which displays the authoritative candidate set/winner from the first autonomous decision slice;
 - **Pathfinding** — straight, structural/weighted detours, 3D ramps, multi-level climb, Z switchback, vertical overpass, unreachable, hierarchy and dynamic invalidation scenarios.
 
 The root `visualizer.scenario` package contains shared scenario contracts/catalog/diagnostic primitives; mechanic-specific scenarios, controllers and helpers live in domain subpackages. A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
@@ -105,7 +107,7 @@ new SimulationRuntime
 new ZLevelVisualizer
 ```
 
-Restart does **not** clear or mutate the existing world in place. Simulation systems therefore need no debug-only `reset()` APIs, and a restart naturally recreates Clock, Scheduler state, object identities, movement actions, reservations, terrain and geometry from the scenario definition.
+Restart does **not** clear or mutate the existing world in place. Simulation systems therefore need no debug-only `reset()` APIs, and a restart naturally recreates Clock, Scheduler state, object identities, movement actions, reservations, terrain, geometry, needs and autonomous decision state from the scenario definition.
 
 Scenarios are deterministic. Restart repeats the same scenario definition and seed; a future “new seed” action, if needed, is a separate operation.
 
@@ -204,7 +206,9 @@ Generic visualizer controls inside a scenario:
 - click: selected cell/object at the current standing Z;
 - HUD: tick, Z, FPS, zoom/sampling and inspector context.
 
-The active scenario title, description and `R`/`Esc` reminder remain visible at the bottom of the scenario screen. Pathfinding scenarios additionally use generic presentation-only cell markers for start, goal, route and scenario warnings; those markers do not become simulation state.
+The active scenario title, description and `R`/`Esc` reminder remain visible at the bottom of the scenario screen. Pathfinding and autonomous-agent scenarios additionally use generic presentation-only cell markers for important cells/candidates; those markers do not become simulation state.
+
+`Cow Foraging` reads only `NeedLookup` and `AgentDecisionLookup` for AI-specific diagnostics. It does not evaluate candidates in presentation. Alternative perceived candidates use warning markers, while the authoritative selected winner uses a goal marker. The summary reports hunger, current target, decision tick, candidate count, expected benefit, distance and score.
 
 The F5 overlay reads `OccupancyLookup` only when enabled:
 
@@ -252,6 +256,6 @@ Focused correctness scenarios and future representative performance scenarios ar
 
 Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
 
-Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention, MoveTo and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. `ScenarioMenuModel` tests group expansion, cross-group search and restoration of collapse state; final font/layout aesthetics remain manually inspected in the desktop visualizer.
+Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention, MoveTo, autonomous Cow opportunity diagnostics and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. `ScenarioMenuModel` tests group expansion, cross-group search and restoration of collapse state; final font/layout/marker aesthetics remain manually inspected in the desktop visualizer.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
