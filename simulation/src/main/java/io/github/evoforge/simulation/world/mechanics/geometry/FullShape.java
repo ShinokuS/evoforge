@@ -23,6 +23,11 @@ public final class FullShape
     }
 
     @Override
+    public int solidVolume() {
+        return CellVolume.FULL;
+    }
+
+    @Override
     public int minimumTraversalFactor() {
         return ShapeTraversalFactor.NEUTRAL;
     }

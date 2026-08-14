@@ -15,11 +15,14 @@ A terrain coordinate is the Shape **anchor**. Under the current model, the ordin
 `Shape` is an open declarative local contract. Its public responsibilities are:
 
 ```text
+solidVolume()
 transitionPorts(relative source)
 transitionBlocks(relative source)
 departureTraversalFactor(relative source, direction)
 arrivalTraversalFactor(relative source, direction)
 ```
+
+`solidVolume()` is objective cell-local geometry. Transition ports/blocks/factors are structural traversal geometry. A consumer must not reinterpret one contract as the other simply because both describe the same Shape.
 
 The relative source is:
 
@@ -36,6 +39,32 @@ destination XYZ - source XYZ
 with each delta in `[-1,1]` and not all zero.
 
 A Shape receives no absolute World, neighbor lookup, Navigation, ObjectId or pathfinder. The same Shape value can therefore be reused at any translation.
+
+## Cell-local solid volume
+
+`CellVolume` is a deterministic material-agnostic fixed-point scale:
+
+```text
+CellVolume.EMPTY = 0
+CellVolume.FULL  = 1_000_000
+```
+
+The number is a fraction of one discrete world-cell volume. It is deliberately **not** a statement that one cell is one cubic metre, one litre or any other physical unit. A future physical scale can convert the normalized cell volume without changing Shape geometry.
+
+`Shape.solidVolume()` reports the approximate amount of the Shape anchor cell occupied by solid terrain geometry:
+
+```text
+FullShape = 1.0 cell
+RampShape = 0.5 cell
+```
+
+The current ramp value is intentionally coarse. It captures the useful geometric fact that a wedge occupies approximately half of its anchor cell without introducing meshes, voxel subcells or water-specific code.
+
+This contract is reusable by future liquid, gas, snow, displacement or other volume consumers. It does **not** describe where the remaining free space connects to neighboring cells. A single scalar volume cannot encode boundary topology or opening height, so fluid code must not infer that information from `solidVolume()` alone.
+
+Likewise, navigation `transitionPorts()` are not hydraulic/fluid openings. If the first real flow solver needs boundary connectivity, that capability must be introduced as neutral physical geometry with the solver as evidence rather than by coupling Water to navigation roles.
+
+`Shape` keeps a full-cell default volume to preserve existing full-terrain semantics and lightweight/test Shape implementations. Any partial-production Shape must override the value and is covered by production Shape volume contract tests.
 
 ## Current supported-position law
 
@@ -122,13 +151,13 @@ destination support = destination standing XYZ - (0,0,1)
 
 ### FullShape
 
-`FullShape.INSTANCE` represents the default full solid terrain cell. It supports the standing position above the cell, participates in ordinary horizontal topology and compatible local vertical/ramp connections through the generic role law, and blocks traversal through its solid volume.
+`FullShape.INSTANCE` represents the default full solid terrain cell. It occupies the whole anchor-cell volume, supports the standing position above the cell, participates in ordinary horizontal topology and compatible local vertical/ramp connections through the generic role law, and blocks traversal through its solid volume.
 
 ### RampShape
 
 `RampShape` has four cardinal singleton orientations. `riseX()` / `riseY()` expose the objective cardinal direction in which it rises. The same vector drives its topology and its specialized presentation binding.
 
-A ramp remains terrain with Shape geometry; it is not an empty navigation node. Its departure/arrival contributions create a local lower/ramp/upper connection only when neighboring support Shapes independently provide the matching roles.
+A ramp occupies approximately half of its anchor-cell volume. It remains terrain with Shape geometry; it is not an empty navigation node. Its departure/arrival contributions create a local lower/ramp/upper connection only when neighboring support Shapes independently provide the matching roles.
 
 ## Generic-consumer rule
 
@@ -140,6 +169,6 @@ If a future Shape fits the current contract, existing generic consumers must not
 
 ## Diagnostics and tests
 
-Geometry tests cover concrete Shape ports/blocks, role algebra, traversal-factor ownership, terrain lifecycle interaction and hardening around supported positions. Navigation and TransitionCost integration tests verify that the same local role law is consumed consistently.
+Geometry tests cover concrete Shape ports/blocks, cell-local solid volume, role algebra, traversal-factor ownership, terrain lifecycle interaction and hardening around supported positions. Navigation and TransitionCost integration tests verify that the same local role law is consumed consistently.
 
-See [Shape Transition Algebra decision](../decisions/002-shape-transition-algebra.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md) and [Adding a Shape](../guides/adding-a-shape.md).
+See [Shape Transition Algebra decision](../decisions/002-shape-transition-algebra.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Water Foundation note](../notes/water-foundation.md) and [Adding a Shape](../guides/adding-a-shape.md).
