@@ -11,9 +11,9 @@ import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
 /**
  * Lightweight presentation of authoritative finite Water.
  *
- * <p>Only camera-visible XY cells are queried. Animation is derived from one
- * global time phase plus coordinates, so there is no per-cell animation state,
- * no particle allocation and no renderer-owned fluid simulation.</p>
+ * <p>Only camera-visible XY cells are queried. Every visible water cell shares
+ * one global animation phase, so adjacent tiles read as one surface without
+ * per-cell animation state, particle allocation or renderer-owned fluid simulation.</p>
  */
 public final class WaterRenderer {
 
@@ -102,12 +102,9 @@ public final class WaterRenderer {
             opacity *= 0.88f;
         }
 
-        int frame = Math.floorMod(
-                globalFrame + x + y + waterZ,
-                ProceduralWaterArt.FRAME_COUNT);
         batch.setColor(1f, 1f, 1f, opacity);
         batch.draw(
-                art.frame(frame),
+                art.frame(globalFrame),
                 x,
                 y,
                 1f,
