@@ -7,17 +7,20 @@ import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 
-/** Draws minimal presentation-only cell diagnostics for the selected standing Z. */
+/** Draws presentation-only cell diagnostics for the selected standing Z. */
 final class ScenarioDiagnosticRenderer {
 
+    private static final float ENDPOINT_INSET = 0.01f;
+    private static final float ENDPOINT_FRAME = 0.04f;
+
     private static final Color START =
-            new Color(0.35f, 0.95f, 0.45f, 0.9f);
+            new Color(0.35f, 0.95f, 0.45f, 1f);
     private static final Color GOAL =
-            new Color(0.95f, 0.35f, 0.35f, 0.9f);
+            new Color(0.95f, 0.35f, 0.35f, 1f);
     private static final Color ROUTE =
-            new Color(1f, 0.85f, 0.2f, 0.85f);
+            new Color(1f, 0.85f, 0.2f, 1f);
     private static final Color WARNING =
-            new Color(1f, 0.55f, 0.15f, 0.9f);
+            new Color(1f, 0.55f, 0.15f, 1f);
 
     private final ShapeRenderer shapes =
             new ShapeRenderer();
@@ -32,7 +35,7 @@ final class ScenarioDiagnosticRenderer {
         }
 
         shapes.setProjectionMatrix(worldProjection);
-        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
 
         for (int index = 0;
                 index < diagnostics.cellCount();
@@ -62,48 +65,60 @@ final class ScenarioDiagnosticRenderer {
         float y = marker.y();
 
         switch (marker.style()) {
-            case ROUTE -> shapes.line(
-                    x + 0.38f,
-                    y + 0.08f,
-                    x + 0.62f,
-                    y + 0.08f);
-            case START -> {
-                shapes.line(
-                        x + 0.08f,
-                        y + 0.08f,
-                        x + 0.30f,
-                        y + 0.08f);
-                shapes.line(
-                        x + 0.08f,
-                        y + 0.08f,
-                        x + 0.08f,
-                        y + 0.30f);
-            }
-            case GOAL -> {
-                shapes.line(
-                        x + 0.70f,
-                        y + 0.92f,
-                        x + 0.92f,
-                        y + 0.92f);
-                shapes.line(
-                        x + 0.92f,
-                        y + 0.70f,
-                        x + 0.92f,
-                        y + 0.92f);
-            }
+            case ROUTE -> shapes.rect(
+                    x + 0.34f,
+                    y + 0.34f,
+                    0.32f,
+                    0.32f);
+            case START, GOAL -> drawEndpointFrame(x, y);
             case WARNING -> {
-                shapes.line(
-                        x + 0.70f,
-                        y + 0.08f,
-                        x + 0.92f,
-                        y + 0.08f);
-                shapes.line(
-                        x + 0.92f,
-                        y + 0.08f,
-                        x + 0.92f,
-                        y + 0.30f);
+                shapes.rect(
+                        x + 0.72f,
+                        y + 0.02f,
+                        0.26f,
+                        ENDPOINT_FRAME);
+                shapes.rect(
+                        x + 0.94f,
+                        y + 0.02f,
+                        ENDPOINT_FRAME,
+                        0.26f);
             }
         }
+    }
+
+    /**
+     * Endpoint diagnostics own the outermost cell band. Occupancy keeps its
+     * own inner frames, leaving the object footprint in the center untouched.
+     */
+    private void drawEndpointFrame(
+            float x,
+            float y) {
+
+        float min = ENDPOINT_INSET;
+        float max = 1f - ENDPOINT_INSET;
+        float length = max - min;
+        float innerMax = max - ENDPOINT_FRAME;
+
+        shapes.rect(
+                x + min,
+                y + min,
+                length,
+                ENDPOINT_FRAME);
+        shapes.rect(
+                x + min,
+                y + innerMax,
+                length,
+                ENDPOINT_FRAME);
+        shapes.rect(
+                x + min,
+                y + min,
+                ENDPOINT_FRAME,
+                length);
+        shapes.rect(
+                x + innerMax,
+                y + min,
+                ENDPOINT_FRAME,
+                length);
     }
 
     private static Color color(
