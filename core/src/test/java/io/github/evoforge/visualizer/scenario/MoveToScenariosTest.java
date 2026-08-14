@@ -11,49 +11,55 @@ import org.junit.jupiter.api.Test;
 final class MoveToScenariosTest {
 
     @Test
-    void patrolContinuesToTheNextWaypoint() {
+    void patrolContinuesToTheNextWaypointOnAnotherZLevel() {
         ScenarioSession session = new MoveToPatrolScenario().create();
         SimulationRuntime runtime = session.runtime();
-        ObjectId mover = runtime.view().cells().objectAt(-4, -3, 1, 0);
+        ObjectId mover = runtime.view().cells().objectAt(-4, -2, 0, 0);
 
         assertTrue(runtime.view().moveTo().isActive(mover));
         assertTrue(hasRoute(session.diagnostics()));
+        assertEquals(1, goalZ(session.diagnostics()));
 
         int ticks = 0;
-        while (!session.diagnostics().summary().contains("waypoint=2/4")
-                && ticks++ < 100) {
+        while (!session.diagnostics().summary().contains("waypoint=2/5")
+                && ticks++ < 300) {
             advance(session);
         }
 
-        assertTrue(session.diagnostics().summary().contains("waypoint=2/4"));
+        assertTrue(session.diagnostics().summary().contains("waypoint=2/5"));
         assertTrue(runtime.view().moveTo().isActive(mover));
-        assertEquals(4, runtime.view().transforms().x(mover));
-        assertEquals(-3, runtime.view().transforms().y(mover));
+        assertEquals(2, runtime.view().transforms().x(mover));
+        assertEquals(2, runtime.view().transforms().y(mover));
+        assertEquals(1, runtime.view().transforms().z(mover));
+        assertEquals(2, goalZ(session.diagnostics()));
     }
 
     @Test
-    void interactiveScenarioMovesSelectedObjectAndKeepsAcceptedRouteVisible() {
+    void interactiveScenarioMovesSelectedObjectAcrossMultipleZLevels() {
         ScenarioSession session = new MoveToInteractiveScenario().create();
         SimulationRuntime runtime = session.runtime();
-        ObjectId mover = runtime.view().cells().objectAt(-4, 0, 1, 0);
+        ObjectId mover = runtime.view().cells().objectAt(-4, -2, 0, 0);
 
-        session.controller().primaryCellAction(-4, 0, 1);
-        assertTrue(session.controller().secondaryCellAction(4, 0, 1));
+        session.controller().primaryCellAction(-4, -2, 0);
+        assertTrue(session.controller().secondaryCellAction(14, 0, 4));
         assertTrue(runtime.view().moveTo().isActive(mover));
         assertTrue(hasRoute(session.diagnostics()));
-        assertEquals(4, goalX(session.diagnostics()));
+        assertEquals(14, goalX(session.diagnostics()));
+        assertEquals(4, goalZ(session.diagnostics()));
 
-        session.controller().secondaryCellAction(0, 4, 1);
-        assertEquals(4, goalX(session.diagnostics()));
+        session.controller().secondaryCellAction(6, 0, 2);
+        assertEquals(14, goalX(session.diagnostics()));
+        assertEquals(4, goalZ(session.diagnostics()));
 
         int ticks = 0;
-        while (runtime.view().moveTo().isActive(mover) && ticks++ < 100) {
+        while (runtime.view().moveTo().isActive(mover) && ticks++ < 300) {
             advance(session);
         }
 
         assertTrue(!runtime.view().moveTo().isActive(mover));
-        assertEquals(4, runtime.view().transforms().x(mover));
+        assertEquals(14, runtime.view().transforms().x(mover));
         assertEquals(0, runtime.view().transforms().y(mover));
+        assertEquals(4, runtime.view().transforms().z(mover));
         assertNotNull(runtime.view().moveTo().lastCompletion(mover));
         assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
     }
@@ -77,6 +83,16 @@ final class MoveToScenariosTest {
             ScenarioCellMarker marker = diagnostics.cell(index);
             if (marker.style() == ScenarioCellMarkerStyle.GOAL) {
                 return marker.x();
+            }
+        }
+        throw new AssertionError("goal marker missing");
+    }
+
+    private static int goalZ(ScenarioDiagnostics diagnostics) {
+        for (int index = 0; index < diagnostics.cellCount(); index++) {
+            ScenarioCellMarker marker = diagnostics.cell(index);
+            if (marker.style() == ScenarioCellMarkerStyle.GOAL) {
+                return marker.z();
             }
         }
         throw new AssertionError("goal marker missing");
