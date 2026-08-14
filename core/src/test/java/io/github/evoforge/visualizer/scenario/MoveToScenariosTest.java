@@ -35,7 +35,7 @@ final class MoveToScenariosTest {
     }
 
     @Test
-    void interactiveScenarioMovesSelectedObjectAcrossMultipleZLevels() {
+    void interactiveScenarioMovesSelectedObjectUpAndDownAcrossZLevels() {
         ScenarioSession session = new MoveToInteractiveScenario().create();
         SimulationRuntime runtime = session.runtime();
         ObjectId mover = runtime.view().cells().objectAt(-4, -2, 0, 0);
@@ -51,17 +51,34 @@ final class MoveToScenariosTest {
         assertEquals(14, goalX(session.diagnostics()));
         assertEquals(4, goalZ(session.diagnostics()));
 
-        int ticks = 0;
-        while (runtime.view().moveTo().isActive(mover) && ticks++ < 300) {
-            advance(session);
-        }
+        advanceUntilIdle(session, mover);
 
-        assertTrue(!runtime.view().moveTo().isActive(mover));
         assertEquals(14, runtime.view().transforms().x(mover));
         assertEquals(0, runtime.view().transforms().y(mover));
         assertEquals(4, runtime.view().transforms().z(mover));
         assertNotNull(runtime.view().moveTo().lastCompletion(mover));
         assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
+
+        assertTrue(session.controller().secondaryCellAction(-4, 0, 0));
+        assertEquals(0, goalZ(session.diagnostics()));
+        advanceUntilIdle(session, mover);
+
+        assertEquals(-4, runtime.view().transforms().x(mover));
+        assertEquals(0, runtime.view().transforms().y(mover));
+        assertEquals(0, runtime.view().transforms().z(mover));
+        assertTrue(runtime.view().moveTo().lastCompletion(mover).reachedGoal());
+    }
+
+    private static void advanceUntilIdle(
+            ScenarioSession session,
+            ObjectId mover) {
+
+        int ticks = 0;
+        while (session.runtime().view().moveTo().isActive(mover)
+                && ticks++ < 300) {
+            advance(session);
+        }
+        assertTrue(!session.runtime().view().moveTo().isActive(mover));
     }
 
     private static void advance(ScenarioSession session) {
