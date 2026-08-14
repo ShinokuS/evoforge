@@ -47,6 +47,7 @@ public final class VisualizerInputController extends InputAdapter {
             case Input.Keys.F3 -> { state.toggleShapeDirections(); return true; }
             case Input.Keys.F4 -> { state.cycleLowerDepth(); return true; }
             case Input.Keys.F5 -> { state.toggleOccupancy(); return true; }
+            case Input.Keys.F6 -> { state.toggleTechnicalDetails(); return true; }
             default -> { return false; }
         }
     }
