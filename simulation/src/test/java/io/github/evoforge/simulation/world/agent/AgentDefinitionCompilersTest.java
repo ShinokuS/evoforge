@@ -14,6 +14,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedDefinitionCompiler;
 import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitionCompiler;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitionCompiler;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitions;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitionCompiler;
@@ -68,10 +70,19 @@ final class AgentDefinitionCompilersTest {
     }
 
     @Test
+    void compilesNeedMotivationAsIndependentDefinitionAspect() {
+        NeedMotivationDefinitions definitions = new NeedMotivationDefinitions();
+        NeedMotivationDefinitionCompiler compiler = new NeedMotivationDefinitionCompiler(definitions);
+        ObjectDefinitionId id = ObjectDefinitionId.of(6);
+        compiler.compile(id, parse("{\"core:hunger\":{\"activationLevel\":40}}"), null);
+        assertEquals(40, definitions.get(id, NeedId.of("core:hunger")).activationLevel());
+    }
+
+    @Test
     void compilesNeedSatisfactionAsIndependentDefinitionAspect() {
         NeedSatisfactionDefinitions definitions = new NeedSatisfactionDefinitions();
         NeedSatisfactionDefinitionCompiler compiler = new NeedSatisfactionDefinitionCompiler(definitions);
-        ObjectDefinitionId id = ObjectDefinitionId.of(6);
+        ObjectDefinitionId id = ObjectDefinitionId.of(7);
         compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"consumesQuantity\":4,\"useDurationTicks\":7,\"requiresCapability\":\"core:graze\"}}"), null);
         assertEquals(1, definitions.count(id));
         var satisfaction = definitions.satisfactionAt(id, 0);
@@ -86,7 +97,7 @@ final class AgentDefinitionCompilersTest {
     void compilesConsumableStockAsIndependentDefinitionAspect() {
         ConsumableStockDefinitions definitions = new ConsumableStockDefinitions();
         ConsumableStockDefinitionCompiler compiler = new ConsumableStockDefinitionCompiler(definitions);
-        ObjectDefinitionId id = ObjectDefinitionId.of(7);
+        ObjectDefinitionId id = ObjectDefinitionId.of(8);
         compiler.compile(id, parse("{\"capacity\":120,\"initial\":75}"), null);
         assertEquals(120, definitions.get(id).capacity());
         assertEquals(75, definitions.get(id).initialQuantity());
