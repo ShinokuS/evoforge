@@ -7,10 +7,11 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 final class MoveToPatrolController implements ScenarioController {
 
     private static final int[][] WAYPOINTS = {
-            {4, -3, 1},
-            {4, 3, 1},
-            {-4, 3, 1},
-            {-4, -3, 1}
+            {2, 2, 1},
+            {6, -2, 2},
+            {10, 2, 3},
+            {14, -2, 4},
+            {-4, -2, 0}
     };
 
     private final SimulationRuntime runtime;
