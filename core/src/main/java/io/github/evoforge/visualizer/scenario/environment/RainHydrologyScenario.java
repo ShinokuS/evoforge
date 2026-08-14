@@ -40,7 +40,12 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         // minutes of normal visualizer runtime, while their closed physical
         // faces contain the interior surface Water without inventing world bounds.
         assembly.soilHydrology(absorbent, 1_000_000, 500);
-        assembly.soilHydrology(clay, 500_000, 200);
+
+        // Clay fully absorbs the first 150k volume (300 rain evaluations) and
+        // only then begins producing free Water. After the deterministic prewarm
+        // this leaves a visibly shallower pool than the stone catchment, making
+        // fill-dependent opacity easy to compare without presentation-only data.
+        assembly.soilHydrology(clay, 150_000, 500);
         assembly.periodicPrecipitation(500, 1L);
 
         for (int x = MIN_X; x <= MAX_X; x++) {
