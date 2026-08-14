@@ -15,12 +15,13 @@ final class ScenarioCatalogTest {
         assertEquals(List.of(
                         "cutaway", "ramp-navigation", "timed-movement",
                         "movement-patrol", "movement-click-to-move",
-                        "occupancy-contention", "agent-cow-foraging", "agent-cow-visual-search",
-                        "pathfinding-straight", "pathfinding-structural-detour",
-                        "pathfinding-weighted-detour", "pathfinding-ramp-3d",
-                        "pathfinding-multi-level-climb", "pathfinding-z-switchback",
-                        "pathfinding-vertical-overpass", "pathfinding-unreachable",
-                        "pathfinding-hierarchy", "pathfinding-invalidation"),
+                        "occupancy-contention", "agent-living-cow", "agent-cow-foraging",
+                        "agent-cow-visual-search", "pathfinding-straight",
+                        "pathfinding-structural-detour", "pathfinding-weighted-detour",
+                        "pathfinding-ramp-3d", "pathfinding-multi-level-climb",
+                        "pathfinding-z-switchback", "pathfinding-vertical-overpass",
+                        "pathfinding-unreachable", "pathfinding-hierarchy",
+                        "pathfinding-invalidation"),
                 catalog.scenarios().stream().map(VisualizerScenario::id).toList());
     }
 
@@ -40,7 +41,7 @@ final class ScenarioCatalogTest {
         VisualizerScenario duplicate = stub("same");
         assertThrows(IllegalArgumentException.class, () -> ScenarioCatalog.ofGroups(
                 ScenarioGroup.of("first", "First", duplicate),
-                ScenarioGroup.of("second", "Second", duplicate)));
+                ScenarioGroup.of("second", "Second", duplicate))));
     }
 
     @Test
