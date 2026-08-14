@@ -42,6 +42,17 @@ final class CorrelatedRandomWalkExplorationPolicyTest {
     }
 
     @Test
+    void canonicalFirstCowStartsWithVisiblyOffAxisFrontierPoint() {
+        SearchRelocationRequest request = CorrelatedRandomWalkExplorationPolicy.standard().nextRelocation(
+                ObjectId.of(0, 0),
+                FacingDirection.EAST,
+                0,
+                7);
+
+        assertEquals(new SearchRelocationRequest(-2, -6), request);
+    }
+
+    @Test
     void selectedPointKeepsCoarseFacingTowardItsQuadrant() {
         SearchRelocationRequest request = new SearchRelocationRequest(6, 3);
 
