@@ -20,25 +20,19 @@ public final class NeedSatisfactionDefinitionCompiler
     private final NeedSatisfactionDefinitions definitions;
 
     public NeedSatisfactionDefinitionCompiler(NeedSatisfactionDefinitions definitions) {
-        if (definitions == null) {
-            throw new IllegalArgumentException("definitions must not be null");
-        }
+        if (definitions == null) throw new IllegalArgumentException("definitions must not be null");
         this.definitions = definitions;
     }
 
     @Override
-    public String key() {
-        return "needSatisfaction";
-    }
+    public String key() { return "needSatisfaction"; }
 
     @Override
     public void compile(
             ObjectDefinitionId definitionId,
             JsonObject data,
             DefinitionCatalog<ObjectDefinitionId> catalog) {
-        if (data == null) {
-            throw new IllegalArgumentException("data must not be null");
-        }
+        if (data == null) throw new IllegalArgumentException("data must not be null");
         List<String> keys = new ArrayList<>(data.keySet());
         Collections.sort(keys);
         for (String key : keys) {
@@ -47,14 +41,15 @@ public final class NeedSatisfactionDefinitionCompiler
                 throw new IllegalArgumentException("needSatisfaction." + key + " must be an object");
             }
             JsonObject entry = element.getAsJsonObject();
-            long amount = integer(
-                    entry.get("amount"),
-                    "needSatisfaction." + key + ".amount");
+            long amount = integer(entry.get("amount"), "needSatisfaction." + key + ".amount");
+            JsonElement consumed = entry.get("consumesQuantity");
+            long consumedQuantity = consumed == null
+                    ? 0L
+                    : integer(consumed, "needSatisfaction." + key + ".consumesQuantity");
             CapabilityId required = null;
             JsonElement capability = entry.get("requiresCapability");
             if (capability != null) {
-                if (!capability.isJsonPrimitive()
-                        || !capability.getAsJsonPrimitive().isString()) {
+                if (!capability.isJsonPrimitive() || !capability.getAsJsonPrimitive().isString()) {
                     throw new IllegalArgumentException(
                             "needSatisfaction." + key + ".requiresCapability must be a string");
                 }
@@ -62,23 +57,19 @@ public final class NeedSatisfactionDefinitionCompiler
             }
             definitions.add(
                     definitionId,
-                    new NeedSatisfaction(NeedId.of(key), amount, required));
+                    new NeedSatisfaction(NeedId.of(key), amount, consumedQuantity, required));
         }
     }
 
     @Override
-    public void finish() {
-        definitions.freeze();
-    }
+    public void finish() { definitions.freeze(); }
 
     private static long integer(JsonElement element, String path) {
         if (element == null || !element.isJsonPrimitive()) {
             throw new IllegalArgumentException(path + " is required");
         }
         JsonPrimitive primitive = element.getAsJsonPrimitive();
-        if (!primitive.isNumber()) {
-            throw new IllegalArgumentException(path + " must be an integer");
-        }
+        if (!primitive.isNumber()) throw new IllegalArgumentException(path + " must be an integer");
         try {
             return new BigDecimal(primitive.getAsString()).longValueExact();
         } catch (NumberFormatException | ArithmeticException exception) {
