@@ -14,6 +14,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
+import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 
 final class VerticalSkySurfaceSystemTest {
 
@@ -21,6 +22,7 @@ final class VerticalSkySurfaceSystemTest {
     void resolvesWaterStrictlyAboveTerrainAndTerrainOnSharedAnchor() {
         Fixture fixture = new Fixture();
         fixture.landscape.placeTerrain(0, 0, 3, fixture.terrainId);
+        fixture.landscape.setShape(0, 0, 3, RampShape.POSITIVE_X);
 
         assertEquals(
                 new SkySurface(0, 0, 3, SkySurface.Kind.TERRAIN),
