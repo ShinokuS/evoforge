@@ -12,11 +12,13 @@ import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 /** Visual acceptance scene for finite surface Water and low-cost rain presentation. */
 public final class RainHydrologyScenario implements VisualizerScenario {
 
-    private static final int MIN_X = -12;
-    private static final int MAX_X = 12;
-    private static final int MIN_Y = -8;
-    private static final int MAX_Y = 8;
-    private static final int PREWARM_TICKS = 5;
+    private static final int MIN_X = -5;
+    private static final int MAX_X = 5;
+    private static final int MIN_Y = -3;
+    private static final int MAX_Y = 3;
+    private static final int WALL_X = 6;
+    private static final int WALL_Y = 4;
+    private static final int PREWARM_TICKS = 400;
 
     @Override public String id() { return "rain-hydrology"; }
     @Override public String title() { return "Rain & Water"; }
@@ -34,24 +36,23 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         LandscapeDefinitionId stone =
                 assembly.landscapeDefinition("scenario:rain_stone");
 
-        // The absorbent margin is wider than the prewarm propagation distance.
-        // Until world generation owns finite bounds, this keeps the acceptance
-        // scene away from the temporary sandbox edge without invisible walls.
-        assembly.soilHydrology(absorbent, 1_000_000, 60_000);
-        assembly.soilHydrology(clay, 500_000, 24_000);
-        assembly.periodicPrecipitation(60_000, 1L);
+        // Rain is intentionally weak. FullShape wall cells absorb it for many
+        // minutes of normal visualizer runtime, while their closed physical
+        // faces contain the interior surface Water without inventing world bounds.
+        assembly.soilHydrology(absorbent, 1_000_000, 500);
+        assembly.soilHydrology(clay, 500_000, 200);
+        assembly.periodicPrecipitation(500, 1L);
 
         for (int x = MIN_X; x <= MAX_X; x++) {
             for (int y = MIN_Y; y <= MAX_Y; y++) {
-                LandscapeDefinitionId terrain = terrainAt(
+                assembly.placeTerrain(
                         x,
                         y,
-                        absorbent,
-                        clay,
-                        stone);
-                assembly.placeTerrain(x, y, -1, terrain);
+                        -1,
+                        floorAt(x, absorbent, clay, stone));
             }
         }
+        placeAbsorbentWalls(assembly, absorbent);
 
         SimulationRuntime runtime = assembly.start();
         for (int tick = 0; tick < PREWARM_TICKS; tick++) {
@@ -65,19 +66,15 @@ public final class RainHydrologyScenario implements VisualizerScenario {
                         WeatherPresentation.rain(0.78f)));
     }
 
-    private static LandscapeDefinitionId terrainAt(
+    private static LandscapeDefinitionId floorAt(
             int x,
-            int y,
             LandscapeDefinitionId absorbent,
             LandscapeDefinitionId clay,
             LandscapeDefinitionId stone) {
 
-        if (Math.abs(x) > 5 || Math.abs(y) > 3) {
-            return absorbent;
-        }
-
-        // Two broad catchments create visibly different fill levels while the
-        // same deterministic flow solver smooths their shared boundaries.
+        // The two catchments receive the same rain but retain different surface
+        // fractions. Their shared absorbent strip makes the alpha difference and
+        // continuing hydraulic equalization easy to inspect visually.
         if (x <= -2) {
             return stone;
         }
@@ -85,5 +82,19 @@ public final class RainHydrologyScenario implements VisualizerScenario {
             return clay;
         }
         return absorbent;
+    }
+
+    private static void placeAbsorbentWalls(
+            SimulationAssembly assembly,
+            LandscapeDefinitionId absorbent) {
+
+        for (int x = -WALL_X; x <= WALL_X; x++) {
+            assembly.placeTerrain(x, -WALL_Y, 0, absorbent);
+            assembly.placeTerrain(x, WALL_Y, 0, absorbent);
+        }
+        for (int y = MIN_Y; y <= MAX_Y; y++) {
+            assembly.placeTerrain(-WALL_X, y, 0, absorbent);
+            assembly.placeTerrain(WALL_X, y, 0, absorbent);
+        }
     }
 }
