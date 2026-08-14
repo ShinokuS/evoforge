@@ -40,7 +40,7 @@ public final class LivingCowScenario implements VisualizerScenario {
         assembly.movementRate(cow, 650);
         assembly.exclusiveOccupancy(cow);
         assembly.agent(cow, GRAZE);
-        assembly.vision(cow, 5, 120);
+        assembly.vision(cow, 7, 120);
         assembly.need(cow, HUNGER, 100, 0);
         assembly.needMotivation(cow, HUNGER, 36);
         assembly.needProgression(cow, HUNGER, 6, 4);
