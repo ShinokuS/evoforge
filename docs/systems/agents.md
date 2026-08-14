@@ -227,9 +227,11 @@ not:
 
 `AgentSystem` chooses among search demands deterministically and delegates the epistemic process to `AgentSearchSystem`.
 
-Search first performs a local visual sweep. If nothing is found, `UnguidedExplorationPolicy` returns only observer-relative heading + distance. The current correlated-random-walk policy uses stable identity, previous heading, exploration ordinal and visual range; it receives no XYZ.
+Search first performs a local visual sweep. If nothing is found, `UnguidedExplorationPolicy` returns a coordinate-free relative target point as `offsetX/offsetY`, not an absolute world location and not a coarse `heading + distance` ray. The current correlated-random-walk policy uses stable identity, previous heading, exploration ordinal and visual range to sample a deterministic pseudo-random lattice cell on the outer ring of the visual horizon. A mild directional persistence bias remains, but the selected point can lie between the eight exact cardinal/diagonal rays.
 
-`RelativeSearchLocomotion` converts the relative request into a currently visible, locally traversable multi-cell leg and executes it through production `MoveTo`. Coordinates required by Movement remain behind this execution boundary and are never returned to cognition/search.
+`AgentSearchSystem` turns physical facing toward the selected relative point before execution. `RelativeSearchLocomotion` then resolves the relative offset against the current authoritative position, requires the endpoint to be present in the fresh Vision snapshot, and starts production `MoveTo` with a query-local path constraint that permits only cells from that same visible snapshot. Coordinates required by pathfinding and Movement remain behind this execution boundary and are never returned to cognition/search.
+
+This is the first real consumer for constrained MoveTo advice. The constraint is advisory pathfinding input only; every committed edge still passes through ordinary Movement and Occupancy revalidation.
 
 ## Continuing intents
 
@@ -322,7 +324,8 @@ Headless coverage proves, among other invariants:
 - outside-range / behind-observer / occluded sources are not visual candidates;
 - general Need-solution knowledge starts search without source identity/location;
 - search discovers concrete food only through Perception;
-- unguided exploration expands observation through multi-cell visible relative legs;
+- unguided exploration samples deterministic pseudo-random relative cells on the outer Vision ring instead of collapsing to eight exact rays;
+- exploratory MoveTo is constrained to the fresh visible-cell snapshot used to validate the selected relative point;
 - finite source use decreases authoritative stock and empty stock removes the opportunity;
 - plant Growth restores finite stock independently;
 - open NeedIds progress on independent schedules and clamp at their configured maxima;
