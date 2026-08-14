@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -28,6 +29,24 @@ final class WaterSurfaceIndex {
                 @Override
                 public int columnCount() {
                     return zByColumn.size();
+                }
+
+                @Override
+                public void forEach(WaterSurfaceConsumer consumer) {
+                    if (consumer == null) {
+                        throw new IllegalArgumentException(
+                                "consumer must not be null");
+                    }
+
+                    for (Map.Entry<Column, TreeSet<Integer>> entry
+                            : zByColumn.entrySet()) {
+
+                        Column column = entry.getKey();
+                        consumer.accept(
+                                column.x(),
+                                column.y(),
+                                entry.getValue().last());
+                    }
                 }
             };
 
