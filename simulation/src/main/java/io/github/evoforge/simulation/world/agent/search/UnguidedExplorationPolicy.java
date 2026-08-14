@@ -4,9 +4,13 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 
 /**
- * Chooses an egocentric heading when search has no landmark, map or other spatial guidance.
- * Implementations receive no world coordinates.
+ * Chooses an egocentric exploration leg when search has no landmark, map or other spatial guidance.
+ * Implementations receive no world coordinates; visualRange is only the observer-relative sensory horizon.
  */
 public interface UnguidedExplorationPolicy {
-    FacingDirection nextHeading(ObjectId agentId, FacingDirection previousHeading, long stepOrdinal);
+    SearchRelocationRequest nextRelocation(
+            ObjectId agentId,
+            FacingDirection previousHeading,
+            long legOrdinal,
+            int visualRange);
 }
