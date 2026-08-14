@@ -6,6 +6,7 @@ import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
 import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.simulation.world.pathfinding.PathTransitionConstraint;
 import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
 
@@ -72,6 +73,25 @@ public final class MoveToSystem
             int goalX,
             int goalY,
             int goalZ) {
+        return start(
+                objectId,
+                goalX,
+                goalY,
+                goalZ,
+                PathTransitionConstraint.ALLOW_ALL);
+    }
+
+    /** Starts MoveTo with a query-local advisory route constraint; physical edges still revalidate normally. */
+    public MoveToStartAttempt start(
+            ObjectId objectId,
+            int goalX,
+            int goalY,
+            int goalZ,
+            PathTransitionConstraint constraint) {
+
+        if (constraint == null) {
+            throw new IllegalArgumentException("constraint must not be null");
+        }
 
         MovementClaimAttempt claim =
                 movement.acquireClaim(objectId);
@@ -87,7 +107,8 @@ public final class MoveToSystem
                 claim.claimId(),
                 goalX,
                 goalY,
-                goalZ);
+                goalZ,
+                constraint);
 
         if (activeByObject.putIfAbsent(objectId, active) != null) {
             releaseAfterFailure(active, null);
@@ -192,12 +213,13 @@ public final class MoveToSystem
 
         PathSearch search = pathfinder.begin(
                 PathQuery.between(
-                        transforms.x(active.objectId),
-                        transforms.y(active.objectId),
-                        transforms.z(active.objectId),
-                        active.goalX,
-                        active.goalY,
-                        active.goalZ));
+                                transforms.x(active.objectId),
+                                transforms.y(active.objectId),
+                                transforms.z(active.objectId),
+                                active.goalX,
+                                active.goalY,
+                                active.goalZ)
+                        .withConstraint(active.constraint));
         if (search == null) {
             throw new IllegalStateException(
                     "pathfinder returned null search");
@@ -364,6 +386,7 @@ public final class MoveToSystem
         private final int goalX;
         private final int goalY;
         private final int goalZ;
+        private final PathTransitionConstraint constraint;
         private PathRoute route;
         private int nextStepIndex;
         private MovementActionId childActionId;
@@ -374,13 +397,15 @@ public final class MoveToSystem
                 MovementClaimId claimId,
                 int goalX,
                 int goalY,
-                int goalZ) {
+                int goalZ,
+                PathTransitionConstraint constraint) {
             this.actionId = actionId;
             this.objectId = objectId;
             this.claimId = claimId;
             this.goalX = goalX;
             this.goalY = goalY;
             this.goalZ = goalZ;
+            this.constraint = constraint;
         }
     }
 }
