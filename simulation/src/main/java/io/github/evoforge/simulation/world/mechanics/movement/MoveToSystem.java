@@ -35,6 +35,7 @@ public final class MoveToSystem
     private final TransformLookup transforms;
     private final Pathfinder pathfinder;
     private final MovementSystem movement;
+    private final MoveToQueryConstraintProvider queryConstraints;
 
     private final Map<ObjectId, ActiveMoveTo> activeByObject =
             new HashMap<>();
@@ -50,6 +51,19 @@ public final class MoveToSystem
             Pathfinder pathfinder,
             MovementSystem movement) {
 
+        this(
+                transforms,
+                pathfinder,
+                movement,
+                MoveToQueryConstraintProvider.IDENTITY);
+    }
+
+    public MoveToSystem(
+            TransformLookup transforms,
+            Pathfinder pathfinder,
+            MovementSystem movement,
+            MoveToQueryConstraintProvider queryConstraints) {
+
         if (transforms == null) {
             throw new IllegalArgumentException(
                     "transforms must not be null");
@@ -62,10 +76,15 @@ public final class MoveToSystem
             throw new IllegalArgumentException(
                     "movement must not be null");
         }
+        if (queryConstraints == null) {
+            throw new IllegalArgumentException(
+                    "queryConstraints must not be null");
+        }
 
         this.transforms = transforms;
         this.pathfinder = pathfinder;
         this.movement = movement;
+        this.queryConstraints = queryConstraints;
     }
 
     public MoveToStartAttempt start(
@@ -211,6 +230,15 @@ public final class MoveToSystem
                             + active.objectId);
         }
 
+        PathTransitionConstraint constraint =
+                queryConstraints.constraintFor(
+                        active.objectId,
+                        active.constraint);
+        if (constraint == null) {
+            throw new IllegalStateException(
+                    "MoveTo query constraint provider returned null");
+        }
+
         PathSearch search = pathfinder.begin(
                 PathQuery.between(
                                 transforms.x(active.objectId),
@@ -219,7 +247,7 @@ public final class MoveToSystem
                                 active.goalX,
                                 active.goalY,
                                 active.goalZ)
-                        .withConstraint(active.constraint));
+                        .withConstraint(constraint));
         if (search == null) {
             throw new IllegalStateException(
                     "pathfinder returned null search");
