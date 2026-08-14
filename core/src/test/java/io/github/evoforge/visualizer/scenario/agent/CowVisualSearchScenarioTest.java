@@ -29,7 +29,9 @@ final class CowVisualSearchScenarioTest {
         assertTrue(explorationRoute.size() >= 3);
 
         boolean sawExploring = session.diagnostics().summary().contains("search=EXPLORING:core:hunger");
-        for (int tick = 0; tick < 120 && session.runtime().view().agents().currentTarget(cow) == null; tick++) {
+        // Horizon-oriented unguided search is deliberately not biased toward the hidden Grass position.
+        // Keep this as a liveness budget, not an exact-path/timing contract.
+        for (int tick = 0; tick < 240 && session.runtime().view().agents().currentTarget(cow) == null; tick++) {
             session.runtime().stepper().advance();
             session.update();
             sawExploring |= session.diagnostics().summary().contains("search=EXPLORING:core:hunger");

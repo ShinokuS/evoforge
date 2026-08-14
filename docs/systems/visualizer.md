@@ -8,17 +8,18 @@ The debug application is scenario-driven: one generic visualizer is reused acros
 
 ## Runtime boundary
 
-`ZLevelVisualizer` receives only:
+`ZLevelVisualizer` receives:
 
 ```text
 SimulationView
 SimulationTime
 SimulationStepper
+optional presentation-only ObjectPresentationBindings
 ```
 
-An executable boundary test protects this constructor contract.
+The bindings contain display metadata only. Simulation modules never depend on visualizer presentation types.
 
-`SimulationView` exposes read-only capabilities needed by presentation diagnostics, including Object/Spatial, Orientation, Vision, Occupancy, MoveTo, Need, autonomous Decision and Search state. Presentation never receives mutable domain owners.
+`SimulationView` exposes read-only capabilities needed by presentation diagnostics, including Object/Spatial, Orientation, Vision, Occupancy, MoveTo, Need/NeedProgression, ConsumableStock, Growth, autonomous Decision and Search state. Presentation never receives mutable domain owners.
 
 `ZLevelVisualizer` exposes its presentation input processor to the application shell, but it does not own global `Gdx.input` routing. Scenario-level controls therefore compose with camera/time/debug controls without teaching simulation code about scenario lifecycle.
 
@@ -41,7 +42,8 @@ VisualizerScenario
 ScenarioSession
   ├─ fresh SimulationRuntime
   ├─ initial ScenarioView
-  └─ optional ScenarioController
+  ├─ optional ScenarioController
+  └─ optional ObjectPresentationBindings
   ↓
 ScenarioScreen
   ↓
@@ -50,14 +52,6 @@ ZLevelVisualizer
 
 A `VisualizerScenario` is presentation tooling that builds a fresh production simulation through `SimulationAssembly`. Simulation modules do not depend on scenario types.
 
-`ScenarioView` contains presentation-only initial focus:
-
-```text
-selected standing Z
-camera X/Y
-zoom
-```
-
 `ScenarioController` is optional visualizer-only tooling driven by authoritative simulation ticks. It may update diagnostics or submit ordinary production commands to the scenario runtime; it is not simulation state.
 
 Current groups include:
@@ -65,55 +59,191 @@ Current groups include:
 - **Geometry & Navigation** — Z-Level / Cutaway, Ramp Navigation;
 - **Movement** — Timed Movement, Movement Patrol, Click To Move;
 - **Occupancy** — Occupancy Contention;
-- **Agents** — Cow Foraging, Cow Visual Search;
+- **Agents** — Living Cow Cycle, Cow Foraging, Cow Visual Search;
 - **Pathfinding** — straight, detour, 3D, hierarchy, invalidation and related scenarios.
-
-The root `visualizer.scenario` package contains shared scenario contracts/catalog/diagnostic primitives; mechanic-specific scenarios live in domain subpackages.
 
 ## Presentation ownership
 
 ```text
-Main                         application screen switching
-ScenarioMenuScreen           grouped/searchable scenario browser rendering + input
-ScenarioMenuModel            filter/expansion/selection state
-ScenarioCatalog              ordered groups and scenarios
-ScenarioScreen               active scenario lifecycle
-VisualizerScenario           builds one fresh deterministic world
-ScenarioController           optional presentation-only scenario tooling
-ZLevelVisualizer             generic render orchestration
-VisualizerState              selected Z / overlay / selection state
-VisualizerCamera             pan / zoom / viewport conversion
-VisualizerInputController    physical input -> presentation/time controls
-LandscapeRenderer            terrain/cutaway rendering
-VisualizerOverlayRenderer    grid/navigation/occupancy/object overlays
-VisionDiagnosticRenderer     authoritative selected-object Vision overlay
+Main                          application screen switching
+ScenarioMenuScreen            grouped/searchable scenario browser rendering + input
+ScenarioMenuModel             filter/expansion/selection state
+ScenarioCatalog               ordered groups and scenarios
+ScenarioScreen                active scenario lifecycle
+VisualizerScenario            builds one fresh deterministic world
+ScenarioController            optional presentation-only scenario tooling
+ObjectPresentationBindings    definition -> presentation metadata only
+ZLevelVisualizer              generic render orchestration
+VisualizerState               selected Z / overlay / inspector mode / selection state
+VisualizerCamera              pan / zoom / viewport conversion
+VisualizerInputController     physical input -> presentation/time controls
+LandscapeRenderer             terrain/cutaway rendering
+ObjectPresentationRenderer    all object art, including generic fallback
+VisionDiagnosticRenderer      authoritative selected-object Vision overlay
 MoveToRouteDiagnosticRenderer authoritative selected-object active-route overlay
-VisualizerHudRenderer        status and inspector UI
-ShapePresentationRegistry    typed Shape presentation dispatch
+VisualizerOverlayRenderer     grid/navigation/occupancy/selection diagnostics only
+VisualizerHudRenderer         readable inspector + optional technical details
+ShapePresentationRegistry     typed Shape presentation dispatch
+```
+
+World presentation is rendered before developer diagnostics:
+
+```text
+landscape
+  ↓
+object art
+  ↓
+Vision / route / debug overlays
+  ↓
+HUD
 ```
 
 No component above becomes an authoritative simulation owner.
 
+## Object presentation bindings
+
+Object art is selected outside simulation:
+
+```text
+ObjectDefinitionId
+    ↓ presentation-only binding
+ObjectPresentation
+    ├─ displayName
+    ├─ description
+    ├─ visual family
+    └─ deterministic variant
+```
+
+Current visual families are presentation renderer families, not domain object categories:
+
+```text
+GENERIC
+CREATURE
+VEGETATION
+```
+
+They do not control AI, physics, capabilities or interaction eligibility.
+
+`ObjectPresentationRenderer` is the only object-art owner. Definitions without a special binding retain a deterministic generic marker as a fallback; specialized objects do not receive a second hidden generic marker underneath their art.
+
+The integrated Cow scenario binds Cow to the creature renderer and Grass/Clover/Dandelion to one shared vegetation renderer with presentation variants. There is no simulation-side `if definition == cow/grass` branch.
+
+Creature facing reads `OrientationLookup`. The grazing pose activates only while `AgentIntentTrace.phase == USING_OPPORTUNITY`; its timing therefore follows simulation, not wall-clock animation state.
+
+Vegetation reads authoritative `ConsumableStock.quantity/capacity`. Its visible mass therefore shrinks and returns with depletion/regrowth without maintaining presentation-side biomass state. Current variants intentionally use distinct readable silhouettes rather than a generic cloud of dots:
+
+```text
+Grass       blade-like tuft
+Clover      stems + three-leaf forms
+Dandelion   radial leaves + yellow flower
+```
+
+These differences are presentation data only and do not create plant-specific simulation mechanics.
+
+## Living-world inspector
+
+The inspector is designed to answer the developer's first-order questions quickly:
+
+```text
+What is this object?
+What state is it in?
+What does it currently need?
+What is it doing?
+What is it targeting?
+Is a continuing interaction progressing?
+Is a finite resource full, depleted or regrowing?
+```
+
+The normal inspector therefore prefers concise human-readable state over raw engine fields.
+
+Typical Cow view:
+
+```text
+Cow
+
+BEHAVIOR
+Activity        Exploring for Hunger solution
+Current need    Hunger
+
+NEEDS
+Hunger          [real progress bar]  62 / 100
+```
+
+Typical plant view:
+
+```text
+Clover
+
+RESOURCE
+Biomass         [real progress bar]  4 / 4
+Growth          Full grown · dormant
+```
+
+During a timed interaction the HUD draws a real progress bar derived from authoritative `AgentIntentTrace.startedTick/expectedCompletionTick`. Need and resource bars are also screen-space graphical bars; they are not ASCII text representations.
+
+Repeated LMB on the same cell cycles through the authoritative object stack, allowing the Cow and the plant beneath it to be inspected separately.
+
+### Bounded text layout
+
+Dynamic developer text is treated as bounded layout rather than a collection of fixed-baseline strings. The inspector measures text with the active font, wraps label/value columns to the available content width, and computes row/panel height from the resulting wrapped text.
+
+This applies to titles, Activity/Target values, technical-detail values, progress-bar labels, the top status/help block, and the scenario description/live summary. A longer runtime state therefore expands vertically inside its allotted UI region instead of drawing beyond the panel or viewport edge.
+
+The scenario browser already applies the same bounded-width principle to scenario descriptions and help text.
+
+### Technical-details mode
+
+Raw diagnostics remain available because they are valuable when investigating a mechanic, but they are not shown by default.
+
+`F6` toggles **Technical details**. That mode can expose:
+
+```text
+ObjectId / definition
+XYZ / facing
+cell slice / Shape / transitions / occupancy / stack size
+Need progression next tick
+Vision range / FOV / visible-object count
+raw Search state
+last Decision tick / candidate count / winning score and benefit
+raw GrowthTrace
+```
+
+This is a presentation-mode distinction only. Both modes read the same authoritative `SimulationView`; the concise view does not invent higher-level state.
+
+An additional practical benefit is that the normal inspector no longer requests expensive geometry/Vision diagnostic data merely to display fields the developer did not ask to see.
+
+### Presentation cache boundary
+
+Manual Living Cow acceptance exposed a presentation-only performance problem: the inspector and Vision overlay were rebuilding allocation-heavy authoritative snapshots on every render frame even though simulation state changes only on simulation ticks.
+
+The visualizer caches selected-object inspector data and `VisionSnapshot` results by:
+
+```text
+selected object / selected cell
+simulation tick
+relevant presentation selection state
+technical-details mode
+```
+
+This cache does **not** become simulation truth. A new simulation tick or changed selection causes the presentation to read authoritative state again. The purpose is only to avoid reconstructing identical read-only diagnostics dozens of times between two simulation ticks.
+
 ## Vision diagnostics
 
-Selecting an object with Vision automatically visualizes the simulation's authoritative `VisionSnapshot`.
+Selecting an object with Vision visualizes the simulation's authoritative `VisionSnapshot`.
 
 The renderer does **not** reconstruct a decorative FOV cone from presentation-side math.
 
-Current diagnostics:
+Current world-space diagnostics:
 
 ```text
 soft cell highlight   cells Vision says are visible now
 object frame          objects Vision says are visible now
 facing arrow          authoritative physical orientation
-HUD Vision data       facing / range / FOV / visible counts
 ```
 
-This is intentionally cell-based because it answers the development question directly:
-
-> Which cells and objects can this agent actually perceive right now?
-
 Occlusion, FOV and range changes therefore appear automatically because presentation reads the same result used by autonomous decision making.
+
+Between simulation ticks the selected-object snapshot may be reused by presentation because authoritative state has not advanced. Raw range/FOV/count text is available in F6 technical-details mode instead of permanently occupying the normal inspector.
 
 ## Active route diagnostics
 
@@ -121,41 +251,55 @@ Selecting any object with an active production `MoveTo` automatically shows its 
 
 `MoveToRouteDiagnosticRenderer` reads `MoveToLookup.activeRoute(...)`; it does not invoke Pathfinder or reproduce route logic in presentation.
 
-Current route presentation:
-
-```text
-route cell frame      each cell in the active PathRoute on selected Z
-goal frame            route goal
-```
-
-The overlay is reason-agnostic. The same presentation works for:
-
-```text
-search exploration
-movement toward food/water
-future autonomous intents
-external MoveTo consumers
-```
-
-This keeps route observability attached to the movement contract rather than to Cow-specific scenarios.
+The overlay is reason-agnostic. The same presentation works for search exploration, movement toward food/water, future autonomous intents and external MoveTo consumers.
 
 ## Agent diagnostics
 
-`Cow Foraging` reads authoritative Need and Decision state. It shows competing perceived sources, the selected winner and the current hunger/score context.
+### Living Cow Cycle
 
-`Cow Visual Search` exposes the information-seeking lifecycle. Its summary reads `AgentSearchTrace`, physical facing and authoritative Vision state. It can show states such as:
+This is the first integrated living-world visual acceptance scenario. It starts with a satisfied Cow on a substantially larger sparse meadow.
+
+Every food source begins outside the Cow's initial Vision. The current acceptance Cow has Vision range 7 and horizontal FOV 120°. Hunger must first cross the configured autonomous motivation threshold; only then can the Cow search. The acceptance flow is:
 
 ```text
-SWEEPING
-EXPLORING
-RELOCATION_BLOCKED
+Hunger progression
+    ↓
+meaningful motivation threshold
+    ↓
+local Vision sweep
+    ↓
+unguided EXPLORING + physical relocation
+    ↓
+food actually enters Vision
+    ↓
+Decision winner
+    ↓
+MoveTo
+    ↓
+provider-owned timed grazing
+    ↓
+Hunger down + biomass down
+    ↓
+Growth restores biomass
+    ↓
+full plant becomes dormant
 ```
 
-The scenario now uses a larger world and Vision radius. Grass starts well outside the initial field of view. After a local sweep the Cow chooses a multi-cell relative exploration leg inside its current visual horizon; the generic MoveTo route overlay shows that leg while it is being executed.
+The meadow is 37x29 cells and contains sparse Grass, Clover and Dandelion patches at different directions/distances. Initial camera framing intentionally does not zoom out far enough to make the entire world a tiny overview; normal pan/zoom remains available.
 
-Search presentation never knows hidden Grass coordinates on behalf of the Cow. A target marker appears only after ordinary autonomous decision has selected a concrete source.
+Unguided exploration remains coordinate-free. After a local sweep the current correlated-random-walk policy chooses a deterministic pseudo-random egocentric direction from the eight grid headings with a mild persistence bias, then requests a point near the edge of the current circular visual horizon. Diagonal legs use fewer grid cells than cardinal legs so their Euclidean endpoint stays near the same horizon. Stable agent identity + exploration ordinal make the variation replay-deterministic; Search still receives no XYZ or hidden source location.
 
-The generic Vision and route overlays remain active during these scenarios, so clicking the Cow shows what it currently sees, where it is currently moving, and why Search/Decision selected that process.
+Food definitions have deliberately small finite initial stock. A patch can be depleted by feeding, which forces later motivated behavior to use another available source while the depleted plant regrows.
+
+While grazing, Need and stock remain unchanged until the authoritative provider completion tick. If the same source is still desirable and available after a completed use, Agent can continue another provider-owned use without dropping through an artificial idle frame. The procedural Cow therefore keeps the chewing pose continuously across such consecutive uses because `USING_OPPORTUNITY` itself remains continuous.
+
+When a plant reaches full authoritative stock, Growth becomes `DORMANT_FULL` and has no next scheduled growth tick. Real stock consumption wakes that object's Growth process again. The concise inspector presents this as `Full grown · dormant` or `Regrowing · next in N ticks`.
+
+### Focused agent scenarios
+
+`Cow Foraging` remains the focused candidate-selection proof.
+
+`Cow Visual Search` remains the focused information-seeking proof. It exposes local sweep, unguided exploration and active search MoveTo without giving Search hidden Grass coordinates.
 
 ## Typed Shape presentation
 
@@ -203,9 +347,10 @@ Generic visualizer controls:
 - `F3`: Shape direction diagnostics;
 - `F4`: lower-surface visibility depth;
 - `F5`: Occupancy overlay;
-- click: select cell/object at current standing Z.
+- `F6`: toggle raw Technical details in the inspector;
+- `LMB`: select cell/object; repeated click cycles co-located object stack.
 
-The HUD shows tick, Z, FPS, zoom/sampling and selected-object context.
+The compact status panel shows run state, tick, FPS, Z and zoom without duplicating every diagnostic toggle in the primary object inspector.
 
 ## Restart semantics
 
@@ -227,12 +372,22 @@ Simulation systems therefore need no debug-only reset APIs.
 
 Visualizer performance telemetry distinguishes observed frame interval from CPU work inside renderer stages. Landscape analysis/caches and diagnostic scans are optimized only when profiling identifies them as hot.
 
+The first Living Cow manual acceptance provided a concrete profile:
+
+- authoritative simulation `update` was normally a small fraction of a millisecond;
+- selected-object HUD/Vision diagnostics became the sustained per-frame hot path because identical snapshots were rebuilt between simulation ticks;
+- large zoom/pan changes could independently trigger expensive one-off landscape analysis cache misses.
+
+The sustained HUD/Vision issue is addressed by presentation-tick caching and by not requesting raw technical diagnostics in the normal inspector. Landscape cache-miss behavior remains a separate profiled concern; it should not be confused with simulation cost or prematurely solved by changing world semantics.
+
 Focused correctness scenarios and representative performance scenarios remain separate concerns.
 
 ## Testing boundary
 
-Headless simulation tests own semantic correctness for Geometry, Navigation, Occupancy, Movement, Pathfinding, Vision, Needs, Decision and Search.
+Headless simulation tests own semantic correctness. In particular timed opportunity-use coverage pins that Need/stock do not mutate before the authoritative completion tick, motivation thresholds prevent trivial-deficit action, still-desired repeated uses remain continuously committed, and full Growth processes sleep until real stock depletion wakes them.
 
-Visualizer scenario tests verify meaningful setup and that presentation exposes the same authoritative diagnostic state. The Cow visual-search scenario additionally verifies that a multi-cell exploration `PathRoute` becomes observable through `MoveToLookup` before a concrete food target is known. Final appearance/readability remains a manual desktop check.
+The Living Cow scenario test additionally pins that no food is initially visible, `EXPLORING` is observed, the Cow physically expands search away from its start, and only later reaches a real timed plant use. Exploration-policy tests pin replay-deterministic horizon-oriented variation and diagonal/cardinal distance handling.
+
+Visualizer scenario/catalog tests verify meaningful setup/order and that presentation exposes authoritative state. Final appearance/readability and real desktop performance of the Living Cow Cycle remain mandatory manual acceptance checks before merging the milestone.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.

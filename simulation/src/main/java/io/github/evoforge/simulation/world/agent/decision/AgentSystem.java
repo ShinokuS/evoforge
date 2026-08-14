@@ -6,7 +6,9 @@ import io.github.evoforge.simulation.world.agent.AgentDefinitions;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityEvaluation;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDemand;
-import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseResult;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseActionId;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseCompletion;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseStartAttempt;
 import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionLookup;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
@@ -140,6 +142,38 @@ public final class AgentSystem implements AgentDecisionLookup {
         return active == null || active.opportunityIntent == null ? null : active.opportunityIntent.sourceId;
     }
 
+    @Override
+    public AgentIntentTrace currentIntent(ObjectId agentId) {
+        ActiveAgent active = agentId == null ? null : byObjectId.get(agentId);
+        if (active == null) return null;
+        if (active.opportunityIntent != null) {
+            ActiveOpportunityIntent intent = active.opportunityIntent;
+            if (intent.useActionId != null) {
+                return new AgentIntentTrace(
+                        AgentIntentPhase.USING_OPPORTUNITY,
+                        providers.get(intent.providerIndex).id(),
+                        intent.sourceId,
+                        intent.useStartedTick,
+                        intent.useExpectedCompletionTick);
+            }
+            return new AgentIntentTrace(
+                    AgentIntentPhase.MOVING_TO_OPPORTUNITY,
+                    providers.get(intent.providerIndex).id(),
+                    intent.sourceId,
+                    intent.startedTick,
+                    -1L);
+        }
+        if (active.searchRelocation != null) {
+            return new AgentIntentTrace(
+                    AgentIntentPhase.SEARCH_RELOCATION,
+                    null,
+                    null,
+                    active.searchRelocation.startedTick,
+                    -1L);
+        }
+        return null;
+    }
+
     private void decide(ActiveAgent active) {
         if (objects.get(active.objectId) == null) {
             deactivate(active);
@@ -172,7 +206,8 @@ public final class AgentSystem implements AgentDecisionLookup {
         active.opportunityIntent = new ActiveOpportunityIntent(
                 selected.providerIndex,
                 selected.trace.sourceId(),
-                attempt.actionId());
+                attempt.actionId(),
+                time.tick());
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
     }
 
@@ -212,7 +247,7 @@ public final class AgentSystem implements AgentDecisionLookup {
                 scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
                 return;
             }
-            active.searchRelocation = new ActiveSearchRelocation(attempt.actionId());
+            active.searchRelocation = new ActiveSearchRelocation(attempt.actionId(), time.tick());
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
@@ -246,21 +281,65 @@ public final class AgentSystem implements AgentDecisionLookup {
     }
 
     private void continueOpportunityIntent(ActiveAgent active) {
+        ActiveOpportunityIntent intent = active.opportunityIntent;
+        AgentOpportunityProvider provider = providers.get(intent.providerIndex);
+
+        if (intent.useActionId != null) {
+            if (provider.isUseActive(active.objectId)) {
+                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                return;
+            }
+            OpportunityUseCompletion completion = provider.lastUseCompletion(active.objectId);
+            if (completion == null || !intent.useActionId.equals(completion.actionId())
+                    || !intent.sourceId.equals(completion.sourceId())) {
+                throw new IllegalStateException("autonomous opportunity-use completion was lost: " + active.objectId);
+            }
+            if (completion.result().accepted()
+                    && provider.evaluate(active.objectId, intent.sourceId, 0) != null) {
+                OpportunityUseStartAttempt nextUse = provider.startUse(active.objectId, intent.sourceId);
+                if (nextUse == null) {
+                    throw new IllegalStateException("opportunity provider returned null continuation start attempt");
+                }
+                if (nextUse.accepted()) {
+                    setUse(intent, nextUse);
+                    scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                    return;
+                }
+            }
+            active.opportunityIntent = null;
+            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            return;
+        }
+
         if (moveToLookup.isActive(active.objectId)) {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
-        ActiveOpportunityIntent intent = active.opportunityIntent;
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
-        active.opportunityIntent = null;
-        if (completion == null || !intent.actionId.equals(completion.actionId())) {
+        if (completion == null || !intent.moveToActionId.equals(completion.actionId())) {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
         }
-        if (completion.reachedGoal()) {
-            OpportunityUseResult result = providers.get(intent.providerIndex).use(active.objectId, intent.sourceId);
-            if (result == null) throw new IllegalStateException("opportunity provider returned null use result");
+        if (!completion.reachedGoal()) {
+            active.opportunityIntent = null;
+            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            return;
         }
+
+        OpportunityUseStartAttempt use = provider.startUse(active.objectId, intent.sourceId);
+        if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
+        if (!use.accepted()) {
+            active.opportunityIntent = null;
+            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            return;
+        }
+        setUse(intent, use);
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+    }
+
+    private static void setUse(ActiveOpportunityIntent intent, OpportunityUseStartAttempt use) {
+        intent.useActionId = use.actionId();
+        intent.useStartedTick = use.startedTick();
+        intent.useExpectedCompletionTick = use.expectedCompletionTick();
     }
 
     private void continueSearchRelocation(ActiveAgent active) {
@@ -323,20 +402,31 @@ public final class AgentSystem implements AgentDecisionLookup {
     private static final class ActiveOpportunityIntent {
         private final int providerIndex;
         private final ObjectId sourceId;
-        private final MoveToActionId actionId;
+        private final MoveToActionId moveToActionId;
+        private final long startedTick;
+        private OpportunityUseActionId useActionId;
+        private long useStartedTick;
+        private long useExpectedCompletionTick;
 
-        private ActiveOpportunityIntent(int providerIndex, ObjectId sourceId, MoveToActionId actionId) {
+        private ActiveOpportunityIntent(
+                int providerIndex,
+                ObjectId sourceId,
+                MoveToActionId moveToActionId,
+                long startedTick) {
             this.providerIndex = providerIndex;
             this.sourceId = sourceId;
-            this.actionId = actionId;
+            this.moveToActionId = moveToActionId;
+            this.startedTick = startedTick;
         }
     }
 
     private static final class ActiveSearchRelocation {
         private final MoveToActionId actionId;
+        private final long startedTick;
 
-        private ActiveSearchRelocation(MoveToActionId actionId) {
+        private ActiveSearchRelocation(MoveToActionId actionId, long startedTick) {
             this.actionId = actionId;
+            this.startedTick = startedTick;
         }
     }
 }

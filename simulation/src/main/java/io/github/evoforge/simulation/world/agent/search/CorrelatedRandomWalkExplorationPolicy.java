@@ -5,40 +5,49 @@ import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 
 /**
  * Deterministic correlated-random-walk fallback for unguided exploration.
- * Direction tends to persist and each leg spans several observer-visible cells when Vision permits it.
- * Variation is derived from stable agent/search identity rather than wall-clock randomness.
+ * Each leg selects a pseudo-random relative point on the outer Vision ring rather than one of eight grid rays.
+ * Variation comes only from stable agent/search identity, preserving replay determinism.
  */
 public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExplorationPolicy {
     private static final long DIRECTION_SALT = 0x9E3779B97F4A7C15L;
-    private static final long DISTANCE_SALT = 0xD1B54A32D192ED03L;
+    private static final long ANGLE_SALT = 0x94D049BB133111EBL;
+    private static final double EIGHTH_TURN_RADIANS = StrictMath.PI / 4.0;
 
-    private final int initialStraightLegs;
     private final int straightWeight;
-    private final int leftWeight;
-    private final int rightWeight;
+    private final int adjacentWeight;
+    private final int quarterTurnWeight;
+    private final int broadTurnWeight;
+    private final int reverseWeight;
     private final int totalWeight;
 
     public CorrelatedRandomWalkExplorationPolicy(
-            int initialStraightLegs,
             int straightWeight,
-            int leftWeight,
-            int rightWeight) {
-        if (initialStraightLegs < 0 || straightWeight <= 0 || leftWeight < 0 || rightWeight < 0) {
-            throw new IllegalArgumentException("exploration weights/initial legs are invalid");
+            int adjacentWeight,
+            int quarterTurnWeight,
+            int broadTurnWeight,
+            int reverseWeight) {
+        if (straightWeight <= 0 || adjacentWeight < 0 || quarterTurnWeight < 0
+                || broadTurnWeight < 0 || reverseWeight < 0) {
+            throw new IllegalArgumentException("exploration direction weights are invalid");
         }
-        long total = (long) straightWeight + leftWeight + rightWeight;
-        if (total > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("exploration weight sum is too large");
+        long total = (long) straightWeight
+                + adjacentWeight * 2L
+                + quarterTurnWeight * 2L
+                + broadTurnWeight * 2L
+                + reverseWeight;
+        if (total <= 0L || total > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("exploration weight sum is invalid");
         }
-        this.initialStraightLegs = initialStraightLegs;
         this.straightWeight = straightWeight;
-        this.leftWeight = leftWeight;
-        this.rightWeight = rightWeight;
+        this.adjacentWeight = adjacentWeight;
+        this.quarterTurnWeight = quarterTurnWeight;
+        this.broadTurnWeight = broadTurnWeight;
+        this.reverseWeight = reverseWeight;
         this.totalWeight = (int) total;
     }
 
     public static CorrelatedRandomWalkExplorationPolicy standard() {
-        return new CorrelatedRandomWalkExplorationPolicy(3, 6, 2, 2);
+        return new CorrelatedRandomWalkExplorationPolicy(4, 3, 2, 1, 1);
     }
 
     @Override
@@ -53,33 +62,61 @@ public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExpl
         if (legOrdinal < 0) throw new IllegalArgumentException("legOrdinal must be >= 0");
         if (visualRange <= 0) throw new IllegalArgumentException("visualRange must be > 0");
 
-        FacingDirection heading = nextHeading(agentId, previousHeading, legOrdinal);
-        int maxDistance = Math.max(1, visualRange - 1);
-        int minDistance = Math.min(maxDistance, Math.max(2, (visualRange + 1) / 2));
-        int span = maxDistance - minDistance + 1;
-        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DISTANCE_SALT));
-        int distance = minDistance + (int) Long.remainderUnsigned(mixed, span);
-        return new SearchRelocationRequest(heading, distance);
+        int turnSector = nextTurnSector(agentId, legOrdinal);
+        double jitter = signedUnit(agentId, legOrdinal, ANGLE_SALT) * 0.5;
+        double baseAngle = StrictMath.atan2(previousHeading.y(), previousHeading.x());
+        double targetAngle = baseAngle + (turnSector + jitter) * EIGHTH_TURN_RADIANS;
+        return frontierPoint(targetAngle, visualRange);
     }
 
-    private FacingDirection nextHeading(
-            ObjectId agentId,
-            FacingDirection previousHeading,
-            long legOrdinal) {
-        if (legOrdinal < initialStraightLegs) return previousHeading;
+    /**
+     * Selects one weighted 45-degree sector around the previous heading. The later intra-sector jitter
+     * prevents the result from collapsing back to the eight exact grid rays.
+     */
+    private int nextTurnSector(ObjectId agentId, long legOrdinal) {
         long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DIRECTION_SALT));
         int bucket = (int) Long.remainderUnsigned(mixed, totalWeight);
-        if (bucket < straightWeight) return previousHeading;
-        if (bucket < straightWeight + leftWeight) return left(previousHeading);
-        return right(previousHeading);
+
+        if (bucket < straightWeight) return 0;
+        bucket -= straightWeight;
+        if (bucket < adjacentWeight) return 1;
+        bucket -= adjacentWeight;
+        if (bucket < adjacentWeight) return -1;
+        bucket -= adjacentWeight;
+        if (bucket < quarterTurnWeight) return 2;
+        bucket -= quarterTurnWeight;
+        if (bucket < quarterTurnWeight) return -2;
+        bucket -= quarterTurnWeight;
+        if (bucket < broadTurnWeight) return 3;
+        bucket -= broadTurnWeight;
+        if (bucket < broadTurnWeight) return -3;
+        return reverseWeight > 0 ? 4 : 0;
     }
 
-    static FacingDirection right(FacingDirection heading) {
-        return FacingDirection.of(heading.y(), -heading.x());
+    /** Returns a lattice cell on the outer one-cell-thick ring of the circular visual horizon. */
+    private static SearchRelocationRequest frontierPoint(double angle, int visualRange) {
+        int radius = visualRange;
+        int x = (int) StrictMath.round(StrictMath.cos(angle) * radius);
+        int y = (int) StrictMath.round(StrictMath.sin(angle) * radius);
+        long radiusSquared = (long) radius * radius;
+
+        while ((long) x * x + (long) y * y > radiusSquared) {
+            if (StrictMath.abs(x) >= StrictMath.abs(y) && x != 0) {
+                x -= Integer.signum(x);
+            } else if (y != 0) {
+                y -= Integer.signum(y);
+            }
+        }
+        if (x == 0 && y == 0) {
+            x = StrictMath.cos(angle) >= 0.0 ? 1 : -1;
+        }
+        return new SearchRelocationRequest(x, y);
     }
 
-    private static FacingDirection left(FacingDirection heading) {
-        return FacingDirection.of(-heading.y(), heading.x());
+    private static double signedUnit(ObjectId agentId, long legOrdinal, long salt) {
+        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * salt));
+        double unit = (double) (mixed >>> 11) * 0x1.0p-53;
+        return unit * 2.0 - 1.0;
     }
 
     private static long mix64(long value) {

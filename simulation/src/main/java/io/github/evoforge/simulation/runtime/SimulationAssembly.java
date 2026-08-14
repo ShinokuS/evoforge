@@ -31,6 +31,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinition;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
 import io.github.evoforge.simulation.world.agent.need.progression.IntrinsicNeedProgressionRateResolver;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinition;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinitions;
@@ -48,6 +50,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
@@ -102,6 +105,7 @@ public final class SimulationAssembly {
     private final AgentDefinitions agentDefinitions;
     private final VisionDefinitions visionDefinitions;
     private final NeedDefinitions needDefinitions;
+    private final NeedMotivationDefinitions needMotivationDefinitions;
     private final NeedProgressionDefinitions needProgressionDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
@@ -131,6 +135,7 @@ public final class SimulationAssembly {
         agentDefinitions = new AgentDefinitions();
         visionDefinitions = new VisionDefinitions();
         needDefinitions = new NeedDefinitions();
+        needMotivationDefinitions = new NeedMotivationDefinitions();
         needProgressionDefinitions = new NeedProgressionDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
@@ -211,6 +216,18 @@ public final class SimulationAssembly {
         return this;
     }
 
+    /** Declares when a Need becomes strong enough to generate autonomous environmental action. */
+    public SimulationAssembly needMotivation(
+            ObjectDefinitionId definitionId,
+            NeedId needId,
+            long activationLevel) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        needMotivationDefinitions.add(
+                definitionId,
+                new NeedMotivationDefinition(needId, activationLevel));
+        return this;
+    }
+
     public SimulationAssembly needProgression(
             ObjectDefinitionId definitionId,
             NeedId needId,
@@ -255,7 +272,7 @@ public final class SimulationAssembly {
             NeedId needId,
             long amount,
             CapabilityId requiredCapability) {
-        return satisfiesNeed(sourceDefinitionId, needId, amount, 0L, requiredCapability);
+        return satisfiesNeed(sourceDefinitionId, needId, amount, 0L, 0L, requiredCapability);
     }
 
     public SimulationAssembly satisfiesNeed(
@@ -264,10 +281,25 @@ public final class SimulationAssembly {
             long amount,
             long consumedQuantity,
             CapabilityId requiredCapability) {
+        return satisfiesNeed(sourceDefinitionId, needId, amount, consumedQuantity, 0L, requiredCapability);
+    }
+
+    public SimulationAssembly satisfiesNeed(
+            ObjectDefinitionId sourceDefinitionId,
+            NeedId needId,
+            long amount,
+            long consumedQuantity,
+            long useDurationTicks,
+            CapabilityId requiredCapability) {
         requireNotStarted(); requireObjectDefinition(sourceDefinitionId);
         needSatisfactionDefinitions.add(
                 sourceDefinitionId,
-                new NeedSatisfaction(needId, amount, consumedQuantity, requiredCapability));
+                new NeedSatisfaction(
+                        needId,
+                        amount,
+                        consumedQuantity,
+                        useDurationTicks,
+                        requiredCapability));
         return this;
     }
 
@@ -310,6 +342,7 @@ public final class SimulationAssembly {
         agentDefinitions.freeze();
         visionDefinitions.freeze();
         needDefinitions.freeze();
+        needMotivationDefinitions.freeze();
         needProgressionDefinitions.freeze();
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
@@ -368,7 +401,11 @@ public final class SimulationAssembly {
         movementCompletions.bind(moveTo);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
-        ConsumableStockSystem consumableStocks = new ConsumableStockSystem(objects, consumableStockDefinitions);
+        ConsumableStockReductionRelay stockReductions = new ConsumableStockReductionRelay();
+        ConsumableStockSystem consumableStocks = new ConsumableStockSystem(
+                objects,
+                consumableStockDefinitions,
+                stockReductions);
         for (ObjectId objectId : createdObjects) {
             needs.attach(objectId);
             consumableStocks.attach(objectId);
@@ -402,6 +439,7 @@ public final class SimulationAssembly {
         HandlerId growthHandlerId = scheduledHandlers.register(growth::resume);
         ProcessScheduler growthScheduler = new BoundProcessScheduler(clock, scheduler, growthHandlerId);
         growth.bindScheduler(growthScheduler);
+        stockReductions.bind(growth);
         for (ObjectId objectId : createdObjects) {
             WorldObject object = objects.get(objectId);
             if (object != null && growthDefinitions.has(object.definitionId())) growth.activate(objectId);
@@ -425,19 +463,28 @@ public final class SimulationAssembly {
                 vision,
                 moveTo,
                 moveTo);
-        AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
+
+        NeedSatisfactionOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
                 objects,
                 spatial.transforms(),
                 agentDefinitions,
                 needSatisfactionDefinitions,
                 needSolutionKnowledgeDefinitions,
+                needMotivationDefinitions,
                 needs,
-                consumableStocks);
+                consumableStocks,
+                clock);
+        HandlerId needSatisfactionHandlerId = scheduledHandlers.register(needSatisfaction::resume);
+        ProcessScheduler needSatisfactionScheduler =
+                new BoundProcessScheduler(clock, scheduler, needSatisfactionHandlerId);
+        needSatisfaction.bindScheduler(needSatisfactionScheduler);
+        AgentOpportunityProvider needSatisfactionProvider = needSatisfaction;
+
         AgentSystem agents = new AgentSystem(
                 objects,
                 spatial.transforms(),
                 agentDefinitions,
-                List.of(needSatisfaction),
+                List.of(needSatisfactionProvider),
                 moveTo,
                 moveTo,
                 vision,

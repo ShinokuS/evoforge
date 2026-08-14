@@ -13,78 +13,37 @@ public final class VisualizerState {
     private boolean showTransitions;
     private boolean showShapeDirections;
     private boolean showOccupancy;
+    private boolean showTechnicalDetails;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
 
-    public int selectedZ() {
-        return selectedZ;
-    }
-
-    public int gridMode() {
-        return gridMode;
-    }
-
-    public int lowerDepth() {
-        return LOWER_DEPTH_OPTIONS[lowerDepthIndex];
-    }
-
-    public boolean showTransitions() {
-        return showTransitions;
-    }
-
-    public boolean showShapeDirections() {
-        return showShapeDirections;
-    }
-
-    public boolean showOccupancy() {
-        return showOccupancy;
-    }
-
-    public CellSelection selectedCell() {
-        return selectedCell;
-    }
-
-    public ObjectId selectedObject() {
-        return selectedObject;
-    }
+    public int selectedZ() { return selectedZ; }
+    public int gridMode() { return gridMode; }
+    public int lowerDepth() { return LOWER_DEPTH_OPTIONS[lowerDepthIndex]; }
+    public boolean showTransitions() { return showTransitions; }
+    public boolean showShapeDirections() { return showShapeDirections; }
+    public boolean showOccupancy() { return showOccupancy; }
+    public boolean showTechnicalDetails() { return showTechnicalDetails; }
+    public CellSelection selectedCell() { return selectedCell; }
+    public ObjectId selectedObject() { return selectedObject; }
 
     public void setSelectedZ(int selectedZ) {
         this.selectedZ = selectedZ;
         clearSelection();
     }
 
-    public void selectZ(
-            int delta) {
-
-        setSelectedZ(selectedZ + delta);
-    }
-
-    public void cycleGridMode() {
-        gridMode = (gridMode + 1) % 3;
-    }
-
-    public void toggleTransitions() {
-        showTransitions = !showTransitions;
-    }
-
-    public void toggleShapeDirections() {
-        showShapeDirections = !showShapeDirections;
-    }
-
-    public void toggleOccupancy() {
-        showOccupancy = !showOccupancy;
-    }
+    public void selectZ(int delta) { setSelectedZ(selectedZ + delta); }
+    public void cycleGridMode() { gridMode = (gridMode + 1) % 3; }
+    public void toggleTransitions() { showTransitions = !showTransitions; }
+    public void toggleShapeDirections() { showShapeDirections = !showShapeDirections; }
+    public void toggleOccupancy() { showOccupancy = !showOccupancy; }
+    public void toggleTechnicalDetails() { showTechnicalDetails = !showTechnicalDetails; }
 
     public void cycleLowerDepth() {
-        lowerDepthIndex = (lowerDepthIndex + 1)
-                % LOWER_DEPTH_OPTIONS.length;
+        lowerDepthIndex = (lowerDepthIndex + 1) % LOWER_DEPTH_OPTIONS.length;
     }
 
-    public void selectCell(
-            int x,
-            int y,
-            ObjectId objectId) {
-
+    public void selectCell(int x, int y, ObjectId objectId) {
         selectedCell = new CellSelection(x, y, selectedZ);
         selectedObject = objectId;
     }
@@ -94,9 +53,5 @@ public final class VisualizerState {
         selectedObject = null;
     }
 
-    public record CellSelection(
-            int x,
-            int y,
-            int z) {
-    }
+    public record CellSelection(int x, int y, int z) { }
 }

@@ -27,12 +27,12 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Finite authoritative Consumable Stock separated from physiological benefit
 - Definition-driven scheduled Growth with narrow stock replenishment and an external effective-rate resolver
 - Generic scheduled Need progression for open NeedIds with narrow deficit mutation and an external effective-rate resolver
+- Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation
+- Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth, timed grazing, state-driven presentation and full developer inspector
 
 ## Current living-world sequence
 
 ```text
-Integrated living Cow slice + full developer visualization
-    ↓
 Water + Thirst
     ↓
 real Utility competition
@@ -42,9 +42,7 @@ Intent persistence / interruption
 representative scale profiling
 ```
 
-The integrated Cow slice is the first mandatory visual acceptance point for the current sequence. It should expose authoritative state, cell/object selection, Vision, routes, Needs, Need progression, resources, Growth and timed interactions with state-dependent presentation/animation.
-
-The slice should visibly demonstrate the closed loop:
+The integrated Living Cow slice is the first completed end-to-end visual acceptance foundation. It demonstrates the closed loop:
 
 ```text
 plant regrows finite biomass
@@ -55,20 +53,24 @@ Cow perceives/searches/selects food
     ↓
 MoveTo route
     ↓
-timed consumption interaction
+provider-owned timed grazing
     ↓
 Hunger decreases + biomass decreases
     ↓
 cycle continues
 ```
 
-Representative scale profiling is mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
+The visualizer exposes authoritative cell/object selection, stacked objects, Vision, routes, Needs, Need progression, resources, Growth, decisions and timed-use progress. Grass, Clover and Dandelion share production mechanics while differing through definition and presentation data.
+
+The next direct world/agent consumer is **Water + Thirst**. It should introduce only the minimum physical water quantity/interaction semantics needed for a real second motivation. That milestone then creates the first meaningful consumer for cross-motivation Utility comparison.
+
+Representative scale profiling remains mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
 
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
 
 ## Separate research / large future milestones
 
-The following are intentionally outside the mandatory living-Cow path and require their own design work when a real consumer appears:
+The following remain outside the mandatory immediate sequence and require their own design work when a real consumer appears:
 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;

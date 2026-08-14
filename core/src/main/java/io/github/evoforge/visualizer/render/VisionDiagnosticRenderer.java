@@ -5,6 +5,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisibleCell;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisibleObject;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionSnapshot;
@@ -21,15 +22,24 @@ public final class VisionDiagnosticRenderer {
     private static final Color FACING_SHADOW = new Color(0.02f, 0.03f, 0.03f, 0.92f);
 
     private final SimulationView view;
+    private final SimulationTime time;
     private final VisualizerState state;
     private final VisualizerCamera camera;
     private final ShapeRenderer shapes = new ShapeRenderer();
+    private ObjectId cachedObserver;
+    private long cachedTick = Long.MIN_VALUE;
+    private VisionSnapshot cachedSnapshot;
 
-    public VisionDiagnosticRenderer(SimulationView view, VisualizerState state, VisualizerCamera camera) {
-        if (view == null || state == null || camera == null) {
+    public VisionDiagnosticRenderer(
+            SimulationView view,
+            SimulationTime time,
+            VisualizerState state,
+            VisualizerCamera camera) {
+        if (view == null || time == null || state == null || camera == null) {
             throw new IllegalArgumentException("vision diagnostic dependencies must not be null");
         }
         this.view = view;
+        this.time = time;
         this.state = state;
         this.camera = camera;
     }
@@ -37,7 +47,7 @@ public final class VisionDiagnosticRenderer {
     public void draw(VisualizerCamera.VisibleRange range) {
         ObjectId selected = state.selectedObject();
         if (selected == null) return;
-        VisionSnapshot snapshot = view.vision().snapshot(selected);
+        VisionSnapshot snapshot = snapshot(selected);
         if (snapshot == null) return;
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
@@ -65,6 +75,16 @@ public final class VisionDiagnosticRenderer {
 
     public void dispose() {
         shapes.dispose();
+    }
+
+    private VisionSnapshot snapshot(ObjectId observer) {
+        long tick = time.tick();
+        if (!observer.equals(cachedObserver) || tick != cachedTick) {
+            cachedObserver = observer;
+            cachedTick = tick;
+            cachedSnapshot = view.vision().snapshot(observer);
+        }
+        return cachedSnapshot;
     }
 
     private void drawFacing(VisionSnapshot snapshot) {
