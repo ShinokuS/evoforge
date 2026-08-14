@@ -14,17 +14,51 @@ It complements, but never replaces:
 
 A scenario must not introduce fake versions of simulation mechanics just to make a picture easier to produce.
 
+## Organization
+
+Scenario implementations are grouped by the simulation domain they demonstrate:
+
+```text
+visualizer/scenario/
+  shared catalog/session/diagnostic contracts
+  geometry/
+  movement/
+  occupancy/
+  pathfinding/
+```
+
+Tests mirror the same domain packages. Keep shared presentation contracts/helpers at the scenario root; keep mechanic-specific fixtures, controllers and helpers beside the scenarios that use them.
+
+`ScenarioCatalog` also exposes the same domains as explicit `ScenarioGroup` entries. Group membership is metadata owned by the catalog, not inferred from class names or title prefixes. This keeps the filesystem, Java packages and scenario browser aligned while still allowing titles to change freely.
+
+When a genuinely new domain appears (for example future agent scenarios), add one focused package/group rather than returning to a flat root directory.
+
 ## Adding a scenario
 
-1. Add a small Java class under `visualizer/scenario/` implementing `VisualizerScenario`.
+1. Add a small Java class under the matching `visualizer/scenario/<domain>/` package implementing `VisualizerScenario`.
 2. Build the world through production `SimulationAssembly`.
 3. Keep the scene focused on one understandable behavior or interaction.
 4. Return a fresh `ScenarioSession` containing the new `SimulationRuntime` and a presentation-only `ScenarioView`.
-5. Register the scenario in `ScenarioCatalog.standard()`.
-6. Add headless tests for the meaningful scenario setup/invariants.
-7. Run the desktop visualizer and manually verify the scene, relevant overlays and restart behavior.
+5. Register the scenario in the matching `ScenarioGroup` in `ScenarioCatalog.standard()`.
+6. Add headless tests in the matching scenario test package for meaningful setup/invariants.
+7. Run the desktop visualizer and manually verify the scene, relevant overlays, search/group placement and restart behavior.
 
 A normal scenario should read approximately like a compact example of the mechanic. If understanding it requires unrelated mountains, actors, structures and diagnostics, split it.
+
+## Browser workflow
+
+The selector is a searchable grouped browser rather than a growing flat list.
+
+- `Up/Down`: move through visible group/scenario rows;
+- `Left/Right`: collapse/expand the selected group;
+- `Enter`: toggle a group or open a scenario;
+- mouse click: toggle a group or open a scenario;
+- mouse wheel: scroll the scenario list;
+- typing: search by group title/id and scenario title/id/description;
+- `Backspace`: edit the search query;
+- `Esc`: clear the current search query.
+
+Search temporarily exposes matching groups even when they are normally collapsed. Clearing search restores the previous expanded/collapsed state instead of mutating it.
 
 ## Determinism and restart
 

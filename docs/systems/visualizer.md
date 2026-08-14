@@ -24,12 +24,16 @@ An executable boundary test protects this constructor contract.
 
 ## Scenario lifecycle
 
-The application starts at a small scenario selector rather than constructing one permanent demo world.
+The application starts at a searchable grouped scenario browser rather than constructing one permanent demo world.
 
 ```text
 Main
   ↓
 ScenarioCatalog
+  ├─ ScenarioGroup (Geometry & Navigation)
+  ├─ ScenarioGroup (Movement)
+  ├─ ScenarioGroup (Occupancy)
+  └─ ScenarioGroup (Pathfinding)
   ↓
 VisualizerScenario
   ↓
@@ -57,24 +61,33 @@ It cannot alter simulation mechanics.
 
 `ScenarioController` is an optional visualizer-only lifecycle hook for scenarios whose setup or diagnostics intentionally evolve with simulation ticks. It receives the authoritative simulation tick, not wall-clock time. A controller may update presentation diagnostics or submit ordinary production commands to its scenario runtime; it is not a simulation system and does not become authoritative world state.
 
-Current focused scenarios are:
+Scenario implementations and their tests mirror the same domain organization used by the browser:
 
-- `Z-Level / Cutaway` — caves, roofs, lower surfaces and a deep shaft without movers;
-- `Ramp Navigation` — four directional ramps and a successive vertical ramp chain for F2/F3 inspection;
-- `Timed Movement` — slow and fast movers performing the same one-cell move on simple flat terrain;
-- `Occupancy Contention` — two exclusive movers competing for one immediate destination for F5 inspection;
-- `Pathfinding / Straight` — minimal flat exact route;
-- `Pathfinding / Structural Detour` — structural topology forces a detour;
-- `Pathfinding / Weighted Detour` — lower intrinsic cost wins over fewer cells;
-- `Pathfinding / 3D Ramps` — minimal two-level vertical route;
-- `Pathfinding / Multi-Level Climb` — four successive ramps climb from standing Z0 to Z4;
-- `Pathfinding / Z Switchback` — a multi-level route turns through +X, +Y and -X ramp orientations;
-- `Pathfinding / Vertical Overpass` — start and goal share Z0, but the only route climbs to Z2, crosses and descends;
-- `Pathfinding / Unreachable` — structured `NO_PATH`;
-- `Pathfinding / Hierarchy` — long route crosses derived hierarchy cluster boundaries;
-- `Pathfinding / Dynamic Invalidation` — tick-driven lifecycle: a sliced search runs on open terrain, a new block appears directly on its route, the old search becomes `STALE`, and the next tick starts a fresh search that returns a detour.
+- **Geometry & Navigation** — `Z-Level / Cutaway`, `Ramp Navigation`;
+- **Movement** — `Timed Movement`, `Movement Patrol`, `Click To Move`;
+- **Occupancy** — `Occupancy Contention`;
+- **Pathfinding** — straight, structural/weighted detours, 3D ramps, multi-level climb, Z switchback, vertical overpass, unreachable, hierarchy and dynamic invalidation scenarios.
 
-A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
+The root `visualizer.scenario` package contains shared scenario contracts/catalog/diagnostic primitives; mechanic-specific scenarios, controllers and helpers live in domain subpackages. A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
+
+### Scenario browser
+
+`ScenarioMenuScreen` renders a fixed search/header area, a scrollable grouped list and a separate detail panel. The selector does not push the selected description below an ever-growing scenario list.
+
+`ScenarioMenuModel` owns only presentation selection/filter/expanded-group state and has no libGDX dependency, so browser behavior is headless-testable. Search matches group title/id and scenario title/id/description. If a group itself matches, all of its scenarios are shown. Search temporarily exposes matches without changing the user's normal expanded/collapsed group state.
+
+Browser controls:
+
+- `Up/Down`: select a visible group/scenario row;
+- `Left/Right`: collapse/expand the selected group;
+- `Enter`: toggle a group or open a scenario;
+- click: toggle a group or open a scenario;
+- mouse wheel: scroll the list;
+- typing: search immediately;
+- `Backspace`: edit search;
+- `Esc`: clear search.
+
+The browser uses the larger bundled window bitmap font rather than the tiny default libGDX font and keeps scenario details in a dedicated panel for desktop readability.
 
 ### Restart
 
@@ -104,9 +117,11 @@ The visualizer is split by responsibility:
 
 ```text
 Main                         application screen switching
-ScenarioMenuScreen           scenario selection
+ScenarioMenuScreen           grouped/searchable scenario browser rendering + input
+ScenarioMenuModel            selector filter/expansion/selection state
+ScenarioCatalog              ordered groups and available scenarios
+ScenarioGroup                explicit presentation-side domain grouping
 ScenarioScreen               active scenario lifecycle + R/Esc controls
-ScenarioCatalog              ordered available scenarios
 VisualizerScenario           creates one fresh deterministic simulation world
 ScenarioController           optional tick-driven visualizer-only scenario tooling
 ZLevelVisualizer             generic render-order orchestration
@@ -170,9 +185,9 @@ Near zoom uses `Nearest`; far zoom switches procedural textures to `Linear` to r
 
 Application/session controls:
 
-- scenario selector: `Up/Down`, `Enter` or click;
+- scenario browser: grouped list + search as documented above;
 - `R`: recreate the active scenario from a fresh runtime;
-- `Esc`: return to the scenario selector.
+- `Esc`: return to the scenario browser from an active scenario.
 
 Generic visualizer controls inside a scenario:
 
@@ -194,8 +209,8 @@ The active scenario title, description and `R`/`Esc` reminder remain visible at 
 The F5 overlay reads `OccupancyLookup` only when enabled:
 
 ```text
-OCCUPIED  bright outer cell frame
-RESERVED  inset amber frame + X marker
+OCCUPIED  bright nested cell frame
+RESERVED  deeper inset amber frame
 FREE      no marker
 ```
 
@@ -237,6 +252,6 @@ Focused correctness scenarios and future representative performance scenarios ar
 
 Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
 
-Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. UI selection/restart aesthetics and interaction are manually inspected in the desktop visualizer.
+Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention, MoveTo and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. `ScenarioMenuModel` tests group expansion, cross-group search and restoration of collapse state; final font/layout aesthetics remain manually inspected in the desktop visualizer.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.

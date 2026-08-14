@@ -4,13 +4,13 @@ import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 
-/** Small repeated terrain helpers for visualizer-only scenario composition. */
-final class ScenarioTerrain {
+/** Small repeated terrain helpers shared by visualizer-only scenario domains. */
+public final class ScenarioTerrain {
 
     private ScenarioTerrain() {
     }
 
-    static void fill(
+    public static void fill(
             SimulationAssembly assembly,
             LandscapeDefinitionId terrain,
             int minX,
@@ -26,7 +26,7 @@ final class ScenarioTerrain {
         }
     }
 
-    static void placeRamp(
+    public static void placeRamp(
             SimulationAssembly assembly,
             LandscapeDefinitionId terrain,
             int x,
