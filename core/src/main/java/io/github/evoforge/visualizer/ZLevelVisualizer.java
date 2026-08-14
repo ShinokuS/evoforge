@@ -12,8 +12,10 @@ import io.github.evoforge.simulation.time.SimulationStepper;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
+import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
 import io.github.evoforge.visualizer.render.MoveToRouteDiagnosticRenderer;
+import io.github.evoforge.visualizer.render.ObjectPresentationRenderer;
 import io.github.evoforge.visualizer.render.VisionDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.VisualizerHudRenderer;
 import io.github.evoforge.visualizer.render.VisualizerOverlayRenderer;
@@ -38,13 +40,28 @@ public final class ZLevelVisualizer {
     private final VisionDiagnosticRenderer visionDiagnostics;
     private final MoveToRouteDiagnosticRenderer moveToRouteDiagnostics;
     private final VisualizerOverlayRenderer overlayRenderer;
+    private final ObjectPresentationRenderer objectRenderer;
     private final VisualizerHudRenderer hudRenderer;
     private boolean smoothLandscapeSampling;
 
-    public ZLevelVisualizer(SimulationView view, SimulationTime simulationTime, SimulationStepper stepper) {
+    public ZLevelVisualizer(
+            SimulationView view,
+            SimulationTime simulationTime,
+            SimulationStepper stepper) {
+        this(view, simulationTime, stepper, ObjectPresentationBindings.empty());
+    }
+
+    public ZLevelVisualizer(
+            SimulationView view,
+            SimulationTime simulationTime,
+            SimulationStepper stepper,
+            ObjectPresentationBindings objectPresentations) {
         if (view == null) throw new IllegalArgumentException("view must not be null");
         if (simulationTime == null) throw new IllegalArgumentException("simulationTime must not be null");
         if (stepper == null) throw new IllegalArgumentException("stepper must not be null");
+        if (objectPresentations == null) {
+            throw new IllegalArgumentException("objectPresentations must not be null");
+        }
         time = new VisualizerTimeController(stepper, 0.25f);
         input = new VisualizerInputController(view, state, camera, time);
         sliceResolver = new LandscapeSliceResolver(view);
@@ -53,7 +70,17 @@ public final class ZLevelVisualizer {
         visionDiagnostics = new VisionDiagnosticRenderer(view, state, camera);
         moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
         overlayRenderer = new VisualizerOverlayRenderer(view, state, camera, sliceResolver, shapePresentations);
-        hudRenderer = new VisualizerHudRenderer(view, simulationTime, time, state, camera, sliceResolver, shapePresentations);
+        objectRenderer = new ObjectPresentationRenderer(
+                view, simulationTime, state, camera, objectPresentations);
+        hudRenderer = new VisualizerHudRenderer(
+                view,
+                simulationTime,
+                time,
+                state,
+                camera,
+                sliceResolver,
+                shapePresentations,
+                objectPresentations);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         updateLandscapeSampling();
     }
@@ -87,6 +114,7 @@ public final class ZLevelVisualizer {
         visionDiagnostics.draw(range);
         moveToRouteDiagnostics.draw(range);
         overlayRenderer.draw(range);
+        objectRenderer.draw(range);
         long afterOverlay = System.nanoTime();
         hudRenderer.draw();
         long frameEnd = System.nanoTime();
@@ -96,8 +124,14 @@ public final class ZLevelVisualizer {
 
     public void resize(int width, int height) { camera.resize(width, height); hudRenderer.resize(width, height); }
     public void dispose() {
-        hudRenderer.dispose(); overlayRenderer.dispose(); moveToRouteDiagnostics.dispose(); visionDiagnostics.dispose(); sliceArt.dispose();
-        landscapePack.dispose(); landscapeBatch.dispose();
+        hudRenderer.dispose();
+        objectRenderer.dispose();
+        overlayRenderer.dispose();
+        moveToRouteDiagnostics.dispose();
+        visionDiagnostics.dispose();
+        sliceArt.dispose();
+        landscapePack.dispose();
+        landscapeBatch.dispose();
     }
 
     private void updateLandscapeSampling() {
