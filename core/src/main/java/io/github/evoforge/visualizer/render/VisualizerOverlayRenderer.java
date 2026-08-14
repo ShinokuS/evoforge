@@ -7,7 +7,6 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import io.github.evoforge.visualizer.VisualizerState;
 import io.github.evoforge.visualizer.presentation.ShapeDirectionDiagnostic;
@@ -37,10 +36,6 @@ public final class VisualizerOverlayRenderer {
             new Color(0.02f, 0.025f, 0.022f, 0.94f);
     private static final Color SHAPE_DIRECTION =
             new Color(1f, 0.78f, 0.08f, 1f);
-    private static final Color OBJECT_EVEN =
-            new Color(0.30f, 0.78f, 0.94f, 1f);
-    private static final Color OBJECT_ODD =
-            new Color(0.90f, 0.44f, 0.56f, 1f);
     private static final Color SELECTED =
             new Color(1f, 0.93f, 0.34f, 1f);
     private static final Color OCCUPIED_CELL =
@@ -84,7 +79,6 @@ public final class VisualizerOverlayRenderer {
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         drawActiveSliceContour(range);
-        drawObjects(range);
         shapes.end();
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
@@ -199,39 +193,6 @@ public final class VisualizerOverlayRenderer {
                     y,
                     thickness,
                     1f);
-        }
-    }
-
-    private void drawObjects(
-            VisualizerCamera.VisibleRange range) {
-
-        for (int x = range.minX(); x <= range.maxX(); x++) {
-            for (int y = range.minY(); y <= range.maxY(); y++) {
-                int count = view.cells().objectCount(x, y, state.selectedZ());
-
-                for (int index = 0; index < count; index++) {
-                    ObjectId id = view.cells().objectAt(
-                            x,
-                            y,
-                            state.selectedZ(),
-                            index);
-                    WorldObject object = view.objects().get(id);
-                    if (object == null) {
-                        continue;
-                    }
-
-                    shapes.setColor(
-                            object.definitionId().asInt() % 2 == 0
-                                    ? OBJECT_EVEN
-                                    : OBJECT_ODD);
-                    float offset = Math.min(index, 3) * 0.12f;
-                    shapes.circle(
-                            x + 0.5f + offset,
-                            y + 0.5f - offset,
-                            0.22f,
-                            16);
-                }
-            }
         }
     }
 
