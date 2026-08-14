@@ -324,6 +324,7 @@ public final class SimulationAssembly {
         RelativeSearchLocomotion searchLocomotion = new RelativeSearchLocomotion(
                 spatial.transforms(),
                 navigation.lookup(),
+                vision,
                 moveTo,
                 moveTo);
         AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
