@@ -8,6 +8,7 @@ import io.github.evoforge.simulation.world.agent.AgentDefinitions;
 import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityEvaluation;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDemand;
@@ -37,6 +38,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     private final AgentDefinitions agents;
     private final NeedSatisfactionDefinitions definitions;
     private final NeedSolutionKnowledgeDefinitions knowledge;
+    private final NeedMotivationDefinitions motivations;
     private final NeedSystem needs;
     private final ConsumableStockSystem stocks;
     private final SimulationTime time;
@@ -52,11 +54,12 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             AgentDefinitions agents,
             NeedSatisfactionDefinitions definitions,
             NeedSolutionKnowledgeDefinitions knowledge,
+            NeedMotivationDefinitions motivations,
             NeedSystem needs,
             ConsumableStockSystem stocks,
             SimulationTime time) {
         if (objects == null || transforms == null || agents == null || definitions == null
-                || knowledge == null || needs == null || stocks == null || time == null) {
+                || knowledge == null || motivations == null || needs == null || stocks == null || time == null) {
             throw new IllegalArgumentException("need-satisfaction provider dependencies must not be null");
         }
         this.objects = objects;
@@ -64,6 +67,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         this.agents = agents;
         this.definitions = definitions;
         this.knowledge = knowledge;
+        this.motivations = motivations;
         this.needs = needs;
         this.stocks = stocks;
         this.time = time;
@@ -94,7 +98,8 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         for (int index = 0; index < needs.needCount(agentId); index++) {
             NeedId needId = needs.needAt(agentId, index);
             long level = needs.level(agentId, needId);
-            if (level <= 0 || !knowledge.knows(agentObject.definitionId(), needId)) continue;
+            if (!motivated(agentObject, needId, level)
+                    || !knowledge.knows(agentObject.definitionId(), needId)) continue;
             long max = needs.maxLevel(agentId, needId);
             long urgency;
             try {
@@ -213,7 +218,9 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             if (satisfaction.requiredCapability() != null
                     && !agent.hasCapability(satisfaction.requiredCapability())) continue;
             if (!needs.has(agentId, satisfaction.needId()) || !stockAvailable(sourceId, satisfaction)) continue;
-            long benefit = Math.min(needs.level(agentId, satisfaction.needId()), satisfaction.amount());
+            long level = needs.level(agentId, satisfaction.needId());
+            if (!motivated(agentObject, satisfaction.needId(), level)) continue;
+            long benefit = Math.min(level, satisfaction.amount());
             if (benefit > bestBenefit
                     || (benefit == bestBenefit && benefit > 0L && best != null
                     && satisfaction.needId().compareTo(best.needId()) < 0)) {
@@ -222,6 +229,10 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             }
         }
         return best == null || bestBenefit <= 0L ? null : new Selection(best, bestBenefit);
+    }
+
+    private boolean motivated(WorldObject agentObject, NeedId needId, long level) {
+        return level >= motivations.activationLevel(agentObject.definitionId(), needId);
     }
 
     private boolean eligible(
