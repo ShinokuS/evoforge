@@ -11,6 +11,7 @@ import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionLookup;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
+import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion;
 import io.github.evoforge.simulation.world.agent.search.SearchAdvanceResult;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToActionId;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
@@ -51,6 +52,7 @@ public final class AgentSystem implements AgentDecisionLookup {
     private final MoveToLookup moveToLookup;
     private final PerceptionLookup perception;
     private final AgentSearchSystem search;
+    private final RelativeSearchLocomotion searchLocomotion;
     private final SimulationTime time;
     private final Map<Long, ActiveAgent> byProcessId = new HashMap<>();
     private final Map<ObjectId, ActiveAgent> byObjectId = new HashMap<>();
@@ -67,9 +69,11 @@ public final class AgentSystem implements AgentDecisionLookup {
             MoveToLookup moveToLookup,
             PerceptionLookup perception,
             AgentSearchSystem search,
+            RelativeSearchLocomotion searchLocomotion,
             SimulationTime time) {
         if (objects == null || transforms == null || definitions == null || providers == null
-                || moveTo == null || moveToLookup == null || perception == null || search == null || time == null) {
+                || moveTo == null || moveToLookup == null || perception == null || search == null
+                || searchLocomotion == null || time == null) {
             throw new IllegalArgumentException("agent system dependencies must not be null");
         }
         this.objects = objects;
@@ -80,6 +84,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         this.moveToLookup = moveToLookup;
         this.perception = perception;
         this.search = search;
+        this.searchLocomotion = searchLocomotion;
         this.time = time;
     }
 
@@ -115,7 +120,13 @@ public final class AgentSystem implements AgentDecisionLookup {
             deactivate(active);
             return;
         }
-        if (active.intent != null) continueIntent(active); else decide(active);
+        if (active.opportunityIntent != null) {
+            continueOpportunityIntent(active);
+        } else if (active.searchRelocation != null) {
+            continueSearchRelocation(active);
+        } else {
+            decide(active);
+        }
     }
 
     @Override
@@ -126,7 +137,7 @@ public final class AgentSystem implements AgentDecisionLookup {
     @Override
     public ObjectId currentTarget(ObjectId agentId) {
         ActiveAgent active = agentId == null ? null : byObjectId.get(agentId);
-        return active == null || active.intent == null ? null : active.intent.sourceId;
+        return active == null || active.opportunityIntent == null ? null : active.opportunityIntent.sourceId;
     }
 
     private void decide(ActiveAgent active) {
@@ -158,7 +169,10 @@ public final class AgentSystem implements AgentDecisionLookup {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
-        active.intent = new ActiveIntent(selected.providerIndex, selected.trace.sourceId(), attempt.actionId());
+        active.opportunityIntent = new ActiveOpportunityIntent(
+                selected.providerIndex,
+                selected.trace.sourceId(),
+                attempt.actionId());
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
     }
 
@@ -189,6 +203,19 @@ public final class AgentSystem implements AgentDecisionLookup {
                 active.objectId,
                 providers.get(selected.providerIndex).id(),
                 selected.demand.motivation());
+        if (result.relocation() != null) {
+            RelativeSearchLocomotion.StartAttempt attempt = searchLocomotion.startStep(
+                    active.objectId,
+                    result.relocation().heading());
+            if (!attempt.accepted()) {
+                search.relocationFinished(active.objectId, false);
+                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                return;
+            }
+            active.searchRelocation = new ActiveSearchRelocation(attempt.actionId());
+            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            return;
+        }
         scheduler.scheduleAfter(result.continueSoon() ? ACTIVE_POLL_TICKS : IDLE_RECHECK_TICKS, active.processId);
     }
 
@@ -218,14 +245,14 @@ public final class AgentSystem implements AgentDecisionLookup {
         return result;
     }
 
-    private void continueIntent(ActiveAgent active) {
+    private void continueOpportunityIntent(ActiveAgent active) {
         if (moveToLookup.isActive(active.objectId)) {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
-        ActiveIntent intent = active.intent;
+        ActiveOpportunityIntent intent = active.opportunityIntent;
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
-        active.intent = null;
+        active.opportunityIntent = null;
         if (completion == null || !intent.actionId.equals(completion.actionId())) {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
         }
@@ -233,6 +260,21 @@ public final class AgentSystem implements AgentDecisionLookup {
             OpportunityUseResult result = providers.get(intent.providerIndex).use(active.objectId, intent.sourceId);
             if (result == null) throw new IllegalStateException("opportunity provider returned null use result");
         }
+        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+    }
+
+    private void continueSearchRelocation(ActiveAgent active) {
+        if (moveToLookup.isActive(active.objectId)) {
+            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            return;
+        }
+        ActiveSearchRelocation relocation = active.searchRelocation;
+        MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
+        active.searchRelocation = null;
+        if (completion == null || !relocation.actionId.equals(completion.actionId())) {
+            throw new IllegalStateException("search relocation completion was lost: " + active.objectId);
+        }
+        search.relocationFinished(active.objectId, completion.reachedGoal());
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
     }
 
@@ -269,20 +311,31 @@ public final class AgentSystem implements AgentDecisionLookup {
     private static final class ActiveAgent {
         private final long processId;
         private final ObjectId objectId;
-        private ActiveIntent intent;
+        private ActiveOpportunityIntent opportunityIntent;
+        private ActiveSearchRelocation searchRelocation;
+
         private ActiveAgent(long processId, ObjectId objectId) {
             this.processId = processId;
             this.objectId = objectId;
         }
     }
 
-    private static final class ActiveIntent {
+    private static final class ActiveOpportunityIntent {
         private final int providerIndex;
         private final ObjectId sourceId;
         private final MoveToActionId actionId;
-        private ActiveIntent(int providerIndex, ObjectId sourceId, MoveToActionId actionId) {
+
+        private ActiveOpportunityIntent(int providerIndex, ObjectId sourceId, MoveToActionId actionId) {
             this.providerIndex = providerIndex;
             this.sourceId = sourceId;
+            this.actionId = actionId;
+        }
+    }
+
+    private static final class ActiveSearchRelocation {
+        private final MoveToActionId actionId;
+
+        private ActiveSearchRelocation(MoveToActionId actionId) {
             this.actionId = actionId;
         }
     }
