@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthStatus;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ final class GrowthIntegrationTest {
         SimulationRuntime runtime = assembly.start();
         assertEquals(2, runtime.view().consumableStocks().quantity(plantId));
         assertTrue(runtime.view().growth().has(plantId));
+        assertEquals(GrowthStatus.GROWING, runtime.view().growth().status(plantId));
         assertEquals(4, runtime.view().growth().nextEvaluationTick(plantId));
         assertNull(runtime.view().growth().lastEvaluation(plantId));
 
@@ -41,7 +43,7 @@ final class GrowthIntegrationTest {
     }
 
     @Test
-    void growthNeverExceedsStockCapacity() {
+    void growthStopsSchedulingAfterReachingStockCapacity() {
         SimulationAssembly assembly = SimulationAssembly.create();
         ObjectDefinitionId plant = assembly.objectDefinition("test:bounded_growth");
         assembly.consumableStock(plant, 10, 9);
@@ -52,11 +54,15 @@ final class GrowthIntegrationTest {
         advance(runtime, 2);
         assertEquals(10, runtime.view().consumableStocks().quantity(plantId));
         assertEquals(1, runtime.view().growth().lastEvaluation(plantId).appliedAmount());
-
-        advance(runtime, 2);
-        assertEquals(10, runtime.view().consumableStocks().quantity(plantId));
-        assertEquals(0, runtime.view().growth().lastEvaluation(plantId).appliedAmount());
         assertEquals(5, runtime.view().growth().lastEvaluation(plantId).resolvedAmount());
+        assertEquals(GrowthStatus.DORMANT_FULL, runtime.view().growth().status(plantId));
+        assertEquals(-1, runtime.view().growth().nextEvaluationTick(plantId));
+
+        advance(runtime, 20);
+        assertEquals(10, runtime.view().consumableStocks().quantity(plantId));
+        assertEquals(2, runtime.view().growth().lastEvaluation(plantId).tick());
+        assertEquals(1, runtime.view().growth().lastEvaluation(plantId).appliedAmount());
+        assertEquals(GrowthStatus.DORMANT_FULL, runtime.view().growth().status(plantId));
     }
 
     @Test
