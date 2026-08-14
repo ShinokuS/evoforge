@@ -204,9 +204,9 @@ public final class AgentSystem implements AgentDecisionLookup {
                 providers.get(selected.providerIndex).id(),
                 selected.demand.motivation());
         if (result.relocation() != null) {
-            RelativeSearchLocomotion.StartAttempt attempt = searchLocomotion.startStep(
+            RelativeSearchLocomotion.StartAttempt attempt = searchLocomotion.startLeg(
                     active.objectId,
-                    result.relocation().heading());
+                    result.relocation());
             if (!attempt.accepted()) {
                 search.relocationFinished(active.objectId, false);
                 scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
