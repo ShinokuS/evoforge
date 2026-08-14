@@ -8,6 +8,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfactionDefinitionCompiler;
 import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfactionDefinitions;
+import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitionCompiler;
+import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedDefinitionCompiler;
 import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
@@ -18,7 +20,8 @@ import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 
 final class AgentDefinitionCompilersTest {
-    @Test void compilesAgentCapabilitiesWithoutOwningSensoryParameters() {
+    @Test
+    void compilesAgentCapabilitiesWithoutOwningSensoryParameters() {
         AgentDefinitions definitions = new AgentDefinitions();
         AgentDefinitionCompiler compiler = new AgentDefinitionCompiler(definitions);
         ObjectDefinitionId id = ObjectDefinitionId.of(2);
@@ -28,7 +31,8 @@ final class AgentDefinitionCompilersTest {
         assertTrue(definition.hasCapability(CapabilityId.of("core:drink")));
     }
 
-    @Test void compilesVisionAsIndependentDefinitionAspect() {
+    @Test
+    void compilesVisionAsIndependentDefinitionAspect() {
         VisionDefinitions definitions = new VisionDefinitions();
         VisionDefinitionCompiler compiler = new VisionDefinitionCompiler(definitions);
         ObjectDefinitionId id = ObjectDefinitionId.of(3);
@@ -37,10 +41,22 @@ final class AgentDefinitionCompilersTest {
         assertEquals(120, definitions.get(id).horizontalFovDegrees());
     }
 
-    @Test void compilesOpenNeedIdsWithoutCentralCatalog() {
+    @Test
+    void compilesGeneralNeedSolutionKnowledgeWithoutConcreteSources() {
+        NeedSolutionKnowledgeDefinitions definitions = new NeedSolutionKnowledgeDefinitions();
+        NeedSolutionKnowledgeDefinitionCompiler compiler =
+                new NeedSolutionKnowledgeDefinitionCompiler(definitions);
+        ObjectDefinitionId id = ObjectDefinitionId.of(4);
+        compiler.compile(id, parse("{\"needs\":[\"core:hunger\",\"core:thirst\"]}"), null);
+        assertTrue(definitions.knows(id, NeedId.of("core:hunger")));
+        assertTrue(definitions.knows(id, NeedId.of("core:thirst")));
+    }
+
+    @Test
+    void compilesOpenNeedIdsWithoutCentralCatalog() {
         NeedDefinitions definitions = new NeedDefinitions();
         NeedDefinitionCompiler compiler = new NeedDefinitionCompiler(definitions);
-        ObjectDefinitionId id = ObjectDefinitionId.of(4);
+        ObjectDefinitionId id = ObjectDefinitionId.of(5);
         compiler.compile(id, parse("{\"core:thirst\":{\"max\":200,\"initial\":60},\"core:hunger\":{\"max\":100,\"initial\":80}}"), null);
         assertEquals(2, definitions.count(id));
         NeedSpec first = definitions.specAt(id, 0);
@@ -49,10 +65,11 @@ final class AgentDefinitionCompilersTest {
         assertEquals(80, first.initialLevel());
     }
 
-    @Test void compilesNeedSatisfactionAsIndependentDefinitionAspect() {
+    @Test
+    void compilesNeedSatisfactionAsIndependentDefinitionAspect() {
         NeedSatisfactionDefinitions definitions = new NeedSatisfactionDefinitions();
         NeedSatisfactionDefinitionCompiler compiler = new NeedSatisfactionDefinitionCompiler(definitions);
-        ObjectDefinitionId id = ObjectDefinitionId.of(5);
+        ObjectDefinitionId id = ObjectDefinitionId.of(6);
         compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"requiresCapability\":\"core:graze\"}}"), null);
         assertEquals(1, definitions.count(id));
         var satisfaction = definitions.satisfactionAt(id, 0);
@@ -61,12 +78,14 @@ final class AgentDefinitionCompilersTest {
         assertEquals(CapabilityId.of("core:graze"), satisfaction.requiredCapability());
     }
 
-    @Test void compilerFinishFreezesItsOwnDefinitionStore() {
+    @Test
+    void compilerFinishFreezesItsOwnDefinitionStore() {
         NeedDefinitions definitions = new NeedDefinitions();
         NeedDefinitionCompiler compiler = new NeedDefinitionCompiler(definitions);
         compiler.finish();
         assertTrue(definitions.isFrozen());
-        assertThrows(IllegalStateException.class, () -> definitions.add(ObjectDefinitionId.of(0),
+        assertThrows(IllegalStateException.class, () -> definitions.add(
+                ObjectDefinitionId.of(0),
                 new NeedSpec(NeedId.of("core:test"), 10, 1)));
     }
 
