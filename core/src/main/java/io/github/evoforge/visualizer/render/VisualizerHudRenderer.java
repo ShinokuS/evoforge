@@ -3,9 +3,11 @@ package io.github.evoforge.visualizer.render;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.utils.Align;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.agent.decision.AgentCandidateTrace;
@@ -14,7 +16,6 @@ import io.github.evoforge.simulation.world.agent.decision.AgentIntentPhase;
 import io.github.evoforge.simulation.world.agent.decision.AgentIntentTrace;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionSnapshot;
-import io.github.evoforge.simulation.world.agent.search.AgentSearchStatus;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchTrace;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthStatus;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthTrace;
@@ -36,6 +37,7 @@ public final class VisualizerHudRenderer {
     private static final float PANEL_MARGIN = 12f;
     private static final float PANEL_PADDING = 14f;
     private static final float ROW_GAP = 4f;
+    private static final float COLUMN_GAP = 10f;
     private static final float BAR_HEIGHT = 9f;
 
     private static final Color PANEL = new Color(0.035f, 0.045f, 0.052f, 0.96f);
@@ -60,6 +62,7 @@ public final class VisualizerHudRenderer {
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
     private final BitmapFont font = new BitmapFont();
+    private final GlyphLayout glyphLayout = new GlyphLayout();
     private final Matrix4 projection = new Matrix4();
 
     private int width = 1;
@@ -70,6 +73,9 @@ public final class VisualizerHudRenderer {
     private int cachedInspectorLowerDepth = Integer.MIN_VALUE;
     private boolean cachedTechnicalDetails;
     private List<InspectorRow> cachedInspectorRows = List.of();
+    private List<InspectorRow> cachedLayoutSource = List.of();
+    private float cachedLayoutWidth = Float.NaN;
+    private List<LayoutRow> cachedLayoutRows = List.of();
 
     public VisualizerHudRenderer(
             SimulationView view,
@@ -95,24 +101,39 @@ public final class VisualizerHudRenderer {
         this.width = width;
         this.height = height;
         projection.setToOrtho2D(0f, 0f, width, height);
+        cachedLayoutWidth = Float.NaN;
     }
 
     public void draw() {
-        float statusWidth = Math.min(760f, width - PANEL_MARGIN * 2f);
-        float statusHeight = 66f;
+        float availableWidth = Math.max(1f, width - PANEL_MARGIN * 2f);
+        float statusWidth = Math.min(760f, availableWidth);
+        String statusLine = (time.running() ? "RUNNING" : "PAUSED")
+                + "   Tick " + simulationTime.tick()
+                + "   FPS " + Gdx.graphics.getFramesPerSecond()
+                + "   Z " + state.selectedZ()
+                + "   Zoom " + camera.zoomLabel();
+        String helpLine = "Space run/pause  |  N step  |  LMB inspect/cycle  |  WASD pan  |  wheel zoom  |  F6 technical "
+                + onOff(state.showTechnicalDetails());
+        float statusContentWidth = Math.max(1f, statusWidth - PANEL_PADDING * 2f);
+        float statusLineHeight = measureWrapped(statusLine, statusContentWidth, 1f);
+        float helpLineHeight = measureWrapped(helpLine, statusContentWidth, 1f);
+        float statusHeight = PANEL_PADDING * 2f + statusLineHeight + 6f + helpLineHeight;
         float statusX = PANEL_MARGIN;
         float statusY = height - PANEL_MARGIN - statusHeight;
 
         VisualizerState.CellSelection selectedCell = state.selectedCell();
         ObjectId selectedObject = state.selectedObject();
+        float inspectorWidth = Math.min(430f, availableWidth);
         List<InspectorRow> rows = selectedCell == null
                 ? List.of()
                 : cachedInspectorRows(selectedCell, selectedObject);
+        List<LayoutRow> layoutRows = selectedCell == null
+                ? List.of()
+                : cachedLayoutRows(rows, inspectorWidth);
 
-        float inspectorWidth = Math.min(430f, width - PANEL_MARGIN * 2f);
         float inspectorHeight = Math.min(
-                Math.max(130f, PANEL_PADDING * 2f + rowsHeight(rows)),
-                height - PANEL_MARGIN * 2f);
+                Math.max(130f, PANEL_PADDING * 2f + rowsHeight(layoutRows)),
+                Math.max(1f, height - PANEL_MARGIN * 2f));
         float inspectorX = width - PANEL_MARGIN - inspectorWidth;
         float inspectorY = height - PANEL_MARGIN - inspectorHeight;
 
@@ -121,10 +142,31 @@ public final class VisualizerHudRenderer {
             inspectorY = Math.max(PANEL_MARGIN, statusY - PANEL_MARGIN - inspectorHeight);
         }
 
-        drawBackgrounds(statusX, statusY, statusWidth, statusHeight,
-                selectedCell != null, inspectorX, inspectorY, inspectorWidth, inspectorHeight, rows);
-        drawText(statusX, statusY, statusHeight,
-                selectedCell != null, inspectorX, inspectorY, inspectorHeight, rows);
+        drawBackgrounds(
+                statusX,
+                statusY,
+                statusWidth,
+                statusHeight,
+                selectedCell != null,
+                inspectorX,
+                inspectorY,
+                inspectorWidth,
+                inspectorHeight,
+                layoutRows);
+        drawText(
+                statusX,
+                statusY,
+                statusHeight,
+                statusWidth,
+                statusLine,
+                helpLine,
+                statusLineHeight,
+                selectedCell != null,
+                inspectorX,
+                inspectorY,
+                inspectorWidth,
+                inspectorHeight,
+                layoutRows);
     }
 
     public void dispose() {
@@ -143,25 +185,25 @@ public final class VisualizerHudRenderer {
             float inspectorY,
             float inspectorWidth,
             float inspectorHeight,
-            List<InspectorRow> rows) {
+            List<LayoutRow> rows) {
         shapes.setProjectionMatrix(projection);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         drawPanel(statusX, statusY, statusWidth, statusHeight);
         if (hasInspector) {
             drawPanel(inspectorX, inspectorY, inspectorWidth, inspectorHeight);
             float rowTop = inspectorY + inspectorHeight - PANEL_PADDING;
-            for (InspectorRow row : rows) {
-                float rowHeight = rowHeight(row.kind());
+            for (LayoutRow layout : rows) {
+                InspectorRow row = layout.row();
                 if (row.kind() == RowKind.BAR) {
                     float barX = inspectorX + PANEL_PADDING;
-                    float barY = rowTop - 30f;
-                    float barWidth = inspectorWidth - PANEL_PADDING * 2f;
+                    float barY = rowTop - layout.height() + 3f;
+                    float barWidth = Math.max(1f, inspectorWidth - PANEL_PADDING * 2f);
                     shapes.setColor(BAR_BACKGROUND);
                     shapes.rect(barX, barY, barWidth, BAR_HEIGHT);
                     shapes.setColor(row.barColor());
                     shapes.rect(barX, barY, barWidth * clamp01(row.fraction()), BAR_HEIGHT);
                 }
-                rowTop -= rowHeight + ROW_GAP;
+                rowTop -= layout.height() + ROW_GAP;
             }
         }
         shapes.end();
@@ -177,66 +219,84 @@ public final class VisualizerHudRenderer {
             float statusX,
             float statusY,
             float statusHeight,
+            float statusWidth,
+            String statusLine,
+            String helpLine,
+            float statusLineHeight,
             boolean hasInspector,
             float inspectorX,
             float inspectorY,
+            float inspectorWidth,
             float inspectorHeight,
-            List<InspectorRow> rows) {
+            List<LayoutRow> rows) {
         batch.setProjectionMatrix(projection);
         batch.begin();
         font.getData().setScale(1f);
 
-        float statusTop = statusY + statusHeight - 13f;
+        float statusContentWidth = Math.max(1f, statusWidth - PANEL_PADDING * 2f);
+        float statusTop = statusY + statusHeight - PANEL_PADDING;
         font.setColor(TEXT);
-        font.draw(batch,
-                (time.running() ? "RUNNING" : "PAUSED")
-                        + "   Tick " + simulationTime.tick()
-                        + "   FPS " + Gdx.graphics.getFramesPerSecond()
-                        + "   Z " + state.selectedZ()
-                        + "   Zoom " + camera.zoomLabel(),
-                statusX + 12f,
-                statusTop);
+        font.draw(batch, statusLine, statusX + PANEL_PADDING, statusTop,
+                statusContentWidth, Align.left, true);
         font.setColor(MUTED);
-        font.draw(batch,
-                "Space run/pause  |  N step  |  LMB inspect/cycle  |  WASD pan  |  wheel zoom  |  F6 technical "
-                        + onOff(state.showTechnicalDetails()),
-                statusX + 12f,
-                statusTop - 25f);
+        font.draw(batch, helpLine, statusX + PANEL_PADDING,
+                statusTop - statusLineHeight - 6f,
+                statusContentWidth, Align.left, true);
 
         if (hasInspector) {
+            float contentWidth = Math.max(1f, inspectorWidth - PANEL_PADDING * 2f);
+            float labelWidth = labelColumnWidth(contentWidth);
+            float valueWidth = Math.max(1f, contentWidth - labelWidth - COLUMN_GAP);
+            float valueX = inspectorX + PANEL_PADDING + labelWidth + COLUMN_GAP;
             float rowTop = inspectorY + inspectorHeight - PANEL_PADDING;
-            for (InspectorRow row : rows) {
+
+            for (LayoutRow layout : rows) {
                 if (rowTop < inspectorY + 8f) break;
+                InspectorRow row = layout.row();
                 switch (row.kind()) {
                     case TITLE -> {
                         font.setColor(TITLE);
                         font.getData().setScale(1.20f);
-                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop);
+                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
+                                contentWidth, Align.left, true);
                         font.getData().setScale(1f);
                     }
                     case SECTION -> {
                         font.setColor(SECTION);
-                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop);
+                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
+                                contentWidth, Align.left, true);
                     }
                     case TEXT -> {
                         font.setColor(row.muted() ? MUTED : TEXT);
-                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop);
-                        if (row.value() != null && !row.value().isBlank()) {
-                            font.setColor(row.muted() ? MUTED : TEXT);
-                            font.draw(batch, row.value(), inspectorX + 210f, rowTop);
+                        if (row.value() == null || row.value().isBlank()) {
+                            font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
+                                    contentWidth, Align.left, true);
+                        } else {
+                            font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
+                                    labelWidth, Align.left, true);
+                            font.draw(batch, row.value(), valueX, rowTop,
+                                    valueWidth, Align.left, true);
                         }
                     }
                     case BAR -> {
+                        float valueColumn = Math.min(90f, Math.max(54f, contentWidth * 0.26f));
+                        float barLabelWidth = Math.max(1f, contentWidth - valueColumn - COLUMN_GAP);
                         font.setColor(TEXT);
-                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop);
+                        font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
+                                barLabelWidth, Align.left, true);
                         if (row.value() != null) {
                             font.setColor(MUTED);
-                            font.draw(batch, row.value(), inspectorX + 300f, rowTop);
+                            font.draw(batch, row.value(),
+                                    inspectorX + PANEL_PADDING + barLabelWidth + COLUMN_GAP,
+                                    rowTop,
+                                    valueColumn,
+                                    Align.right,
+                                    false);
                         }
                     }
                     case SPACER -> { }
                 }
-                rowTop -= rowHeight(row.kind()) + ROW_GAP;
+                rowTop -= layout.height() + ROW_GAP;
             }
         }
         batch.end();
@@ -259,8 +319,62 @@ public final class VisualizerHudRenderer {
             cachedInspectorLowerDepth = lowerDepth;
             cachedTechnicalDetails = technical;
             cachedInspectorRows = List.copyOf(inspectorRows(cell, selectedObject, technical));
+            cachedLayoutSource = List.of();
         }
         return cachedInspectorRows;
+    }
+
+    private List<LayoutRow> cachedLayoutRows(List<InspectorRow> rows, float inspectorWidth) {
+        float contentWidth = Math.max(1f, inspectorWidth - PANEL_PADDING * 2f);
+        if (rows != cachedLayoutSource || Float.compare(contentWidth, cachedLayoutWidth) != 0) {
+            cachedLayoutSource = rows;
+            cachedLayoutWidth = contentWidth;
+            List<LayoutRow> result = new ArrayList<>(rows.size());
+            for (InspectorRow row : rows) {
+                result.add(new LayoutRow(row, measuredRowHeight(row, contentWidth)));
+            }
+            cachedLayoutRows = List.copyOf(result);
+        }
+        return cachedLayoutRows;
+    }
+
+    private float measuredRowHeight(InspectorRow row, float contentWidth) {
+        return switch (row.kind()) {
+            case TITLE -> Math.max(25f, measureWrapped(row.label(), contentWidth, 1.20f));
+            case SECTION -> Math.max(19f, measureWrapped(row.label(), contentWidth, 1f));
+            case TEXT -> {
+                if (row.value() == null || row.value().isBlank()) {
+                    yield Math.max(17f, measureWrapped(row.label(), contentWidth, 1f));
+                }
+                float labelWidth = labelColumnWidth(contentWidth);
+                float valueWidth = Math.max(1f, contentWidth - labelWidth - COLUMN_GAP);
+                yield Math.max(
+                        17f,
+                        Math.max(
+                                measureWrapped(row.label(), labelWidth, 1f),
+                                measureWrapped(row.value(), valueWidth, 1f)));
+            }
+            case BAR -> 36f;
+            case SPACER -> 5f;
+        };
+    }
+
+    private float measureWrapped(String text, float targetWidth, float scale) {
+        font.getData().setScale(scale);
+        glyphLayout.setText(
+                font,
+                text == null ? "" : text,
+                Color.WHITE,
+                Math.max(1f, targetWidth),
+                Align.left,
+                true);
+        float measured = Math.max(font.getLineHeight(), glyphLayout.height);
+        font.getData().setScale(1f);
+        return measured;
+    }
+
+    private static float labelColumnWidth(float contentWidth) {
+        return Math.min(126f, Math.max(82f, contentWidth * 0.32f));
     }
 
     private List<InspectorRow> inspectorRows(
@@ -492,20 +606,10 @@ public final class VisualizerHudRenderer {
         return clamp01((float) value / (float) max);
     }
 
-    private static float rowsHeight(List<InspectorRow> rows) {
+    private static float rowsHeight(List<LayoutRow> rows) {
         float total = 0f;
-        for (InspectorRow row : rows) total += rowHeight(row.kind()) + ROW_GAP;
+        for (LayoutRow row : rows) total += row.height() + ROW_GAP;
         return Math.max(0f, total - ROW_GAP);
-    }
-
-    private static float rowHeight(RowKind kind) {
-        return switch (kind) {
-            case TITLE -> 25f;
-            case SECTION -> 19f;
-            case TEXT -> 17f;
-            case BAR -> 34f;
-            case SPACER -> 5f;
-        };
     }
 
     private static String humanizeId(String value) {
@@ -586,4 +690,6 @@ public final class VisualizerHudRenderer {
             float fraction,
             Color barColor,
             boolean muted) { }
+
+    private record LayoutRow(InspectorRow row, float height) { }
 }
