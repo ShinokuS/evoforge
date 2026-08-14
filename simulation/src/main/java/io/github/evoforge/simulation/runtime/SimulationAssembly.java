@@ -31,6 +31,10 @@ import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
+import io.github.evoforge.simulation.world.agent.perception.vision.TerrainSightOcclusionLookup;
+import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinition;
+import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitions;
+import io.github.evoforge.simulation.world.agent.perception.vision.VisionSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
@@ -64,21 +68,24 @@ import io.github.evoforge.simulation.world.pathfinding.PathHierarchyIndex;
 import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
-
+import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.spatial.orientation.OrientationSystem;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Production composition root for a simulation instance. */
 public final class SimulationAssembly {
-
     private final DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions;
     private final LandscapeTraversalDefinitions landscapeTraversalDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
     private final OccupancyDefinitions occupancyDefinitions;
     private final AgentDefinitions agentDefinitions;
+    private final VisionDefinitions visionDefinitions;
     private final NeedDefinitions needDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final LandscapeSystem landscape;
@@ -87,11 +94,13 @@ public final class SimulationAssembly {
     private final ObjectFactory objectFactory;
     private final CellSpatialIndex cells;
     private final SpatialSystem spatial;
+    private final OrientationSystem orientations;
     private final OccupancySystem occupancy;
     private final ObjectPlacementSystem objectPlacement;
     private final MovementStateStore movementState;
     private final Set<ObjectDefinitionId> placedObjectDefinitions = new HashSet<>();
     private final List<ObjectId> createdObjects = new ArrayList<>();
+    private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
     private boolean started;
 
     private SimulationAssembly() {
@@ -101,6 +110,7 @@ public final class SimulationAssembly {
         movementDefinitions = new MovementDefinitions();
         occupancyDefinitions = new OccupancyDefinitions();
         agentDefinitions = new AgentDefinitions();
+        visionDefinitions = new VisionDefinitions();
         needDefinitions = new NeedDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
@@ -109,205 +119,116 @@ public final class SimulationAssembly {
         objectFactory = new ObjectFactory(objects, objectDefinitions);
         cells = new CellSpatialIndex();
         spatial = new SpatialSystem(cells);
+        orientations = new OrientationSystem(objects);
         occupancy = new OccupancySystem(objects, cells.lookup(), occupancyDefinitions);
         objectPlacement = new ObjectPlacementSystem(objects, occupancy, spatial);
         movementState = new MovementStateStore();
     }
 
     public static SimulationAssembly create() { return new SimulationAssembly(); }
-
-    public LandscapeDefinitionId landscapeDefinition(String key) {
-        return landscapeDefinition(key, SurfaceTraversalCost.NEUTRAL_UNITS);
-    }
-
+    public LandscapeDefinitionId landscapeDefinition(String key) { return landscapeDefinition(key, SurfaceTraversalCost.NEUTRAL_UNITS); }
     public LandscapeDefinitionId landscapeDefinition(String key, long traversalCostUnits) {
         requireNotStarted();
         LandscapeDefinitionId definitionId = landscapeDefinitions.register(key);
         landscapeTraversalDefinitions.put(definitionId, SurfaceTraversalCost.of(traversalCostUnits));
         return definitionId;
     }
-
-    public ObjectDefinitionId objectDefinition(String key) {
-        requireNotStarted();
-        return objectDefinitions.register(key);
-    }
-
+    public ObjectDefinitionId objectDefinition(String key) { requireNotStarted(); return objectDefinitions.register(key); }
     public SimulationAssembly movementRate(ObjectDefinitionId definitionId, long unitsPerTick) {
-        requireNotStarted();
-        requireObjectDefinition(definitionId);
-        movementDefinitions.put(definitionId, MovementRate.of(unitsPerTick));
-        return this;
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        movementDefinitions.put(definitionId, MovementRate.of(unitsPerTick)); return this;
     }
-
     public SimulationAssembly exclusiveOccupancy(ObjectDefinitionId definitionId) {
-        requireNotStarted();
-        requireObjectDefinition(definitionId);
-        if (placedObjectDefinitions.contains(definitionId)) {
-            throw new IllegalStateException(
-                    "exclusive occupancy must be configured before placing instances of definition: " + definitionId);
-        }
-        occupancyDefinitions.put(definitionId, true);
-        return this;
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        if (placedObjectDefinitions.contains(definitionId)) throw new IllegalStateException("exclusive occupancy must be configured before placing instances of definition: " + definitionId);
+        occupancyDefinitions.put(definitionId, true); return this;
     }
-
-    /** Declares a definition as autonomous for the first generic agent decision slice. */
-    public SimulationAssembly agent(
-            ObjectDefinitionId definitionId,
-            int perceptionRadius,
-            CapabilityId... capabilities) {
-        requireNotStarted();
-        requireObjectDefinition(definitionId);
-        agentDefinitions.put(definitionId, new AgentDefinition(perceptionRadius, capabilities));
-        return this;
+    public SimulationAssembly agent(ObjectDefinitionId definitionId, CapabilityId... capabilities) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        agentDefinitions.put(definitionId, new AgentDefinition(capabilities)); return this;
     }
-
-    /** Declares one mutable need carried by instances of this definition. */
-    public SimulationAssembly need(
-            ObjectDefinitionId definitionId,
-            NeedId needId,
-            long maxLevel,
-            long initialLevel) {
-        requireNotStarted();
-        requireObjectDefinition(definitionId);
-        needDefinitions.add(definitionId, new NeedSpec(needId, maxLevel, initialLevel));
-        return this;
+    public SimulationAssembly vision(ObjectDefinitionId definitionId, int range, int horizontalFovDegrees) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        visionDefinitions.put(definitionId, new VisionDefinition(range, horizontalFovDegrees)); return this;
     }
-
-    /** Declares a persistent source that can reduce a compatible agent need after arrival. */
-    public SimulationAssembly satisfiesNeed(
-            ObjectDefinitionId sourceDefinitionId,
-            NeedId needId,
-            long amount,
-            CapabilityId requiredCapability) {
+    public SimulationAssembly initialFacing(ObjectId objectId, int dx, int dy) {
         requireNotStarted();
-        requireObjectDefinition(sourceDefinitionId);
-        needSatisfactionDefinitions.add(
-                sourceDefinitionId,
-                new NeedSatisfaction(needId, amount, requiredCapability));
-        return this;
+        if (!objects.isAlive(objectId)) throw new IllegalArgumentException("object must be alive: " + objectId);
+        initialFacing.put(objectId, FacingDirection.of(dx, dy)); return this;
     }
-
+    public SimulationAssembly need(ObjectDefinitionId definitionId, NeedId needId, long maxLevel, long initialLevel) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        needDefinitions.add(definitionId, new NeedSpec(needId, maxLevel, initialLevel)); return this;
+    }
+    public SimulationAssembly satisfiesNeed(ObjectDefinitionId sourceDefinitionId, NeedId needId, long amount, CapabilityId requiredCapability) {
+        requireNotStarted(); requireObjectDefinition(sourceDefinitionId);
+        needSatisfactionDefinitions.add(sourceDefinitionId, new NeedSatisfaction(needId, amount, requiredCapability)); return this;
+    }
     public ObjectId createObject(ObjectDefinitionId definitionId) {
-        requireNotStarted();
-        WorldObject object = objectFactory.create(definitionId);
-        createdObjects.add(object.id());
-        return object.id();
+        requireNotStarted(); WorldObject object = objectFactory.create(definitionId); createdObjects.add(object.id()); return object.id();
     }
-
     public SimulationAssembly placeObject(ObjectId objectId, int x, int y, int z) {
-        requireNotStarted();
-        OperationResults.requireAccepted(objectPlacement.place(objectId, x, y, z));
+        requireNotStarted(); OperationResults.requireAccepted(objectPlacement.place(objectId, x, y, z));
         WorldObject object = objects.get(objectId);
-        if (object == null) {
-            throw new IllegalStateException("placed object disappeared from repository: " + objectId);
-        }
-        placedObjectDefinitions.add(object.definitionId());
-        return this;
+        if (object == null) throw new IllegalStateException("placed object disappeared from repository: " + objectId);
+        placedObjectDefinitions.add(object.definitionId()); return this;
     }
-
-    public SimulationAssembly placeTerrain(
-            int x, int y, int z, LandscapeDefinitionId definitionId) {
-        requireNotStarted();
-        OperationResults.requireAccepted(landscape.placeTerrain(x, y, z, definitionId));
-        return this;
+    public SimulationAssembly placeTerrain(int x, int y, int z, LandscapeDefinitionId definitionId) {
+        requireNotStarted(); OperationResults.requireAccepted(landscape.placeTerrain(x, y, z, definitionId)); return this;
     }
-
     public SimulationAssembly setShape(int x, int y, int z, Shape shape) {
-        requireNotStarted();
-        landscape.setShape(x, y, z, shape);
-        return this;
+        requireNotStarted(); landscape.setShape(x, y, z, shape); return this;
     }
 
     public SimulationRuntime start() {
-        requireNotStarted();
-        started = true;
-        landscapeDefinitions.freeze();
-        landscapeTraversalDefinitions.freeze();
-        objectDefinitions.freeze();
-        movementDefinitions.freeze();
-        occupancyDefinitions.freeze();
-        agentDefinitions.freeze();
-        needDefinitions.freeze();
-        needSatisfactionDefinitions.freeze();
+        requireNotStarted(); started = true;
+        landscapeDefinitions.freeze(); landscapeTraversalDefinitions.freeze(); objectDefinitions.freeze();
+        movementDefinitions.freeze(); occupancyDefinitions.freeze(); agentDefinitions.freeze(); visionDefinitions.freeze();
+        needDefinitions.freeze(); needSatisfactionDefinitions.freeze();
+
+        for (ObjectId objectId : createdObjects) {
+            WorldObject object = objects.get(objectId);
+            if (object != null && (visionDefinitions.has(object.definitionId()) || initialFacing.containsKey(objectId))) {
+                orientations.attach(objectId, initialFacing.getOrDefault(objectId, FacingDirection.EAST));
+            }
+        }
 
         HandlerRegistry scheduledHandlers = new HandlerRegistry();
         Scheduler scheduler = new Scheduler(scheduledHandlers);
         SimulationClock clock = new SimulationClock();
         SimulationStepper stepper = new SimulationStepper(clock, scheduler);
-
-        MovementStepCompletionRelay movementCompletions =
-                new MovementStepCompletionRelay();
-        MovementActionProcessor movementActions = new MovementActionProcessor(
-                movementState,
-                objects,
-                spatial.transforms(),
-                navigation.lookup(),
-                occupancy,
-                spatial,
-                movementCompletions);
+        MovementStepCompletionRelay movementCompletions = new MovementStepCompletionRelay();
+        MovementActionProcessor movementActions = new MovementActionProcessor(movementState, objects,
+                spatial.transforms(), navigation.lookup(), occupancy, spatial, orientations, movementCompletions);
         HandlerId movementHandlerId = scheduledHandlers.register(movementActions::complete);
-        ProcessScheduler movementScheduler = new BoundProcessScheduler(
-                clock, scheduler, movementHandlerId);
+        ProcessScheduler movementScheduler = new BoundProcessScheduler(clock, scheduler, movementHandlerId);
 
-        TransitionCostCalculator transitionCosts = new TransitionCostCalculator(
-                landscape.terrain(), landscape.geometry(), landscapeTraversalDefinitions);
-        TransitionCostLowerBoundLookup transitionCostBounds = new TransitionCostLowerBoundCalculator(
-                landscapeTraversalDefinitions, landscape.shapeTraversalBounds());
-
-        ExactAStarPathfinder exactPathfinder = new ExactAStarPathfinder(
-                navigation.lookup(),
-                transitionCosts,
-                landscape.traversalRevision(),
-                PathHeuristics.chebyshev(transitionCostBounds));
-        PathHierarchyIndex hierarchy = new PathHierarchyIndex(
-                navigation.lookup(),
-                landscape.traversalChanges(),
-                PathHierarchyConfig.standard());
+        TransitionCostCalculator transitionCosts = new TransitionCostCalculator(landscape.terrain(), landscape.geometry(), landscapeTraversalDefinitions);
+        TransitionCostLowerBoundLookup transitionCostBounds = new TransitionCostLowerBoundCalculator(landscapeTraversalDefinitions, landscape.shapeTraversalBounds());
+        ExactAStarPathfinder exactPathfinder = new ExactAStarPathfinder(navigation.lookup(), transitionCosts,
+                landscape.traversalRevision(), PathHeuristics.chebyshev(transitionCostBounds));
+        PathHierarchyIndex hierarchy = new PathHierarchyIndex(navigation.lookup(), landscape.traversalChanges(), PathHierarchyConfig.standard());
         Pathfinder pathfinder = new HierarchicalPathfinder(hierarchy, exactPathfinder);
-
-        MovementSystem movement = new MovementSystem(
-                objects,
-                spatial.transforms(),
-                navigation.lookup(),
-                movementDefinitions,
-                transitionCosts,
-                occupancy,
-                movementState,
-                movementScheduler);
-        MoveToSystem moveTo = new MoveToSystem(
-                spatial.transforms(),
-                pathfinder,
-                movement);
+        MovementSystem movement = new MovementSystem(objects, spatial.transforms(), navigation.lookup(), movementDefinitions,
+                transitionCosts, occupancy, movementState, movementScheduler);
+        MoveToSystem moveTo = new MoveToSystem(spatial.transforms(), pathfinder, movement);
         movementCompletions.bind(moveTo);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
-        for (ObjectId objectId : createdObjects) {
-            needs.attach(objectId);
-        }
+        for (ObjectId objectId : createdObjects) needs.attach(objectId);
 
-        AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
-                objects,
-                spatial.transforms(),
-                agentDefinitions,
-                needSatisfactionDefinitions,
-                needs);
-        AgentSystem agents = new AgentSystem(
-                objects,
-                spatial.transforms(),
-                cells.lookup(),
-                agentDefinitions,
-                List.of(needSatisfaction),
-                moveTo,
-                moveTo,
-                clock);
+        VisionSystem vision = new VisionSystem(objects, spatial.transforms(), cells.lookup(), orientations,
+                visionDefinitions, new TerrainSightOcclusionLookup(landscape.terrain()));
+        AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(objects,
+                spatial.transforms(), agentDefinitions, needSatisfactionDefinitions, needs);
+        AgentSystem agents = new AgentSystem(objects, spatial.transforms(), agentDefinitions, List.of(needSatisfaction),
+                moveTo, moveTo, vision, clock);
         HandlerId agentHandlerId = scheduledHandlers.register(agents::resume);
         ProcessScheduler agentScheduler = new BoundProcessScheduler(clock, scheduler, agentHandlerId);
         agents.bindScheduler(agentScheduler);
         for (ObjectId objectId : createdObjects) {
             WorldObject object = objects.get(objectId);
-            if (object != null && agentDefinitions.has(object.definitionId())) {
-                agents.activate(objectId);
-            }
+            if (object != null && agentDefinitions.has(object.definitionId())) agents.activate(objectId);
         }
 
         CommandDispatcher dispatcher = new CommandDispatcher();
@@ -315,35 +236,16 @@ public final class SimulationAssembly {
         dispatcher.register(ReplaceTerrainCommand.class, new ReplaceTerrainHandler(landscape));
         dispatcher.register(MoveStepCommand.class, new MoveStepHandler(movement));
         dispatcher.register(MoveToCommand.class, new MoveToHandler(moveTo));
-
-        SimulationView view = new SimulationView(
-                objects,
-                spatial.transforms(),
-                landscape.terrain(),
-                landscape.terrainExtents(),
-                landscape.terrainRevision(),
-                landscape.geometry(),
-                navigation.lookup(),
-                occupancy,
-                cells.lookup(),
-                pathfinder,
-                moveTo,
-                needs,
-                agents);
-
-        return new SimulationRuntime(
-                new SynchronousCommandGateway(dispatcher), clock, stepper, view);
+        SimulationView view = new SimulationView(objects, spatial.transforms(), orientations, vision,
+                landscape.terrain(), landscape.terrainExtents(), landscape.terrainRevision(), landscape.geometry(),
+                navigation.lookup(), occupancy, cells.lookup(), pathfinder, moveTo, needs, agents);
+        return new SimulationRuntime(new SynchronousCommandGateway(dispatcher), clock, stepper, view);
     }
 
     private void requireObjectDefinition(ObjectDefinitionId definitionId) {
-        if (!objectDefinitions.contains(definitionId)) {
-            throw new IllegalArgumentException("unknown object definition: " + definitionId);
-        }
+        if (!objectDefinitions.contains(definitionId)) throw new IllegalArgumentException("unknown object definition: " + definitionId);
     }
-
     private void requireNotStarted() {
-        if (started) {
-            throw new IllegalStateException("simulation assembly has already started");
-        }
+        if (started) throw new IllegalStateException("simulation assembly has already started");
     }
 }
