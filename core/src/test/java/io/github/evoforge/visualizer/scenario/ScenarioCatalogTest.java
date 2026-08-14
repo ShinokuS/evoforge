@@ -10,12 +10,12 @@ final class ScenarioCatalogTest {
     @Test
     void standardCatalogKeepsDomainGroupsAndFocusedScenarioOrder() {
         ScenarioCatalog catalog = ScenarioCatalog.standard();
-        assertEquals(List.of("geometry", "movement", "occupancy", "pathfinding"),
+        assertEquals(List.of("geometry", "movement", "occupancy", "agents", "pathfinding"),
                 catalog.groups().stream().map(ScenarioGroup::id).toList());
         assertEquals(List.of(
                         "cutaway", "ramp-navigation", "timed-movement",
                         "movement-patrol", "movement-click-to-move",
-                        "occupancy-contention", "pathfinding-straight",
+                        "occupancy-contention", "agent-cow-foraging", "pathfinding-straight",
                         "pathfinding-structural-detour", "pathfinding-weighted-detour",
                         "pathfinding-ramp-3d", "pathfinding-multi-level-climb",
                         "pathfinding-z-switchback", "pathfinding-vertical-overpass",
