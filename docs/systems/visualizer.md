@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Observe the real authoritative simulation during development. The visualizer is not a second world model and never owns simulation truth.
+Observe authoritative simulation state during development. The visualizer is not a second world model and never owns simulation truth.
 
 The debug application is scenario-driven: one generic visualizer is reused across small deterministic worlds that each demonstrate one understandable mechanic or interaction. Scenarios improve human debugging and explanation; they do not replace headless correctness tests.
 
@@ -18,23 +18,23 @@ SimulationStepper
 
 An executable boundary test protects this constructor contract.
 
-`SimulationView` also exposes read-only Occupancy, Need and autonomous Decision state, so presentation can diagnose dynamic space conflicts and agent reasoning without receiving mutable domain owners.
+`SimulationView` exposes read-only capabilities needed by presentation diagnostics, including Object/Spatial, Orientation, Vision, Occupancy, MoveTo, Need, autonomous Decision and Search state. Presentation never receives mutable domain owners.
 
-`ZLevelVisualizer` exposes its presentation input processor to the application shell, but it does not own global `Gdx.input` routing. This allows scenario-level controls such as restart/back to compose with the existing camera/time/debug controls without teaching the simulation visualizer about scenario lifecycle.
+`ZLevelVisualizer` exposes its presentation input processor to the application shell, but it does not own global `Gdx.input` routing. Scenario-level controls therefore compose with camera/time/debug controls without teaching simulation code about scenario lifecycle.
 
 ## Scenario lifecycle
 
-The application starts at a searchable grouped scenario browser rather than constructing one permanent demo world.
+The application starts at a searchable grouped scenario browser.
 
 ```text
 Main
   ↓
 ScenarioCatalog
-  ├─ ScenarioGroup (Geometry & Navigation)
-  ├─ ScenarioGroup (Movement)
-  ├─ ScenarioGroup (Occupancy)
-  ├─ ScenarioGroup (Agents)
-  └─ ScenarioGroup (Pathfinding)
+  ├─ Geometry & Navigation
+  ├─ Movement
+  ├─ Occupancy
+  ├─ Agents
+  └─ Pathfinding
   ↓
 VisualizerScenario
   ↓
@@ -58,204 +58,154 @@ camera X/Y
 zoom
 ```
 
-It cannot alter simulation mechanics.
+`ScenarioController` is optional visualizer-only tooling driven by authoritative simulation ticks. It may update diagnostics or submit ordinary production commands to the scenario runtime; it is not simulation state.
 
-`ScenarioController` is an optional visualizer-only lifecycle hook for scenarios whose setup or diagnostics intentionally evolve with simulation ticks. It receives the authoritative simulation tick, not wall-clock time. A controller may update presentation diagnostics or submit ordinary production commands to its scenario runtime; it is not a simulation system and does not become authoritative world state.
+Current groups include:
 
-Scenario implementations and their tests mirror the same domain organization used by the browser:
+- **Geometry & Navigation** — Z-Level / Cutaway, Ramp Navigation;
+- **Movement** — Timed Movement, Movement Patrol, Click To Move;
+- **Occupancy** — Occupancy Contention;
+- **Agents** — Cow Foraging, Cow Visual Search;
+- **Pathfinding** — straight, detour, 3D, hierarchy, invalidation and related scenarios.
 
-- **Geometry & Navigation** — `Z-Level / Cutaway`, `Ramp Navigation`;
-- **Movement** — `Timed Movement`, `Movement Patrol`, `Click To Move`;
-- **Occupancy** — `Occupancy Contention`;
-- **Agents** — `Cow Foraging`, which displays the authoritative candidate set/winner from the first autonomous decision slice;
-- **Pathfinding** — straight, structural/weighted detours, 3D ramps, multi-level climb, Z switchback, vertical overpass, unreachable, hierarchy and dynamic invalidation scenarios.
-
-The root `visualizer.scenario` package contains shared scenario contracts/catalog/diagnostic primitives; mechanic-specific scenarios, controllers and helpers live in domain subpackages. A scenario should be added when a behavior is useful to understand or inspect visually. There is no requirement to mirror every unit test with a scenario.
-
-### Scenario browser
-
-`ScenarioMenuScreen` renders a fixed search/header area, a scrollable grouped list and a separate detail panel. The selector does not push the selected description below an ever-growing scenario list.
-
-`ScenarioMenuModel` owns only presentation selection/filter/expanded-group state and has no libGDX dependency, so browser behavior is headless-testable. Search matches group title/id and scenario title/id/description. If a group itself matches, all of its scenarios are shown. Search temporarily exposes matches without changing the user's normal expanded/collapsed group state.
-
-Browser controls:
-
-- `Up/Down`: select a visible group/scenario row;
-- `Left/Right`: collapse/expand the selected group;
-- `Enter`: toggle a group or open a scenario;
-- click: toggle a group or open a scenario;
-- mouse wheel: scroll the list;
-- typing: search immediately;
-- `Backspace`: edit search;
-- `Esc`: clear search.
-
-The browser uses the larger bundled window bitmap font rather than the tiny default libGDX font and keeps scenario details in a dedicated panel for desktop readability.
-
-### Restart
-
-`R` restarts the active scenario by discarding the current presentation/session and calling the same scenario's `create()` again.
-
-```text
-R
- ↓
-dispose current ScenarioScreen / ZLevelVisualizer
- ↓
-VisualizerScenario.create()
- ↓
-new SimulationRuntime
- ↓
-new ZLevelVisualizer
-```
-
-Restart does **not** clear or mutate the existing world in place. Simulation systems therefore need no debug-only `reset()` APIs, and a restart naturally recreates Clock, Scheduler state, object identities, movement actions, reservations, terrain, geometry, needs and autonomous decision state from the scenario definition.
-
-Scenarios are deterministic. Restart repeats the same scenario definition and seed; a future “new seed” action, if needed, is a separate operation.
-
-`Esc` leaves the active scenario and returns to the selector.
+The root `visualizer.scenario` package contains shared scenario contracts/catalog/diagnostic primitives; mechanic-specific scenarios live in domain subpackages.
 
 ## Presentation ownership
-
-The visualizer is split by responsibility:
 
 ```text
 Main                         application screen switching
 ScenarioMenuScreen           grouped/searchable scenario browser rendering + input
-ScenarioMenuModel            selector filter/expansion/selection state
-ScenarioCatalog              ordered groups and available scenarios
-ScenarioGroup                explicit presentation-side domain grouping
-ScenarioScreen               active scenario lifecycle + R/Esc controls
-VisualizerScenario           creates one fresh deterministic simulation world
-ScenarioController           optional tick-driven visualizer-only scenario tooling
-ZLevelVisualizer             generic render-order orchestration
-VisualizerState              selected Z, overlay modes, selection
-VisualizerCamera             pan, zoom, viewport and coordinate conversion
-VisualizerInputController    physical input → presentation/time controls
-LandscapeRenderer            terrain/cutaway rendering + analysis cache
-VisualizerOverlayRenderer    grid, Z perimeter, F2/F3/F5, object/selection overlays
-VisualizerHudRenderer        status and inspector screen-space UI
-ShapePresentationRegistry    exact-type Shape presentation dispatch
+ScenarioMenuModel            filter/expansion/selection state
+ScenarioCatalog              ordered groups and scenarios
+ScenarioScreen               active scenario lifecycle
+VisualizerScenario           builds one fresh deterministic world
+ScenarioController           optional presentation-only scenario tooling
+ZLevelVisualizer             generic render orchestration
+VisualizerState              selected Z / overlay / selection state
+VisualizerCamera             pan / zoom / viewport conversion
+VisualizerInputController    physical input -> presentation/time controls
+LandscapeRenderer            terrain/cutaway rendering
+VisualizerOverlayRenderer    grid/navigation/occupancy/object overlays
+VisionDiagnosticRenderer     authoritative selected-object Vision overlay
+VisualizerHudRenderer        status and inspector UI
+ShapePresentationRegistry    typed Shape presentation dispatch
 ```
 
 No component above becomes an authoritative simulation owner.
+
+## Vision diagnostics
+
+Selecting an object with Vision automatically visualizes the simulation's authoritative `VisionSnapshot`.
+
+The renderer does **not** reconstruct a decorative FOV cone from presentation-side math.
+
+Current diagnostics:
+
+```text
+soft cell highlight   cells Vision says are visible now
+object frame          objects Vision says are visible now
+facing arrow          authoritative physical orientation
+HUD Vision data       facing / range / FOV / visible counts
+```
+
+This is intentionally cell-based because it answers the development question directly:
+
+> Which cells and objects can this agent actually perceive right now?
+
+Occlusion, FOV and range changes therefore appear automatically because presentation reads the same result used by autonomous decision making.
+
+## Agent diagnostics
+
+`Cow Foraging` reads authoritative Need and Decision state. It shows competing perceived sources, the selected winner and the current hunger/score context.
+
+`Cow Visual Search` exposes the information-seeking lifecycle. Its summary reads `AgentSearchTrace`, physical facing and authoritative Vision state. It can show states such as:
+
+```text
+SWEEPING
+EXPLORING
+RELOCATION_BLOCKED
+```
+
+Search presentation never knows hidden Grass coordinates on behalf of the Cow. A target marker appears only after ordinary autonomous decision has selected a concrete source.
+
+The generic Vision overlay remains active during these scenarios, so clicking the Cow immediately shows exactly what it can currently see while the search trace explains what it is doing about missing information.
 
 ## Typed Shape presentation
 
 Generic presentation does not branch on concrete Shape classes. `ShapePresentationRegistry` dispatches by exact Java type to specialized bindings registered in the presentation composition root.
 
-Current bindings:
-
-- `FullShapePresentation`
-- `RampShapePresentation`
-
-A binding supplies the currently needed Shape-specific presentation facts: terrain region, optional direction diagnostic and inspector label. Procedural art itself no longer imports `RampShape`; the ramp binding translates `riseX/riseY` into art parameters.
-
-This prevents `instanceof`/concrete-class chains from spreading through renderer, F3 diagnostics and inspector while keeping presentation concerns out of simulation `Shape`.
+Current bindings include full cells and ramps. A binding supplies only presentation facts needed by renderers; procedural art does not become simulation semantics.
 
 ## Horizontal Z cut
 
 Visualizer Z is the standing/navigation plane. For each XY:
 
 ```text
-terrain at selected Z       → SOLID_BODY
-terrain at selected Z - 1   → CURRENT_SURFACE
-nearest visible terrain down through open volume → LOWER_SURFACE
-otherwise                   → EMPTY
+terrain at selected Z       -> SOLID_BODY
+terrain at selected Z - 1   -> CURRENT_SURFACE
+nearest visible terrain down through open volume -> LOWER_SURFACE
+otherwise                   -> EMPTY
 ```
 
-Visibility is derived from geometry, not labels such as “cave” or absolute Z.
+Visibility is derived from geometry, not semantic labels such as "cave".
 
-Resolved context includes body depth, drop depth, ceiling distance, cover depth and shortest open-volume exposure distance to sky-connected exterior air.
+## Cutaway and procedural landscape
 
-## Cutaway presentation
+Current-surface terrain keeps its natural palette; deeper/covered surfaces darken according to depth/exposure. Ramps keep one visual identity across slice context.
 
-- current surface keeps the natural terrain palette;
-- lower surfaces fade nonlinearly with drop depth;
-- cover/body depth darkens more strongly;
-- sufficiently deep space approaches background darkness and loses visual detail;
-- ramps keep one visual identity across slice context;
-- only the outer cardinal boundary of `CURRENT_SURFACE` receives the active-Z perimeter, so there is no per-tile active grid.
+The canonical development landscape is generated procedurally in memory at 16x16 native pixels per logical cell. Surface topology is deterministic from XYZ and local geometry.
 
-## Procedural landscape art
+Presentation sampling changes with zoom to reduce shimmer without changing authoritative geometry.
 
-The canonical development landscape is generated in memory at 16×16 native pixels per logical cell. Surface topology uses normalized 8-neighbor masks with diagonal corner gating. Visual variants are deterministic from XYZ.
-
-Ramp geometry rotates while lighting remains fixed in world-space, preventing rotated-light artifacts. Atlas padding prevents texture bleeding.
-
-Near zoom uses `Nearest`; far zoom switches procedural textures to `Linear` to reduce sampling shimmer while camera motion stays continuous.
-
-## Diagnostics and controls
+## Controls
 
 Application/session controls:
 
-- scenario browser: grouped list + search as documented above;
 - `R`: recreate the active scenario from a fresh runtime;
-- `Esc`: return to the scenario browser from an active scenario.
+- `Esc`: return to the scenario browser.
 
-Generic visualizer controls inside a scenario:
+Generic visualizer controls:
 
 - `Space`: run/pause simulation time;
 - `N`: single simulation step while paused;
 - `WASD`: pan;
 - mouse wheel: zoom;
 - `PgUp/PgDn`: change standing Z;
-- `G`: grid off/subtle/debug;
-- `F2`: authoritative Navigation transition overlay;
-- `F3`: Shape direction diagnostics supplied through typed presentation bindings;
-- `F4`: lower-surface visibility depth `0 / 1 / 4 / 8`;
-- `F5`: Occupancy overlay at the selected standing Z;
-- click: selected cell/object at the current standing Z;
-- HUD: tick, Z, FPS, zoom/sampling and inspector context.
+- `G`: grid mode;
+- `F2`: Navigation transition overlay;
+- `F3`: Shape direction diagnostics;
+- `F4`: lower-surface visibility depth;
+- `F5`: Occupancy overlay;
+- click: select cell/object at current standing Z.
 
-The active scenario title, description and `R`/`Esc` reminder remain visible at the bottom of the scenario screen. Pathfinding and autonomous-agent scenarios additionally use generic presentation-only cell markers for important cells/candidates; those markers do not become simulation state.
+The HUD shows tick, Z, FPS, zoom/sampling and selected-object context.
 
-`Cow Foraging` reads only `NeedLookup` and `AgentDecisionLookup` for AI-specific diagnostics. It does not evaluate candidates in presentation. Alternative perceived candidates use warning markers, while the authoritative selected winner uses a goal marker. The summary reports hunger, current target, decision tick, candidate count, expected benefit, distance and score.
+## Restart semantics
 
-The F5 overlay reads `OccupancyLookup` only when enabled:
+Restart discards the current scenario session and creates a new runtime from the same deterministic scenario definition.
 
 ```text
-OCCUPIED  bright nested cell frame
-RESERVED  deeper inset amber frame
-FREE      no marker
+R
+ ↓
+dispose current session
+ ↓
+VisualizerScenario.create()
+ ↓
+new SimulationRuntime
 ```
 
-The selected-cell inspector also reports the exact `FREE / OCCUPIED / RESERVED` state. This makes the distinction between physical presence and an in-flight destination claim directly observable while debugging Movement conflicts.
+Simulation systems therefore need no debug-only reset APIs.
 
 ## Performance
 
-Two complementary telemetry streams are logged once per second:
+Visualizer performance telemetry distinguishes observed frame interval from CPU work inside renderer stages. Landscape analysis/caches and diagnostic scans are optimized only when profiling identifies them as hot.
 
-```text
-VisualizerPerf
-    visible cells
-    landscape CPU avg/max
-    exposure-analysis CPU avg/max
-    analysis cache hit/miss
-    padding / cache occupancy / cached Z radius
-
-VisualizerFramePerf
-    observed frame interval avg/max
-    total CPU work inside ZLevelVisualizer.render avg/max
-    update / landscape / overlay / HUD CPU avg/max
-    Java heap min/max/current
-    native heap
-```
-
-The observed frame interval includes pacing/vsync effects, while the CPU stage timings cover work inside the visualizer render method. A large frame-time spike with low CPU-stage maxima therefore points outside those measured CPU stages; a matching landscape/analysis, overlay or HUD spike identifies the responsible presentation path directly.
-
-Exposure uses a primitive dense distance field. Its BFS queue is a reusable resolver-owned scratch buffer, so a camera-local analysis rebuild allocates the new cached distance field but does not also allocate another same-sized temporary queue. Analysis windows are padded relative to viewport size, cached by authoritative visibility revision and built for a nearby standing-Z band so normal camera motion and Z switching reuse work.
-
-The selected-cell inspector caches its expensive slice/exposure result by selected XYZ, F4 lower depth and visibility revision. Dynamic facts such as Occupancy are still read live every frame, while an unchanged inspected cell no longer rebuilds a private exposure field every render.
-
-Hot sparse read paths avoid temporary coordinate-key allocation. This includes Terrain, the Spatial cell index and Occupancy reservation lookup; immutable coordinate keys are still used for stored authoritative entries.
-
-Occupancy scanning is diagnostic-only and is performed over the visible selected-Z cells only while F5 is enabled. No Occupancy render cache is introduced without profiling evidence.
-
-Focused correctness scenarios and future representative performance scenarios are separate concerns. A scenario intended to explain one mechanic should not become a large benchmark world; representative scale profiling gets its own explicit workload when needed.
+Focused correctness scenarios and representative performance scenarios remain separate concerns.
 
 ## Testing boundary
 
-Headless tests cover cut priority, current-surface query, depth/cover/exposure geometry, sealed/open caverns, future non-terrain occlusion, cache retarget correctness, deterministic topology and presentation dependency boundaries. Occupancy correctness itself is tested in the headless simulation layer; the F5 visual styling remains manually inspected.
+Headless simulation tests own semantic correctness for Geometry, Navigation, Occupancy, Movement, Pathfinding, Vision, Needs, Decision and Search.
 
-Scenario tests independently verify the meaningful world setup behind cutaway geometry, ramp topology, timed movement, occupancy contention, MoveTo, autonomous Cow opportunity diagnostics and catalog freshness. Pathfinding scenario tests verify expected outcomes, require the dedicated vertical scenarios to expose route markers across multiple standing-Z slices, and drive `Dynamic Invalidation` through `RUNNING → STALE → fresh FOUND detour` using deterministic simulation ticks. `ScenarioMenuModel` tests group expansion, cross-group search and restoration of collapse state; final font/layout/marker aesthetics remain manually inspected in the desktop visualizer.
+Visualizer scenario tests verify meaningful setup and that presentation exposes the same authoritative diagnostic state. Final appearance/readability remains a manual desktop check.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
