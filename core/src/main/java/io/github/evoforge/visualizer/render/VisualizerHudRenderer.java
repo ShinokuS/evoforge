@@ -49,6 +49,11 @@ public final class VisualizerHudRenderer {
     private final Matrix4 projection = new Matrix4();
     private int width = 1;
     private int height = 1;
+    private long cachedInspectorTick = Long.MIN_VALUE;
+    private VisualizerState.CellSelection cachedInspectorCell;
+    private ObjectId cachedInspectorObject;
+    private int cachedInspectorLowerDepth = Integer.MIN_VALUE;
+    private List<InspectorLine> cachedInspectorLines = List.of();
 
     public VisualizerHudRenderer(
             SimulationView view,
@@ -87,7 +92,7 @@ public final class VisualizerHudRenderer {
         ObjectId selectedObject = state.selectedObject();
         List<InspectorLine> inspectorLines = selectedCell == null
                 ? List.of()
-                : inspectorLines(selectedCell, selectedObject);
+                : cachedInspectorLines(selectedCell, selectedObject);
         float inspectorWidth = Math.min(470f, width - margin * 2f);
         float desiredInspectorHeight = 34f + inspectorLines.size() * 19f;
         float inspectorHeight = Math.min(Math.max(180f, desiredInspectorHeight), height - margin * 2f);
@@ -151,6 +156,24 @@ public final class VisualizerHudRenderer {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+    }
+
+    private List<InspectorLine> cachedInspectorLines(
+            VisualizerState.CellSelection cell,
+            ObjectId selectedObject) {
+        long tick = simulationTime.tick();
+        int lowerDepth = state.lowerDepth();
+        if (tick != cachedInspectorTick
+                || !sameCell(cell, cachedInspectorCell)
+                || !sameObject(selectedObject, cachedInspectorObject)
+                || lowerDepth != cachedInspectorLowerDepth) {
+            cachedInspectorTick = tick;
+            cachedInspectorCell = cell;
+            cachedInspectorObject = selectedObject;
+            cachedInspectorLowerDepth = lowerDepth;
+            cachedInspectorLines = List.copyOf(inspectorLines(cell, selectedObject));
+        }
+        return cachedInspectorLines;
     }
 
     private List<InspectorLine> inspectorLines(
@@ -269,6 +292,20 @@ public final class VisualizerHudRenderer {
         if (end <= start) return "100%";
         long elapsed = Math.max(0L, Math.min(end - start, simulationTime.tick() - start));
         return (elapsed * 100L / (end - start)) + "%";
+    }
+
+    private static boolean sameCell(
+            VisualizerState.CellSelection left,
+            VisualizerState.CellSelection right) {
+        if (left == right) return true;
+        return left != null && right != null
+                && left.x() == right.x()
+                && left.y() == right.y()
+                && left.z() == right.z();
+    }
+
+    private static boolean sameObject(ObjectId left, ObjectId right) {
+        return left == right || (left != null && left.equals(right));
     }
 
     private static String bar(long value, long max) {
