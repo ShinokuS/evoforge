@@ -111,10 +111,10 @@ public final class ZLevelVisualizer {
                 state.selectedZ(), state.lowerDepth());
         landscapeBatch.end();
         long afterLandscape = System.nanoTime();
+        objectRenderer.draw(range);
         visionDiagnostics.draw(range);
         moveToRouteDiagnostics.draw(range);
         overlayRenderer.draw(range);
-        objectRenderer.draw(range);
         long afterOverlay = System.nanoTime();
         hudRenderer.draw();
         long frameEnd = System.nanoTime();
