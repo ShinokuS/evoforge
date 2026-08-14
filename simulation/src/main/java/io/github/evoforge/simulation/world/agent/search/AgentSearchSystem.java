@@ -70,6 +70,10 @@ public final class AgentSearchSystem implements AgentSearchLookup {
                     state.explorationHeading,
                     state.explorationStepOrdinal++,
                     currentVision.range());
+            orientationMutations.faceIfPresent(
+                    agentId,
+                    relocation.heading().x(),
+                    relocation.heading().y());
             state.explorationHeading = relocation.heading();
             state.relocationPending = true;
             state.status = AgentSearchStatus.EXPLORING;
