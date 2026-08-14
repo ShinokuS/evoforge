@@ -282,10 +282,7 @@ public final class SimulationAssembly {
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
         for (ObjectId objectId : createdObjects) {
-            WorldObject object = objects.get(objectId);
-            if (object != null && needDefinitions.has(object.definitionId())) {
-                needs.attach(objectId, object.definitionId());
-            }
+            needs.attach(objectId);
         }
 
         AgentOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(

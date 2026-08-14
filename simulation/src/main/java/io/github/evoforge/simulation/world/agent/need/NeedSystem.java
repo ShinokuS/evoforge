@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.agent.need;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
+import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,16 +25,16 @@ public final class NeedSystem implements NeedLookup {
         this.definitions = definitions;
     }
 
-    public void attach(ObjectId objectId, ObjectDefinitionId definitionId) {
-        if (!objects.isAlive(objectId)) {
+    public void attach(ObjectId objectId) {
+        WorldObject object = objects.get(objectId);
+        if (object == null) {
             throw new IllegalArgumentException("object must be alive: " + objectId);
-        }
-        if (definitionId == null) {
-            throw new IllegalArgumentException("definitionId must not be null");
         }
         if (states.containsKey(objectId)) {
             throw new IllegalStateException("need state already attached: " + objectId);
         }
+
+        ObjectDefinitionId definitionId = object.definitionId();
         if (!definitions.has(definitionId)) {
             return;
         }
