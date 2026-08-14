@@ -1,7 +1,6 @@
 package io.github.evoforge.simulation.world.mechanics.movement;
 
 import io.github.evoforge.simulation.result.ResultCode;
-import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalConstraint;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.pathfinding.PathRoute;
@@ -36,7 +35,6 @@ public final class MoveToSystem
     private final TransformLookup transforms;
     private final Pathfinder pathfinder;
     private final MovementSystem movement;
-    private final MoverTraversalConstraint traversalConstraint;
 
     private final Map<ObjectId, ActiveMoveTo> activeByObject =
             new HashMap<>();
@@ -52,19 +50,6 @@ public final class MoveToSystem
             Pathfinder pathfinder,
             MovementSystem movement) {
 
-        this(
-                transforms,
-                pathfinder,
-                movement,
-                MoverTraversalConstraint.ALLOW_ALL);
-    }
-
-    public MoveToSystem(
-            TransformLookup transforms,
-            Pathfinder pathfinder,
-            MovementSystem movement,
-            MoverTraversalConstraint traversalConstraint) {
-
         if (transforms == null) {
             throw new IllegalArgumentException(
                     "transforms must not be null");
@@ -77,15 +62,10 @@ public final class MoveToSystem
             throw new IllegalArgumentException(
                     "movement must not be null");
         }
-        if (traversalConstraint == null) {
-            throw new IllegalArgumentException(
-                    "traversalConstraint must not be null");
-        }
 
         this.transforms = transforms;
         this.pathfinder = pathfinder;
         this.movement = movement;
-        this.traversalConstraint = traversalConstraint;
     }
 
     public MoveToStartAttempt start(
@@ -239,7 +219,7 @@ public final class MoveToSystem
                                 active.goalX,
                                 active.goalY,
                                 active.goalZ)
-                        .withConstraint(pathConstraint(active)));
+                        .withConstraint(active.constraint));
         if (search == null) {
             throw new IllegalStateException(
                     "pathfinder returned null search");
@@ -275,46 +255,6 @@ public final class MoveToSystem
 
         active.route = route;
         startNextStep(active);
-    }
-
-    private PathTransitionConstraint pathConstraint(
-            ActiveMoveTo active) {
-
-        return new PathTransitionConstraint() {
-            @Override
-            public boolean allows(
-                    int fromX,
-                    int fromY,
-                    int fromZ,
-                    int toX,
-                    int toY,
-                    int toZ) {
-
-                return active.constraint.allows(
-                                fromX,
-                                fromY,
-                                fromZ,
-                                toX,
-                                toY,
-                                toZ)
-                        && traversalConstraint.allows(
-                                active.objectId,
-                                fromX,
-                                fromY,
-                                fromZ,
-                                toX,
-                                toY,
-                                toZ);
-            }
-
-            @Override
-            public long revision() {
-                // High-churn mover/environment facts intentionally do not become a
-                // global traversal revision. Preserve only the caller's explicit
-                // query-local revision; Movement revalidates the real edge live.
-                return active.constraint.revision();
-            }
-        };
     }
 
     private void startNextStep(
