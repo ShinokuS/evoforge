@@ -5,12 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
+import io.github.evoforge.simulation.world.pathfinding.PathRoute;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import org.junit.jupiter.api.Test;
 
 final class CowVisualSearchScenarioTest {
     @Test
-    void scenarioShowsExplorationBeforeConcreteFoodSelection() {
+    void scenarioShowsMultiCellExplorationBeforeConcreteFoodSelection() {
         ScenarioSession session = new CowVisualSearchScenario().create();
         ObjectId cow = session.runtime().view().cells().objectAt(0, 0, 0, 0);
 
@@ -21,8 +22,14 @@ final class CowVisualSearchScenarioTest {
         assertTrue(session.diagnostics().summary().contains("search=SWEEPING:core:hunger"));
         assertTrue(session.diagnostics().summary().contains("grassVisible=false"));
 
-        boolean sawExploring = false;
-        for (int tick = 0; tick < 80 && session.runtime().view().agents().currentTarget(cow) == null; tick++) {
+        for (int tick = 0; tick < 3; tick++) session.runtime().stepper().advance();
+        session.update();
+        PathRoute explorationRoute = session.runtime().view().moveTo().activeRoute(cow);
+        assertNotNull(explorationRoute);
+        assertTrue(explorationRoute.size() >= 3);
+
+        boolean sawExploring = session.diagnostics().summary().contains("search=EXPLORING:core:hunger");
+        for (int tick = 0; tick < 120 && session.runtime().view().agents().currentTarget(cow) == null; tick++) {
             session.runtime().stepper().advance();
             session.update();
             sawExploring |= session.diagnostics().summary().contains("search=EXPLORING:core:hunger");
