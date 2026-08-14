@@ -25,6 +25,11 @@ final class CowVisualSearchController implements ScenarioController {
     }
 
     @Override
+    public void update(long tick) {
+        // Diagnostics are read live from authoritative simulation state.
+    }
+
+    @Override
     public ScenarioDiagnostics diagnostics() {
         long level = runtime.view().needs().level(cow, hunger);
         boolean visible = runtime.view().vision().snapshot(cow).isObjectVisible(grass);
