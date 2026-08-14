@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.scenario;
 import io.github.evoforge.visualizer.scenario.agent.CowForagingScenario;
 import io.github.evoforge.visualizer.scenario.agent.CowVisualSearchScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowScenario;
+import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 import io.github.evoforge.visualizer.scenario.geometry.CutawayScenario;
 import io.github.evoforge.visualizer.scenario.geometry.RampNavigationScenario;
 import io.github.evoforge.visualizer.scenario.movement.MoveToInteractiveScenario;
@@ -64,6 +65,8 @@ public final class ScenarioCatalog {
                 ScenarioGroup.of("movement", "Movement",
                         new TimedMovementScenario(), new MoveToPatrolScenario(), new MoveToInteractiveScenario()),
                 ScenarioGroup.of("occupancy", "Occupancy", new OccupancyContentionScenario()),
+                ScenarioGroup.of("environment", "Environment",
+                        new RainHydrologyScenario()),
                 ScenarioGroup.of("agents", "Agents",
                         new LivingCowScenario(), new CowForagingScenario(), new CowVisualSearchScenario()),
                 ScenarioGroup.of("pathfinding", "Pathfinding",

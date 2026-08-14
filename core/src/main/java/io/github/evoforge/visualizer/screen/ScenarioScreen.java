@@ -13,6 +13,8 @@ import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.utils.Align;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.visualizer.ZLevelVisualizer;
+import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;
+import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationKind;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
@@ -59,6 +61,7 @@ public final class ScenarioScreen extends ScreenAdapter {
                 runtime.time(),
                 runtime.stepper(),
                 session.objectPresentations());
+        visualizer.setWeatherPresentation(session.weather());
 
         ScenarioView initial = session.view();
         visualizer.setView(
@@ -121,7 +124,9 @@ public final class ScenarioScreen extends ScreenAdapter {
         font.getData().setScale(0.9f);
 
         String title = "SCENARIO  " + scenario.title();
-        String detail = scenario.description() + "   |   R restart   |   Esc scenarios";
+        String detail = scenario.description()
+                + "   |   " + weatherLabel(session.weather().current())
+                + "   |   R restart   |   Esc scenarios";
         String summary = diagnostics.summary();
         float textWidth = Math.max(1f, screenWidth - LABEL_MARGIN * 2f);
 
@@ -140,6 +145,21 @@ public final class ScenarioScreen extends ScreenAdapter {
             drawShadowed(summary, LABEL_MARGIN, top, textWidth, Color.LIGHT_GRAY);
         }
         batch.end();
+    }
+
+    private static String weatherLabel(
+            WeatherPresentation weather) {
+
+        if (weather == null) {
+            throw new IllegalStateException(
+                    "weather lookup returned null");
+        }
+        if (weather.kind() == WeatherPresentationKind.RAIN) {
+            return "Weather: Rain "
+                    + Math.round(weather.intensity() * 100f)
+                    + "%";
+        }
+        return "Weather: Clear";
     }
 
     private float measure(String text, float targetWidth) {

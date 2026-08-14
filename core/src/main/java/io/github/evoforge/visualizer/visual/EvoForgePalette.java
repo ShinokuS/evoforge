@@ -19,6 +19,11 @@ public final class EvoForgePalette {
     public static final int EARTH_DARK = 0x62462FFF;
     public static final int EARTH_SHADOW = 0x493628FF;
 
+    public static final int WATER_BASE = 0x4394B6FF;
+    public static final int WATER_DARK = 0x337C9EFF;
+    public static final int WATER_LIGHT = 0x72C3D2FF;
+    public static final int WATER_HIGHLIGHT = 0xA4DFE2FF;
+
     // Cutaway mass stays in the same restrained landscape family instead of
     // switching to a separate blue/black material. Depth is communicated by
     // renderer shading; these colours only provide subtle material contrast.

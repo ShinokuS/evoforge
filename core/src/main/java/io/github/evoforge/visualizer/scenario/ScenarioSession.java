@@ -2,32 +2,75 @@ package io.github.evoforge.visualizer.scenario;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
+import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLookup;
 
 /** One fresh simulation instance plus its initial presentation focus and tooling. */
 public record ScenarioSession(
         SimulationRuntime runtime,
         ScenarioView view,
         ScenarioController controller,
-        ObjectPresentationBindings objectPresentations) {
+        ObjectPresentationBindings objectPresentations,
+        WeatherPresentationLookup weather) {
 
     public ScenarioSession(
             SimulationRuntime runtime,
             ScenarioView view) {
-        this(runtime, view, ScenarioController.NONE, ObjectPresentationBindings.empty());
+        this(
+                runtime,
+                view,
+                ScenarioController.NONE,
+                ObjectPresentationBindings.empty(),
+                WeatherPresentationLookup.CLEAR_LOOKUP);
     }
 
     public ScenarioSession(
             SimulationRuntime runtime,
             ScenarioView view,
             ScenarioController controller) {
-        this(runtime, view, controller, ObjectPresentationBindings.empty());
+        this(
+                runtime,
+                view,
+                controller,
+                ObjectPresentationBindings.empty(),
+                WeatherPresentationLookup.CLEAR_LOOKUP);
     }
 
     public ScenarioSession(
             SimulationRuntime runtime,
             ScenarioView view,
             ScenarioDiagnostics diagnostics) {
-        this(runtime, view, ScenarioController.fixed(diagnostics), ObjectPresentationBindings.empty());
+        this(
+                runtime,
+                view,
+                ScenarioController.fixed(diagnostics),
+                ObjectPresentationBindings.empty(),
+                WeatherPresentationLookup.CLEAR_LOOKUP);
+    }
+
+    /** Preserves the previous canonical presentation constructor for existing scenarios. */
+    public ScenarioSession(
+            SimulationRuntime runtime,
+            ScenarioView view,
+            ScenarioController controller,
+            ObjectPresentationBindings objectPresentations) {
+        this(
+                runtime,
+                view,
+                controller,
+                objectPresentations,
+                WeatherPresentationLookup.CLEAR_LOOKUP);
+    }
+
+    public ScenarioSession(
+            SimulationRuntime runtime,
+            ScenarioView view,
+            WeatherPresentationLookup weather) {
+        this(
+                runtime,
+                view,
+                ScenarioController.NONE,
+                ObjectPresentationBindings.empty(),
+                weather);
     }
 
     public ScenarioSession {
@@ -36,6 +79,9 @@ public record ScenarioSession(
         if (controller == null) throw new IllegalArgumentException("controller must not be null");
         if (objectPresentations == null) {
             throw new IllegalArgumentException("objectPresentations must not be null");
+        }
+        if (weather == null) {
+            throw new IllegalArgumentException("weather must not be null");
         }
     }
 
