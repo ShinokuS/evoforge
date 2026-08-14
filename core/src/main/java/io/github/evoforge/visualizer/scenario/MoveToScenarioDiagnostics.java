@@ -32,11 +32,18 @@ final class MoveToScenarioDiagnostics {
             if (plan != null && plan.route() != null) {
                 int next = remainingStart(plan.route(), x, y, z);
                 for (int index = next; index < plan.route().size(); index++) {
+                    int routeX = plan.route().x(index);
+                    int routeY = plan.route().y(index);
+                    int routeZ = plan.route().z(index);
+                    ScenarioCellMarkerStyle style =
+                            view.cells().objectCount(routeX, routeY, routeZ) > 0
+                                    ? ScenarioCellMarkerStyle.WARNING
+                                    : ScenarioCellMarkerStyle.ROUTE;
                     markers.add(new ScenarioCellMarker(
-                            plan.route().x(index),
-                            plan.route().y(index),
-                            plan.route().z(index),
-                            ScenarioCellMarkerStyle.ROUTE));
+                            routeX,
+                            routeY,
+                            routeZ,
+                            style));
                 }
             }
         }
