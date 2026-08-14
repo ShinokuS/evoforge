@@ -74,7 +74,7 @@ VisualizerScenario            builds one fresh deterministic world
 ScenarioController            optional presentation-only scenario tooling
 ObjectPresentationBindings    definition -> presentation metadata only
 ZLevelVisualizer              generic render orchestration
-VisualizerState               selected Z / overlay / selection state
+VisualizerState               selected Z / overlay / inspector mode / selection state
 VisualizerCamera              pan / zoom / viewport conversion
 VisualizerInputController     physical input -> presentation/time controls
 LandscapeRenderer             terrain/cutaway rendering
@@ -82,7 +82,7 @@ ObjectPresentationRenderer    all object art, including generic fallback
 VisionDiagnosticRenderer      authoritative selected-object Vision overlay
 MoveToRouteDiagnosticRenderer authoritative selected-object active-route overlay
 VisualizerOverlayRenderer     grid/navigation/occupancy/selection diagnostics only
-VisualizerHudRenderer         status + living-world inspector
+VisualizerHudRenderer         readable inspector + optional technical details
 ShapePresentationRegistry     typed Shape presentation dispatch
 ```
 
@@ -124,69 +124,118 @@ VEGETATION
 
 They do not control AI, physics, capabilities or interaction eligibility.
 
-`ObjectPresentationRenderer` is the only object-art owner. Definitions without a special binding retain the old deterministic generic marker as a fallback; specialized objects do not receive a second hidden generic marker underneath their art.
+`ObjectPresentationRenderer` is the only object-art owner. Definitions without a special binding retain a deterministic generic marker as a fallback; specialized objects do not receive a second hidden generic marker underneath their art.
 
-The integrated Cow scenario binds Cow to the creature renderer and Grass/Clover/Dandelion to one shared vegetation renderer with different variants. There is no simulation-side `if definition == cow/grass` branch.
+The integrated Cow scenario binds Cow to the creature renderer and Grass/Clover/Dandelion to one shared vegetation renderer with presentation variants. There is no simulation-side `if definition == cow/grass` branch.
 
-Vegetation density reads authoritative `ConsumableStock.quantity/capacity`, so depletion and regrowth become visible automatically. Creature facing reads `OrientationLookup`. The grazing pose activates only while `AgentIntentTrace.phase == USING_OPPORTUNITY`; its timing therefore follows simulation, not wall-clock animation state.
+Creature facing reads `OrientationLookup`. The grazing pose activates only while `AgentIntentTrace.phase == USING_OPPORTUNITY`; its timing therefore follows simulation, not wall-clock animation state.
+
+Vegetation reads authoritative `ConsumableStock.quantity/capacity`. Its visible mass therefore shrinks and returns with depletion/regrowth without maintaining presentation-side biomass state. Current variants intentionally use distinct readable silhouettes rather than a generic cloud of dots:
+
+```text
+Grass       blade-like tuft
+Clover      stems + three-leaf forms
+Dandelion   radial leaves + yellow flower
+```
+
+These differences are presentation data only and do not create plant-specific simulation mechanics.
 
 ## Living-world inspector
 
-Selecting a cell shows authoritative structural context and the number of objects currently stacked in that cell. Repeated LMB on the same cell cycles through the stack, which allows inspecting both an actor and a co-located interaction source.
-
-For the selected object the HUD can expose, when present:
+The inspector is designed to answer the developer's first-order questions quickly:
 
 ```text
-presentation name / description
-ObjectId + definition + XYZ + facing
-all open Needs and current/max levels
-next Need-progression evaluation
-finite stock quantity/capacity
-next Growth evaluation + last applied Growth
-Vision range/FOV/visible-object count
-current autonomous intent phase
-authoritative timed-use progress/completion tick
-search state
-last decision, winner and top candidates
-current target
+What is this object?
+What state is it in?
+What does it currently need?
+What is it doing?
+What is it targeting?
+Is a continuing interaction progressing?
+Is a finite resource full, depleted or regrowing?
 ```
 
-The inspector does not infer these facts from sprites. It reads the same `SimulationView` capabilities used by production systems.
+The normal inspector therefore prefers concise human-readable state over raw engine fields.
+
+Typical Cow view:
+
+```text
+Cow
+
+BEHAVIOR
+Activity        Exploring for Hunger solution
+Current need    Hunger
+
+NEEDS
+Hunger          [real progress bar]  62 / 100
+```
+
+Typical plant view:
+
+```text
+Clover
+
+RESOURCE
+Biomass         [real progress bar]  4 / 4
+Growth          Full grown · dormant
+```
+
+During a timed interaction the HUD draws a real progress bar derived from authoritative `AgentIntentTrace.startedTick/expectedCompletionTick`. Need and resource bars are also screen-space graphical bars; they are not ASCII text representations.
+
+Repeated LMB on the same cell cycles through the authoritative object stack, allowing the Cow and the plant beneath it to be inspected separately.
+
+### Technical-details mode
+
+Raw diagnostics remain available because they are valuable when investigating a mechanic, but they are not shown by default.
+
+`F6` toggles **Technical details**. That mode can expose:
+
+```text
+ObjectId / definition
+XYZ / facing
+cell slice / Shape / transitions / occupancy / stack size
+Need progression next tick
+Vision range / FOV / visible-object count
+raw Search state
+last Decision tick / candidate count / winning score and benefit
+raw GrowthTrace
+```
+
+This is a presentation-mode distinction only. Both modes read the same authoritative `SimulationView`; the concise view does not invent higher-level state.
+
+An additional practical benefit is that the normal inspector no longer requests expensive geometry/Vision diagnostic data merely to display fields the developer did not ask to see.
 
 ### Presentation cache boundary
 
 Manual Living Cow acceptance exposed a presentation-only performance problem: the inspector and Vision overlay were rebuilding allocation-heavy authoritative snapshots on every render frame even though simulation state changes only on simulation ticks.
 
-The visualizer now caches selected-object inspector data and `VisionSnapshot` results by:
+The visualizer caches selected-object inspector data and `VisionSnapshot` results by:
 
 ```text
 selected object / selected cell
 simulation tick
 relevant presentation selection state
+technical-details mode
 ```
 
 This cache does **not** become simulation truth. A new simulation tick or changed selection causes the presentation to read authoritative state again. The purpose is only to avoid reconstructing identical read-only diagnostics dozens of times between two simulation ticks.
 
-This distinction is important: optimization occurs at the observer boundary and does not change the frequency or fidelity of authoritative simulation updates.
-
 ## Vision diagnostics
 
-Selecting an object with Vision automatically visualizes the simulation's authoritative `VisionSnapshot`.
+Selecting an object with Vision visualizes the simulation's authoritative `VisionSnapshot`.
 
 The renderer does **not** reconstruct a decorative FOV cone from presentation-side math.
 
-Current diagnostics:
+Current world-space diagnostics:
 
 ```text
 soft cell highlight   cells Vision says are visible now
 object frame          objects Vision says are visible now
 facing arrow          authoritative physical orientation
-HUD Vision data       range / FOV / visible counts
 ```
 
 Occlusion, FOV and range changes therefore appear automatically because presentation reads the same result used by autonomous decision making.
 
-Between simulation ticks the selected-object snapshot may be reused by presentation because authoritative state has not advanced. This avoids per-frame allocation without changing Vision semantics.
+Between simulation ticks the selected-object snapshot may be reused by presentation because authoritative state has not advanced. Raw range/FOV/count text is available in F6 technical-details mode instead of permanently occupying the normal inspector.
 
 ## Active route diagnostics
 
@@ -202,7 +251,7 @@ The overlay is reason-agnostic. The same presentation works for search explorati
 
 This is the first integrated living-world visual acceptance scenario. It starts with a satisfied Cow on a substantially larger sparse meadow.
 
-Every food source begins outside the Cow's initial Vision. Hunger must first cross the configured autonomous motivation threshold; only then can the Cow search. The acceptance flow is therefore:
+Every food source begins outside the Cow's initial Vision. Hunger must first cross the configured autonomous motivation threshold; only then can the Cow search. The acceptance flow is:
 
 ```text
 Hunger progression
@@ -225,16 +274,16 @@ Hunger down + biomass down
     ↓
 Growth restores biomass
     ↓
-cycle repeats
+full plant becomes dormant
 ```
 
 The meadow is 37x29 cells and contains sparse Grass, Clover and Dandelion patches at different directions/distances. Initial camera framing intentionally does not zoom out far enough to make the entire world a tiny overview; normal pan/zoom remains available.
 
-Food definitions have deliberately small finite initial stock. A patch can be depleted by feeding, which forces the next motivated cycle to seek another available source while depleted plants regrow independently.
+Food definitions have deliberately small finite initial stock. A patch can be depleted by feeding, which forces later motivated behavior to use another available source while the depleted plant regrows.
 
 While grazing, Need and stock remain unchanged until the authoritative provider completion tick. If the same source is still desirable and available after a completed use, Agent can continue another provider-owned use without dropping through an artificial idle frame. The procedural Cow therefore keeps the chewing pose continuously across such consecutive uses because `USING_OPPORTUNITY` itself remains continuous.
 
-The inspector progress percentage is derived from `AgentIntentTrace.startedTick/expectedCompletionTick`; no presentation timer invents interaction duration.
+When a plant reaches full authoritative stock, Growth becomes `DORMANT_FULL` and has no next scheduled growth tick. Real stock consumption wakes that object's Growth process again. The concise inspector presents this as `Full grown · dormant` or `Regrowing · next in N ticks`.
 
 ### Focused agent scenarios
 
@@ -288,9 +337,10 @@ Generic visualizer controls:
 - `F3`: Shape direction diagnostics;
 - `F4`: lower-surface visibility depth;
 - `F5`: Occupancy overlay;
+- `F6`: toggle raw Technical details in the inspector;
 - `LMB`: select cell/object; repeated click cycles co-located object stack.
 
-The HUD shows tick, Z, FPS, zoom/sampling and selected-object context.
+The compact status panel shows run state, tick, FPS, Z and zoom without duplicating every diagnostic toggle in the primary object inspector.
 
 ## Restart semantics
 
@@ -318,16 +368,16 @@ The first Living Cow manual acceptance provided a concrete profile:
 - selected-object HUD/Vision diagnostics became the sustained per-frame hot path because identical snapshots were rebuilt between simulation ticks;
 - large zoom/pan changes could independently trigger expensive one-off landscape analysis cache misses.
 
-The first issue is addressed with presentation-tick caches. Landscape cache-miss behavior remains a separate profiled concern; it should not be confused with simulation cost or prematurely solved by changing world semantics.
+The sustained HUD/Vision issue is addressed by presentation-tick caching and by not requesting raw technical diagnostics in the normal inspector. Landscape cache-miss behavior remains a separate profiled concern; it should not be confused with simulation cost or prematurely solved by changing world semantics.
 
 Focused correctness scenarios and representative performance scenarios remain separate concerns.
 
 ## Testing boundary
 
-Headless simulation tests own semantic correctness. In particular timed opportunity-use coverage pins that Need/stock do not mutate before the authoritative completion tick, motivation thresholds prevent trivial-deficit action, and still-desired repeated uses remain continuously committed.
+Headless simulation tests own semantic correctness. In particular timed opportunity-use coverage pins that Need/stock do not mutate before the authoritative completion tick, motivation thresholds prevent trivial-deficit action, still-desired repeated uses remain continuously committed, and full Growth processes sleep until real stock depletion wakes them.
 
 The Living Cow scenario test additionally pins that no food is initially visible, `EXPLORING` is observed, the Cow physically expands search away from its start, and only later reaches a real timed plant use.
 
-Visualizer scenario/catalog tests verify meaningful setup/order and that presentation exposes the same authoritative diagnostic state. Final appearance/readability and real desktop performance of the Living Cow Cycle remain mandatory manual acceptance checks before merging the milestone.
+Visualizer scenario/catalog tests verify meaningful setup/order and that presentation exposes authoritative state. Final appearance/readability and real desktop performance of the Living Cow Cycle remain mandatory manual acceptance checks before merging the milestone.
 
 See [Debug Scenarios Guide](../guides/debug-scenarios.md) when adding a new human-observable development scenario.
