@@ -67,7 +67,7 @@ public final class ZLevelVisualizer {
         sliceResolver = new LandscapeSliceResolver(view);
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
-        visionDiagnostics = new VisionDiagnosticRenderer(view, state, camera);
+        visionDiagnostics = new VisionDiagnosticRenderer(view, simulationTime, state, camera);
         moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
         overlayRenderer = new VisualizerOverlayRenderer(view, state, camera, sliceResolver, shapePresentations);
         objectRenderer = new ObjectPresentationRenderer(
