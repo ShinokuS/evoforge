@@ -4,7 +4,8 @@ import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.time.SimulationTime;
 
 /** Owns cadence for one configured world-level precipitation source. */
-public final class PeriodicPrecipitationSystem {
+public final class PeriodicPrecipitationSystem
+        implements PrecipitationEventLookup {
 
     private static final long PROCESS_ID = 0L;
 
@@ -15,6 +16,7 @@ public final class PeriodicPrecipitationSystem {
     private boolean started;
     private boolean scheduled;
     private long nextEvaluationTick = -1L;
+    private long lastEvaluationTick = -1L;
     private PrecipitationBatchResult lastResult;
 
     public PeriodicPrecipitationSystem(
@@ -73,9 +75,16 @@ public final class PeriodicPrecipitationSystem {
 
         scheduled = false;
         nextEvaluationTick = -1L;
+        lastEvaluationTick = time.tick();
         lastResult = precipitation.applyUniform(
                 schedule.amountPerColumn());
         scheduleNext();
+    }
+
+    @Override
+    public boolean occursAt(long tick) {
+        return tick == lastEvaluationTick
+                || (scheduled && tick == nextEvaluationTick);
     }
 
     public boolean scheduled() {
@@ -84,6 +93,10 @@ public final class PeriodicPrecipitationSystem {
 
     public long nextEvaluationTick() {
         return nextEvaluationTick;
+    }
+
+    public long lastEvaluationTick() {
+        return lastEvaluationTick;
     }
 
     public PrecipitationBatchResult lastResult() {
