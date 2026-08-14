@@ -23,10 +23,14 @@ public final class ObjectPresentationRenderer {
     private static final Color COW_SPOT = new Color(0.18f, 0.16f, 0.14f, 1f);
     private static final Color COW_MUZZLE = new Color(0.78f, 0.57f, 0.50f, 1f);
     private static final Color OUTLINE = new Color(0.07f, 0.08f, 0.07f, 0.92f);
-    private static final Color GRASS = new Color(0.30f, 0.66f, 0.29f, 1f);
-    private static final Color CLOVER = new Color(0.25f, 0.58f, 0.31f, 1f);
-    private static final Color DANDELION = new Color(0.37f, 0.64f, 0.25f, 1f);
-    private static final Color FLOWER = new Color(0.98f, 0.78f, 0.16f, 1f);
+    private static final Color PLANT_SHADOW = new Color(0.08f, 0.16f, 0.08f, 0.88f);
+    private static final Color GRASS = new Color(0.28f, 0.73f, 0.29f, 1f);
+    private static final Color GRASS_LIGHT = new Color(0.48f, 0.84f, 0.36f, 1f);
+    private static final Color CLOVER = new Color(0.22f, 0.62f, 0.28f, 1f);
+    private static final Color CLOVER_LIGHT = new Color(0.40f, 0.76f, 0.39f, 1f);
+    private static final Color DANDELION = new Color(0.31f, 0.67f, 0.24f, 1f);
+    private static final Color FLOWER = new Color(1.00f, 0.81f, 0.15f, 1f);
+    private static final Color FLOWER_CENTER = new Color(0.72f, 0.49f, 0.08f, 1f);
 
     private final SimulationView view;
     private final SimulationTime time;
@@ -135,46 +139,113 @@ public final class ObjectPresentationRenderer {
     }
 
     private void drawVegetation(ObjectId id, int variant, float cx, float cy) {
-        float fraction = 1f;
-        if (view.consumableStocks().has(id)) {
-            long capacity = view.consumableStocks().capacity(id);
-            fraction = capacity <= 0L ? 0f : (float) view.consumableStocks().quantity(id) / (float) capacity;
-        }
-        fraction = Math.max(0f, Math.min(1f, fraction));
-        int shoots = 2 + Math.round(fraction * 6f);
-        float radius = 0.12f + fraction * 0.16f;
-        Color foliage = switch (variant % 3) {
-            case 1 -> CLOVER;
-            case 2 -> DANDELION;
-            default -> GRASS;
-        };
-        shapes.setColor(OUTLINE);
-        shapes.circle(cx, cy, Math.max(0.07f, radius * 0.46f), 14);
+        float fraction = stockFraction(id);
+        shapes.setColor(PLANT_SHADOW);
+        shapes.circle(cx, cy, 0.10f + fraction * 0.12f, 18);
 
-        shapes.setColor(foliage);
-        long seed = id.asLong() * 31L + variant * 17L;
-        for (int index = 0; index < shoots; index++) {
-            double angle = ((seed + index * 97L) & 1023L) / 1024.0 * Math.PI * 2.0;
-            float distance = radius * (0.35f + (index % 3) * 0.20f);
-            float sx = cx + (float) Math.cos(angle) * distance;
-            float sy = cy + (float) Math.sin(angle) * distance;
-            float size = 0.045f + fraction * 0.025f;
-            shapes.circle(sx, sy, size, 10);
+        switch (Math.floorMod(variant, 3)) {
+            case 1 -> drawClover(id, cx, cy, fraction);
+            case 2 -> drawDandelion(id, cx, cy, fraction);
+            default -> drawGrass(id, cx, cy, fraction);
         }
+    }
 
-        if (variant % 3 == 1 && fraction > 0.35f) {
+    private void drawGrass(ObjectId id, float cx, float cy, float fraction) {
+        int bladeCount = Math.max(2, 3 + Math.round(fraction * 7f));
+        float maxLength = 0.10f + fraction * 0.24f;
+        long seed = id.asLong() * 73L + 19L;
+        for (int index = 0; index < bladeCount; index++) {
+            double angle = ((seed + index * 137L) & 2047L) / 2048.0 * Math.PI * 2.0;
+            float length = maxLength * (0.70f + (index % 4) * 0.08f);
+            float ux = (float) Math.cos(angle);
+            float uy = (float) Math.sin(angle);
+            float px = -uy;
+            float py = ux;
+            float baseOffset = 0.025f + (index % 3) * 0.012f;
+            float bx = cx + ux * baseOffset;
+            float by = cy + uy * baseOffset;
+            float halfWidth = 0.025f + fraction * 0.010f;
+            shapes.setColor(index % 3 == 0 ? GRASS_LIGHT : GRASS);
+            shapes.triangle(
+                    bx + px * halfWidth,
+                    by + py * halfWidth,
+                    bx - px * halfWidth,
+                    by - py * halfWidth,
+                    cx + ux * length,
+                    cy + uy * length);
+        }
+        shapes.setColor(GRASS_LIGHT);
+        shapes.circle(cx, cy, 0.045f + fraction * 0.025f, 12);
+    }
+
+    private void drawClover(ObjectId id, float cx, float cy, float fraction) {
+        int stems = Math.max(1, 1 + Math.round(fraction * 3f));
+        long seed = id.asLong() * 41L + 7L;
+        for (int stem = 0; stem < stems; stem++) {
+            double angle = ((seed + stem * 521L) & 2047L) / 2048.0 * Math.PI * 2.0;
+            float distance = 0.06f + fraction * (0.07f + stem * 0.015f);
+            float ux = (float) Math.cos(angle);
+            float uy = (float) Math.sin(angle);
+            float tx = cx + ux * distance;
+            float ty = cy + uy * distance;
             shapes.setColor(CLOVER);
-            for (int i = 0; i < 3; i++) {
-                double angle = i * Math.PI * 2.0 / 3.0;
+            shapes.rectLine(cx, cy, tx, ty, 0.022f);
+            float leafRadius = 0.045f + fraction * 0.025f;
+            shapes.setColor(CLOVER_LIGHT);
+            for (int leaf = 0; leaf < 3; leaf++) {
+                double leafAngle = angle + leaf * Math.PI * 2.0 / 3.0;
                 shapes.circle(
-                        cx + (float) Math.cos(angle) * 0.07f,
-                        cy + (float) Math.sin(angle) * 0.07f,
-                        0.065f,
-                        12);
+                        tx + (float) Math.cos(leafAngle) * leafRadius * 0.62f,
+                        ty + (float) Math.sin(leafAngle) * leafRadius * 0.62f,
+                        leafRadius,
+                        14);
             }
-        } else if (variant % 3 == 2 && fraction > 0.25f) {
-            shapes.setColor(FLOWER);
-            shapes.circle(cx, cy, 0.065f + 0.025f * fraction, 14);
+            shapes.setColor(CLOVER);
+            shapes.circle(tx, ty, leafRadius * 0.34f, 10);
         }
+    }
+
+    private void drawDandelion(ObjectId id, float cx, float cy, float fraction) {
+        int leaves = Math.max(3, 4 + Math.round(fraction * 5f));
+        long seed = id.asLong() * 53L + 11L;
+        for (int index = 0; index < leaves; index++) {
+            double angle = ((seed + index * 293L) & 2047L) / 2048.0 * Math.PI * 2.0;
+            float ux = (float) Math.cos(angle);
+            float uy = (float) Math.sin(angle);
+            float px = -uy;
+            float py = ux;
+            float length = 0.10f + fraction * (0.12f + (index % 3) * 0.018f);
+            float halfWidth = 0.035f;
+            shapes.setColor(DANDELION);
+            shapes.triangle(
+                    cx + px * halfWidth,
+                    cy + py * halfWidth,
+                    cx - px * halfWidth,
+                    cy - py * halfWidth,
+                    cx + ux * length,
+                    cy + uy * length);
+        }
+        if (fraction > 0.35f) {
+            float flowerRadius = 0.055f + fraction * 0.030f;
+            shapes.setColor(FLOWER);
+            for (int petal = 0; petal < 8; petal++) {
+                double angle = petal * Math.PI / 4.0;
+                shapes.circle(
+                        cx + (float) Math.cos(angle) * flowerRadius * 0.72f,
+                        cy + (float) Math.sin(angle) * flowerRadius * 0.72f,
+                        flowerRadius * 0.52f,
+                        10);
+            }
+            shapes.setColor(FLOWER_CENTER);
+            shapes.circle(cx, cy, flowerRadius * 0.52f, 12);
+        }
+    }
+
+    private float stockFraction(ObjectId id) {
+        if (!view.consumableStocks().has(id)) return 1f;
+        long capacity = view.consumableStocks().capacity(id);
+        if (capacity <= 0L) return 0f;
+        return Math.max(0f, Math.min(1f,
+                (float) view.consumableStocks().quantity(id) / (float) capacity));
     }
 }
