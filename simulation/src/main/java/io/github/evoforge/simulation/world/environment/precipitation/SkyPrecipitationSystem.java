@@ -7,11 +7,13 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 /**
  * Resolves uniform vertical precipitation against cached top surfaces per XY column.
  *
- * <p>The highest terrain anchor defines which terrain surface is exposed to sky.
- * Positive Water strictly above that terrain becomes the exposed target instead,
+ * <p>The target domain is the deterministic union of occupied Terrain columns and
+ * wet Water columns. Positive Water strictly above terrain becomes the exposed target,
  * so rain falling on a lake enters Water directly rather than infiltrating soil
- * underneath the lake. Water at the same Z as a partial terrain Shape retains the
- * terrain-first semantics of that shared anchor cell.
+ * underneath the lake. A wet column without terrain is also sky-addressable, allowing
+ * runoff or a waterfall over empty space to continue receiving precipitation.
+ * Water at the same Z as a partial terrain Shape retains terrain-first semantics of
+ * that shared anchor cell.
  */
 public final class SkyPrecipitationSystem {
 
@@ -42,17 +44,17 @@ public final class SkyPrecipitationSystem {
         this.precipitation = precipitation;
     }
 
-    /** Applies the same finite source volume to every currently occupied terrain column. */
+    /**
+     * Applies the same finite source volume once to every currently sky-addressable
+     * Terrain/Water XY column.
+     */
     public PrecipitationBatchResult applyUniform(
             int amountPerColumn) {
 
         int amount = CellVolume.requireValid(amountPerColumn);
-        int columns = terrainSurfaces.columnCount();
-        if (columns == 0) {
-            return PrecipitationBatchResult.empty();
-        }
-
+        int[] columns = {0};
         long[] totals = new long[4];
+
         terrainSurfaces.forEach((x, y, terrainZ) -> {
             PrecipitationResult result;
 
@@ -71,17 +73,44 @@ public final class SkyPrecipitationSystem {
                         amount);
             }
 
-            totals[0] = Math.addExact(totals[0], result.input());
-            totals[1] = Math.addExact(totals[1], result.infiltrated());
-            totals[2] = Math.addExact(totals[2], result.surfaceWater());
-            totals[3] = Math.addExact(totals[3], result.unplaced());
+            columns[0] = Math.incrementExact(columns[0]);
+            add(totals, result);
         });
 
+        waterSurfaces.forEach((x, y, waterZ) -> {
+            if (terrainSurfaces.hasColumn(x, y)) {
+                return;
+            }
+
+            PrecipitationResult result =
+                    precipitation.applyWaterSurface(
+                            x,
+                            y,
+                            waterZ,
+                            amount);
+            columns[0] = Math.incrementExact(columns[0]);
+            add(totals, result);
+        });
+
+        if (columns[0] == 0) {
+            return PrecipitationBatchResult.empty();
+        }
+
         return new PrecipitationBatchResult(
-                columns,
+                columns[0],
                 totals[0],
                 totals[1],
                 totals[2],
                 totals[3]);
+    }
+
+    private static void add(
+            long[] totals,
+            PrecipitationResult result) {
+
+        totals[0] = Math.addExact(totals[0], result.input());
+        totals[1] = Math.addExact(totals[1], result.infiltrated());
+        totals[2] = Math.addExact(totals[2], result.surfaceWater());
+        totals[3] = Math.addExact(totals[3], result.unplaced());
     }
 }
