@@ -21,7 +21,7 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Exclusive object Occupancy with immediate execution destination reservations
 - Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
 - Observable one-edge Movement completion and long-range `MoveTo` lifecycle over the existing edge primitive
-- Movement visualizer scenarios: closed waypoint patrol and interactive LMB-select / RMB-MoveTo with route diagnostics
+- Movement visualizer scenarios: closed multi-level Z0-Z4 waypoint patrol and interactive LMB-select / RMB-MoveTo across the same 3D course with route diagnostics
 
 ## Next simulation sequence
 
