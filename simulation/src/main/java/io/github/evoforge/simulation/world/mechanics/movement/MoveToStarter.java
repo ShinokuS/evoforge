@@ -18,4 +18,43 @@ public interface MoveToStarter {
             int goalY,
             int goalZ,
             PathTransitionConstraint constraint);
+
+    static MoveToStarter direct(
+            MoveToSystem moveTo) {
+
+        if (moveTo == null) {
+            throw new IllegalArgumentException(
+                    "moveTo must not be null");
+        }
+
+        return new MoveToStarter() {
+            @Override
+            public MoveToStartAttempt start(
+                    ObjectId objectId,
+                    int goalX,
+                    int goalY,
+                    int goalZ) {
+                return moveTo.start(
+                        objectId,
+                        goalX,
+                        goalY,
+                        goalZ);
+            }
+
+            @Override
+            public MoveToStartAttempt start(
+                    ObjectId objectId,
+                    int goalX,
+                    int goalY,
+                    int goalZ,
+                    PathTransitionConstraint constraint) {
+                return moveTo.start(
+                        objectId,
+                        goalX,
+                        goalY,
+                        goalZ,
+                        constraint);
+            }
+        };
+    }
 }
