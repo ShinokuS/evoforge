@@ -31,6 +31,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinition;
+import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
 import io.github.evoforge.simulation.world.agent.need.progression.IntrinsicNeedProgressionRateResolver;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinition;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinitions;
@@ -102,6 +104,7 @@ public final class SimulationAssembly {
     private final AgentDefinitions agentDefinitions;
     private final VisionDefinitions visionDefinitions;
     private final NeedDefinitions needDefinitions;
+    private final NeedMotivationDefinitions needMotivationDefinitions;
     private final NeedProgressionDefinitions needProgressionDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
@@ -131,6 +134,7 @@ public final class SimulationAssembly {
         agentDefinitions = new AgentDefinitions();
         visionDefinitions = new VisionDefinitions();
         needDefinitions = new NeedDefinitions();
+        needMotivationDefinitions = new NeedMotivationDefinitions();
         needProgressionDefinitions = new NeedProgressionDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
@@ -208,6 +212,18 @@ public final class SimulationAssembly {
             long initialLevel) {
         requireNotStarted(); requireObjectDefinition(definitionId);
         needDefinitions.add(definitionId, new NeedSpec(needId, maxLevel, initialLevel));
+        return this;
+    }
+
+    /** Declares when a Need becomes strong enough to generate autonomous environmental action. */
+    public SimulationAssembly needMotivation(
+            ObjectDefinitionId definitionId,
+            NeedId needId,
+            long activationLevel) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        needMotivationDefinitions.add(
+                definitionId,
+                new NeedMotivationDefinition(needId, activationLevel));
         return this;
     }
 
@@ -325,6 +341,7 @@ public final class SimulationAssembly {
         agentDefinitions.freeze();
         visionDefinitions.freeze();
         needDefinitions.freeze();
+        needMotivationDefinitions.freeze();
         needProgressionDefinitions.freeze();
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
@@ -447,6 +464,7 @@ public final class SimulationAssembly {
                 agentDefinitions,
                 needSatisfactionDefinitions,
                 needSolutionKnowledgeDefinitions,
+                needMotivationDefinitions,
                 needs,
                 consumableStocks,
                 clock);
