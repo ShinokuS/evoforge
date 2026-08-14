@@ -55,7 +55,7 @@ public final class WaterFlowSystem {
      * Redistributes one deterministic local flow step and returns the total volume
      * that crossed cell boundaries during this update.
      */
-    public int update() {
+    public long update() {
         List<WaterCell> activeCells =
                 activity.drainSorted();
         if (activeCells.isEmpty()) {
@@ -431,12 +431,12 @@ public final class WaterFlowSystem {
         }
     }
 
-    private int commit(
+    private long commit(
             List<MutableTransfer> transfers) {
 
         Map<WaterCell, Integer> deltas =
                 new TreeMap<>();
-        int moved = 0;
+        long moved = 0L;
 
         for (MutableTransfer transfer : transfers) {
             if (transfer.amount <= CellVolume.EMPTY) {
