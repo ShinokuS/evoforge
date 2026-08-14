@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
@@ -34,6 +37,28 @@ final class WaterSurfaceLookupTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> surfaces.topZ(2, 3));
+    }
+
+    @Test
+    void iteratesWetColumnsInStableCoordinateOrder() {
+        WaterSystem water = water();
+        WaterSurfaceLookup surfaces = water.surfaces();
+
+        water.addAtMost(2, 4, -3, 100_000);
+        water.addAtMost(-5, 7, 8, 100_000);
+        water.addAtMost(2, -1, 6, 100_000);
+        water.addAtMost(2, -1, 9, 100_000);
+
+        List<String> visited = new ArrayList<>();
+        surfaces.forEach((x, y, z) ->
+                visited.add(x + ":" + y + ":" + z));
+
+        assertEquals(
+                List.of(
+                        "-5:7:8",
+                        "2:-1:9",
+                        "2:4:-3"),
+                visited);
     }
 
     @Test
