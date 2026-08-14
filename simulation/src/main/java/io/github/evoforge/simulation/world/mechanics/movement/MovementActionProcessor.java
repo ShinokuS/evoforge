@@ -4,6 +4,7 @@ import io.github.evoforge.simulation.result.ResultCode;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyReservationId;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
+import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalConstraint;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
@@ -16,12 +17,14 @@ public final class MovementActionProcessor {
     private static final ResultCode NOT_PLACED = ResultCode.of("movement", "not_placed");
     private static final ResultCode SOURCE_CHANGED = ResultCode.of("movement", "source_changed");
     private static final ResultCode TRANSITION_UNAVAILABLE = ResultCode.of("movement", "transition_unavailable");
+    private static final ResultCode TRAVERSAL_RESTRICTED = ResultCode.of("movement", "traversal_restricted");
     private static final ResultCode DESTINATION_UNAVAILABLE = ResultCode.of("movement", "destination_unavailable");
 
     private final MovementStateStore state;
     private final ObjectLookup objects;
     private final TransformLookup transforms;
     private final NavigationLookup navigation;
+    private final MoverTraversalConstraint traversalConstraint;
     private final OccupancySystem occupancy;
     private final SpatialSystem spatial;
     private final OrientationMutations orientations;
@@ -30,20 +33,47 @@ public final class MovementActionProcessor {
     public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
             NavigationLookup navigation, OccupancySystem occupancy, SpatialSystem spatial,
             MovementStepCompletionSink completions) {
-        this(state, objects, transforms, navigation, occupancy, spatial, OrientationMutations.none(), completions);
+        this(
+                state,
+                objects,
+                transforms,
+                navigation,
+                MoverTraversalConstraint.ALLOW_ALL,
+                occupancy,
+                spatial,
+                OrientationMutations.none(),
+                completions);
     }
 
     public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
             NavigationLookup navigation, OccupancySystem occupancy, SpatialSystem spatial,
             OrientationMutations orientations, MovementStepCompletionSink completions) {
-        if (state == null || objects == null || transforms == null || navigation == null || occupancy == null
-                || spatial == null || orientations == null || completions == null) {
+        this(
+                state,
+                objects,
+                transforms,
+                navigation,
+                MoverTraversalConstraint.ALLOW_ALL,
+                occupancy,
+                spatial,
+                orientations,
+                completions);
+    }
+
+    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
+            NavigationLookup navigation, MoverTraversalConstraint traversalConstraint,
+            OccupancySystem occupancy, SpatialSystem spatial,
+            OrientationMutations orientations, MovementStepCompletionSink completions) {
+        if (state == null || objects == null || transforms == null || navigation == null
+                || traversalConstraint == null || occupancy == null || spatial == null
+                || orientations == null || completions == null) {
             throw new IllegalArgumentException("movement action processor dependencies must not be null");
         }
         this.state = state;
         this.objects = objects;
         this.transforms = transforms;
         this.navigation = navigation;
+        this.traversalConstraint = traversalConstraint;
         this.occupancy = occupancy;
         this.spatial = spatial;
         this.orientations = orientations;
@@ -74,6 +104,16 @@ public final class MovementActionProcessor {
         int dz = action.toZ() - action.fromZ();
         if (!TransitionMask.contains(navigation.transitions(action.fromX(), action.fromY(), action.fromZ()), dx, dy, dz)) {
             finish(action, reservationId, false, TRANSITION_UNAVAILABLE); return;
+        }
+        if (!traversalConstraint.allows(
+                action.objectId(),
+                action.fromX(),
+                action.fromY(),
+                action.fromZ(),
+                action.toX(),
+                action.toY(),
+                action.toZ())) {
+            finish(action, reservationId, false, TRAVERSAL_RESTRICTED); return;
         }
         if (reservationId != null) {
             if (!occupancy.ownsReservation(reservationId, action.objectId(), action.toX(), action.toY(), action.toZ())) {

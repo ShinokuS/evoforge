@@ -4,7 +4,7 @@
 
 Own finite authoritative liquid-water quantity in the shared discrete XYZ world and redistribute that quantity locally without embedding water into Terrain, Geometry or a giant world-cell object.
 
-The current slice includes finite state, the deterministic local flow solver, cached wet-column surfaces, an opt-in runtime process that advances active flow one local step per simulation tick until dormancy, precipitation-driven replenishment and a simple exposed-surface evaporation sink. Traversal effects and drinking remain later slices.
+The current slice includes finite state, the deterministic local flow solver, cached wet-column surfaces, an opt-in runtime process that advances active flow one local step per simulation tick until dormancy, precipitation-driven replenishment and a simple exposed-surface evaporation sink. Authoritative mover-specific wading restrictions are now available; planner integration and drinking remain later slices.
 
 ## Ownership
 
@@ -244,16 +244,17 @@ The current Water/Surface-Hydrology slices do **not** yet implement:
 - deep drainage/groundwater or plant soil-water uptake;
 - automatic Water wake coordination for arbitrary runtime Geometry changes;
 - object displacement volume;
-- traversal/pathfinding effects;
-- semantic Water-depth bands for movers;
+- Water-aware planner/query composition;
+- shallow-Water traversal costs or speed penalties;
+- swimming or waterborne locomotion;
 - Water-body identity;
 - Thirst/Drink interactions;
 - detailed pressure, inertia, viscosity, turbulence or erosion.
 
-Those behaviors must be introduced by their first real consumer. In particular, raw Water amount changes do not increment Navigation/Pathfinder revisions.
+Raw Water amount changes intentionally do not increment Navigation/Pathfinder revisions. See the dedicated Water Traversal document for the authoritative wading boundary and the next planner-integration step.
 
 ## Tests
 
-Headless tests cover finite add/remove arithmetic, generic Shape capacity, deterministic hydraulic redistribution and conservation, ramp opening behavior, convergence/dormancy, cached wet surfaces, precipitation source accounting, shared sky targeting, finite exposed evaporation, Water-before-soil evaporation, covered-water protection, periodic evaporation cadence and rain suppression.
+Headless tests cover finite add/remove arithmetic, generic Shape capacity, deterministic hydraulic redistribution and conservation, ramp opening behavior, convergence/dormancy, cached wet surfaces, precipitation source accounting, shared sky targeting, finite exposed evaporation, Water-before-soil evaporation, covered-water protection, periodic evaporation cadence, rain suppression, mover-specific Water-depth classification and authoritative Movement revalidation.
 
-See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), and the [Water Foundation design note](../notes/water-foundation.md).
+See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), [Water Traversal](water-traversal.md), and the [Water Foundation design note](../notes/water-foundation.md).
