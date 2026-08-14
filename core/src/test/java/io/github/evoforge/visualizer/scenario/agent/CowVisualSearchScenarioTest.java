@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 final class CowVisualSearchScenarioTest {
     @Test
-    void scenarioExposesSearchBeforeConcreteFoodSelection() {
+    void scenarioShowsExplorationBeforeConcreteFoodSelection() {
         ScenarioSession session = new CowVisualSearchScenario().create();
         ObjectId cow = session.runtime().view().cells().objectAt(0, 0, 0, 0);
 
@@ -19,10 +19,16 @@ final class CowVisualSearchScenarioTest {
         assertNull(session.runtime().view().agents().currentTarget(cow));
         assertNotNull(session.runtime().view().searches().currentSearch(cow));
         assertTrue(session.diagnostics().summary().contains("search=SWEEPING:core:hunger"));
+        assertTrue(session.diagnostics().summary().contains("grassVisible=false"));
 
-        session.runtime().stepper().advance();
-        session.runtime().stepper().advance();
-        session.update();
+        boolean sawExploring = false;
+        for (int tick = 0; tick < 80 && session.runtime().view().agents().currentTarget(cow) == null; tick++) {
+            session.runtime().stepper().advance();
+            session.update();
+            sawExploring |= session.diagnostics().summary().contains("search=EXPLORING:core:hunger");
+        }
+
+        assertTrue(sawExploring);
         assertNotNull(session.runtime().view().agents().currentTarget(cow));
         assertTrue(session.diagnostics().summary().contains("grassVisible=true"));
     }
