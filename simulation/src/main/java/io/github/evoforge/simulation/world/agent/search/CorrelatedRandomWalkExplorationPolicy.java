@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
  */
 public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExplorationPolicy {
     private static final long DIRECTION_SALT = 0x9E3779B97F4A7C15L;
-    private static final long ANGLE_SALT = 0xD1B54A32D192ED03L;
+    private static final long ANGLE_SALT = 0x94D049BB133111EBL;
     private static final double EIGHTH_TURN_RADIANS = StrictMath.PI / 4.0;
 
     private final int straightWeight;
