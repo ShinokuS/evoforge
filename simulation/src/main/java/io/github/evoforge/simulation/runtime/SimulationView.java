@@ -1,5 +1,9 @@
 package io.github.evoforge.simulation.runtime;
 
+import io.github.evoforge.simulation.world.agent.decision.AgentDecisionLookup;
+import io.github.evoforge.simulation.world.agent.need.NeedLookup;
+import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
+import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
@@ -11,13 +15,14 @@ import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.spatial.orientation.OrientationLookup;
 
-/**
- * Read-only capabilities exposed by a started simulation runtime.
- */
+/** Read-only capabilities exposed by a started simulation runtime. */
 public record SimulationView(
         ObjectLookup objects,
         TransformLookup transforms,
+        OrientationLookup orientations,
+        VisionLookup vision,
         TerrainLookup terrain,
         TerrainExtentLookup terrainExtents,
         TerrainRevisionLookup terrainRevision,
@@ -26,52 +31,17 @@ public record SimulationView(
         OccupancyLookup occupancy,
         CellObjectLookup cells,
         Pathfinder pathfinder,
-        MoveToLookup moveTo) {
+        MoveToLookup moveTo,
+        NeedLookup needs,
+        AgentDecisionLookup agents,
+        AgentSearchLookup searches) {
 
     public SimulationView {
-        if (objects == null) {
-            throw new IllegalArgumentException(
-                    "objects must not be null");
-        }
-        if (transforms == null) {
-            throw new IllegalArgumentException(
-                    "transforms must not be null");
-        }
-        if (terrain == null) {
-            throw new IllegalArgumentException(
-                    "terrain must not be null");
-        }
-        if (terrainExtents == null) {
-            throw new IllegalArgumentException(
-                    "terrainExtents must not be null");
-        }
-        if (terrainRevision == null) {
-            throw new IllegalArgumentException(
-                    "terrainRevision must not be null");
-        }
-        if (geometry == null) {
-            throw new IllegalArgumentException(
-                    "geometry must not be null");
-        }
-        if (navigation == null) {
-            throw new IllegalArgumentException(
-                    "navigation must not be null");
-        }
-        if (occupancy == null) {
-            throw new IllegalArgumentException(
-                    "occupancy must not be null");
-        }
-        if (cells == null) {
-            throw new IllegalArgumentException(
-                    "cells must not be null");
-        }
-        if (pathfinder == null) {
-            throw new IllegalArgumentException(
-                    "pathfinder must not be null");
-        }
-        if (moveTo == null) {
-            throw new IllegalArgumentException(
-                    "moveTo must not be null");
+        if (objects == null || transforms == null || orientations == null || vision == null
+                || terrain == null || terrainExtents == null || terrainRevision == null
+                || geometry == null || navigation == null || occupancy == null || cells == null
+                || pathfinder == null || moveTo == null || needs == null || agents == null || searches == null) {
+            throw new IllegalArgumentException("simulation view capabilities must not be null");
         }
     }
 }

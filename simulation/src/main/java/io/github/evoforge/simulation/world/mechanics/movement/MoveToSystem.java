@@ -167,6 +167,12 @@ public final class MoveToSystem
     }
 
     @Override
+    public PathRoute activeRoute(ObjectId objectId) {
+        ActiveMoveTo active = objectId == null ? null : activeByObject.get(objectId);
+        return active == null ? null : active.route;
+    }
+
+    @Override
     public MoveToCompletion lastCompletion(
             ObjectId objectId) {
         if (objectId == null) {
