@@ -2,6 +2,9 @@ package io.github.evoforge.simulation.world.environment.precipitation;
 
 import io.github.evoforge.simulation.world.environment.sky.SkySurface;
 import io.github.evoforge.simulation.world.environment.sky.SkySurfaceLookup;
+import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
 /** Applies uniform vertical precipitation to shared sky-exposed surfaces. */
@@ -25,6 +28,18 @@ public final class SkyPrecipitationSystem {
 
         this.surfaces = surfaces;
         this.precipitation = precipitation;
+    }
+
+    public SkyPrecipitationSystem(
+            TerrainSurfaceLookup terrainSurfaces,
+            WaterSurfaceLookup waterSurfaces,
+            PrecipitationSystem precipitation) {
+
+        this(
+                new VerticalSkySurfaceSystem(
+                        terrainSurfaces,
+                        waterSurfaces),
+                precipitation);
     }
 
     /** Applies the same finite source volume once to every current sky surface. */
