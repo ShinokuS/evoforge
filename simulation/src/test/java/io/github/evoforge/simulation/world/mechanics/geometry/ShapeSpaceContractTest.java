@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.mechanics.geometry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +81,37 @@ final class ShapeSpaceContractTest {
                 CellSpace.boundaryOpeningFloor(
                         quarterSolid,
                         CellFace.POSITIVE_X));
+    }
+
+    @Test
+    void productionFreeSpaceProfilesAreMonotonicAndMatchSolidVolume() {
+        Shape[] shapes = {
+            FullShape.INSTANCE,
+            RampShape.POSITIVE_X,
+            RampShape.NEGATIVE_X,
+            RampShape.POSITIVE_Y,
+            RampShape.NEGATIVE_Y
+        };
+
+        for (Shape shape : shapes) {
+            int previous = CellVolume.EMPTY;
+            for (int height = CellSpace.EMPTY_HEIGHT;
+                    height <= CellSpace.FULL_HEIGHT;
+                    height += 100_000) {
+
+                int current = CellSpace.freeVolumeBelow(
+                        shape,
+                        height);
+                assertTrue(
+                        current >= previous,
+                        shape + " free-space profile must be monotonic");
+                previous = current;
+            }
+
+            assertEquals(
+                    CellVolume.FULL - shape.solidVolume(),
+                    CellSpace.capacity(shape));
+        }
     }
 
     @Test
