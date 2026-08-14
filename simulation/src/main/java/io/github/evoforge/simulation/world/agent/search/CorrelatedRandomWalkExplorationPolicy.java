@@ -5,22 +5,13 @@ import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 
 /**
  * Deterministic correlated-random-walk fallback for unguided exploration.
- * Each leg selects a pseudo-random direction around the current visible horizon while retaining
- * a mild bias toward the previous heading. Variation comes only from stable agent/search identity.
+ * Each leg selects a pseudo-random relative point on the outer Vision ring rather than one of eight grid rays.
+ * Variation comes only from stable agent/search identity, preserving replay determinism.
  */
 public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExplorationPolicy {
     private static final long DIRECTION_SALT = 0x9E3779B97F4A7C15L;
-
-    private static final FacingDirection[] CLOCKWISE = {
-            FacingDirection.of(1, 0),
-            FacingDirection.of(1, -1),
-            FacingDirection.of(0, -1),
-            FacingDirection.of(-1, -1),
-            FacingDirection.of(-1, 0),
-            FacingDirection.of(-1, 1),
-            FacingDirection.of(0, 1),
-            FacingDirection.of(1, 1)
-    };
+    private static final long ANGLE_SALT = 0xD1B54A32D192ED03L;
+    private static final double EIGHTH_TURN_RADIANS = StrictMath.PI / 4.0;
 
     private final int straightWeight;
     private final int adjacentWeight;
@@ -71,54 +62,61 @@ public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExpl
         if (legOrdinal < 0) throw new IllegalArgumentException("legOrdinal must be >= 0");
         if (visualRange <= 0) throw new IllegalArgumentException("visualRange must be > 0");
 
-        FacingDirection heading = nextHeading(agentId, previousHeading, legOrdinal);
-        return new SearchRelocationRequest(heading, horizonDistance(heading, visualRange));
-    }
-
-    private FacingDirection nextHeading(
-            ObjectId agentId,
-            FacingDirection previousHeading,
-            long legOrdinal) {
-        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DIRECTION_SALT));
-        int bucket = (int) Long.remainderUnsigned(mixed, totalWeight);
-
-        if (bucket < straightWeight) return previousHeading;
-        bucket -= straightWeight;
-        if (bucket < adjacentWeight) return rotate(previousHeading, 1);
-        bucket -= adjacentWeight;
-        if (bucket < adjacentWeight) return rotate(previousHeading, -1);
-        bucket -= adjacentWeight;
-        if (bucket < quarterTurnWeight) return rotate(previousHeading, 2);
-        bucket -= quarterTurnWeight;
-        if (bucket < quarterTurnWeight) return rotate(previousHeading, -2);
-        bucket -= quarterTurnWeight;
-        if (bucket < broadTurnWeight) return rotate(previousHeading, 3);
-        bucket -= broadTurnWeight;
-        if (bucket < broadTurnWeight) return rotate(previousHeading, -3);
-        if (reverseWeight > 0) return rotate(previousHeading, 4);
-        return previousHeading;
+        int turnSector = nextTurnSector(agentId, legOrdinal);
+        double jitter = signedUnit(agentId, legOrdinal, ANGLE_SALT) * 0.5;
+        double baseAngle = StrictMath.atan2(previousHeading.y(), previousHeading.x());
+        double targetAngle = baseAngle + (turnSector + jitter) * EIGHTH_TURN_RADIANS;
+        return frontierPoint(targetAngle, visualRange);
     }
 
     /**
-     * Chooses a grid-ray length near the circular Vision frontier. Diagonal grid steps are longer
-     * in Euclidean space, so they need fewer cells than cardinal steps to reach the same horizon.
+     * Selects one weighted 45-degree sector around the previous heading. The later intra-sector jitter
+     * prevents the result from collapsing back to the eight exact grid rays.
      */
-    private static int horizonDistance(FacingDirection heading, int visualRange) {
-        int cardinalRadius = Math.max(1, visualRange - 1);
-        if (heading.x() == 0 || heading.y() == 0) return cardinalRadius;
-        return Math.max(1, Math.round((float) (cardinalRadius / Math.sqrt(2.0))));
+    private int nextTurnSector(ObjectId agentId, long legOrdinal) {
+        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DIRECTION_SALT));
+        int bucket = (int) Long.remainderUnsigned(mixed, totalWeight);
+
+        if (bucket < straightWeight) return 0;
+        bucket -= straightWeight;
+        if (bucket < adjacentWeight) return 1;
+        bucket -= adjacentWeight;
+        if (bucket < adjacentWeight) return -1;
+        bucket -= adjacentWeight;
+        if (bucket < quarterTurnWeight) return 2;
+        bucket -= quarterTurnWeight;
+        if (bucket < quarterTurnWeight) return -2;
+        bucket -= quarterTurnWeight;
+        if (bucket < broadTurnWeight) return 3;
+        bucket -= broadTurnWeight;
+        if (bucket < broadTurnWeight) return -3;
+        return reverseWeight > 0 ? 4 : 0;
     }
 
-    private static FacingDirection rotate(FacingDirection heading, int eighthTurnsClockwise) {
-        int index = directionIndex(heading);
-        return CLOCKWISE[Math.floorMod(index + eighthTurnsClockwise, CLOCKWISE.length)];
-    }
+    /** Returns a lattice cell on the outer one-cell-thick ring of the circular visual horizon. */
+    private static SearchRelocationRequest frontierPoint(double angle, int visualRange) {
+        int radius = visualRange;
+        int x = (int) StrictMath.round(StrictMath.cos(angle) * radius);
+        int y = (int) StrictMath.round(StrictMath.sin(angle) * radius);
+        long radiusSquared = (long) radius * radius;
 
-    private static int directionIndex(FacingDirection heading) {
-        for (int index = 0; index < CLOCKWISE.length; index++) {
-            if (CLOCKWISE[index].equals(heading)) return index;
+        while ((long) x * x + (long) y * y > radiusSquared) {
+            if (StrictMath.abs(x) >= StrictMath.abs(y) && x != 0) {
+                x -= Integer.signum(x);
+            } else if (y != 0) {
+                y -= Integer.signum(y);
+            }
         }
-        throw new IllegalArgumentException("unsupported facing direction: " + heading);
+        if (x == 0 && y == 0) {
+            x = StrictMath.cos(angle) >= 0.0 ? 1 : -1;
+        }
+        return new SearchRelocationRequest(x, y);
+    }
+
+    private static double signedUnit(ObjectId agentId, long legOrdinal, long salt) {
+        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * salt));
+        double unit = (double) (mixed >>> 11) * 0x1.0p-53;
+        return unit * 2.0 - 1.0;
     }
 
     private static long mix64(long value) {
