@@ -294,6 +294,18 @@ public final class AgentSystem implements AgentDecisionLookup {
                     || !intent.sourceId.equals(completion.sourceId())) {
                 throw new IllegalStateException("autonomous opportunity-use completion was lost: " + active.objectId);
             }
+            if (completion.result().accepted()
+                    && provider.evaluate(active.objectId, intent.sourceId, 0) != null) {
+                OpportunityUseStartAttempt nextUse = provider.startUse(active.objectId, intent.sourceId);
+                if (nextUse == null) {
+                    throw new IllegalStateException("opportunity provider returned null continuation start attempt");
+                }
+                if (nextUse.accepted()) {
+                    setUse(intent, nextUse);
+                    scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                    return;
+                }
+            }
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -320,10 +332,14 @@ public final class AgentSystem implements AgentDecisionLookup {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
+        setUse(intent, use);
+        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+    }
+
+    private static void setUse(ActiveOpportunityIntent intent, OpportunityUseStartAttempt use) {
         intent.useActionId = use.actionId();
         intent.useStartedTick = use.startedTick();
         intent.useExpectedCompletionTick = use.expectedCompletionTick();
-        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
     }
 
     private void continueSearchRelocation(ActiveAgent active) {
