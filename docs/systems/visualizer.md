@@ -183,6 +183,14 @@ During a timed interaction the HUD draws a real progress bar derived from author
 
 Repeated LMB on the same cell cycles through the authoritative object stack, allowing the Cow and the plant beneath it to be inspected separately.
 
+### Bounded text layout
+
+Dynamic developer text is treated as bounded layout rather than a collection of fixed-baseline strings. The inspector measures text with the active font, wraps label/value columns to the available content width, and computes row/panel height from the resulting wrapped text.
+
+This applies to titles, Activity/Target values, technical-detail values, progress-bar labels, the top status/help block, and the scenario description/live summary. A longer runtime state therefore expands vertically inside its allotted UI region instead of drawing beyond the panel or viewport edge.
+
+The scenario browser already applies the same bounded-width principle to scenario descriptions and help text.
+
 ### Technical-details mode
 
 Raw diagnostics remain available because they are valuable when investigating a mechanic, but they are not shown by default.
@@ -251,7 +259,7 @@ The overlay is reason-agnostic. The same presentation works for search explorati
 
 This is the first integrated living-world visual acceptance scenario. It starts with a satisfied Cow on a substantially larger sparse meadow.
 
-Every food source begins outside the Cow's initial Vision. Hunger must first cross the configured autonomous motivation threshold; only then can the Cow search. The acceptance flow is:
+Every food source begins outside the Cow's initial Vision. The current acceptance Cow has Vision range 7 and horizontal FOV 120°. Hunger must first cross the configured autonomous motivation threshold; only then can the Cow search. The acceptance flow is:
 
 ```text
 Hunger progression
@@ -278,6 +286,8 @@ full plant becomes dormant
 ```
 
 The meadow is 37x29 cells and contains sparse Grass, Clover and Dandelion patches at different directions/distances. Initial camera framing intentionally does not zoom out far enough to make the entire world a tiny overview; normal pan/zoom remains available.
+
+Unguided exploration remains coordinate-free. After a local sweep the current correlated-random-walk policy chooses a deterministic pseudo-random egocentric direction from the eight grid headings with a mild persistence bias, then requests a point near the edge of the current circular visual horizon. Diagonal legs use fewer grid cells than cardinal legs so their Euclidean endpoint stays near the same horizon. Stable agent identity + exploration ordinal make the variation replay-deterministic; Search still receives no XYZ or hidden source location.
 
 Food definitions have deliberately small finite initial stock. A patch can be depleted by feeding, which forces later motivated behavior to use another available source while the depleted plant regrows.
 
@@ -376,7 +386,7 @@ Focused correctness scenarios and representative performance scenarios remain se
 
 Headless simulation tests own semantic correctness. In particular timed opportunity-use coverage pins that Need/stock do not mutate before the authoritative completion tick, motivation thresholds prevent trivial-deficit action, still-desired repeated uses remain continuously committed, and full Growth processes sleep until real stock depletion wakes them.
 
-The Living Cow scenario test additionally pins that no food is initially visible, `EXPLORING` is observed, the Cow physically expands search away from its start, and only later reaches a real timed plant use.
+The Living Cow scenario test additionally pins that no food is initially visible, `EXPLORING` is observed, the Cow physically expands search away from its start, and only later reaches a real timed plant use. Exploration-policy tests pin replay-deterministic horizon-oriented variation and diagonal/cardinal distance handling.
 
 Visualizer scenario/catalog tests verify meaningful setup/order and that presentation exposes authoritative state. Final appearance/readability and real desktop performance of the Living Cow Cycle remain mandatory manual acceptance checks before merging the milestone.
 
