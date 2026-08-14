@@ -15,12 +15,12 @@ baseAmount
 intervalTicks
 ```
 
-`GrowthSystem` owns only the continuing growth process:
+`GrowthSystem` owns the growth lifecycle:
 
 ```text
-activation
-scheduled evaluation
-next evaluation tick
+GROWING
+DORMANT_FULL
+next scheduled evaluation when growing
 last GrowthTrace
 ```
 
@@ -57,7 +57,7 @@ SnowCoverSystem ──────┘
 
 The project intentionally does **not** define a universal `GrowthConditionType` enum, a central condition switch, or a permanent formula such as `sun * rain * temperature` before real environmental consumers exist. The first real condition will justify the composition algebra that fits its semantics.
 
-## Scheduled semantics
+## Scheduled and dormant semantics
 
 A definition such as:
 
@@ -66,11 +66,29 @@ baseAmount = 3
 intervalTicks = 12
 ```
 
-means the growth process is evaluated every 12 simulation ticks. With the current intrinsic resolver, each evaluation requests 3 quantity units.
+means a non-full object is evaluated after 12 simulation ticks. With the current intrinsic resolver, each evaluation requests 3 quantity units.
 
-`ConsumableStockSystem` clamps the actual addition to remaining capacity. Growth continues to be scheduled while full; an evaluation at capacity therefore records a positive resolved amount and zero applied amount.
+`ConsumableStockSystem` clamps the actual addition to remaining capacity. When the stock reaches capacity, `GrowthSystem` enters `DORMANT_FULL` and deliberately schedules no further growth evaluation.
 
-This simple schedule is current correctness semantics, not a performance commitment. Representative profiling must precede event-driven sleeping or batch optimizations.
+```text
+stock < capacity
+    ↓
+GROWING
+    ↓ scheduled pulses
+stock == capacity
+    ↓
+DORMANT_FULL
+    ↓ no growth ticks
+stock is consumed
+    ↓ narrow stock-reduction notification
+GROWING again
+```
+
+`ConsumableStockSystem` remains the sole authoritative quantity owner. After successful consumption it emits only a narrow `ConsumableStockReductionSink` notification through a composition-root relay. Growth reacts to that notification only for objects that already have a Growth definition and are currently dormant.
+
+A full plant therefore does not wake periodically merely to discover that zero quantity can be added. This is runtime semantics, not a presentation optimization.
+
+A non-full object whose `GrowthRateResolver` currently returns zero remains scheduled because an environmental condition may become favorable at a later interval. Sleeping on environmental conditions belongs to the future condition mechanics that can actually signal such changes; it is not guessed inside Growth today.
 
 ## Data aspect
 
@@ -99,7 +117,8 @@ Grass, Clover and Dandelion can therefore share the same production Growth code 
 
 ```text
 has(object)
-nextEvaluationTick(object)
+status(object)               GROWING | DORMANT_FULL
+nextEvaluationTick(object)   -1 while dormant
 lastEvaluation(object)
 ```
 
@@ -113,7 +132,7 @@ quantityAfter
 capacity
 ```
 
-These diagnostics are intended to feed the full living-world inspector and state visualization in the later integrated Cow slice.
+The normal developer inspector translates these mechanics into concise presentation such as `Regrowing · next in 6 ticks` or `Full grown · dormant`. Raw trace data remains available only in technical-details mode.
 
 ## Invariants
 
@@ -130,6 +149,9 @@ Headless tests cover:
 - different plant definitions sharing one Growth mechanic;
 - Growth without a stock target failing configuration;
 - a substituted resolver suppressing or boosting growth without modifying `GrowthSystem`;
+- a full plant scheduling no growth work;
+- real stock consumption waking exactly that dormant growth process;
+- the process returning to `DORMANT_FULL` once capacity is restored;
 - data-defined Growth compilation and freeze behavior.
 
 ## Explicitly deferred
@@ -142,7 +164,6 @@ Not implemented yet:
 - seasons;
 - nutrient/soil chemistry;
 - fractional/sub-interval growth accumulation;
-- plant age, life stages, reproduction, withering or death;
-- state-dependent presentation sprites and growth animation.
+- plant age, life stages, reproduction, withering or death.
 
 Those features should extend independent world mechanics and the resolver boundary only when they have real consumers.
