@@ -16,6 +16,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitionCompiler;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitions;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitionCompiler;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
 
@@ -70,12 +72,23 @@ final class AgentDefinitionCompilersTest {
         NeedSatisfactionDefinitions definitions = new NeedSatisfactionDefinitions();
         NeedSatisfactionDefinitionCompiler compiler = new NeedSatisfactionDefinitionCompiler(definitions);
         ObjectDefinitionId id = ObjectDefinitionId.of(6);
-        compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"requiresCapability\":\"core:graze\"}}"), null);
+        compiler.compile(id, parse("{\"core:hunger\":{\"amount\":35,\"consumesQuantity\":4,\"requiresCapability\":\"core:graze\"}}"), null);
         assertEquals(1, definitions.count(id));
         var satisfaction = definitions.satisfactionAt(id, 0);
         assertEquals(NeedId.of("core:hunger"), satisfaction.needId());
         assertEquals(35, satisfaction.amount());
+        assertEquals(4, satisfaction.consumedQuantity());
         assertEquals(CapabilityId.of("core:graze"), satisfaction.requiredCapability());
+    }
+
+    @Test
+    void compilesConsumableStockAsIndependentDefinitionAspect() {
+        ConsumableStockDefinitions definitions = new ConsumableStockDefinitions();
+        ConsumableStockDefinitionCompiler compiler = new ConsumableStockDefinitionCompiler(definitions);
+        ObjectDefinitionId id = ObjectDefinitionId.of(7);
+        compiler.compile(id, parse("{\"capacity\":120,\"initial\":75}"), null);
+        assertEquals(120, definitions.get(id).capacity());
+        assertEquals(75, definitions.get(id).initialQuantity());
     }
 
     @Test
