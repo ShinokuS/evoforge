@@ -4,7 +4,7 @@
 
 Own finite authoritative liquid-water quantity in the shared discrete XYZ world and redistribute that quantity locally without embedding water into Terrain, Geometry or a giant world-cell object.
 
-The current slice includes finite state plus the first deterministic local flow solver. Precipitation, soil interaction, evaporation, traversal effects and drinking remain later slices.
+The current slice includes finite state plus the first deterministic local flow solver. A separate surface-hydrology foundation can now route explicit precipitation through finite soil moisture into Water. Runtime weather scheduling, sky exposure, evaporation, traversal effects and drinking remain later slices.
 
 ## Ownership
 
@@ -83,7 +83,7 @@ Successful external mutation also wakes the changed cell in the local flow front
 
 Negative requests are programming errors. Zero is a valid no-op.
 
-This API remains directly suitable for future finite sources and sinks: conservation accounting uses returned actual transfers rather than a catalog of rejection reasons.
+This API remains directly suitable for finite sources and sinks: conservation accounting uses returned actual transfers rather than a catalog of rejection reasons. The precipitation foundation uses `addAtMost(...)` for excess rainfall and therefore wakes Water through this boundary without importing `WaterFlowSystem`.
 
 ## Hydraulic-head model
 
@@ -200,13 +200,13 @@ The current solver can redistribute over-capacity water when the changed geometr
 
 ## Deliberately absent
 
-The current flow slice does **not** yet implement:
+The current Water/Surface-Hydrology slices do **not** yet implement:
 
 - runtime/scheduler cadence for hydraulic updates;
-- rain or sky exposure;
-- soil moisture/absorption;
+- weather state, rainfall scheduling or sky-exposure discovery;
 - evaporation;
 - springs or other scheduled sources/drains;
+- deep drainage/groundwater or plant soil-water uptake;
 - object displacement volume;
 - traversal/pathfinding effects;
 - semantic water-depth bands for movers;
@@ -231,6 +231,7 @@ Headless tests cover:
 - mutation-order-independent authoritative results;
 - integer convergence and dormancy;
 - external wake after Geometry change;
-- no silent deletion while displacing newly over-capacity water.
+- no silent deletion while displacing newly over-capacity water;
+- soil-first precipitation routing and explicit source accounting.
 
-See [Geometry and Shape](geometry.md) and the [Water Foundation design note](../notes/water-foundation.md).
+See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), and the [Water Foundation design note](../notes/water-foundation.md).
