@@ -11,7 +11,7 @@ public final class MoveToInteractiveScenario implements VisualizerScenario {
     @Override public String id() { return "movement-click-to-move"; }
     @Override public String title() { return "Click To Move"; }
     @Override public String description() {
-        return "LMB select mover; RMB choose destination; route remains visible.";
+        return "LMB select mover; RMB choose destination; PgUp/PgDn change Z; route remains visible.";
     }
 
     @Override
@@ -23,19 +23,19 @@ public final class MoveToInteractiveScenario implements VisualizerScenario {
                 "scenario:click_move_mover");
         assembly.movementRate(moverDefinition, 500);
         assembly.exclusiveOccupancy(moverDefinition);
-        ScenarioTerrain.fill(assembly, ground, -8, 8, -5, 5, 0);
+        MoveToScenarioCourse.build(assembly, ground);
 
-        ObjectId first = assembly.createObject(moverDefinition);
-        ObjectId second = assembly.createObject(moverDefinition);
-        ObjectId third = assembly.createObject(moverDefinition);
-        assembly.placeObject(first, -4, -2, 1);
-        assembly.placeObject(second, -4, 0, 1);
-        assembly.placeObject(third, -4, 2, 1);
+        ObjectId low = assembly.createObject(moverDefinition);
+        ObjectId middle = assembly.createObject(moverDefinition);
+        ObjectId high = assembly.createObject(moverDefinition);
+        assembly.placeObject(low, -4, -2, 0);
+        assembly.placeObject(middle, 6, 2, 2);
+        assembly.placeObject(high, 14, -2, 4);
 
         SimulationRuntime runtime = assembly.start();
         return new ScenarioSession(
                 runtime,
-                new ScenarioView(1, 0f, 0f, 0.75f),
+                new ScenarioView(0, 5f, 0f, 0.85f),
                 new MoveToInteractiveController(runtime));
     }
 }
