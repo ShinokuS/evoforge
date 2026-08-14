@@ -10,6 +10,7 @@ import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityPro
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityEvaluation;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDemand;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseResult;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
@@ -29,6 +30,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     private final NeedSatisfactionDefinitions definitions;
     private final NeedSolutionKnowledgeDefinitions knowledge;
     private final NeedSystem needs;
+    private final ConsumableStockSystem stocks;
 
     public NeedSatisfactionOpportunityProvider(
             ObjectLookup objects,
@@ -36,9 +38,10 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             AgentDefinitions agents,
             NeedSatisfactionDefinitions definitions,
             NeedSolutionKnowledgeDefinitions knowledge,
-            NeedSystem needs) {
+            NeedSystem needs,
+            ConsumableStockSystem stocks) {
         if (objects == null || transforms == null || agents == null || definitions == null
-                || knowledge == null || needs == null) {
+                || knowledge == null || needs == null || stocks == null) {
             throw new IllegalArgumentException("need-satisfaction provider dependencies must not be null");
         }
         this.objects = objects;
@@ -47,12 +50,11 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         this.definitions = definitions;
         this.knowledge = knowledge;
         this.needs = needs;
+        this.stocks = stocks;
     }
 
     @Override
-    public String id() {
-        return "needs:satisfaction";
-    }
+    public String id() { return "needs:satisfaction"; }
 
     @Override
     public List<OpportunitySearchDemand> searchDemands(ObjectId agentId) {
@@ -90,6 +92,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             if (satisfaction.requiredCapability() != null
                     && !agent.hasCapability(satisfaction.requiredCapability())) continue;
             if (!needs.has(agentId, satisfaction.needId())) continue;
+            if (!stockAvailable(sourceId, satisfaction)) continue;
             long deficit = needs.level(agentId, satisfaction.needId());
             if (deficit <= 0) continue;
             long benefit = Math.min(deficit, satisfaction.amount());
@@ -132,7 +135,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             NeedSatisfaction satisfaction = definitions.satisfactionAt(sourceObject.definitionId(), index);
             if (satisfaction.requiredCapability() != null
                     && !agent.hasCapability(satisfaction.requiredCapability())) continue;
-            if (!needs.has(agentId, satisfaction.needId())) continue;
+            if (!needs.has(agentId, satisfaction.needId()) || !stockAvailable(sourceId, satisfaction)) continue;
             long benefit = Math.min(needs.level(agentId, satisfaction.needId()), satisfaction.amount());
             if (benefit > bestBenefit) {
                 best = satisfaction;
@@ -140,7 +143,23 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             }
         }
         if (best == null || bestBenefit <= 0) return new OpportunityUseResult(false, UNAVAILABLE);
+
+        if (best.consumesStock() && !stocks.consume(sourceId, best.consumedQuantity())) {
+            return new OpportunityUseResult(false, UNAVAILABLE);
+        }
         long applied = needs.satisfy(agentId, best.needId(), best.amount());
-        return new OpportunityUseResult(applied > 0, applied > 0 ? USED : UNAVAILABLE);
+        if (applied <= 0) {
+            throw new IllegalStateException("validated need satisfaction applied no benefit: " + agentId);
+        }
+        return new OpportunityUseResult(true, USED);
+    }
+
+    private boolean stockAvailable(ObjectId sourceId, NeedSatisfaction satisfaction) {
+        if (!satisfaction.consumesStock()) return true;
+        if (!stocks.has(sourceId)) {
+            throw new IllegalStateException(
+                    "need satisfaction consumes stock but source has no consumable stock: " + sourceId);
+        }
+        return stocks.quantity(sourceId) >= satisfaction.consumedQuantity();
     }
 }
