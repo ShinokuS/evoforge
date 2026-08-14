@@ -19,7 +19,7 @@ public final class CowForagingScenario implements VisualizerScenario {
     @Override public String id() { return "agent-cow-foraging"; }
     @Override public String title() { return "Cow Foraging"; }
     @Override public String description() {
-        return "A hungry autonomous cow sees only through its directional visual sense, evaluates visible Grass and Hay, and chooses the more valuable source without a cow-specific behavior script.";
+        return "A hungry autonomous cow evaluates visible finite Grass and Hay stocks, then consumes real source quantity without a cow-specific behavior script.";
     }
     @Override
     public ScenarioSession create() {
@@ -30,7 +30,9 @@ public final class CowForagingScenario implements VisualizerScenario {
         ObjectDefinitionId hay = assembly.objectDefinition("scenario:hay");
         assembly.movementRate(cow, 500); assembly.exclusiveOccupancy(cow);
         assembly.agent(cow, GRAZE); assembly.vision(cow, 8, 120); assembly.need(cow, HUNGER, 100, 60);
-        assembly.satisfiesNeed(grass, HUNGER, 15, GRAZE); assembly.satisfiesNeed(hay, HUNGER, 60, GRAZE);
+        assembly.consumableStock(grass, 8, 8); assembly.consumableStock(hay, 4, 4);
+        assembly.satisfiesNeed(grass, HUNGER, 15, 1, GRAZE);
+        assembly.satisfiesNeed(hay, HUNGER, 60, 1, GRAZE);
         ScenarioTerrain.fill(assembly, ground, -1, 7, -2, 2, -1);
         ObjectId cowId = assembly.createObject(cow); ObjectId grassId = assembly.createObject(grass); ObjectId hayId = assembly.createObject(hay);
         assembly.placeObject(cowId, 0, 0, 0); assembly.placeObject(grassId, 2, 1, 0); assembly.placeObject(hayId, 6, -1, 0);

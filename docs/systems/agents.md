@@ -4,32 +4,31 @@
 
 The agent subsystem proves that autonomous behavior can emerge from composable world mechanics rather than species-specific scripts.
 
-The current Cow slice now proves four connected capabilities:
+The current production slice proves:
 
 ```text
-A. perceived opportunity -> deterministic choice -> MoveTo -> interaction
-B. a new compatible source works without editing Cow/Decision code
-C. current perception is real directed Vision with occlusion
-D. unresolved motivation + general knowledge -> information search -> local exploration -> discovery
+perception -> opportunity generation -> deterministic choice -> intent -> MoveTo -> interaction
+unresolved motivation -> semantic search demand -> visual search -> relative exploration -> discovery
+finite source quantity -> availability -> interaction cost -> authoritative depletion
 ```
 
-There is no `CowAI`, `EatGrassAction`, source-type switch or global action catalog.
+There is no `CowAI`, `EatGrassAction`, source-type switch, global action enum or omniscient `findFood()`.
 
-The broader pre-implementation direction remains in [Agent AI foundations](../notes/2026-08-14-agent-ai-foundations.md). This document describes only implemented semantics.
+The broader research direction remains non-normative in [Agent AI foundations](../notes/2026-08-14-agent-ai-foundations.md). This document describes implemented semantics only.
 
 ## Core boundary
 
 ```text
 World truth
    ↓
-Orientation + Vision
+Orientation + sensory mechanics
    ↓
 PerceptionSnapshot
    ↓
 mechanic-owned opportunity providers
    ↓
 AgentSystem
-   ├─ concrete opportunity -> autonomous intent -> MoveTo -> interaction
+   ├─ concrete opportunity -> continuing intent -> MoveTo -> use
    └─ no opportunity -> semantic search demand
                          ↓
                     AgentSearchSystem
@@ -37,7 +36,7 @@ AgentSystem
                          └─ unguided relative exploration
 ```
 
-The simulation may internally represent physical state with XYZ coordinates. Agent cognition/search does not receive a coordinate map and does not store an absolute self-position.
+Simulation may internally represent physical state with XYZ coordinates. Agent cognition/search does not receive a global coordinate map or an absolute self-position.
 
 ## Ownership
 
@@ -50,40 +49,39 @@ The simulation may internally represent physical state with XYZ coordinates. Age
 | immutable Vision parameters | `VisionDefinitions` |
 | current visual truth | `VisionSystem` / `VisionLookup` |
 | sensor-neutral current perception | `PerceptionLookup` |
-| immutable need declarations | `NeedDefinitions` |
-| mutable need deficit | `NeedSystem` / `NeedLookup` |
-| immutable source need effects | `NeedSatisfactionDefinitions` |
+| immutable Need declarations | `NeedDefinitions` |
+| mutable Need deficit | `NeedSystem` / `NeedLookup` |
+| immutable source Need effects | `NeedSatisfactionDefinitions` |
+| bounded consumable source configuration | `ConsumableStockDefinitions` |
+| mutable consumable source quantity | `ConsumableStockSystem` / `ConsumableStockLookup` |
 | general knowledge that a Need has environmental solutions | `NeedSolutionKnowledgeDefinitions` |
-| meaning of one opportunity family | its `AgentOpportunityProvider` |
-| selected autonomous opportunity intent | `AgentSystem` |
+| one opportunity family | its `AgentOpportunityProvider` |
+| selected autonomous intent | `AgentSystem` |
 | current epistemic search state | `AgentSearchSystem` |
-| unguided exploration-leg choice | `UnguidedExplorationPolicy` |
-| relative-search physical execution | `RelativeSearchLocomotion` |
-| long-range/edge movement | existing MoveTo / Movement / Occupancy stack |
-| current route diagnostics | `MoveToLookup.activeRoute(...)` |
+| unguided exploration choice | `UnguidedExplorationPolicy` |
+| search physical execution | `RelativeSearchLocomotion` |
+| route/edge movement | MoveTo / Movement / Occupancy stack |
 | decision diagnostics | `AgentDecisionTrace` |
 | search diagnostics | `AgentSearchTrace` |
 
-The owners remain deliberately narrow. Decision does not mutate physiology; Need does not decide behavior; Search does not perform physical movement; presentation does not recompute perception or pathfinding.
+Decision does not mutate physiology directly. Need does not choose behavior. Search does not own movement. Presentation does not recreate simulation truth.
 
 ## Open semantic identifiers
 
-Needs and capabilities use open IDs rather than project-wide enums:
+Needs and capabilities use open IDs:
 
 ```text
 NeedId("core:hunger")
 CapabilityId("core:graze")
 ```
 
-Adding another identifier does not require editing a central switch.
-
-An ID alone does not create behavior. Meaning is supplied by the mechanic that owns definitions/state/opportunities for that ID.
+Adding another identifier does not require editing a central enum or switch. An ID alone does not create behavior; its mechanic supplies the meaning.
 
 ## Agent composition
 
 `AgentDefinition` currently contains autonomous capabilities only.
 
-Vision, needs, source effects and knowledge are independent definition aspects:
+Other properties remain independent definition aspects:
 
 ```text
 object definition
@@ -91,14 +89,15 @@ object definition
   ├─ vision
   ├─ needs
   ├─ needSolutionKnowledge
-  └─ optional mechanic aspects such as needSatisfaction
+  ├─ needSatisfaction
+  └─ optional world-mechanic aspects such as consumableStock
 ```
 
-This avoids turning `AgentDefinition` into a universal bag of every future cognitive, sensory and physiological property.
+This prevents `AgentDefinition` from becoming a universal bag of every sensory, physiological and cognitive property.
 
 ## Needs
 
-A `NeedSpec` defines:
+`NeedSpec` defines:
 
 ```text
 NeedId
@@ -113,7 +112,7 @@ Runtime levels are deficit-oriented:
 maxLevel  maximum configured deficit
 ```
 
-`NeedSystem` exclusively owns mutable deficit state.
+`NeedSystem` exclusively owns mutable deficits.
 
 Current mutation:
 
@@ -128,34 +127,22 @@ Need progression over time is not implemented yet.
 
 Vision is an independent sensory mechanic.
 
-A `VisionDefinition` currently supplies:
+`VisionDefinition` currently supplies:
 
 ```text
 range
 horizontal FOV degrees
 ```
 
-`VisionSystem` reads:
+`VisionSystem` reads authoritative position, facing, current cell contents and `SightOcclusionLookup`, then produces immutable `VisionSnapshot` data containing cells and objects actually visible now.
 
-```text
-authoritative XYZ
-+ authoritative facing
-+ VisionDefinition
-+ CellObjectLookup
-+ SightOcclusionLookup
-```
-
-and produces an immutable `VisionSnapshot` containing the cells and objects actually visible now.
-
-The first occlusion adapter treats terrain occupying an intermediate sampled sight cell as opaque.
-
-Decision does not depend directly on Vision. It consumes the sensor-neutral `PerceptionLookup`; today Vision provides that capability. Hearing/smell can later contribute through a perception composition boundary without adding sense-specific branches to Decision.
+Decision consumes the sensor-neutral `PerceptionLookup`, not Vision-specific APIs. Hearing or smell can later contribute behind that boundary without adding sense-specific branches to Decision.
 
 Movement changes physical facing only after a movement edge successfully commits.
 
 ## Mechanics expose opportunities
 
-`AgentOpportunityProvider` is the narrow bridge from a mechanic into autonomous decision making.
+`AgentOpportunityProvider` is the narrow bridge from one mechanic into autonomous decision:
 
 ```java
 String id();
@@ -164,32 +151,46 @@ OpportunityUseResult use(ObjectId agentId, ObjectId sourceId);
 List<OpportunitySearchDemand> searchDemands(ObjectId agentId);
 ```
 
-`evaluate` receives only a source that reached current Perception. There is no repository-wide `findFood()`.
+`evaluate` receives only sources that reached current Perception. There is no repository-wide source scan.
 
-`use` revalidates current world facts after locomotion before mutating the mechanic.
+`use` revalidates current world facts after locomotion before mutating domain owners.
 
-`searchDemands` may say that an unresolved motivation has a class of environmental solutions worth seeking, without revealing any concrete source.
+`searchDemands` can state that an unresolved motivation has environmental solutions worth seeking without revealing a concrete source.
 
-## First opportunity family: need satisfaction
+## Need satisfaction and finite source quantity
 
-A source definition may advertise that it can reduce a Need and optionally require a capability.
+A source definition may advertise a Need effect and optionally require a capability.
 
-Grass, Hay and future compatible content are not known by name to generic Decision.
+`NeedSatisfaction` now keeps physiological effect and physical source cost separate:
 
-Eligibility currently depends on:
+```text
+amount             Need deficit reduction
+consumedQuantity   ConsumableStock units spent per successful use
+```
+
+A zero `consumedQuantity` means a persistent/non-depleting effect. A positive value requires the source instance to own `ConsumableStock`.
+
+Eligibility includes:
 
 ```text
 source carries NeedSatisfaction data
 agent carries the relevant Need
 current deficit > 0
 required capability is present, if configured
+finite source has at least consumedQuantity available
 ```
 
-The current source effect is persistent. Quantity/depletion/harvesting are separate future resource mechanics.
+If a finite source is empty, it is not advertised as an opportunity. Arrival/use revalidates stock before mutation.
+
+A satisfaction that declares positive consumption while its source has no consumable stock is a configuration/invariant failure, not a normal world outcome.
+
+Grass, Hay and future compatible content remain data. Generic Decision does not know their names.
+
+See [Consumable Stock](./consumable-stock.md) for quantity ownership and current stock semantics.
 
 ## General semantic knowledge
 
-`NeedSolutionKnowledgeDefinitions` represents only a narrow semantic fact:
+`NeedSolutionKnowledgeDefinitions` currently represents one narrow semantic fact:
 
 ```text
 "this definition knows that environmental solutions exist for NeedId X"
@@ -201,28 +202,21 @@ Example:
 core:hunger -> environmental solutions exist
 ```
 
-It does **not** contain:
+It does not contain Grass/Hay IDs, ObjectIds, XYZ coordinates, routes or last-known positions.
 
-```text
-Grass/Hay definition IDs
-ObjectIds
-XYZ coordinates
-last-known positions
-routes
-```
-
-This is intentionally not a universal Knowledge framework. Other knowledge families receive their own owner only when real consumers appear; common structure is generalized only after evidence exists.
+This is intentionally not a universal Knowledge framework. Other knowledge families should receive their own owner only when real consumers appear.
 
 ## Unknown-source search
 
-When no concrete perceived opportunity exists, providers may emit `OpportunitySearchDemand`:
+When no concrete perceived opportunity exists, providers may emit:
 
 ```text
-motivation
-urgency
+OpportunitySearchDemand
+  motivation
+  urgency
 ```
 
-For the Cow example this means approximately:
+For the Cow proof this means approximately:
 
 ```text
 "hunger is unresolved and I know environmental solutions exist"
@@ -234,112 +228,89 @@ not:
 "Grass is at (5, 0, 0)"
 ```
 
-`AgentSystem` chooses among search demands deterministically and delegates the chosen epistemic process to `AgentSearchSystem`.
+`AgentSystem` chooses among search demands deterministically and delegates the epistemic process to `AgentSearchSystem`.
 
 ### Local visual sweep
 
-The first search phase observes the current heading and rotates through four 90-degree headings.
-
-Every heading is evaluated through ordinary authoritative Vision on the next scheduled think.
+Search first observes the current heading and rotates through four 90-degree headings. Every heading is evaluated through ordinary authoritative Vision on a later scheduled think.
 
 If a compatible source enters Perception, normal opportunity evaluation resumes and Search is cancelled.
 
 ### Unguided exploration
 
-If the local sweep finds nothing, Search does not query a hidden map and does not invent a target.
+If the local sweep finds nothing, Search falls back to `UnguidedExplorationPolicy`.
 
-It asks an `UnguidedExplorationPolicy` for an observer-relative exploration leg:
+The current `CorrelatedRandomWalkExplorationPolicy` receives only:
 
 ```text
-previous search heading
-+ deterministic exploration-leg ordinal
-+ stable agent identity
-+ current visual range
-    ↓
-relative heading + relative distance
+stable agent identity
+previous exploration heading
+exploration-leg ordinal
+current visual range
 ```
 
-The current implementation is `CorrelatedRandomWalkExplorationPolicy`.
-
-It models directional persistence: the first few exploration legs continue the existing heading; later deterministic pseudo-random choices favor straight movement and less frequently turn left/right. Leg distance is also deterministic and bounded by the current visual range, so the agent normally moves several cells before another full local sweep instead of turning its head after every cell.
-
-The current standard parameters are algorithm parameters, not Cow/source semantics, and the policy is behind an interface so another exploration algorithm does not require modifying Search/Decision.
-
-No world coordinate is passed to `UnguidedExplorationPolicy`.
-
-The policy returns:
+and returns an observer-relative request:
 
 ```text
 SearchRelocationRequest(
-    FacingDirection heading,
-    int distance)
+    heading,
+    distance
+)
 ```
 
-with no XYZ.
+No XYZ is passed to the policy or stored in search state.
+
+Directional persistence is favored; deterministic pseudo-random variation later chooses straight/left/right alternatives. Current weights are provisional algorithm parameters, not Cow semantics.
 
 ## Relative search locomotion
 
-Search itself never translates its relative leg into absolute world coordinates.
+`RelativeSearchLocomotion` is the execution boundary between cognition and physical movement.
 
-`AgentSystem`, which owns continuing autonomous intents, delegates the request to `RelativeSearchLocomotion`.
-
-That adapter is an execution boundary. It may read physical XYZ because Movement requires physical state, but it does not expose those coordinates back to Search or Knowledge.
-
-Before a leg starts, the agent physically faces the selected exploration heading. The locomotion adapter then reads a fresh authoritative Vision snapshot and resolves only the currently known ray:
+Flow:
 
 ```text
 relative heading + requested distance
     ↓
-face that heading
+face chosen heading
     ↓
-fresh VisionSnapshot
+read fresh VisionSnapshot
     ↓
-read current physical transform internally
+inspect consecutive currently visible cells on that ray
     ↓
-follow consecutive local Navigation transitions
-only while every next cell is in current Vision
+truncate to locally traversable visible extent
     ↓
-truncate at the last visible/traversable cell
-    ↓
-production MoveTo to that local visible goal
+production MoveTo to the resulting local destination
 ```
 
-The local Z preference is same level, then upward/downward adjacent transition when geometry allows it.
+The adapter may read authoritative XYZ internally because Movement requires physical coordinates. Those coordinates are never returned to Search/Knowledge.
 
-A request for six cells can therefore become a four-cell route if only four consecutive cells are currently visible/traversable. Search receives no absolute destination back.
+Search therefore cannot ask Pathfinder for an arbitrary destination through unknown world space.
 
-Search cannot choose an arbitrary destination in unknown space. Exploration expands observation in multi-cell local legs whose destinations are inside current visual knowledge.
+## Continuing intents
 
-## Search relocation as a continuing intent
+`AgentSystem` owns long-running autonomous execution.
 
-The relative exploration leg is owned by `AgentSystem` as a distinct continuing process from an opportunity intent.
+Current intent families are:
 
 ```text
-search requests one relative leg
-    ↓
-AgentSystem starts local visible MoveTo
-    ↓
-while MoveTo active: no new search relocation is issued
-    ↓
-completion
-    ↓
-AgentSearchSystem.relocationFinished(...)
-    ↓
-new observation / local sweep cycle
+opportunity intent
+search relocation intent
 ```
 
-If the leg is blocked/rejected, Search changes its relative heading and resumes visual exploration. It does not branch on a global Movement error catalog.
+While a MoveTo is active, no duplicate search relocation or opportunity use is issued. Completion is matched by `MoveToActionId` before continuing the domain process.
+
+Intent interruption/competition is not implemented yet.
 
 ## Candidate evaluation
 
-The first provider still uses a deliberately provisional deterministic score:
+The first provider uses a deliberately provisional score:
 
 ```text
 effectiveBenefit = min(currentDeficit, advertisedAmount)
 score = max(1, effectiveBenefit * 1024 / (distance + 1))
 ```
 
-Stable candidate order:
+Stable order:
 
 ```text
 1. score descending
@@ -348,135 +319,90 @@ Stable candidate order:
 4. provider registration order
 ```
 
-This is not a claim that the final EvoForge utility model is solved. Multiple real motivations/providers are still required before response curves and consideration algebra are promoted into a stronger contract.
+This is not the final Utility AI algebra. Multiple real motivations are required before response curves and cross-motivation normalization are promoted into a stronger contract.
 
 ## Determinism
 
-Current agent/search determinism relies on:
+Current agent/search determinism depends on:
 
 ```text
 stable perceived-object ordering
 stable candidate tie breaks
 stable search-demand ordering
 simulation ticks, never wall-clock time
-pure deterministic exploration-leg generation
+deterministic exploration variation from stable identity + ordinal
 ```
 
-The correlated exploration fallback derives directional and leg-length variation from stable agent identity plus exploration ordinal. It does not use nondeterministic runtime randomness.
+Authoritative hash-map iteration is not used as decision order.
 
 ## Scheduling
 
-Current timings remain intentionally simple:
+Current timings are intentionally simple implementation choices:
 
 ```text
-first autonomous think       +1 tick
-active MoveTo                poll each tick
-active visual sweep          next heading each tick
-relative exploration         one multi-cell MoveTo leg at a time
-idle/no search demand        recheck after 10 ticks
+first think                    +1 tick
+active MoveTo                  poll each tick
+active visual sweep            advance each tick
+search exploration leg         one MoveTo per leg
+idle/no search demand          recheck after 10 ticks
 ```
 
-These timings are current implementation, not permanent performance promises.
-
-Representative scale profiling must precede specialized AI scheduling/index structures.
+Representative profiling must precede specialized AI scheduling/index structures.
 
 ## Developer observability
 
-`SimulationView` exposes read-only:
+`SimulationView` exposes read-only Orientation, Vision, Need, ConsumableStock, Decision, Search and MoveTo state.
+
+The visualizer can show for a selected object:
 
 ```text
-OrientationLookup
-VisionLookup
-MoveToLookup
-NeedLookup
-AgentDecisionLookup
-AgentSearchLookup
+actual visible cells
+actually visible objects
+physical facing
+active MoveTo route
+decision/search diagnostics
 ```
 
-`AgentDecisionTrace` records candidates and winner.
+`AgentDecisionTrace` records candidates and the winner. `AgentSearchTrace` records current/last search motivation and phase.
 
-`AgentSearchTrace` records current/last search motivation, phase, headings observed and facing.
-
-`MoveToLookup.activeRoute(...)` exposes the immutable current route for diagnostics without letting presentation recompute pathfinding.
-
-The generic visualizer shows for the selected object:
-
-```text
-visible-cell overlay, when Vision exists
-visible-object frames
-physical facing arrow
-active MoveTo route cells and goal
-Vision/facing inspector data
-```
-
-The route overlay is reason-agnostic: it works for search exploration, movement toward a selected opportunity and future MoveTo consumers alike.
-
-Agent scenarios currently include:
+Agent debug scenarios currently include:
 
 ```text
 Agents -> Cow Foraging
 Agents -> Cow Visual Search
 ```
 
-`Cow Visual Search` uses a larger field and Vision radius. Grass starts well outside initial Vision, so the scenario visibly demonstrates local sweep -> multi-cell exploration route -> new Vision -> concrete Grass selection.
-
-Presentation does not recreate Vision, Decision or Pathfinding logic.
+Both scenarios now use finite food stock; presentation never recreates Vision, Decision or Pathfinding logic.
 
 ## Current proofs
 
-Headless tests now cover:
+Headless coverage proves, among other invariants:
 
-- visible Grass -> MoveTo -> authoritative Hunger reduction;
-- plug-in Hay works without Cow/Decision edits;
-- farther higher-benefit source can win;
-- outside-range source is not initially known;
-- source behind the Cow is excluded by FOV;
-- opaque terrain blocks sight;
-- semantic Need-solution knowledge can start Search without a concrete source;
-- local visual sweep discovers a source only after turning toward it;
-- without general solution knowledge, unseen food does not trigger Search;
-- after an unsuccessful local sweep, the Cow expands search through a multi-cell relative physical leg without inventing a target;
-- food outside the initial Vision is found only after physical exploration brings it into Vision;
-- exploration heading and leg length are deterministic for stable identity/ordinal;
-- exact candidate ties remain deterministic.
+- visible compatible source -> MoveTo -> Need reduction;
+- new compatible source definition works without Cow/Decision changes;
+- stronger farther source can beat weaker nearer source;
+- outside-range / behind-observer / occluded sources are not visual candidates;
+- general Need-solution knowledge starts search without source identity/location;
+- search discovers concrete food only through Perception;
+- unguided exploration expands observation through multi-cell visible relative legs;
+- exploration variation and candidate ties remain deterministic;
+- finite source use decreases authoritative stock;
+- empty finite source is no longer a candidate.
 
-## Future spatial knowledge
+## Deferred work
 
-Persistent spatial memory is **not required by the current Cow slice**.
+Not required for the current first Cow foundation:
 
-If later mechanics need remembered places, cognition still should not require a global XYZ self-location. A richer agent may instead know relationships such as:
-
-```text
-"the settlement is beyond that hill"
-"the water source is near the large tree"
-"the hidden cache is beside this landmark"
-```
-
-That would justify future landmark/topological belief ownership rather than exposing `TransformLookup` to cognition.
-
-Potential future guidance sources can include remembered landmarks/places, socially learned locations, maps, compasses, signs or other navigation instruments. When a real consumer appears, those sources can guide Search before the unguided exploration fallback.
-
-No persistent Memory framework is introduced merely to complete the current animal-foraging loop.
-
-## Explicitly deferred
-
-Not yet implemented:
-
-- need progression / metabolism;
-- finite consumable resource quantity;
 - plant growth/regrowth;
-- water volume/fluid behavior;
-- persistent individual beliefs and episodic memory;
-- landmark/topological spatial memory;
-- learned knowledge, confidence, forgetting and misinformation;
+- Need progression / metabolism;
+- water/thirst;
+- cross-motivation Utility algebra;
+- intent persistence/interruption;
+- persistent beliefs / episodic or landmark memory;
 - map/compass/tool-assisted navigation;
-- hearing, smell and multi-sense aggregation;
-- personality, values, skills, relations and mood;
-- motivation sources broader than physiological Needs;
-- generalized utility response curves / consideration algebra;
-- intent interruption and external-order arbitration;
-- GOAP/HTN/BT planning;
-- advanced Vision/body/eye-height semantics;
+- hearing/smell;
+- fluid simulation;
+- advanced Vision/body geometry;
 - AI-specific optimization before representative profiling.
 
-The current search foundation is sufficient for the first living Cow loop without persistent memory. The next simulation layer should therefore return to world mechanics: finite food quantity, plant regrowth and physiology progression, rather than expanding cognition for its own sake.
+The next direct world-mechanic consumer is plant growth: it will justify a narrow replenishment mutation for `ConsumableStockSystem` and make finite plant biomass recover over simulation time.

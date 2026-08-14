@@ -42,6 +42,9 @@ import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
+import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
@@ -93,6 +96,7 @@ public final class SimulationAssembly {
     private final NeedDefinitions needDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
+    private final ConsumableStockDefinitions consumableStockDefinitions;
     private final LandscapeSystem landscape;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
@@ -119,6 +123,7 @@ public final class SimulationAssembly {
         needDefinitions = new NeedDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
+        consumableStockDefinitions = new ConsumableStockDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
         navigation = new NavigationSystem(landscape.geometry());
         objects = new ObjectRepository();
@@ -201,15 +206,35 @@ public final class SimulationAssembly {
         return this;
     }
 
+    public SimulationAssembly consumableStock(
+            ObjectDefinitionId definitionId,
+            long capacity,
+            long initialQuantity) {
+        requireNotStarted(); requireObjectDefinition(definitionId);
+        consumableStockDefinitions.put(
+                definitionId,
+                new ConsumableStockDefinition(capacity, initialQuantity));
+        return this;
+    }
+
     public SimulationAssembly satisfiesNeed(
             ObjectDefinitionId sourceDefinitionId,
             NeedId needId,
             long amount,
             CapabilityId requiredCapability) {
+        return satisfiesNeed(sourceDefinitionId, needId, amount, 0L, requiredCapability);
+    }
+
+    public SimulationAssembly satisfiesNeed(
+            ObjectDefinitionId sourceDefinitionId,
+            NeedId needId,
+            long amount,
+            long consumedQuantity,
+            CapabilityId requiredCapability) {
         requireNotStarted(); requireObjectDefinition(sourceDefinitionId);
         needSatisfactionDefinitions.add(
                 sourceDefinitionId,
-                new NeedSatisfaction(needId, amount, requiredCapability));
+                new NeedSatisfaction(needId, amount, consumedQuantity, requiredCapability));
         return this;
     }
 
@@ -254,6 +279,7 @@ public final class SimulationAssembly {
         needDefinitions.freeze();
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
+        consumableStockDefinitions.freeze();
 
         for (ObjectId objectId : createdObjects) {
             WorldObject object = objects.get(objectId);
@@ -307,7 +333,11 @@ public final class SimulationAssembly {
         movementCompletions.bind(moveTo);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
-        for (ObjectId objectId : createdObjects) needs.attach(objectId);
+        ConsumableStockSystem consumableStocks = new ConsumableStockSystem(objects, consumableStockDefinitions);
+        for (ObjectId objectId : createdObjects) {
+            needs.attach(objectId);
+            consumableStocks.attach(objectId);
+        }
 
         VisionSystem vision = new VisionSystem(
                 objects,
@@ -333,7 +363,8 @@ public final class SimulationAssembly {
                 agentDefinitions,
                 needSatisfactionDefinitions,
                 needSolutionKnowledgeDefinitions,
-                needs);
+                needs,
+                consumableStocks);
         AgentSystem agents = new AgentSystem(
                 objects,
                 spatial.transforms(),
@@ -374,6 +405,7 @@ public final class SimulationAssembly {
                 pathfinder,
                 moveTo,
                 needs,
+                consumableStocks,
                 agents,
                 searches);
         return new SimulationRuntime(

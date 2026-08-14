@@ -20,7 +20,7 @@ public final class CowVisualSearchScenario implements VisualizerScenario {
     @Override public String id() { return "agent-cow-visual-search"; }
     @Override public String title() { return "Cow Visual Search"; }
     @Override public String description() {
-        return "Grass starts well outside the cow's Vision. The hungry cow performs a local visual sweep, then explores by multi-cell relative legs chosen inside its current visual horizon until Grass actually enters perception.";
+        return "Grass starts well outside the cow's Vision. The hungry cow explores by relative visible legs, discovers it through Vision, then consumes one unit from its finite stock.";
     }
 
     @Override
@@ -35,7 +35,8 @@ public final class CowVisualSearchScenario implements VisualizerScenario {
         assembly.vision(cow, 6, 110);
         assembly.need(cow, HUNGER, 100, 70);
         assembly.knowsNeedSolution(cow, HUNGER);
-        assembly.satisfiesNeed(grass, HUNGER, 35, GRAZE);
+        assembly.consumableStock(grass, 6, 6);
+        assembly.satisfiesNeed(grass, HUNGER, 35, 1, GRAZE);
         ScenarioTerrain.fill(assembly, ground, -6, 20, -8, 8, -1);
 
         ObjectId cowId = assembly.createObject(cow);
