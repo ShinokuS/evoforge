@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Consumable Stock models a bounded quantity carried by an object instance when an interaction must spend real source quantity.
+Consumable Stock models a bounded quantity carried by an object instance when interactions or world processes must spend or restore real source quantity.
 
-It is deliberately narrower than a universal resource/material framework. The current consumer is finite food; later mechanics may reuse the same bounded-stock owner only when their semantics genuinely fit.
+It is deliberately narrower than a universal resource/material framework. The current consumers are finite food and plant regrowth; later mechanics may reuse the same bounded-stock owner only when their semantics genuinely fit.
 
 ## Ownership
 
@@ -26,6 +26,24 @@ capacity(object)
 ```
 
 Presentation and autonomous decision never mutate stock directly.
+
+## Mutation boundaries
+
+Consumption remains an explicit owner mutation:
+
+```text
+consume(object, exactQuantity)
+```
+
+The Growth subsystem introduced the first legitimate restoration consumer, so stock now also exposes the narrow mutation capability:
+
+```text
+ConsumableStockReplenishment.replenish(object, requestedQuantity)
+```
+
+It adds at most the remaining capacity and returns the actual quantity added.
+
+There is still no generic `setQuantity`, arbitrary mutable state exposure or universal Resource mutation interface. Future systems that need a different semantic mutation should receive an equally narrow capability rather than bypassing the owner.
 
 ## Quantity semantics
 
@@ -57,6 +75,24 @@ A satisfaction with `consumedQuantity == 0` remains persistent/non-depleting. A 
 Evaluation does not advertise a finite opportunity when current quantity is below its required consumption amount.
 
 At use time the provider revalidates co-location, capability, Need deficit and stock availability before consuming stock and mutating the Need owner.
+
+## Growth integration
+
+Growth does not own stock quantity. `GrowthSystem` resolves how much growth should occur, then requests replenishment through `ConsumableStockReplenishment`.
+
+```text
+GrowthSystem
+    ↓ resolved amount
+ConsumableStockReplenishment
+    ↓
+ConsumableStockSystem
+    ↓ clamps to capacity
+actual quantity added
+```
+
+Environmental conditions remain outside Consumable Stock entirely.
+
+See [Growth](./growth.md) for growth scheduling and future environmental influence boundaries.
 
 ## Data aspects
 
@@ -96,17 +132,17 @@ Implemented now:
 - bounded capacity and initial quantity;
 - authoritative per-instance quantity;
 - exact quantity consumption;
+- capacity-clamped narrow replenishment;
 - stock-aware opportunity availability;
 - read-only diagnostics;
 - independent data compiler.
 
-Not implemented in this subsystem yet:
+Not implemented in this subsystem:
 
-- regrowth/replenishment;
 - continuous/fractional units;
 - nutrition chemistry;
 - mass, density or volume physics;
 - shared reservoirs across multiple cells;
 - automatic destruction when quantity reaches zero.
 
-Plant regrowth is the next real consumer that will justify adding a narrow replenishment mutation instead of exposing a generic setter preemptively.
+Growth/regrowth is a separate subsystem and does not change Consumable Stock ownership.
