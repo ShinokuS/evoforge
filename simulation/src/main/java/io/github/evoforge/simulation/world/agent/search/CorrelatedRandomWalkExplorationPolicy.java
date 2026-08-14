@@ -5,28 +5,32 @@ import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 
 /**
  * Deterministic correlated-random-walk fallback for unguided exploration.
- * Direction tends to persist; turns are derived from stable agent/search identity rather than wall-clock randomness.
+ * Direction tends to persist and each leg spans several observer-visible cells when Vision permits it.
+ * Variation is derived from stable agent/search identity rather than wall-clock randomness.
  */
 public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExplorationPolicy {
-    private final int initialStraightSteps;
+    private static final long DIRECTION_SALT = 0x9E3779B97F4A7C15L;
+    private static final long DISTANCE_SALT = 0xD1B54A32D192ED03L;
+
+    private final int initialStraightLegs;
     private final int straightWeight;
     private final int leftWeight;
     private final int rightWeight;
     private final int totalWeight;
 
     public CorrelatedRandomWalkExplorationPolicy(
-            int initialStraightSteps,
+            int initialStraightLegs,
             int straightWeight,
             int leftWeight,
             int rightWeight) {
-        if (initialStraightSteps < 0 || straightWeight <= 0 || leftWeight < 0 || rightWeight < 0) {
-            throw new IllegalArgumentException("exploration weights/initial steps are invalid");
+        if (initialStraightLegs < 0 || straightWeight <= 0 || leftWeight < 0 || rightWeight < 0) {
+            throw new IllegalArgumentException("exploration weights/initial legs are invalid");
         }
         long total = (long) straightWeight + leftWeight + rightWeight;
         if (total > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("exploration weight sum is too large");
         }
-        this.initialStraightSteps = initialStraightSteps;
+        this.initialStraightLegs = initialStraightLegs;
         this.straightWeight = straightWeight;
         this.leftWeight = leftWeight;
         this.rightWeight = rightWeight;
@@ -38,28 +42,35 @@ public final class CorrelatedRandomWalkExplorationPolicy implements UnguidedExpl
     }
 
     @Override
-    public FacingDirection nextHeading(
+    public SearchRelocationRequest nextRelocation(
             ObjectId agentId,
             FacingDirection previousHeading,
-            long stepOrdinal) {
+            long legOrdinal,
+            int visualRange) {
         if (agentId == null || previousHeading == null) {
             throw new IllegalArgumentException("exploration identity/heading must not be null");
         }
-        if (stepOrdinal < 0) {
-            throw new IllegalArgumentException("stepOrdinal must be >= 0");
-        }
-        if (stepOrdinal < initialStraightSteps) {
-            return previousHeading;
-        }
+        if (legOrdinal < 0) throw new IllegalArgumentException("legOrdinal must be >= 0");
+        if (visualRange <= 0) throw new IllegalArgumentException("visualRange must be > 0");
 
-        long mixed = mix64(agentId.asLong() ^ ((stepOrdinal + 1L) * 0x9E3779B97F4A7C15L));
+        FacingDirection heading = nextHeading(agentId, previousHeading, legOrdinal);
+        int maxDistance = Math.max(1, visualRange - 1);
+        int minDistance = Math.min(maxDistance, Math.max(2, (visualRange + 1) / 2));
+        int span = maxDistance - minDistance + 1;
+        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DISTANCE_SALT));
+        int distance = minDistance + (int) Long.remainderUnsigned(mixed, span);
+        return new SearchRelocationRequest(heading, distance);
+    }
+
+    private FacingDirection nextHeading(
+            ObjectId agentId,
+            FacingDirection previousHeading,
+            long legOrdinal) {
+        if (legOrdinal < initialStraightLegs) return previousHeading;
+        long mixed = mix64(agentId.asLong() ^ ((legOrdinal + 1L) * DIRECTION_SALT));
         int bucket = (int) Long.remainderUnsigned(mixed, totalWeight);
-        if (bucket < straightWeight) {
-            return previousHeading;
-        }
-        if (bucket < straightWeight + leftWeight) {
-            return left(previousHeading);
-        }
+        if (bucket < straightWeight) return previousHeading;
+        if (bucket < straightWeight + leftWeight) return left(previousHeading);
         return right(previousHeading);
     }
 
