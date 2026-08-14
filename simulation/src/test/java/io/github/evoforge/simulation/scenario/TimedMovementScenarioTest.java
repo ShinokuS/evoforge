@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.scenario;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepResult;
@@ -27,8 +29,7 @@ final class TimedMovementScenarioTest {
 
         ScenarioHarness scenario = builder.start();
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 scenario.submit(
                         new MoveStepCommand(
                                 objectId,
@@ -80,16 +81,14 @@ final class TimedMovementScenarioTest {
 
         ScenarioHarness scenario = builder.start();
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 scenario.submit(
                         new MoveStepCommand(
                                 humanId,
                                 1,
                                 0,
                                 0)));
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 scenario.submit(
                         new MoveStepCommand(
                                 horseId,
@@ -185,8 +184,7 @@ final class TimedMovementScenarioTest {
     void rejectsSecondStepWhileMovementIsActive() {
         ScenarioRun run = movingScenario(100);
 
-        assertEquals(
-                MoveStepResult.STARTED,
+        assertAccepted(
                 run.scenario().submit(
                         new MoveStepCommand(
                                 run.objectId(),
@@ -194,14 +192,14 @@ final class TimedMovementScenarioTest {
                                 0,
                                 0)));
 
-        assertEquals(
-                MoveStepResult.ALREADY_MOVING,
+        assertRejected(
                 run.scenario().submit(
                         new MoveStepCommand(
                                 run.objectId(),
                                 1,
                                 0,
-                                0)));
+                                0)),
+                "movement:already_moving");
     }
 
     @Test
@@ -218,14 +216,14 @@ final class TimedMovementScenarioTest {
 
         ScenarioHarness scenario = builder.start();
 
-        assertEquals(
-                MoveStepResult.MOVEMENT_UNAVAILABLE,
+        assertRejected(
                 scenario.submit(
                         new MoveStepCommand(
                                 objectId,
                                 1,
                                 0,
-                                0)));
+                                0)),
+                "movement:movement_unavailable");
     }
 
     @Test
@@ -242,14 +240,14 @@ final class TimedMovementScenarioTest {
 
         ScenarioHarness scenario = builder.start();
 
-        assertEquals(
-                MoveStepResult.TRANSITION_UNAVAILABLE,
+        assertRejected(
                 scenario.submit(
                         new MoveStepCommand(
                                 objectId,
                                 1,
                                 0,
-                                0)));
+                                0)),
+                "movement:transition_unavailable");
     }
 
     @Test
@@ -343,6 +341,18 @@ final class TimedMovementScenarioTest {
                         batched.objectId()),
                 individual.scenario().transforms().z(
                         individual.objectId()));
+    }
+
+    private static void assertAccepted(
+            MoveStepResult result) {
+        assertTrue(result.accepted(), result.code().toString());
+    }
+
+    private static void assertRejected(
+            MoveStepResult result,
+            String code) {
+        assertFalse(result.accepted());
+        assertEquals(code, result.code().value());
     }
 
     private static ScenarioRun movingScenario(

@@ -1,53 +1,32 @@
 package io.github.evoforge.simulation.control.movement;
 
 import io.github.evoforge.simulation.control.core.CommandResult;
+import io.github.evoforge.simulation.result.OperationResult;
 import io.github.evoforge.simulation.result.ResultCode;
 
-public enum MoveStepResult
+/** Domain-neutral command observation of one movement-start attempt. */
+public record MoveStepResult(
+        boolean accepted,
+        ResultCode code)
         implements CommandResult {
 
-    STARTED(
-            true,
-            ResultCode.of("movement", "started")),
-    MOVEMENT_UNAVAILABLE(
-            false,
-            ResultCode.of("movement", "movement_unavailable")),
-    NOT_PLACED(
-            false,
-            ResultCode.of("movement", "not_placed")),
-    ALREADY_MOVING(
-            false,
-            ResultCode.of("movement", "already_moving")),
-    NOT_ADJACENT(
-            false,
-            ResultCode.of("movement", "not_adjacent")),
-    TRANSITION_UNAVAILABLE(
-            false,
-            ResultCode.of("movement", "transition_unavailable")),
-    DESTINATION_OCCUPIED(
-            false,
-            ResultCode.of("movement", "destination_occupied")),
-    DESTINATION_RESERVED(
-            false,
-            ResultCode.of("movement", "destination_reserved"));
-
-    private final boolean accepted;
-    private final ResultCode code;
-
-    MoveStepResult(
-            boolean accepted,
-            ResultCode code) {
-        this.accepted = accepted;
-        this.code = code;
+    public MoveStepResult {
+        if (code == null) {
+            throw new IllegalArgumentException(
+                    "code must not be null");
+        }
     }
 
-    @Override
-    public boolean accepted() {
-        return accepted;
-    }
+    public static MoveStepResult from(
+            OperationResult result) {
 
-    @Override
-    public ResultCode code() {
-        return code;
+        if (result == null) {
+            throw new IllegalArgumentException(
+                    "result must not be null");
+        }
+
+        return new MoveStepResult(
+                result.accepted(),
+                result.code());
     }
 }

@@ -68,6 +68,7 @@ public final class ScenarioScreen extends ScreenAdapter {
 
         input = new InputMultiplexer(
                 new SessionInput(),
+                new ScenarioCellInput(session, visualizer),
                 visualizer.inputProcessor());
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }

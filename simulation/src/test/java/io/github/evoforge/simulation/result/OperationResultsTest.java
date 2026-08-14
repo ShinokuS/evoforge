@@ -1,8 +1,11 @@
 package io.github.evoforge.simulation.result;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.evoforge.simulation.control.movement.MoveStepResult;
 import org.junit.jupiter.api.Test;
 
 final class OperationResultsTest {
@@ -10,18 +13,14 @@ final class OperationResultsTest {
     @Test
     void requireAcceptedReturnsOriginalAcceptedResult() {
         TestResult result = TestResult.ACCEPTED;
-
-        assertSame(
-                result,
-                OperationResults.requireAccepted(result));
+        assertSame(result, OperationResults.requireAccepted(result));
     }
 
     @Test
     void requireAcceptedRejectsUnexpectedDomainRejection() {
         assertThrows(
                 IllegalStateException.class,
-                () -> OperationResults.requireAccepted(
-                        TestResult.REJECTED));
+                () -> OperationResults.requireAccepted(TestResult.REJECTED));
     }
 
     @Test
@@ -29,6 +28,22 @@ final class OperationResultsTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> OperationResults.requireAccepted(null));
+    }
+
+    @Test
+    void movementCommandAdapterPreservesOpenResultCode() {
+        ResultCode code = ResultCode.of("movement", "extension_result");
+        MoveStepResult result = MoveStepResult.from(
+                new OpenResult(false, code));
+
+        assertFalse(result.accepted());
+        assertEquals(code, result.code());
+    }
+
+    private record OpenResult(
+            boolean accepted,
+            ResultCode code)
+            implements OperationResult {
     }
 
     private enum TestResult implements OperationResult {

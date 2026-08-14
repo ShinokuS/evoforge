@@ -20,12 +20,12 @@ This page tracks only milestone state and deliberately deferred work. Detailed c
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal
 - Exclusive object Occupancy with immediate execution destination reservations
 - Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
+- Observable one-edge Movement completion and long-range `MoveTo` lifecycle over the existing edge primitive
+- Movement visualizer scenarios: multi-level waypoint patrol and interactive visible-surface LMB-select / RMB-MoveTo with route diagnostics
 
 ## Next simulation sequence
 
 ```text
-observable Movement/Action outcome
-    ↓
 first agent / Cow vertical slice
     ↓
 deterministic World Generation
@@ -52,7 +52,7 @@ The internal design of a future milestone is introduced by its first real consum
 - early movement cancellation and reactive wake-up
 - falling, climbing, jumping, swimming and flying
 - actor-specific terrain affinity/locomotion
-- multi-step `MoveTo` lifecycle
+- automatic waiting/replanning inside `MoveTo`
 - persistent route cache
 - portal/multi-level hierarchy refinement beyond the current exact reachability preflight
 - incremental/replanning pathfinder strategies such as D*/LPA*

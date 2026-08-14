@@ -130,6 +130,13 @@ public final class ZLevelVisualizer {
         return state.selectedZ();
     }
 
+    /** Converts screen coordinates to world-cell XY for scenario tooling. */
+    public VisualizerCamera.Cell cellAt(
+            int screenX,
+            int screenY) {
+        return camera.cellAt(screenX, screenY);
+    }
+
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
         long frameStart = System.nanoTime();

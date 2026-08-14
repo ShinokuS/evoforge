@@ -51,6 +51,10 @@ movement:transition_unavailable
 
 There is no project-wide enum containing every possible domain outcome. Concrete domains may expose richer typed result data beyond the common floor.
 
+A use-case adapter must not recreate a closed domain catalog. `MoveStepHandler`, for example, forwards the Movement operation's `accepted + ResultCode` into `MoveStepResult`; adding a new Movement result code does not require another handler branch or mirrored command enum.
+
+Command acceptance and eventual completion are separate facts. An accepted `MoveStep` means its timed edge started. An accepted `MoveTo` means the long-range intent was accepted and has identity; its later `MoveToCompletion` reports whether the goal was actually reached. `NO_PATH` or a later blocked edge can therefore terminate a valid accepted `MoveTo` without changing the already-returned command result.
+
 ## Rejection versus exception
 
 The boundary is semantic:
@@ -63,7 +67,7 @@ invalid programming/configuration/invariant state
     → exception
 ```
 
-Examples of ordinary rejection include occupied terrain placement, replacing terrain where none exists, missing ordinary movement capability, an already active Movement action or an unavailable structural transition.
+Examples of ordinary rejection include occupied terrain placement, replacing terrain where none exists, missing ordinary movement capability, locomotion already owned by another action/controller or an unavailable structural transition.
 
 Examples of exceptional state include null dependencies/commands, missing or duplicate handler registration, a handler returning null, unknown trusted runtime ids or broken definition data required by an otherwise valid operation.
 
@@ -77,6 +81,7 @@ One concrete command class has one registered handler:
 PlaceTerrainCommand.class   → PlaceTerrainHandler
 ReplaceTerrainCommand.class → ReplaceTerrainHandler
 MoveStepCommand.class       → MoveStepHandler
+MoveToCommand.class         → MoveToHandler
 ```
 
 The dispatcher does not search superclasses or interfaces for a “closest” handler. Missing and duplicate registrations are bootstrap/programming failures.
@@ -99,7 +104,8 @@ Examples:
 
 ```text
 terrain command handler   → LandscapeMutations
-movement command handler  → MovementSystem
+MoveStepHandler           → MovementSystem
+MoveToHandler             → MoveToSystem
 ```
 
 The reverse dependency is forbidden. `ControlDependencyContractTest` makes the generic package boundary executable policy.
@@ -111,31 +117,32 @@ After an intent has been accepted, continuing domain work stays inside the ownin
 Examples that do not need to manufacture Commands merely to continue:
 
 - scheduled completion of an existing Movement action;
+- `MoveToSystem` starting its next concrete child edge after Movement completion;
 - future world generation or erosion producing terrain through narrow landscape mutation capability;
 - future crafting/growth/construction process continuation.
 
-For timed Movement:
+For route-level Movement:
 
 ```text
-submit(MoveStepCommand)
-    → synchronously validate/start MovementAction
-    → return movement:started
-    → Spatial remains at source
+submit(MoveToCommand)
+    → synchronously accept route intent
+    → Movement owns continuing work
 
 later:
 Scheduler
     → MovementActionProcessor
-    → completion revalidation
-    → Spatial move or interruption
+    → completion revalidation + cleanup
+    → synchronous Movement completion
+    → MoveToSystem continues or terminates
 ```
 
-The scheduled continuation bypasses CommandDispatcher because it is no longer external intent.
+Continuing work bypasses CommandDispatcher because it is no longer a new external intent.
 
 ## Current synchronous transport
 
-`SynchronousCommandGateway.submit` dispatches immediately. Immediate accepted mutations are visible before `submit` returns.
+`SynchronousCommandGateway.submit` dispatches immediately. Immediate accepted mutations/ownership are visible before `submit` returns.
 
-Synchronous **delivery** does not imply synchronous **domain completion**: an accepted timed command may only start a long-lived action.
+Synchronous **delivery** does not imply synchronous **domain completion**: an accepted timed command may only start continuing work. A `MoveTo` may also reach an immediate terminal outcome during submission, such as source equal to goal or `NO_PATH`; that outcome remains Movement observation rather than a rewritten CommandResult.
 
 Submitted call order is deterministic for deterministic callers. A future queued/asynchronous gateway may reuse the same command/handler contracts only after explicitly defining queue flush order and within-tick state visibility; transport changes may not silently change simulation semantics.
 
@@ -149,7 +156,8 @@ A new command should normally require:
 4. register exactly one handler for the concrete command type;
 5. test accepted and expected-rejection paths;
 6. leave programming/configuration failures exceptional;
-7. keep long-lived continuation in the owning domain rather than routing it back through Commands.
+7. forward open domain results without rebuilding an exhaustive result catalog;
+8. keep long-lived continuation in the owning domain rather than routing it back through Commands.
 
 The generic dispatcher must not learn the new domain type.
 

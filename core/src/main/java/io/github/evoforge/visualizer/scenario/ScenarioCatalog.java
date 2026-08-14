@@ -37,6 +37,8 @@ public final class ScenarioCatalog {
                 new RampNavigationScenario(),
                 new TimedMovementScenario(),
                 new OccupancyContentionScenario(),
+                new MoveToPatrolScenario(),
+                new MoveToInteractiveScenario(),
                 new PathfindingStraightScenario(),
                 new PathfindingStructuralDetourScenario(),
                 new PathfindingWeightedDetourScenario(),

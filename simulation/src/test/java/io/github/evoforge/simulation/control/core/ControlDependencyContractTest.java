@@ -43,6 +43,25 @@ final class ControlDependencyContractTest {
                 CONTROL_IMPORT);
     }
 
+    @Test
+    void moveToOrchestrationDoesNotBypassMovementExecutionBoundary()
+            throws IOException {
+
+        Path source = mainJava().resolve(
+                "io/github/evoforge/simulation/world/mechanics/movement/MoveToSystem.java");
+        assertTrue(Files.isRegularFile(source), "missing source file: " + source);
+
+        String text = Files.readString(source);
+        assertFalse(text.contains(
+                "import io.github.evoforge.simulation.world.spatial.SpatialSystem;"));
+        assertFalse(text.contains(
+                "import io.github.evoforge.simulation.world.navigation."));
+        assertFalse(text.contains(
+                "import io.github.evoforge.simulation.world.mechanics.occupancy."));
+        assertFalse(text.contains(
+                "import io.github.evoforge.simulation.world.mechanics.traversal."));
+    }
+
     private static void assertNoImport(
             Path root,
             String forbiddenImport)

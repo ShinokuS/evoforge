@@ -12,22 +12,15 @@ final class ScenarioCatalogTest {
     @Test
     void standardCatalogKeepsFocusedScenarioOrder() {
         ScenarioCatalog catalog = ScenarioCatalog.standard();
-
         assertEquals(
                 List.of(
-                        "cutaway",
-                        "ramp-navigation",
-                        "timed-movement",
-                        "occupancy-contention",
-                        "pathfinding-straight",
-                        "pathfinding-structural-detour",
-                        "pathfinding-weighted-detour",
-                        "pathfinding-ramp-3d",
-                        "pathfinding-multi-level-climb",
-                        "pathfinding-z-switchback",
-                        "pathfinding-vertical-overpass",
-                        "pathfinding-unreachable",
-                        "pathfinding-hierarchy",
+                        "cutaway", "ramp-navigation", "timed-movement",
+                        "occupancy-contention", "movement-patrol",
+                        "movement-click-to-move", "pathfinding-straight",
+                        "pathfinding-structural-detour", "pathfinding-weighted-detour",
+                        "pathfinding-ramp-3d", "pathfinding-multi-level-climb",
+                        "pathfinding-z-switchback", "pathfinding-vertical-overpass",
+                        "pathfinding-unreachable", "pathfinding-hierarchy",
                         "pathfinding-invalidation"),
                 catalog.scenarios().stream()
                         .map(VisualizerScenario::id)

@@ -12,14 +12,10 @@ import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 public final class OccupancyContentionScenario implements VisualizerScenario {
 
     @Override
-    public String id() {
-        return "occupancy-contention";
-    }
+    public String id() { return "occupancy-contention"; }
 
     @Override
-    public String title() {
-        return "Occupancy Contention";
-    }
+    public String title() { return "Occupancy Contention"; }
 
     @Override
     public String description() {
@@ -44,13 +40,12 @@ public final class OccupancyContentionScenario implements VisualizerScenario {
         assembly.placeObject(right, 1, 0, 1);
 
         SimulationRuntime runtime = assembly.start();
-        require(
+        requireAccepted(
                 runtime.submit(new MoveStepCommand(left, 0, 0, 1)),
-                MoveStepResult.STARTED,
                 "first mover");
-        require(
+        requireRejected(
                 runtime.submit(new MoveStepCommand(right, 0, 0, 1)),
-                MoveStepResult.DESTINATION_RESERVED,
+                "movement:destination_reserved",
                 "competing mover");
 
         return new ScenarioSession(
@@ -58,14 +53,26 @@ public final class OccupancyContentionScenario implements VisualizerScenario {
                 new ScenarioView(1, 0f, 0f, 0.65f));
     }
 
-    private static void require(
-            MoveStepResult actual,
-            MoveStepResult expected,
+    private static void requireAccepted(
+            MoveStepResult result,
             String label) {
 
-        if (actual != expected) {
+        if (!result.accepted()) {
             throw new IllegalStateException(
-                    label + " expected " + expected + " but was " + actual);
+                    label + " was rejected: " + result.code());
+        }
+    }
+
+    private static void requireRejected(
+            MoveStepResult result,
+            String expectedCode,
+            String label) {
+
+        if (result.accepted()
+                || !expectedCode.equals(result.code().value())) {
+            throw new IllegalStateException(
+                    label + " expected " + expectedCode
+                            + " but was " + result.code());
         }
     }
 }
