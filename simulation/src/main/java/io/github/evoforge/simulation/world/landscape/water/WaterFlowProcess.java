@@ -1,8 +1,8 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowPreparation;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
 
 /**
  * Water-hydrology adapter around the shared scheduled liquid-flow process.
@@ -16,22 +16,24 @@ public final class WaterFlowProcess {
 
     /** Flow-only adapter used by isolated Water solver tests. */
     public WaterFlowProcess(WaterFlowSystem flow) {
-        this(flow, null);
+        this(flow, LiquidFlowPreparation.NONE);
     }
 
     public WaterFlowProcess(
             WaterFlowSystem flow,
             WaterSoilExchangeSystem soilExchange) {
 
-        if (flow == null) {
-            throw new IllegalArgumentException("flow must not be null");
+        if (soilExchange == null) {
+            throw new IllegalArgumentException("soil exchange must not be null");
         }
-        LiquidFlowPreparation preparation = soilExchange == null
-                ? LiquidFlowPreparation.NONE
-                : soilExchange::update;
-        delegate = new LiquidFlowProcess(
-                flow.liquidFlowSystem(),
-                preparation);
+        this.delegate = createDelegate(flow, soilExchange::update);
+    }
+
+    private WaterFlowProcess(
+            WaterFlowSystem flow,
+            LiquidFlowPreparation preparation) {
+
+        this.delegate = createDelegate(flow, preparation);
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -48,5 +50,17 @@ public final class WaterFlowProcess {
 
     public boolean scheduled() {
         return delegate.scheduled();
+    }
+
+    private static LiquidFlowProcess createDelegate(
+            WaterFlowSystem flow,
+            LiquidFlowPreparation preparation) {
+
+        if (flow == null) {
+            throw new IllegalArgumentException("flow must not be null");
+        }
+        return new LiquidFlowProcess(
+                flow.liquidFlowSystem(),
+                preparation);
     }
 }
