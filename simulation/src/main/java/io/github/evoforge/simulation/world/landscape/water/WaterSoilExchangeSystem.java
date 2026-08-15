@@ -7,10 +7,8 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 /**
  * Deterministic local exchange from free Water into retained SoilMoisture.
  *
- * <p>The system inspects only Water cells already woken by authoritative Water
- * mutations. It therefore adds no world scan and naturally sleeps with the Water
- * frontier. A Water cell may share space with partial terrain; otherwise the
- * immediately lower terrain cell is treated as its supporting soil surface.
+ * <p>This remains intentionally Water-specific. Generic free-liquid transport does
+ * not imply that blood, wine or another future liquid infiltrates Soil as Water.
  */
 public final class WaterSoilExchangeSystem {
 
@@ -32,75 +30,40 @@ public final class WaterSoilExchangeSystem {
         this.soil = soil;
     }
 
-    /**
-     * Infiltrates currently active free Water before the next flow solve and returns
-     * the exact transferred volume.
-     */
+    /** Infiltrates active free Water before the next shared liquid-flow solve. */
     public long update() {
         long infiltratedTotal = 0L;
 
-        for (WaterCell cell : water.flowActivity().snapshotSorted()) {
-            int amount = water.lookup().amount(
-                    cell.x(),
-                    cell.y(),
-                    cell.z());
-            if (amount <= CellVolume.EMPTY) {
-                continue;
-            }
+        for (WaterCell cell : water.activeCellsSorted()) {
+            int amount = water.lookup().amount(cell.x(), cell.y(), cell.z());
+            if (amount <= CellVolume.EMPTY) continue;
 
             int terrainZ = supportingTerrainZ(cell);
-            if (terrainZ == Integer.MIN_VALUE) {
-                continue;
-            }
+            if (terrainZ == Integer.MIN_VALUE) continue;
 
             int infiltrated = soil.infiltrateAtMost(
-                    cell.x(),
-                    cell.y(),
-                    terrainZ,
-                    amount);
-            if (infiltrated <= CellVolume.EMPTY) {
-                continue;
-            }
+                    cell.x(), cell.y(), terrainZ, amount);
+            if (infiltrated <= CellVolume.EMPTY) continue;
 
             int removed = water.removeAtMost(
-                    cell.x(),
-                    cell.y(),
-                    cell.z(),
-                    infiltrated);
+                    cell.x(), cell.y(), cell.z(), infiltrated);
             if (removed != infiltrated) {
                 throw new IllegalStateException(
                         "Water changed during deterministic soil exchange at "
-                                + cell
-                                + ": infiltrated="
-                                + infiltrated
-                                + ", removed="
-                                + removed);
+                                + cell + ": infiltrated=" + infiltrated
+                                + ", removed=" + removed);
             }
-            infiltratedTotal = Math.addExact(
-                    infiltratedTotal,
-                    infiltrated);
+            infiltratedTotal = Math.addExact(infiltratedTotal, infiltrated);
         }
 
         return infiltratedTotal;
     }
 
-    private int supportingTerrainZ(
-            WaterCell cell) {
-
-        if (terrain.contains(
-                cell.x(),
-                cell.y(),
-                cell.z())) {
-            return cell.z();
-        }
-        if (cell.z() == Integer.MIN_VALUE) {
-            return Integer.MIN_VALUE;
-        }
+    private int supportingTerrainZ(WaterCell cell) {
+        if (terrain.contains(cell.x(), cell.y(), cell.z())) return cell.z();
+        if (cell.z() == Integer.MIN_VALUE) return Integer.MIN_VALUE;
         int below = cell.z() - 1;
-        return terrain.contains(
-                cell.x(),
-                cell.y(),
-                below)
+        return terrain.contains(cell.x(), cell.y(), below)
                 ? below
                 : Integer.MIN_VALUE;
     }
