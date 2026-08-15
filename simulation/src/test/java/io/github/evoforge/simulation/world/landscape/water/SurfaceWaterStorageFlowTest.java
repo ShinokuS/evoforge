@@ -57,6 +57,35 @@ final class SurfaceWaterStorageFlowTest {
     }
 
     @Test
+    void multipleHorizontalExitsCannotDrainSourceBelowStorage() {
+        TestGeometry geometry = new TestGeometry()
+                .open(0, 0, 0)
+                .open(-1, 0, 0)
+                .open(1, 0, 0)
+                .open(0, -1, 0)
+                .open(0, 1, 0);
+        WaterSystem water = water(geometry);
+        WaterFlowSystem flow = new WaterFlowSystem(
+                water,
+                geometry,
+                (x, y, z) -> 10_000);
+
+        water.addAtMost(0, 0, 0, 12_000);
+
+        assertTrue(flow.update() > 0L);
+        assertTrue(
+                water.lookup().amount(0, 0, 0) >= 10_000,
+                "simultaneous exits must preserve the one shared surface-storage reserve");
+        assertEquals(
+                12_000,
+                water.lookup().amount(0, 0, 0)
+                        + water.lookup().amount(-1, 0, 0)
+                        + water.lookup().amount(1, 0, 0)
+                        + water.lookup().amount(0, -1, 0)
+                        + water.lookup().amount(0, 1, 0));
+    }
+
+    @Test
     void retainedFilmStillFallsThroughOpenFloor() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 1)
