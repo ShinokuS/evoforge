@@ -32,28 +32,25 @@ public final class WaterRampGatesScenario implements VisualizerScenario {
         LandscapeDefinitionId wall =
                 assembly.landscapeDefinition("scenario:water_geometry_wall");
 
-        // One finite floor makes the map a closed shallow hydraulic domain. The
-        // explicit world bounds replace the previous accidental infinite runoff.
         WaterScenarioSupport.fillFloor(
                 assembly, stone, MIN_X, MAX_X, MIN_Y, MAX_Y, -1);
 
-        // Upper-left chamber: a symmetric source. It is intentionally isolated
-        // so any directional bias remains visible instead of diffusing into the map.
+        // A genuinely square isolated chamber keeps equal hydraulic distances in
+        // every cardinal direction, so persistent directional bias is visible.
         WaterScenarioSupport.ringWalls(
-                assembly, wall, -9, -3, 1, 5, 0, 0);
+                assembly, wall, -9, -3, 0, 6, 0, 0);
         assembly.initialWater(-6, 3, 0, CellVolume.FULL);
 
-        // Lower-left/centre: a long barrier with one open end. Water seeded on the
-        // left must travel around the end before the right side can equalize.
+        // Long barrier with one open end. Water seeded on the left must route
+        // around y=-1 before reaching the right side.
         for (int y = -6; y <= -2; y++) {
             assembly.placeTerrain(-1, y, 0, wall);
         }
         assembly.initialWater(-5, -4, 0, 900_000);
         assembly.initialWater(-4, -4, 0, 700_000);
 
-        // Right: two narrow channels containing POSITIVE_X ramps. The upper lane
-        // approaches the low/west face and may enter the partial anchor cell. The
-        // lower lane approaches the high/east face and must remain blocked.
+        // Two narrow channels containing POSITIVE_X ramps. The upper lane
+        // approaches the low/west face; the lower lane approaches the high/east face.
         for (int x = 4; x <= 9; x++) {
             assembly.placeTerrain(x, 1, 0, wall);
             assembly.placeTerrain(x, 3, 0, wall);
