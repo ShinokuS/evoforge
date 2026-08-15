@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
@@ -38,7 +39,7 @@ final class WaterLiquidFacadeTest {
     }
 
     @Test
-    void oneSharedSolverMovesSeveralTypesWhileWaterFacadeFiltersDiagnostics() {
+    void oneSharedSolverMovesSeveralTypesWhileWaterProjectionFiltersDiagnostics() {
         GeometryLookup geometry = (x, y, z) ->
                 z == 0 && y == 0 && (x == 0 || x == 1 || x == 3 || x == 4)
                         ? null
@@ -48,8 +49,11 @@ final class WaterLiquidFacadeTest {
                 geometry);
         WaterSystem water = new WaterSystem(liquids);
         LiquidTypeId blood = LiquidTypeId.of("blood");
-        LiquidFlowSystem sharedFlow = new LiquidFlowSystem(liquids, geometry);
-        WaterFlowSystem waterFlow = new WaterFlowSystem(sharedFlow);
+        LiquidFlowSystem sharedFlow = new LiquidFlowSystem(
+                liquids,
+                geometry,
+                type -> LiquidTransportProperties.reference());
+        WaterFlowLookup waterFlow = WaterFlowLookup.from(sharedFlow.flowLookup());
 
         water.addAtMost(0, 0, 0, 400_000);
         liquids.addAtMost(blood, 3, 0, 0, 400_000);
@@ -57,7 +61,7 @@ final class WaterLiquidFacadeTest {
         assertTrue(sharedFlow.update() > 0L);
         assertTrue(water.lookup().amount(1, 0, 0) > 0);
         assertTrue(liquids.lookup().amountOf(blood, 4, 0, 0) > 0);
-        assertNotNull(waterFlow.flowLookup().find(1, 0, 0));
-        assertNull(waterFlow.flowLookup().find(4, 0, 0));
+        assertNotNull(waterFlow.find(1, 0, 0));
+        assertNull(waterFlow.find(4, 0, 0));
     }
 }
