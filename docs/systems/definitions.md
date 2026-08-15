@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Represent immutable content/configuration separately from mutable runtime state. Definitions describe what a content type is configured to be; authoritative systems own what individual runtime instances/cells/processes currently do or store.
+Represent immutable content/configuration separately from mutable runtime state. Definitions describe what a content type is configured to be; authoritative systems own what individual runtime instances, cells and processes currently store or do.
 
 ## Stable identity
 
@@ -32,7 +32,7 @@ Conceptually:
 }
 ```
 
-A mechanic explicitly registers/owns compilation of the aspect it understands. Generic definition loading handles stable identity and dispatch without becoming a switch over all world mechanics.
+A mechanic explicitly registers and owns compilation of the aspect it understands. Generic definition loading handles stable identity and dispatch without becoming a switch over all world mechanics.
 
 ```text
 source data
@@ -44,7 +44,7 @@ explicit mechanic compilation
 mechanic-owned immutable lookup/store
 ```
 
-Fundamental bootstrap remains explicit rather than reflection/service-discovery driven so dependencies and order are visible and deterministic.
+Fundamental bootstrap remains explicit rather than reflection/service-discovery driven so dependencies and order stay visible and deterministic.
 
 ## Definition data versus runtime state
 
@@ -61,22 +61,25 @@ Can it change independently for one runtime object/cell/process?
 Examples:
 
 ```text
-MovementRate / WaterWadingProfile       object definition data
-exclusive-cell capability               object definition data
-Agent/Vision/Need capability parameters object definition data
-ConsumableStock/Growth configuration    object definition data
-SurfaceTraversalCost                    landscape definition data
-SoilHydrology / SurfaceWaterStorage      landscape definition data
+MovementRate / WaterWadingProfile        object definition data
+exclusive-cell capability                object definition data
+Agent/Vision/Need capability parameters  object definition data
+ConsumableStock/Growth configuration     object definition data
+SurfaceTraversalCost                     landscape definition data
+SoilProperties                           landscape definition data
+SurfaceRetentionDefinitions              landscape material data
+LiquidTransportProperties                liquid identity configuration
 
 MovementAction / MovementClaim           mutable Movement state
 execution reservation                    mutable Occupancy state
 Spatial XYZ                              mutable Spatial state
 Need deficit / consumable quantity       mutable mechanic state
-SoilMoisture / Water quantity             mutable environmental state
-terrain presence/material per XYZ         mutable Terrain state
+Soil retained-liquid composition         mutable environmental state
+free-liquid quantity/type                mutable environmental state
+terrain presence/material per XYZ        mutable Terrain state
 ```
 
-Definitions never own object existence, positions, movement progress, reservation lifetime, terrain-cell lifetime or finite resource quantity.
+Definitions never own object existence, positions, movement progress, reservation lifetime, terrain-cell lifetime or finite resource/liquid quantity.
 
 ## Current object-definition aspects
 
@@ -94,26 +97,38 @@ Current production composition includes independent immutable stores for:
 - finite Consumable Stock configuration;
 - Growth configuration.
 
-Absence has mechanic-specific meaning. For example, no Movement aspect means current ordinary self-propelled Movement is unavailable; no exclusive Occupancy aspect means the object is transparent to exclusive-cell claims; no Water-wading aspect means Water-neutral traversal under the current compatibility contract.
+Absence has mechanic-specific meaning. For example, no Movement aspect means ordinary self-propelled Movement is unavailable; no exclusive Occupancy aspect means the object is transparent to exclusive-cell claims; no Water-wading aspect means Water-neutral traversal under the current contract.
 
 These aspects remain independent. A definition can combine them without forcing unrelated systems to know the content's concrete name/type.
 
 ## Current landscape-definition aspects
 
-Landscape identity is also composed from independent mechanic data:
+Landscape identity is composed from independent mechanic data:
 
 - `SurfaceTraversalCost` — actor-independent cost contribution for an already-valid structural edge;
-- `SoilHydrology` — finite retained-moisture capacity and infiltration transfer limit;
+- `SoilProperties` — shared pore `capacity` plus material `permeability` for the reference-viscosity liquid;
 - deterministic local Soil-capacity variation parameters;
-- `SurfaceWaterStorage` — finite free-Water reserve before same-Z horizontal runoff becomes mobile.
+- generic `SurfaceRetentionDefinitions` — material microtopographic free-liquid reserve before same-Z horizontal runoff.
+
+`SoilProperties` is intentionally physical/material-owned. Liquid-specific uptake is derived by combining material permeability with the incoming liquid's `LiquidTransportProperties`, not by storing Water-specific infiltration limits or liquid/material pair tables.
 
 Shape is Geometry state/override associated with a terrain anchor lifetime, not a mutable field inside the material definition.
 
 A missing required traversal cost on terrain participating in an otherwise valid priced edge is broken content/bootstrap configuration rather than an invitation to silently substitute a fallback.
 
+## Liquid transport definitions
+
+`LiquidTypeId` is an open domain-owned identity. A liquid that participates in free transport or Soil infiltration must have `LiquidTransportProperties` registered during composition.
+
+The current property is kinematic viscosity. `LiquidTransportDefinitions` is frozen at runtime like other definition stores, and missing transport data is treated as broken configuration rather than silently assuming Water behavior.
+
+Water is explicitly registered with the reference viscosity used to calibrate the previously accepted Water transport rate.
+
+Adding future physical properties must be driven by an actual mechanic. EvoForge does not maintain a speculative omnibus liquid property bag.
+
 ## Immutable compiled stores
 
-Mechanic-owned definition stores are frozen when `SimulationAssembly.start()` begins runtime execution. Production composition currently freezes Landscape, traversal, Soil/Water-surface parameters, Object, Movement, Water-wading, Occupancy, Agent/Vision/Need/Stock/Growth definition stores before scheduled simulation work starts.
+Mechanic-owned definition stores are frozen when `SimulationAssembly.start()` begins runtime execution. Production composition freezes Landscape, traversal, Soil properties/variation, generic surface retention, liquid transport, Object, Movement, Water-wading, Occupancy, Agent/Vision/Need/Stock/Growth definition stores before scheduled simulation work starts.
 
 Runtime systems therefore observe immutable configuration while authoritative mutable state remains in its owner.
 
