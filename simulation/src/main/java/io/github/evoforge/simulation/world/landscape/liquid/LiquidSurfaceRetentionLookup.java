@@ -6,16 +6,21 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
  * Free-liquid volume retained by supporting surface microtopography before
  * horizontal runoff.
  *
- * <p>The current capability is a property of the supporting material/geometry,
- * not a liquid/material pair table. Vertical falling is intentionally unaffected.
- * If future wetting physics needs surface tension/contact-angle effects, those must
- * be derived from physical capabilities rather than concrete liquid identities.
+ * <p>The current terrain implementation is material-owned and identical for every
+ * liquid identity. The type remains part of the port so a future physical wetting
+ * model can derive retention from liquid/surface properties without changing the
+ * hydraulic solver. Concrete identity switches and pair tables do not belong here.
+ * Vertical falling is intentionally unaffected.
  */
 @FunctionalInterface
 public interface LiquidSurfaceRetentionLookup {
 
     LiquidSurfaceRetentionLookup NONE =
-            (x, y, z) -> CellVolume.EMPTY;
+            (type, x, y, z) -> CellVolume.EMPTY;
 
-    int capacityAt(int x, int y, int z);
+    int capacityAt(
+            LiquidTypeId type,
+            int x,
+            int y,
+            int z);
 }
