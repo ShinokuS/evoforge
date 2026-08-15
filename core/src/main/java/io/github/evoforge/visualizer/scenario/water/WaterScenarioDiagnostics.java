@@ -1,9 +1,9 @@
 package io.github.evoforge.visualizer.scenario.water;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioController;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
-import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 
 /** Small bounded diagnostics for focused Water acceptance worlds. */
 final class WaterScenarioDiagnostics implements ScenarioController {
@@ -16,6 +16,7 @@ final class WaterScenarioDiagnostics implements ScenarioController {
     private final int minZ;
     private final int maxZ;
     private ScenarioDiagnostics diagnostics = ScenarioDiagnostics.NONE;
+    private long lastTick = Long.MIN_VALUE;
 
     WaterScenarioDiagnostics(
             SimulationRuntime runtime,
@@ -44,6 +45,11 @@ final class WaterScenarioDiagnostics implements ScenarioController {
 
     @Override
     public void update(long tick) {
+        if (tick == lastTick) {
+            return;
+        }
+        lastTick = tick;
+
         long totalWater = 0L;
         long totalMoisture = 0L;
         int wetCells = 0;
