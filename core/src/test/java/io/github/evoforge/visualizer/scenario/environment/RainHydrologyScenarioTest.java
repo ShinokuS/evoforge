@@ -11,10 +11,10 @@ import io.github.evoforge.visualizer.scenario.ScenarioSession;
 final class RainHydrologyScenarioTest {
 
     @Test
-    void prewarmedSceneContainsSurfaceWaterInsideDryAbsorbentWalls() {
+    void prewarmedSceneStartsAtBoundedRainPulseWithShallowSurfaceWater() {
         ScenarioSession session = new RainHydrologyScenario().create();
 
-        assertEquals(400L, session.runtime().time().tick());
+        assertEquals(240L, session.runtime().time().tick());
         assertEquals(
                 WeatherPresentationKind.RAIN,
                 session.weather().current().kind());
@@ -22,15 +22,17 @@ final class RainHydrologyScenarioTest {
 
         assertTrue(
                 session.runtime().view().water().amount(-4, 0, 0) > 0,
-                "stone catchment should expose finite surface water");
-
+                "impermeable surface should expose a shallow finite puddle");
         assertEquals(
                 0,
-                session.runtime().view().water().amount(-6, 0, 1),
-                "left absorbent wall must still have no surface overflow");
+                session.runtime().view().water().amount(4, 3, 0),
+                "loam should absorb its direct 3 mm rain event before free Water forms");
         assertEquals(
                 0,
-                session.runtime().view().water().amount(6, 0, 1),
-                "right absorbent wall must still have no surface overflow");
+                session.runtime().view().soilMoisture().amount(3, 0, -1),
+                "covered ground must remain shielded by the roof");
+        assertTrue(
+                session.runtime().view().soilMoisture().amount(3, 0, 1) > 0,
+                "the exposed roof must receive precipitation instead");
     }
 }
