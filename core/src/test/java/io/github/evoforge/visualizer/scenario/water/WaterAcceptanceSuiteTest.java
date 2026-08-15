@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.scenario.water;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,7 @@ import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 final class WaterAcceptanceSuiteTest {
 
     @Test
-    void zFlowContainsRealStackedPoolAndMultiLevelFall() {
+    void zFlowContainsRealStackedPoolAndSettlesToNoActualTransfer() {
         ScenarioSession session = new WaterZStackScenario().create();
         SimulationRuntime runtime = session.runtime();
 
@@ -25,6 +26,24 @@ final class WaterAcceptanceSuiteTest {
                 runtime.view().water().amount(4, 0, 1) > 0
                         || runtime.view().water().amount(4, 0, 2) > 0,
                 "falling shaft must occupy an intermediate Z after two local solver steps");
+
+        advance(runtime, 160);
+        for (int x = -9; x <= 9; x++) {
+            for (int y = -5; y <= 5; y++) {
+                for (int z = 0; z <= 4; z++) {
+                    assertNull(
+                            runtime.view().waterFlow().find(x, y, z),
+                            "settled Water Z scene must expose no actual flow sample");
+                }
+            }
+        }
+
+        long settledTotal = sumWaterAllZ(runtime, -9, 9, -5, 5, 0, 4);
+        advance(runtime, 12);
+        assertEquals(
+                settledTotal,
+                sumWaterAllZ(runtime, -9, 9, -5, 5, 0, 4),
+                "settled Water must stay at the same fixed point without hidden oscillation");
     }
 
     @Test
@@ -145,6 +164,22 @@ final class WaterAcceptanceSuiteTest {
             for (int y = minY; y <= maxY; y++) {
                 total += runtime.view().water().amount(x, y, z);
             }
+        }
+        return total;
+    }
+
+    private static long sumWaterAllZ(
+            SimulationRuntime runtime,
+            int minX,
+            int maxX,
+            int minY,
+            int maxY,
+            int minZ,
+            int maxZ) {
+
+        long total = 0L;
+        for (int z = minZ; z <= maxZ; z++) {
+            total += sumWater(runtime, minX, maxX, minY, maxY, z);
         }
         return total;
     }
