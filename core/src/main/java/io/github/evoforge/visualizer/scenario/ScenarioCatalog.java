@@ -20,13 +20,7 @@ import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingUnreachable
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingVerticalOverpassScenario;
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingWeightedDetourScenario;
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingZSwitchbackScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterBarrierDetourScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterEqualizationScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterEvaporationCycleScenario;
 import io.github.evoforge.visualizer.scenario.water.WaterRampGatesScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterSkyShieldScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterSymmetricSplitScenario;
-import io.github.evoforge.visualizer.scenario.water.WaterVerticalFallScenario;
 import io.github.evoforge.visualizer.scenario.water.WaterZStackScenario;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -76,13 +70,7 @@ public final class ScenarioCatalog {
                 ScenarioGroup.of("water", "Water / Hydrology",
                         new RainHydrologyScenario(),
                         new WaterZStackScenario(),
-                        new WaterVerticalFallScenario(),
-                        new WaterEqualizationScenario(),
-                        new WaterSymmetricSplitScenario(),
-                        new WaterRampGatesScenario(),
-                        new WaterBarrierDetourScenario(),
-                        new WaterSkyShieldScenario(),
-                        new WaterEvaporationCycleScenario()),
+                        new WaterRampGatesScenario()),
                 ScenarioGroup.of("agents", "Agents",
                         new LivingCowScenario(), new CowForagingScenario(), new CowVisualSearchScenario()),
                 ScenarioGroup.of("pathfinding", "Pathfinding",
