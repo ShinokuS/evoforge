@@ -4,7 +4,7 @@
 
 Define Water-specific behavior on top of EvoForge's shared free-liquid foundation.
 
-Water was the first implemented liquid, so the original storage and hydraulic solver were historically named after Water. Those generic mechanics now live in [Liquids](liquids.md). `WaterSystem` is a narrow typed facade for `StandardLiquidTypes.WATER`; Water hydrology, atmosphere interaction, traversal and presentation remain explicit Water consumers.
+Water was the first implemented liquid, so the original storage and hydraulic solver were historically named after Water. Those generic mechanics now live in [Liquids](liquids.md). `WaterSystem` is a narrow typed facade for its open `WaterSystem.TYPE` identity; Water hydrology, atmosphere interaction, traversal and presentation remain explicit Water consumers.
 
 ## Ownership
 
@@ -16,7 +16,7 @@ XYZ -> dry
 XYZ -> LiquidTypeId + finite free volume
 ```
 
-Water is the built-in liquid identity `water`. `WaterLookup` projects only that identity:
+Water owns the open liquid identity `water`. `WaterLookup` projects only that identity:
 
 ```java
 int amount(int x, int y, int z);
@@ -60,6 +60,8 @@ The physical behavior accepted during the Water milestone is preserved:
 - latest actual-transfer diagnostics.
 
 The generic solver preserves liquid identity while moving volume. It does not branch on names such as Water, blood or wine.
+
+A multi-liquid runtime composes one shared `LiquidFlowSystem`; `WaterFlowSystem` can wrap that solver to expose Water-only diagnostics rather than creating a second hydraulic authority.
 
 See [Liquids](liquids.md) for the current single-component contact rule and future mixture seam.
 
@@ -153,7 +155,7 @@ Current Water integration does not implement:
 
 Existing Water headless coverage remains the regression contract for Water behavior: finite add/remove arithmetic, Shape capacity/openings, exact conservation, simultaneous-exit limiting, SurfaceWaterStorage, vertical falling, run-on Soil infiltration, saturated Soil behavior, deterministic dormancy, actual-flow diagnostics, cached Water surfaces, precipitation/evaporation accounting, Water-aware traversal and finite-world containment.
 
-Generic liquid tests additionally prove that non-Water identities use the same finite hydraulic solver, preserve identity and cannot accidentally mix through storage overwrite or deterministic iteration order.
+Generic liquid tests additionally prove that non-Water identities use the same finite hydraulic solver, preserve identity and cannot accidentally mix through storage overwrite or deterministic iteration order. Water integration tests also prove that a non-Water liquid in the shared owner does not inherit Water-to-Soil infiltration semantics.
 
 Visual Water acceptance remains Rain Cycle, stacked Z flow, Geometry/Ramp stress, Surface optical depth and calm/active Water presentation.
 
