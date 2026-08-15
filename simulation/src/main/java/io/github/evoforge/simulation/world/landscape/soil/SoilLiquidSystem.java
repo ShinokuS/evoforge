@@ -2,21 +2,24 @@ package io.github.evoforge.simulation.world.landscape.soil;
 
 import java.util.TreeSet;
 
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportLookup;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportMath;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
 /**
  * Authoritative retained-liquid composition inside Soil pore volume.
  *
- * <p>Unlike free-liquid cells, retained Soil content may contain several liquid
- * constituents at once. They compete for one material-owned capacity; this is
- * retained composition, not a free-liquid mixing/chemistry model.
+ * <p>Several liquid constituents may occupy one Soil cell while competing for one
+ * material-owned pore capacity. Retained composition is bookkeeping for porous
+ * occupancy, not free-liquid mixing or chemistry.
  */
-public final class SoilLiquidSystem {
+public final class SoilLiquidSystem implements SoilLiquidRetention {
 
     private final SoilLiquidStorage storage;
-    private final SoilHydrologyLookup hydrology;
-    private final SoilLiquidInteractionLookup interactions;
+    private final SoilPropertiesLookup properties;
+    private final LiquidTransportLookup liquidTransport;
     private final TreeSet<SoilCell> occupiedCells = new TreeSet<>();
     private final SoilLiquidLookup lookup = new SoilLiquidLookup() {
         @Override
@@ -76,22 +79,15 @@ public final class SoilLiquidSystem {
 
     public SoilLiquidSystem(
             SoilLiquidStorage storage,
-            SoilHydrologyLookup hydrology) {
-        this(storage, hydrology, SoilLiquidInteractionLookup.DEFAULT);
-    }
-
-    public SoilLiquidSystem(
-            SoilLiquidStorage storage,
-            SoilHydrologyLookup hydrology,
-            SoilLiquidInteractionLookup interactions) {
-
-        if (storage == null || hydrology == null || interactions == null) {
+            SoilPropertiesLookup properties,
+            LiquidTransportLookup liquidTransport) {
+        if (storage == null || properties == null || liquidTransport == null) {
             throw new IllegalArgumentException(
                     "Soil liquid dependencies must not be null");
         }
         this.storage = storage;
-        this.hydrology = hydrology;
-        this.interactions = interactions;
+        this.properties = properties;
+        this.liquidTransport = liquidTransport;
     }
 
     public SoilLiquidLookup lookup() {
@@ -102,45 +98,46 @@ public final class SoilLiquidSystem {
         return cells;
     }
 
-    /** Returns the effective local Soil hydrology, or null for non-absorbing terrain. */
-    public SoilHydrology hydrologyAt(int x, int y, int z) {
-        return hydrology.find(x, y, z);
+    /** Returns effective local porous properties, or null for non-absorbing terrain. */
+    public SoilProperties propertiesAt(int x, int y, int z) {
+        return properties.find(x, y, z);
     }
 
     /**
-     * Retains at most one interaction-defined infiltration step while respecting
-     * the one shared pore capacity across every retained liquid constituent.
+     * Retains one viscosity/permeability-bounded infiltration step while respecting
+     * the one shared pore capacity across every retained constituent.
+     *
+     * <p>The current surface-contact model assumes unit driving force while free
+     * liquid is present. Material permeability supplies the nominal reference-fluid
+     * uptake rate; inverse kinematic viscosity converts it to the actual liquid rate.
      */
+    @Override
     public int infiltrateAtMost(
             LiquidTypeId type,
             int x,
             int y,
             int z,
             int requested) {
-
         requireType(type);
         requireNonNegative(requested);
         if (requested == CellVolume.EMPTY) return CellVolume.EMPTY;
 
-        SoilHydrology localHydrology = hydrology.find(x, y, z);
-        if (localHydrology == null) return CellVolume.EMPTY;
+        SoilProperties local = properties.find(x, y, z);
+        if (local == null) return CellVolume.EMPTY;
 
         int currentTotal = currentTotal(x, y, z);
         int available = Math.max(
                 CellVolume.EMPTY,
-                localHydrology.capacity() - currentTotal);
+                local.capacity() - currentTotal);
         if (available == CellVolume.EMPTY) return CellVolume.EMPTY;
 
-        int interactionLimit = CellVolume.requireValid(
-                interactions.infiltrationLimitAt(
-                        type,
-                        x,
-                        y,
-                        z,
-                        localHydrology));
+        LiquidTransportProperties transport = liquidTransport.require(type);
+        int viscosityAdjustedPermeability = LiquidTransportMath.mobilityAdjustedAmount(
+                local.permeability(),
+                transport);
         int infiltrated = Math.min(
                 requested,
-                Math.min(available, interactionLimit));
+                Math.min(available, viscosityAdjustedPermeability));
         if (infiltrated == CellVolume.EMPTY) return CellVolume.EMPTY;
 
         int currentConstituent = currentAmount(type, x, y, z);
@@ -153,7 +150,7 @@ public final class SoilLiquidSystem {
         if (currentTotal == CellVolume.EMPTY) {
             occupiedCells.add(new SoilCell(x, y, z));
         }
-        verifyCapacity(x, y, z, localHydrology);
+        verifyCapacity(x, y, z, local);
         return infiltrated;
     }
 
@@ -163,7 +160,6 @@ public final class SoilLiquidSystem {
             int y,
             int z,
             int requested) {
-
         requireType(type);
         requireNonNegative(requested);
         if (requested == CellVolume.EMPTY) return CellVolume.EMPTY;
@@ -178,7 +174,6 @@ public final class SoilLiquidSystem {
         } else {
             storage.put(x, y, z, type, remaining);
         }
-
         if (currentTotal(x, y, z) == CellVolume.EMPTY) {
             occupiedCells.remove(new SoilCell(x, y, z));
         }
@@ -194,21 +189,20 @@ public final class SoilLiquidSystem {
     }
 
     private int currentTotal(int x, int y, int z) {
-        int total = CellVolume.requireValid(storage.totalAmount(x, y, z));
-        return total;
+        return CellVolume.requireValid(storage.totalAmount(x, y, z));
     }
 
     private void verifyCapacity(
             int x,
             int y,
             int z,
-            SoilHydrology localHydrology) {
+            SoilProperties local) {
         int total = currentTotal(x, y, z);
-        if (total > localHydrology.capacity()) {
+        if (total > local.capacity()) {
             throw new IllegalStateException(
                     "retained Soil liquid exceeded pore capacity at ("
                             + x + ", " + y + ", " + z + "): "
-                            + total + " > " + localHydrology.capacity());
+                            + total + " > " + local.capacity());
         }
     }
 
