@@ -107,6 +107,16 @@ public final class LiquidSystem {
         return removed;
     }
 
+    /** Iterates every currently active free-liquid cell without draining it. */
+    public void forEachActive(LiquidCellConsumer consumer) {
+        if (consumer == null) {
+            throw new IllegalArgumentException("consumer must not be null");
+        }
+        for (LiquidCell cell : flowActivity.snapshotSorted()) {
+            consumer.accept(cell.x(), cell.y(), cell.z());
+        }
+    }
+
     /** Iterates currently active cells containing {@code type} without draining them. */
     public void forEachActive(
             LiquidTypeId type,

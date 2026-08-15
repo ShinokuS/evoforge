@@ -1,36 +1,59 @@
 package io.github.evoforge.simulation.world.landscape.soil;
 
-import java.util.TreeSet;
-
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
-/** Authoritative finite moisture retained by terrain cells. */
+/**
+ * Typed compatibility facade over retained Soil liquid composition.
+ *
+ * <p>Existing hydrology/presentation consumers can continue to reason about one
+ * moisture constituent while {@link SoilLiquidSystem} owns the shared pore volume
+ * and may retain other liquid types independently.
+ */
 public final class SoilMoistureSystem {
 
-    private final SoilMoistureStorage storage;
-    private final SoilHydrologyLookup hydrology;
+    private static final LiquidTypeId LEGACY_MOISTURE_TYPE =
+            LiquidTypeId.of("water");
+
+    private final SoilLiquidSystem liquids;
+    private final LiquidTypeId moistureType;
     private final SoilMoistureLookup lookup;
-    private final TreeSet<MoistureCell> wetCells = new TreeSet<>();
-    private final SoilMoistureCellsLookup cells = new SoilMoistureCellsLookup() {
-        @Override
-        public int wetCellCount() {
-            return wetCells.size();
-        }
+    private final SoilMoistureCellsLookup cells;
 
-        @Override
-        public void forEach(SoilMoistureCellConsumer consumer) {
-            if (consumer == null) {
-                throw new IllegalArgumentException(
-                        "consumer must not be null");
-            }
-            for (MoistureCell cell : wetCells) {
-                consumer.accept(cell.x(), cell.y(), cell.z());
-            }
-        }
-    };
+    /** Creates a typed moisture projection over a shared retained-liquid owner. */
+    public SoilMoistureSystem(
+            SoilLiquidSystem liquids,
+            LiquidTypeId moistureType) {
 
-    /** Backward-compatible composition without coordinate-local variation. */
+        if (liquids == null || moistureType == null) {
+            throw new IllegalArgumentException(
+                    "Soil moisture dependencies must not be null");
+        }
+        this.liquids = liquids;
+        this.moistureType = moistureType;
+        lookup = (x, y, z) -> liquids.lookup().amountOf(
+                moistureType, x, y, z);
+        cells = new SoilMoistureCellsLookup() {
+            @Override
+            public int wetCellCount() {
+                return liquids.cells().cellCount(moistureType);
+            }
+
+            @Override
+            public void forEach(SoilMoistureCellConsumer consumer) {
+                if (consumer == null) {
+                    throw new IllegalArgumentException(
+                            "consumer must not be null");
+                }
+                liquids.cells().forEach(
+                        moistureType,
+                        (x, y, z) -> consumer.accept(x, y, z));
+            }
+        };
+    }
+
+    /** Backward-compatible Water-only composition without coordinate-local variation. */
     public SoilMoistureSystem(
             SoilMoistureStorage storage,
             TerrainLookup terrain,
@@ -42,22 +65,21 @@ public final class SoilMoistureSystem {
                         hydrology));
     }
 
+    /**
+     * Backward-compatible Water-only composition for existing fixtures.
+     * New multi-liquid composition should create one shared {@link SoilLiquidSystem}
+     * and pass an explicit liquid identity to the primary constructor.
+     */
     public SoilMoistureSystem(
             SoilMoistureStorage storage,
             SoilHydrologyLookup hydrology) {
-
-        if (storage == null) {
-            throw new IllegalArgumentException(
-                    "storage must not be null");
-        }
-        if (hydrology == null) {
-            throw new IllegalArgumentException(
-                    "hydrology must not be null");
-        }
-
-        this.storage = storage;
-        this.hydrology = hydrology;
-        lookup = storage::amount;
+        this(
+                new SoilLiquidSystem(
+                        new MoistureStorageAdapter(
+                                requireStorage(storage),
+                                LEGACY_MOISTURE_TYPE),
+                        requireHydrology(hydrology)),
+                LEGACY_MOISTURE_TYPE);
     }
 
     public SoilMoistureLookup lookup() {
@@ -69,57 +91,21 @@ public final class SoilMoistureSystem {
     }
 
     /** Returns the effective local material hydrology, or null for non-absorbing terrain. */
-    public SoilHydrology hydrologyAt(
-            int x,
-            int y,
-            int z) {
-        return hydrology.find(x, y, z);
+    public SoilHydrology hydrologyAt(int x, int y, int z) {
+        return liquids.hydrologyAt(x, y, z);
     }
 
-    /**
-     * Infiltrates no more than one material-defined transfer limit and the remaining
-     * local moisture capacity. Missing soil hydrology means that the terrain does not
-     * absorb Water.
-     */
     public int infiltrateAtMost(
             int x,
             int y,
             int z,
             int requested) {
-
-        requireNonNegative(requested);
-        if (requested == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
-        }
-
-        SoilHydrology definition = hydrology.find(x, y, z);
-        if (definition == null) {
-            return CellVolume.EMPTY;
-        }
-
-        int current = currentAmount(x, y, z);
-        int available = Math.max(
-                CellVolume.EMPTY,
-                definition.capacity() - current);
-        int infiltrated = Math.min(
-                requested,
-                Math.min(
-                        definition.infiltrationLimit(),
-                        available));
-
-        if (infiltrated == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
-        }
-
-        storage.put(
+        return liquids.infiltrateAtMost(
+                moistureType,
                 x,
                 y,
                 z,
-                current + infiltrated);
-        if (current == CellVolume.EMPTY) {
-            wetCells.add(new MoistureCell(x, y, z));
-        }
-        return infiltrated;
+                requested);
     }
 
     public int removeAtMost(
@@ -127,60 +113,83 @@ public final class SoilMoistureSystem {
             int y,
             int z,
             int requested) {
-
-        requireNonNegative(requested);
-        if (requested == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
-        }
-
-        int current = currentAmount(x, y, z);
-        int removed = Math.min(requested, current);
-        if (removed == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
-        }
-
-        int remaining = current - removed;
-        if (remaining == CellVolume.EMPTY) {
-            storage.remove(x, y, z);
-            wetCells.remove(new MoistureCell(x, y, z));
-        } else {
-            storage.put(x, y, z, remaining);
-        }
-        return removed;
+        return liquids.removeAtMost(
+                moistureType,
+                x,
+                y,
+                z,
+                requested);
     }
 
-    private int currentAmount(
-            int x,
-            int y,
-            int z) {
-
-        return CellVolume.requireValid(
-                storage.amount(x, y, z));
-    }
-
-    private static void requireNonNegative(
-            int requested) {
-
-        if (requested < CellVolume.EMPTY) {
-            throw new IllegalArgumentException(
-                    "requested soil moisture volume must not be negative: "
-                            + requested);
+    private static SoilMoistureStorage requireStorage(SoilMoistureStorage storage) {
+        if (storage == null) {
+            throw new IllegalArgumentException("storage must not be null");
         }
+        return storage;
     }
 
-    private record MoistureCell(int x, int y, int z)
-            implements Comparable<MoistureCell> {
+    private static SoilHydrologyLookup requireHydrology(SoilHydrologyLookup hydrology) {
+        if (hydrology == null) {
+            throw new IllegalArgumentException("hydrology must not be null");
+        }
+        return hydrology;
+    }
+
+    private static final class MoistureStorageAdapter
+            implements SoilLiquidStorage {
+        private final SoilMoistureStorage storage;
+        private final LiquidTypeId type;
+
+        private MoistureStorageAdapter(
+                SoilMoistureStorage storage,
+                LiquidTypeId type) {
+            this.storage = storage;
+            this.type = type;
+        }
 
         @Override
-        public int compareTo(MoistureCell other) {
-            int xOrder = Integer.compare(x, other.x);
-            if (xOrder != 0) {
-                return xOrder;
+        public int amountOf(
+                LiquidTypeId requestedType,
+                int x,
+                int y,
+                int z) {
+            return type.equals(requestedType)
+                    ? CellVolume.requireValid(storage.amount(x, y, z))
+                    : CellVolume.EMPTY;
+        }
+
+        @Override
+        public int totalAmount(int x, int y, int z) {
+            return CellVolume.requireValid(storage.amount(x, y, z));
+        }
+
+        @Override
+        public void put(
+                int x,
+                int y,
+                int z,
+                LiquidTypeId requestedType,
+                int amount) {
+            requireProjectedType(requestedType);
+            storage.put(x, y, z, amount);
+        }
+
+        @Override
+        public void remove(
+                int x,
+                int y,
+                int z,
+                LiquidTypeId requestedType) {
+            requireProjectedType(requestedType);
+            storage.remove(x, y, z);
+        }
+
+        private void requireProjectedType(LiquidTypeId requestedType) {
+            if (!type.equals(requestedType)) {
+                throw new IllegalArgumentException(
+                        "legacy Soil moisture storage cannot retain "
+                                + requestedType);
             }
-            int yOrder = Integer.compare(y, other.y);
-            return yOrder != 0
-                    ? yOrder
-                    : Integer.compare(z, other.z);
         }
     }
 }
