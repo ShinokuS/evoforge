@@ -20,6 +20,8 @@ import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingUnreachable
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingVerticalOverpassScenario;
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingWeightedDetourScenario;
 import io.github.evoforge.visualizer.scenario.pathfinding.PathfindingZSwitchbackScenario;
+import io.github.evoforge.visualizer.scenario.water.WaterRampGatesScenario;
+import io.github.evoforge.visualizer.scenario.water.WaterZStackScenario;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -65,8 +67,10 @@ public final class ScenarioCatalog {
                 ScenarioGroup.of("movement", "Movement",
                         new TimedMovementScenario(), new MoveToPatrolScenario(), new MoveToInteractiveScenario()),
                 ScenarioGroup.of("occupancy", "Occupancy", new OccupancyContentionScenario()),
-                ScenarioGroup.of("environment", "Environment",
-                        new RainHydrologyScenario()),
+                ScenarioGroup.of("water", "Water / Hydrology",
+                        new RainHydrologyScenario(),
+                        new WaterZStackScenario(),
+                        new WaterRampGatesScenario()),
                 ScenarioGroup.of("agents", "Agents",
                         new LivingCowScenario(), new CowForagingScenario(), new CowVisualSearchScenario()),
                 ScenarioGroup.of("pathfinding", "Pathfinding",

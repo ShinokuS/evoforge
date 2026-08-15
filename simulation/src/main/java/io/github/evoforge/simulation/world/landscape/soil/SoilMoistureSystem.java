@@ -2,7 +2,6 @@ package io.github.evoforge.simulation.world.landscape.soil;
 
 import java.util.TreeSet;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
@@ -10,8 +9,7 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 public final class SoilMoistureSystem {
 
     private final SoilMoistureStorage storage;
-    private final TerrainLookup terrain;
-    private final SoilHydrologyDefinitions hydrology;
+    private final SoilHydrologyLookup hydrology;
     private final SoilMoistureLookup lookup;
     private final TreeSet<MoistureCell> wetCells = new TreeSet<>();
     private final SoilMoistureCellsLookup cells = new SoilMoistureCellsLookup() {
@@ -32,18 +30,25 @@ public final class SoilMoistureSystem {
         }
     };
 
+    /** Backward-compatible composition without coordinate-local variation. */
     public SoilMoistureSystem(
             SoilMoistureStorage storage,
             TerrainLookup terrain,
             SoilHydrologyDefinitions hydrology) {
+        this(
+                storage,
+                new TerrainSoilHydrologyLookup(
+                        terrain,
+                        hydrology));
+    }
+
+    public SoilMoistureSystem(
+            SoilMoistureStorage storage,
+            SoilHydrologyLookup hydrology) {
 
         if (storage == null) {
             throw new IllegalArgumentException(
                     "storage must not be null");
-        }
-        if (terrain == null) {
-            throw new IllegalArgumentException(
-                    "terrain must not be null");
         }
         if (hydrology == null) {
             throw new IllegalArgumentException(
@@ -51,7 +56,6 @@ public final class SoilMoistureSystem {
         }
 
         this.storage = storage;
-        this.terrain = terrain;
         this.hydrology = hydrology;
         lookup = storage::amount;
     }
@@ -64,10 +68,18 @@ public final class SoilMoistureSystem {
         return cells;
     }
 
+    /** Returns the effective local material hydrology, or null for non-absorbing terrain. */
+    public SoilHydrology hydrologyAt(
+            int x,
+            int y,
+            int z) {
+        return hydrology.find(x, y, z);
+    }
+
     /**
      * Infiltrates no more than one material-defined transfer limit and the remaining
-     * moisture capacity. Missing soil hydrology means that the terrain does not
-     * absorb water.
+     * local moisture capacity. Missing soil hydrology means that the terrain does not
+     * absorb Water.
      */
     public int infiltrateAtMost(
             int x,
@@ -80,13 +92,11 @@ public final class SoilMoistureSystem {
             return CellVolume.EMPTY;
         }
 
-        LandscapeDefinitionId definitionId = terrain.find(x, y, z);
-        if (definitionId == null
-                || !hydrology.has(definitionId)) {
+        SoilHydrology definition = hydrology.find(x, y, z);
+        if (definition == null) {
             return CellVolume.EMPTY;
         }
 
-        SoilHydrology definition = hydrology.get(definitionId);
         int current = currentAmount(x, y, z);
         int available = Math.max(
                 CellVolume.EMPTY,

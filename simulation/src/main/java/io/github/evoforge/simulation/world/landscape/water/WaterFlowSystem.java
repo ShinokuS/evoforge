@@ -31,11 +31,26 @@ public final class WaterFlowSystem {
 
     private final WaterSystem water;
     private final GeometryLookup geometry;
+    private final SurfaceWaterStorageLookup surfaceStorage;
     private final WaterFlowActivity activity;
+    private final TreeMap<WaterCell, WaterFlowSample> lastFlow =
+            new TreeMap<>();
+    private final WaterFlowLookup flowLookup = (x, y, z) ->
+            lastFlow.get(new WaterCell(x, y, z));
 
     public WaterFlowSystem(
             WaterSystem water,
             GeometryLookup geometry) {
+        this(
+                water,
+                geometry,
+                SurfaceWaterStorageLookup.NONE);
+    }
+
+    public WaterFlowSystem(
+            WaterSystem water,
+            GeometryLookup geometry,
+            SurfaceWaterStorageLookup surfaceStorage) {
 
         if (water == null) {
             throw new IllegalArgumentException(
@@ -45,10 +60,20 @@ public final class WaterFlowSystem {
             throw new IllegalArgumentException(
                     "geometry must not be null");
         }
+        if (surfaceStorage == null) {
+            throw new IllegalArgumentException(
+                    "surfaceStorage must not be null");
+        }
 
         this.water = water;
         this.geometry = geometry;
+        this.surfaceStorage = surfaceStorage;
         activity = water.flowActivity();
+    }
+
+    /** Actual sparse transfer state from the latest evaluated solver step. */
+    public WaterFlowLookup flowLookup() {
+        return flowLookup;
     }
 
     /**
@@ -56,6 +81,8 @@ public final class WaterFlowSystem {
      * that crossed cell boundaries during this update.
      */
     public long update() {
+        lastFlow.clear();
+
         List<WaterCell> activeCells =
                 activity.drainSorted();
         if (activeCells.isEmpty()) {
@@ -162,7 +189,8 @@ public final class WaterFlowSystem {
                     second,
                     secondShape,
                     secondAmount,
-                    openingFloor);
+                    openingFloor,
+                    firstToSecond);
         }
 
         return planDirected(
@@ -173,7 +201,8 @@ public final class WaterFlowSystem {
                 first,
                 firstShape,
                 firstAmount,
-                openingFloor);
+                openingFloor,
+                firstToSecond.opposite());
     }
 
     private MutableTransfer planDirected(
@@ -184,7 +213,8 @@ public final class WaterFlowSystem {
             WaterCell destination,
             Shape destinationShape,
             int destinationAmount,
-            long openingFloor) {
+            long openingFloor,
+            CellFace direction) {
 
         if (sourceAmount == CellVolume.EMPTY
                 || sourceHead <= openingFloor) {
@@ -209,8 +239,19 @@ public final class WaterFlowSystem {
                 CellVolume.EMPTY,
                 sourceAmount - retainedBelowOpening);
 
+        int retainedSurface = direction.dz() == 0
+                ? CellVolume.requireValid(
+                        surfaceStorage.capacityAtWaterCell(
+                                source.x(),
+                                source.y(),
+                                source.z()))
+                : CellVolume.EMPTY;
+        int mobileAboveOpening = Math.max(
+                CellVolume.EMPTY,
+                availableAboveOpening - retainedSurface);
+
         int maximumTransfer = Math.min(
-                availableAboveOpening,
+                mobileAboveOpening,
                 destinationFree);
         if (maximumTransfer <= CellVolume.EMPTY) {
             return null;
@@ -345,16 +386,43 @@ public final class WaterFlowSystem {
         for (Map.Entry<WaterCell, List<MutableTransfer>> entry
                 : outgoing.entrySet()) {
 
+            WaterCell source = entry.getKey();
             List<MutableTransfer> group = entry.getValue();
             group.sort(Comparator.comparing(
                     transfer -> transfer.destination));
 
-            int sourceAmount = amount(entry.getKey());
+            int sourceAmount = amount(source);
             int relaxedSourceLimit =
                     sourceAmount / RELAXATION_DIVISOR;
             proportionallyLimit(
                     group,
                     relaxedSourceLimit);
+
+            int verticalOut = CellVolume.EMPTY;
+            List<MutableTransfer> horizontal = new ArrayList<>();
+            for (MutableTransfer transfer : group) {
+                if (transfer.destination.z() != source.z()) {
+                    verticalOut = Math.addExact(
+                            verticalOut,
+                            transfer.amount);
+                } else {
+                    horizontal.add(transfer);
+                }
+            }
+
+            if (!horizontal.isEmpty()) {
+                int retainedSurface = CellVolume.requireValid(
+                        surfaceStorage.capacityAtWaterCell(
+                                source.x(),
+                                source.y(),
+                                source.z()));
+                int horizontalLimit = Math.max(
+                        CellVolume.EMPTY,
+                        sourceAmount - verticalOut - retainedSurface);
+                proportionallyLimit(
+                        horizontal,
+                        horizontalLimit);
+            }
         }
     }
 
@@ -454,6 +522,7 @@ public final class WaterFlowSystem {
             moved = Math.addExact(
                     moved,
                     transfer.amount);
+            recordFlow(transfer);
         }
 
         if (moved == CellVolume.EMPTY) {
@@ -507,6 +576,29 @@ public final class WaterFlowSystem {
         }
 
         return moved;
+    }
+
+    private void recordFlow(
+            MutableTransfer transfer) {
+
+        WaterFlowSample sample = new WaterFlowSample(
+                transfer.destination.x() - transfer.source.x(),
+                transfer.destination.y() - transfer.source.y(),
+                transfer.destination.z() - transfer.source.z(),
+                transfer.amount);
+        recordDominant(transfer.source, sample);
+        recordDominant(transfer.destination, sample);
+    }
+
+    private void recordDominant(
+            WaterCell cell,
+            WaterFlowSample candidate) {
+
+        WaterFlowSample existing = lastFlow.get(cell);
+        if (existing == null
+                || candidate.amount() > existing.amount()) {
+            lastFlow.put(cell, candidate);
+        }
     }
 
     private long sharedOpeningFloor(

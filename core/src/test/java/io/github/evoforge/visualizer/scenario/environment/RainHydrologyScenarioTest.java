@@ -11,26 +11,26 @@ import io.github.evoforge.visualizer.scenario.ScenarioSession;
 final class RainHydrologyScenarioTest {
 
     @Test
-    void prewarmedSceneContainsSurfaceWaterInsideDryAbsorbentWalls() {
+    void sceneStartsDryWithSeparateFiniteLake() {
         ScenarioSession session = new RainHydrologyScenario().create();
 
-        assertEquals(400L, session.runtime().time().tick());
+        assertEquals(0L, session.runtime().time().tick());
         assertEquals(
-                WeatherPresentationKind.RAIN,
+                WeatherPresentationKind.CLEAR,
                 session.weather().current().kind());
-        assertTrue(session.runtime().view().waterSurfaces().columnCount() > 0);
 
+        assertEquals(
+                0,
+                session.runtime().view().soilMoisture().amount(0, 0, -1));
+        assertEquals(
+                0,
+                session.runtime().view().water().amount(0, 0, 0));
         assertTrue(
-                session.runtime().view().water().amount(-4, 0, 0) > 0,
-                "stone catchment should expose finite surface water");
-
+                session.runtime().view().water().amount(-5, 0, -1) > 0,
+                "the separate depression lake must exist at setup without prewarming the ground");
         assertEquals(
                 0,
-                session.runtime().view().water().amount(-6, 0, 1),
-                "left absorbent wall must still have no surface overflow");
-        assertEquals(
-                0,
-                session.runtime().view().water().amount(6, 0, 1),
-                "right absorbent wall must still have no surface overflow");
+                session.runtime().view().soilMoisture().amount(4, 0, -1),
+                "ground under the elevated roof must start just as dry as exposed ground");
     }
 }

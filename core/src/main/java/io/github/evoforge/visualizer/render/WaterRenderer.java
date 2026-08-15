@@ -7,6 +7,7 @@ import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
+import io.github.evoforge.visualizer.visual.WaterSliceResolver;
 
 /**
  * Lightweight presentation of authoritative finite Water.
@@ -17,10 +18,11 @@ import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
  */
 public final class WaterRenderer {
 
-    private static final long FRAME_MILLIS = 180L;
+    private static final long FRAME_MILLIS = 110L;
 
     private final SimulationView view;
     private final ProceduralWaterArt art;
+    private final WaterSliceResolver sliceResolver;
 
     public WaterRenderer(
             SimulationView view,
@@ -32,6 +34,9 @@ public final class WaterRenderer {
         }
         this.view = view;
         this.art = art;
+        sliceResolver = new WaterSliceResolver(
+                view.water(),
+                view.geometry());
     }
 
     public void draw(
@@ -40,10 +45,15 @@ public final class WaterRenderer {
             int maxX,
             int minY,
             int maxY,
-            int selectedStandingZ) {
+            int selectedStandingZ,
+            int maxLowerDepth) {
 
         if (batch == null) {
             throw new IllegalArgumentException("batch must not be null");
+        }
+        if (maxLowerDepth < 0) {
+            throw new IllegalArgumentException(
+                    "maxLowerDepth must not be negative");
         }
         if (view.waterSurfaces().columnCount() == 0) {
             return;
@@ -60,6 +70,7 @@ public final class WaterRenderer {
                         x,
                         y,
                         selectedStandingZ,
+                        maxLowerDepth,
                         globalFrame);
             }
         }
@@ -71,18 +82,19 @@ public final class WaterRenderer {
             int x,
             int y,
             int selectedStandingZ,
+            int maxLowerDepth,
             int globalFrame) {
 
         if (!view.waterSurfaces().hasColumn(x, y)) {
             return;
         }
 
-        int waterZ = view.waterSurfaces().topZ(x, y);
-        if (!visibleAtSelectedPlane(
+        int waterZ = sliceResolver.resolve(
                 x,
                 y,
-                waterZ,
-                selectedStandingZ)) {
+                selectedStandingZ,
+                maxLowerDepth);
+        if (waterZ == WaterSliceResolver.NO_WATER) {
             return;
         }
 
@@ -97,10 +109,9 @@ public final class WaterRenderer {
             return;
         }
 
-        float opacity = opacityFor(amount, capacity);
-        if (waterZ < selectedStandingZ) {
-            opacity *= 0.88f;
-        }
+        int depth = selectedStandingZ - waterZ;
+        float opacity = opacityFor(amount, capacity)
+                * depthOpacity(depth);
 
         batch.setColor(1f, 1f, 1f, opacity);
         batch.draw(
@@ -109,29 +120,6 @@ public final class WaterRenderer {
                 y,
                 1f,
                 1f);
-    }
-
-    private boolean visibleAtSelectedPlane(
-            int x,
-            int y,
-            int waterZ,
-            int selectedStandingZ) {
-
-        if (waterZ == selectedStandingZ) {
-            return !view.terrain().contains(
-                    x,
-                    y,
-                    selectedStandingZ);
-        }
-
-        // A Ramp may hold Water in its own terrain-anchor cell. Show this one
-        // embedded level while its standing surface is selected; deeper water
-        // remains hidden until the user changes Z rather than leaking through
-        // arbitrary cutaway roofs.
-        return waterZ == selectedStandingZ - 1
-                && view.terrain().contains(x, y, waterZ)
-                && CellSpace.capacity(
-                        view.geometry().find(x, y, waterZ)) > 0;
     }
 
     static float opacityFor(
@@ -145,6 +133,22 @@ public final class WaterRenderer {
                 1f,
                 amount / (float) capacity);
         float eased = fill * (2f - fill);
-        return 0.06f + 0.66f * eased;
+        return 0.12f + 0.72f * eased;
+    }
+
+    static float depthOpacity(
+            int depth) {
+
+        if (depth <= 0) {
+            return 1f;
+        }
+        return switch (Math.min(depth, 6)) {
+            case 1 -> 0.92f;
+            case 2 -> 0.80f;
+            case 3 -> 0.68f;
+            case 4 -> 0.57f;
+            case 5 -> 0.48f;
+            default -> 0.40f;
+        };
     }
 }
