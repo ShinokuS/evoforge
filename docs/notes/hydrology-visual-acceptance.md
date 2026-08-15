@@ -2,85 +2,85 @@
 
 ## Goal
 
-Make finite Water and configured Rain immediately readable in the development visualizer without adding a second simulation, particle world or persistent presentation state per cell/drop.
+Keep finite Water readable and testable in the development visualizer without creating an unbounded hydraulic workload or a second presentation simulation.
+
+## Finite world boundary
+
+Hydrology acceptance worlds configure explicit inclusive XYZ `WorldBounds` through `SimulationAssembly.worldBounds(...)`.
+
+`WorldGeometryLookup` composes the ordinary landscape geometry with that objective world fact. Coordinates outside configured bounds present `FullShape` to Geometry consumers, so Water, Navigation, Movement and traversal cannot treat the exterior as open space. Assemblies that do not configure bounds preserve the historical unbounded-world behavior.
+
+The boundary is not represented by generated wall terrain and does not require Water-specific edge checks.
 
 ## Water presentation
 
-The visualizer reads authoritative `WaterLookup`, `WaterSurfaceLookup` and neutral `GeometryLookup` only for the camera-visible XY range.
+The visualizer reads authoritative `WaterLookup` and uses `WaterSurfaceLookup` only as a sparse XY early-out.
 
-- one shared procedural 16x16 atlas contains six Water animation frames;
+- one shared procedural Water atlas is reused by every visible cell;
 - cell opacity is derived from current finite Water amount divided by neutral geometric capacity;
-- all visible neighbouring Water cells share one global animation phase so tile boundaries read as one coherent surface;
-- a presentation-only `WaterSliceResolver` resolves the nearest wet XYZ cell visible through the selected horizontal cut and configured lower-depth band;
-- completely solid geometry stops that vertical lookup, so Water does not leak visually through roofs or full terrain;
-- Water above the selected cut is hidden, while Water below it remains visible through actually open cutaway space;
-- deeper visible Water is progressively dimmed to make Z separation readable without creating per-cell state;
-- no Water animation component/state is stored in simulation or per rendered cell;
-- no reflections, refractions, fluid mesh, framebuffer post-processing or flow-vector field are used in this slice.
-
-`WaterSurfaceLookup` remains the cheap sparse XY early-out. It is not treated as the full drawable Water state because it intentionally stores only the topmost wet Z per column.
+- all visible neighbouring Water cells share one animation phase;
+- cutaway rendering resolves the nearest visible Water cell at or below the selected Z instead of assuming the topmost wet cell is the drawable layer;
+- no Water animation component/state is stored in simulation or per rendered cell.
 
 If the world has no wet columns, the Water renderer returns before scanning the visible range.
 
-## Rain presentation
+## Compact stress suite
 
-Rain is a fixed-budget screen-space effect driven by a presentation-only weather lookup.
+The `Water / Hydrology` group intentionally contains only three visual scenarios.
 
-- `Clear` exits immediately;
-- `Rain` draws one subtle atmosphere veil plus at most 96 deterministic streaks;
-- streak seeds are allocated once when the renderer is created;
-- no raindrop entities or per-frame particle allocations exist.
+### Rain Cycle
 
-The presentation weather contract is intentionally separate from physical precipitation cadence. The current simulation has periodic precipitation rather than a full atmospheric weather-duration model; a future Weather domain can adapt into the same presentation lookup.
+The only continuously climate-driven acceptance world. It covers:
 
-## UI
+- intermittent precipitation;
+- soil-first infiltration;
+- low-infiltration puddles;
+- impermeable runoff;
+- roof / highest-surface shielding;
+- exposed Water and retained-moisture evaporation;
+- long-term non-flooding balance.
 
-The existing scenario status line includes `Weather: Clear` or `Weather: Rain <intensity>%`. Focused Water scenarios also expose bounded presentation-only diagnostics with total finite Water, wet-cell count, retained SoilMoisture and per-Z Water totals. These diagnostics only read authoritative state.
+For acceptance math only, one tile is treated as a 1 m x 1 m footprint and one full normalized cell as 1 m water depth. Therefore 1 mm of water depth equals 1000 normalized volume units.
 
-## Water / Hydrology acceptance suite
+One 240-tick climate cycle is treated as one scenario day for balancing rates:
 
-The visualizer catalog contains a dedicated `Water / Hydrology` group.
+- rain event: 3000 units = 3.0 mm;
+- evaporation: 20 units per exposed column per tick, at most 4.8 mm over the cycle before precipitation-tick suppression;
+- loam infiltration limit: 3.0 mm per rain event;
+- compacted-clay infiltration limit: 0.8 mm per event.
 
-| Scenario | Main failure class it is meant to expose |
-| --- | --- |
-| `Rain & Water` | soil-first infiltration, finite surface runoff and low-cost rain presentation |
-| `Water Z Stack` | deep Water occupying several Z cells and cutaway continuity while switching Z |
-| `Water Vertical Fall` | one-local-step vertical propagation from an elevated runoff source |
-| `Water Equalization` | hydraulic-head relaxation through one physical gate |
-| `Water Symmetric Split` | deterministic bounded multi-edge outflow and ordering bias |
-| `Water Ramp Gates` | Ramp low-face opening vs high-face blocking using physical Shape facts |
-| `Water Barrier Detour` | no flow through FullShape barriers and no basin teleportation |
-| `Water Sky Shield` | highest-surface rain targeting and shielding of lower terrain by a roof |
-| `Water Evaporation Cycle` | precipitation cadence, same-tick evaporation suppression and Water-before-Soil sink behavior |
+The deliberately negative free-water balance means puddles should dry before the next rain pulse instead of accumulating toward a flood. This is a dimensionally meaningful acceptance climate, not yet a full meteorological evapotranspiration model.
 
-Each scenario starts from deterministic setup/prewarm and is backed by a headless assertion that the intended physical condition actually exists. The suite complements, rather than replaces, lower-level Water tests for exact mass conservation, insertion-order determinism, deadband convergence, dormancy/wake and geometry-driven displacement.
+### Water Z Flow
 
-## Manual acceptance
+Rain-free deterministic setup using exact initial Water. It combines:
 
-For Water scenarios:
+- a real multi-Z deep pool;
+- a vertical falling shaft;
+- one-edge-per-update propagation;
+- Z cutaway continuity.
 
-1. use `Space` to advance simulation time;
-2. use `PgUp/PgDn` on `Water Z Stack` and `Water Vertical Fall` to verify Water remains readable across cuts;
-3. compare the visible surface with the diagnostic `zN=volume` values;
-4. verify walls/roofs never show Water from physically hidden cells beneath them;
-5. inspect `Water Ramp Gates` from both sides of the Ramp;
-6. watch `Water Symmetric Split` for directional bias;
-7. watch the evaporation scenario across several rain pulses;
-8. pan/zoom aggressively and compare `VisualizerPerf` with non-Water scenarios.
+### Water Geometry Stress
 
-## Performance rule
+Rain-free bounded horizontal stress combining:
 
-The visual layer intentionally prefers bounded cost over visual richness. Z resolution adds only a short camera-local downward lookup bounded by the existing cutaway lower-depth setting and only for XY columns already known to contain Water. Any future splash, ripple, flow-direction or lighting enhancement should remain derived/read-only and should be justified by representative profiling before adding persistent state or world-wide work.
+- symmetric multi-exit flow;
+- a long FullShape barrier and detour/equalization path;
+- Ramp low-face admission;
+- Ramp high-face blocking;
+- finite spreading inside a closed map.
 
-## Known non-scenario coverage
+Existing lower-level tests remain the authority for exact conservation, deterministic mutation order, integer deadband convergence, dormancy/wake, capacity displacement and mover-specific Water traversal.
 
-Some invariants are more reliable as headless tests than as a visual scene and remain covered there:
+## Performance rules
 
-- exact conservation during redistribution;
-- mutation/insertion-order determinism;
-- convergence into the integer deadband and dormancy;
-- explicit external mutation wake-up;
-- geometry changes that reduce capacity without silently deleting Water;
-- authoritative Movement/MoveTo revalidation against mover-specific wading depth.
+Hydrology acceptance intentionally bounds work in several independent ways:
 
-The suite does not claim to prove mechanics that do not exist yet, such as groundwater, pressure networks, swimming, waves or finite generated-world boundary semantics.
+- finite world bounds cap the maximum hydraulic frontier;
+- non-climate stress worlds use exact initial Water rather than repeated precipitation;
+- rain occurs only once per long climate cycle;
+- Water presentation has no per-cell persistent animation state;
+- Water diagnostics recompute only when the simulation tick changes, never once per render frame while paused;
+- rain remains a fixed-budget screen-space effect.
+
+Any future ripple, splash, flow-direction or lighting enhancement should remain derived/read-only and should be justified by profiling before adding persistent state or world-wide work.
