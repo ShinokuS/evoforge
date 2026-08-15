@@ -2,259 +2,236 @@
 
 ## Purpose
 
-Own finite authoritative liquid-water quantity in the shared discrete XYZ world and redistribute that quantity locally without embedding water into Terrain, Geometry or a giant world-cell object.
+Own finite authoritative liquid-Water quantity in the shared discrete XYZ world and redistribute it locally without embedding Water into Terrain, Geometry or a universal world-cell object.
 
-The current slice includes finite state, the deterministic local flow solver, cached wet-column surfaces, an opt-in runtime process that advances active flow one local step per simulation tick until dormancy, precipitation-driven replenishment and a simple exposed-surface evaporation sink. Authoritative mover-specific wading restrictions are now available; planner integration and drinking remain later slices.
+The current foundation includes finite sparse quantity, Shape-derived free capacity, deterministic local redistribution, SurfaceWaterStorage, run-on Soil infiltration, shared sky-surface precipitation/evaporation, sparse latest-step flow diagnostics, optional finite runtime bounds and mover-specific terrestrial wading integrated into both MoveTo planning and authoritative Movement revalidation.
+
+Drinking, swimming and richer fluid mechanics remain later consumers.
 
 ## Ownership
 
-Water is an independent landscape mechanic:
+Water is independent landscape state:
 
 ```text
 TerrainState   XYZ -> terrain identity | absence
 Geometry       XYZ terrain anchor -> Shape | default FullShape
-WaterState     XYZ -> liquid volume | dry
+SoilMoisture   terrain XYZ -> retained finite moisture
+WaterState     XYZ -> free liquid volume | dry
 ```
 
 Shared coordinates are interaction addresses; Water does not become a Terrain field.
 
-`WaterSystem` is the authoritative quantity mutation owner. `WaterLookup` exposes current quantity:
+`WaterSystem` is the authoritative mutation owner. `WaterLookup` exposes current quantity:
 
 ```java
 int amount(int x, int y, int z);
 ```
 
-Dry/absent water is represented by `CellVolume.EMPTY` (`0`), not by a special water object.
+Dry Water is `CellVolume.EMPTY` (`0`). Current storage is sparse: only positive quantities require entries. Storage representation is replaceable.
 
-`WaterFlowSystem` owns redistribution policy and a sparse activity frontier, but no separate liquid quantity. `WaterFlowProcess` is only a scheduler adapter around that solver.
+## Quantity and geometry
 
-## Quantity representation
-
-Water quantity uses the deterministic cell-volume scale introduced by Geometry:
+Water uses the deterministic normalized cell-volume scale:
 
 ```text
 CellVolume.EMPTY = 0
 CellVolume.FULL  = 1_000_000
 ```
 
-A quantity is a fraction of one discrete cell volume. It does not yet define litres, density or world-cell dimensions.
-
-Current storage is sparse: only positive quantities require entries. This is a replaceable representation, not a public promise about future chunking or packing.
-
-## Derived wet-column surface
-
-`WaterSystem` also maintains `WaterSurfaceLookup`, a derived cache of the top positive-water Z in each wet XY column.
-
-The cache is updated through the same authoritative mutation boundary as Water quantity:
-
-- external `addAtMost(...)` / `removeAtMost(...)` calls;
-- simultaneous flow commits through `replaceFromFlow(...)`.
-
-It therefore remains correct when a stable lake is hydraulically dormant. Atmosphere consumers can find an exposed lake surface without iterating the Water flow frontier or scanning vertical world space.
-
-The cache owns no independent liquid quantity and cannot mutate Water.
-
-## Geometry-derived free space
+This is a fraction of one discrete cell volume, not litres or a declaration that a world cell is one cubic metre.
 
 Water reads only neutral Geometry facts. It does not branch on `FullShape`, `RampShape` or future concrete Shape classes.
 
-The basic capacity remains:
+Important Geometry inputs are:
 
 ```text
-open cell             capacity = 1.0
-FullShape anchor cell capacity = 0.0
-RampShape anchor cell capacity = 0.5
+CellSpace.capacity(shape)
+CellSpace.surfaceHeight(shape, volume)
+Shape.freeVolumeBelow(localHeight)
+Shape.boundaryOpeningFloor(CellFace)
 ```
 
-Flow additionally needs more than one scalar volume. Geometry exposes a coarse cell-local free-space profile:
+A coordinate with no Shape is open space. `FullShape` has zero Water capacity. A current cardinal `RampShape` leaves a half-cell free wedge with its own height/opening profile.
 
-```text
-freeVolumeBelow(localHeight)
-boundaryOpeningFloor(CellFace)
-```
+Navigation transition ports are not hydraulic openings.
 
-`freeVolumeBelow` answers how much geometric free volume exists below a normalized height. `boundaryOpeningFloor` answers the lowest local elevation where that free space connects through one physical cell face, or `CellSpace.CLOSED`.
+## Mutation boundary
 
-These are objective physical facts. They are **not** water-specific behavior and are deliberately independent from navigation `transitionPorts()`.
-
-For a coordinate without a Shape, free volume is linear with height and all physical faces are open. `FullShape` exposes no free volume/opening. `RampShape` exposes a height-dependent wedge profile, an open low side, a closed high side, an open top and a blocked bottom.
-
-The current boundary contract is intentionally first-order. It is sufficient for the finite flow solver without inventing a mesh/subcell/hydraulic hierarchy. A future Shape whose physically important opening cannot be represented by one lower sill must drive a richer neutral boundary profile rather than a concrete-type branch in Water.
-
-## Mutation semantics
-
-The external primitive operations remain arithmetic:
+External quantity operations are bounded arithmetic:
 
 ```java
 int addAtMost(x, y, z, requested);
 int removeAtMost(x, y, z, requested);
 ```
 
-They return the volume that actually entered or left Water state.
+They return the volume that actually entered or left authoritative Water. Negative requests are programming errors; zero is a valid no-op.
 
-Successful external mutation also wakes the changed cell in the local flow frontier. Zero/no-op mutations do not create work.
+Successful mutation updates the derived surface cache and wakes the local flow frontier. Sources/sinks such as precipitation and evaporation therefore never bypass Water ownership.
 
-Negative requests are programming errors. Zero is a valid no-op.
+## Derived wet-column surface
 
-This API is the shared boundary for finite sources and sinks. Precipitation uses `addAtMost(...)`; evaporation uses `removeAtMost(...)`. Neither needs to import `WaterFlowSystem`, and conservation accounting uses the returned actual quantity rather than bypassing Water ownership.
+`WaterSystem` maintains `WaterSurfaceLookup`, the top positive-Water Z for each wet XY column.
 
-## Hydraulic-head model
+The cache changes only through authoritative Water mutation/flow commit. A hydraulically dormant lake therefore remains discoverable by atmosphere/presentation without scanning vertical world space or iterating the flow frontier.
 
-The solver deliberately does not have separate `gravity()` and `spreadHorizontally()` procedures.
+The cache owns no independent liquid quantity.
 
-For every active local cell pair it derives one hydraulic head from:
+## Hydraulic flow model
+
+`WaterFlowSystem` owns redistribution policy but no duplicate Water amount.
+
+For a connected pair it compares hydraulic head derived from:
 
 ```text
 absolute cell Z
 +
-local liquid surface height
+local liquid surface height from Geometry
 ```
 
-The local surface height is the inverse of Geometry's `freeVolumeBelow(height)` profile.
+The same comparison explains lateral equalization and downward movement. A physical face's opening floor retains Water below its sill; a closed face creates no transfer.
 
-Therefore the same comparison explains both cases:
-
-```text
-same Z, unequal surfaces -> lateral equalization
-higher cell over lower   -> downward flow through an open face
-```
-
-A face opening contributes a lower sill. Water below that sill is retained in the source; Water above it may participate in the pair flux. A closed face contributes no connection.
-
-If Geometry has changed so existing authoritative Water exceeds the new free-space capacity, the excess contributes additional hydraulic head rather than being deleted. Flow can displace it through available openings. A completely closed replacement Shape can still require a higher-level coordinated Geometry/Water mutation because there is no post-hoc physical exit to use.
-
-## Deterministic two-phase redistribution
-
-One flow update is conceptually:
+Each update is two-phase:
 
 ```text
 active frontier
-      |
-      v
-read one authoritative Water + Geometry snapshot
-      |
-      v
-calculate desired neighbor transfers
-      |
-      v
-bound by source quantity + opening sill + destination capacity
-      |
-      v
-deterministic proportional reduction
-      |
-      v
-commit aggregate cell deltas simultaneously
+      ↓
+read authoritative Water + Geometry snapshot
+      ↓
+plan local face transfers
+      ↓
+apply source/opening/storage/destination bounds
+      ↓
+deterministic proportional limiting
+      ↓
+commit aggregate deltas simultaneously
 ```
 
-No transfer can consume Water that arrived earlier in the same update. This prevents traversal-order cascades such as `A -> B -> C` in one solver step.
+Water that arrives during a step cannot be forwarded again during that same step. Candidate ordering and integer remainder allocation are deterministic.
 
-Every undirected face pair is considered at most once per update. Candidate cells/edges and integer remainder allocation use stable coordinate ordering, so `HashMap`/`HashSet` iteration order cannot change authoritative results.
-
-The commit applies net deltas after the whole plan is resolved. The exact redistribution invariant is:
+The conservation invariant is exact:
 
 ```text
 sum(delta over every changed cell) = 0
 ```
 
-Only explicit external source/sink operations may change total Water quantity.
+Only external sources/sinks may change total Water quantity.
 
-## Relaxation and integer deadband
+## SurfaceWaterStorage
 
-Direct pair equalization can overshoot when one source has several lower neighbors. The current solver therefore uses deterministic fixed-point relaxation:
+A supporting terrain definition may declare a finite `SurfaceWaterStorage` capacity.
 
-```text
-pair transfer -> half of the pair equilibrium transfer
-combined outgoing source budget -> at most half of snapshot source quantity
-```
+This reserve is **free Water**, not SoilMoisture. It stays in `WaterState`, contributes to rendering/depth, and is conserved.
 
-Integer division supplies a natural one-quantum deadband. Once no meaningful integer flux remains, the region is considered locally stable rather than oscillating forever around an unrepresentable fractional equilibrium.
+For same-Z horizontal flow, the source keeps the declared reserve before Water becomes mobile. The aggregate source limiter shares one reserve across simultaneous exits, preventing several neighbors from each draining the same shallow storage independently.
 
-These constants are solver policy, not Shape data or fluid identity. They can be refined later from representative hydrology scenarios without changing Water ownership.
+For vertical flow (`dz != 0`) the reserve is not subtracted. Water that can physically fall through an open lower boundary is not artificially held up by a horizontal runoff threshold.
 
-## Active frontier, runtime cadence and dormancy
+## Relaxation and dormancy
 
-The solver never scans the whole world and does not iterate every wet cell forever.
+The solver uses deterministic fixed-point relaxation instead of directly forcing pair equality. Pair transfer and aggregate source budgets are deliberately damped, and integer arithmetic supplies a one-quantum deadband.
 
-A cell is active when:
-
-- external Water quantity at that cell changes;
-- a previous flow step changed that cell;
-- a higher-level Geometry coordinator explicitly activates the cell after physical geometry changes.
-
-`WaterFlowSystem.update()` drains the current active set in deterministic order. If no transfer occurs, nothing is reactivated and the region becomes dormant:
+Once no meaningful integer transfer remains, the active region sleeps:
 
 ```text
-stable lake / isolated puddle
-        |
-        v
-active set becomes empty
-        |
-        v
-future flow work = 0
+stable lake / retained puddle
+        ↓
+active frontier becomes empty
+        ↓
+flow work = 0 until another mutation wakes it
 ```
 
-`WaterFlowProcess` connects this model to the simulation scheduler. `activate()` schedules at most one continuation. Each continuation performs one local solver update one tick later and reschedules itself only while the active frontier still contains work.
+`WaterFlowProcess` advances one local hydraulic step per scheduled simulation tick while work exists.
 
-Production precipitation and evaporation mutate Water only through `WaterSystem`; composition ensures pending hydraulic work is scheduled when free Water was actually changed. If a weather event only changes SoilMoisture, no hydraulic work is needed.
+## Water -> Soil exchange
 
-The frontier stores changed cells, not every cell containing Water. Each active cell examines only its six physical face neighbors.
+Free Water arriving over absorbent terrain may infiltrate even when it did not originate as rain.
+
+Before each scheduled flow solve, `WaterSoilExchangeSystem` inspects the same sparse active-Water frontier, resolves supporting terrain and transfers at most the Soil's current infiltration limit/remaining capacity from Water into `SoilMoistureSystem`.
+
+The exact transferred amount is removed from Water. Then ordinary Water flow runs on what remains.
+
+This gives one consistent physical chain:
+
+```text
+rain/run-on source
+    ↓
+SoilMoisture if capacity remains
+    ↓
+excess free Water
+    ↓
+hydraulic redistribution
+```
+
+See [Surface Hydrology](hydrology.md) for precipitation/evaporation composition.
+
+## Latest actual-flow diagnostics
+
+`WaterFlowSystem` exposes sparse `WaterFlowLookup` samples from the latest evaluated transfer step.
+
+A sample exists only when real Water crossed a cell boundary. It records objective transfer direction/volume for diagnostics; it is not a persistent velocity field.
+
+The map is cleared before each solve. A no-transfer fixed point therefore exposes no stale motion sample. Presentation maps those facts to directional/falling animation and treats no sample as calm.
 
 ## Atmosphere interaction
 
-Vertical atmospheric exposure is now shared through `SkySurfaceLookup` rather than being implemented separately by every environment effect.
+`VerticalSkySurfaceSystem` supplies one shared topmost exposed Terrain-or-Water surface per XY column.
 
-Precipitation can add Water to an exposed liquid surface or route rainfall through exposed terrain and SoilMoisture first.
+- rainfall onto Terrain goes through SoilMoisture first and places only excess as free Water;
+- rainfall onto exposed Water adds directly to the liquid surface;
+- evaporation removes exposed free Water first and then exposed SoilMoisture;
+- covered Water is not evaporated merely because it exists in sparse storage.
 
-The current evaporation placeholder requests a fixed absolute volume per exposed wet XY column. It removes exposed free Water before exposed retained SoilMoisture. This intentionally approximates surface-area-driven loss rather than percentage decay of stored volume.
+Periodic/cyclic scheduling belongs to the environment layer, not `WaterSystem` itself.
 
-Covered Water is not evaporated merely because it is present in `WaterStorage`: sparse wet candidates are revalidated against the shared sky surface before the sink is applied.
+## Optional finite world bounds
 
-## Geometry changes and displacement
+When `SimulationAssembly.worldBounds(...)` is configured, the shared `WorldGeometryLookup` resolves coordinates outside the inclusive box as `FullShape`. Water therefore observes one physically closed world boundary through ordinary Geometry.
+
+There is no Water-specific coordinate clamp, invisible deletion or special edge rule. Without configured bounds, the earlier unbounded semantics remain intentionally available.
+
+Generated/unloaded/streamed world state is still separate future architecture.
+
+## Water-aware terrestrial traversal
+
+Finite Water influences ordinary terrestrial movement through a separate mover-specific constraint, not by changing Navigation topology.
+
+A `WaterWadingProfile(maxDepth)` may be attached to an object definition. The same `WaterWadingConstraint` is composed into:
+
+```text
+MoveTo advisory PathQuery
+MovementSystem start validation
+MovementActionProcessor commit revalidation
+```
+
+Raw Water changes do not increment the landscape traversal revision. Current Water is read when planning/executing, and authoritative Movement remains the final gate.
+
+See [Water Traversal](water-traversal.md).
+
+## Geometry changes
 
 Geometry owns Shape state; Water owns quantity. Geometry therefore never silently deletes displaced Water.
 
-A higher-level landscape mutation coordinator should perform the Geometry change and call:
-
-```java
-waterFlow.activateAt(x, y, z);
-```
-
-and ensure the runtime flow process is awakened when local hydraulic reevaluation is required.
-
-Arbitrary runtime Geometry-to-Water wake coordination is still separate work.
-
-The solver can redistribute over-capacity Water when changed geometry still exposes a physical route. More complex object/terrain displacement remains a coordinated future mechanic rather than an implicit side effect of Geometry writes.
-
-## Current world-boundary limitation
-
-The current sandbox has no authoritative finite generated-world boundary. In a deliberately open test setup, Water can therefore continue flowing into coordinates with no supporting generated landscape.
-
-Water does not compensate for this with invisible walls, deletion at an edge, or an arbitrary coordinate clamp. Physical containment belongs to the future world-generation/world-bounds architecture.
-
-Until then, hydrology scenarios that require retained Water should construct enclosing terrain and avoid layouts that permit indefinite runoff into ungenerated empty space. This does not weaken Water conservation: the solver still conserves finite quantity while redistributing it among represented coordinates.
+`WaterFlowSystem.activateAt(x,y,z)` exists as the narrow hydraulic wake point for a higher-level coordinator after relevant Geometry changes. General runtime Geometry/Water displacement coordination remains future work.
 
 ## Deliberately absent
 
-The current Water/Surface-Hydrology slices do **not** yet implement:
+Current Water does not implement:
 
-- full Weather state, storm fields or moving atmospheric fronts;
-- temperature, humidity, wind or solar-driven evaporation rates;
-- authoritative generated world bounds;
-- springs or other independent scheduled sources/drains;
-- deep drainage/groundwater or plant soil-water uptake;
-- automatic Water wake coordination for arbitrary runtime Geometry changes;
-- object displacement volume;
-- Water-aware planner/query composition;
-- shallow-Water traversal costs or speed penalties;
+- drinking/Thirst interactions;
+- shallow-Water speed/cost penalties;
 - swimming or waterborne locomotion;
+- current forces, knockback or drowning;
 - Water-body identity;
-- Thirst/Drink interactions;
-- detailed pressure, inertia, viscosity, turbulence or erosion.
-
-Raw Water amount changes intentionally do not increment Navigation/Pathfinder revisions. See the dedicated Water Traversal document for the authoritative wading boundary and the next planner-integration step.
+- pressure/inertia/viscosity/turbulence/erosion;
+- object displacement volume;
+- deep groundwater/drainage;
+- automatic wake/displacement coordination for arbitrary runtime Geometry mutation;
+- generated/streamed world-bound semantics beyond optional explicit runtime bounds.
 
 ## Tests
 
-Headless tests cover finite add/remove arithmetic, generic Shape capacity, deterministic hydraulic redistribution and conservation, ramp opening behavior, convergence/dormancy, cached wet surfaces, precipitation source accounting, shared sky targeting, finite exposed evaporation, Water-before-soil evaporation, covered-water protection, periodic evaporation cadence, rain suppression, mover-specific Water-depth classification and authoritative Movement revalidation.
+Headless coverage includes finite add/remove arithmetic, Shape capacity/opening behavior, exact conservation, simultaneous-exit limiting, SurfaceWaterStorage retention, vertical falling, run-on Soil infiltration, saturated-Soil behavior, deterministic convergence/dormancy, actual-flow sample clearing, cached Water surfaces, precipitation/evaporation accounting, Water-aware planning/execution and explicit finite-world containment.
 
-See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), [Water Traversal](water-traversal.md), and the [Water Foundation design note](../notes/water-foundation.md).
+Visual acceptance additionally covers Rain Cycle, stacked Z flow, Geometry/Ramp stress, Surface optical depth and calm/active Water presentation.
+
+See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), [Water Traversal](water-traversal.md), and the historical [Water Foundation note](../notes/water-foundation.md).
