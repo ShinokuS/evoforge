@@ -21,10 +21,11 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
  * bounds them deterministically and commits aggregate deltas through
  * {@link LiquidSystem}.
  *
- * <p>Kinematic viscosity affects only mobility: the same hydraulic equilibrium is
- * sought for every liquid, while more viscous liquids realize a smaller fraction
- * of that transfer per tick. The reference-viscosity liquid preserves the original
- * one-half relaxation cadence exactly.
+ * <p>Kinematic viscosity affects mobility exactly once at the planned edge transfer:
+ * every liquid seeks the same hydraulic equilibrium, while a more viscous liquid
+ * realizes a smaller fraction of that equilibrium transfer per tick. The aggregate
+ * source limiter remains a numerical conservation/stability bound rather than a
+ * second physical viscosity term.
  *
  * <p>The current content model is single-component per free cell. Different liquid
  * types do not implicitly mix. An occupied unlike destination rejects transfer;
@@ -182,7 +183,7 @@ public final class LiquidFlowSystem {
 
         int retainedSurface = direction.dz() == 0
                 ? CellVolume.requireValid(surfaceRetention.capacityAt(
-                        type, source.x(), source.y(), source.z()))
+                        source.x(), source.y(), source.z()))
                 : CellVolume.EMPTY;
         int mobileAboveOpening = Math.max(
                 CellVolume.EMPTY, availableAboveOpening - retainedSurface);
@@ -271,11 +272,7 @@ public final class LiquidFlowSystem {
             group.sort(Comparator.comparing(transfer -> transfer.destination));
 
             int sourceAmount = amount(source);
-            LiquidTypeId sourceType = type(source);
-            int mobilityBudget = LiquidTransportMath.mobilityAdjustedAmount(
-                    sourceAmount / 2,
-                    transport.require(sourceType));
-            proportionallyLimit(group, mobilityBudget);
+            proportionallyLimit(group, sourceAmount / 2);
 
             int verticalOut = CellVolume.EMPTY;
             List<MutableTransfer> horizontal = new ArrayList<>();
@@ -291,7 +288,7 @@ public final class LiquidFlowSystem {
             if (!horizontal.isEmpty()) {
                 int retainedSurface = CellVolume.requireValid(
                         surfaceRetention.capacityAt(
-                                sourceType, source.x(), source.y(), source.z()));
+                                source.x(), source.y(), source.z()));
                 int horizontalLimit = Math.max(
                         CellVolume.EMPTY,
                         sourceAmount - verticalOut - retainedSurface);
