@@ -11,28 +11,26 @@ import io.github.evoforge.visualizer.scenario.ScenarioSession;
 final class RainHydrologyScenarioTest {
 
     @Test
-    void prewarmedSceneStartsAtBoundedRainPulseWithShallowSurfaceWater() {
+    void sceneStartsDryWithSeparateFiniteLake() {
         ScenarioSession session = new RainHydrologyScenario().create();
 
-        assertEquals(240L, session.runtime().time().tick());
+        assertEquals(0L, session.runtime().time().tick());
         assertEquals(
-                WeatherPresentationKind.RAIN,
+                WeatherPresentationKind.CLEAR,
                 session.weather().current().kind());
-        assertTrue(session.runtime().view().waterSurfaces().columnCount() > 0);
 
-        assertTrue(
-                session.runtime().view().water().amount(-4, 0, 0) > 0,
-                "impermeable surface should expose a shallow finite puddle");
         assertEquals(
                 0,
-                session.runtime().view().water().amount(4, 3, 0),
-                "loam should absorb its direct 3 mm rain event before free Water forms");
+                session.runtime().view().soilMoisture().amount(0, 0, -1));
         assertEquals(
                 0,
-                session.runtime().view().soilMoisture().amount(3, 0, 0),
-                "elevated covered ground must remain shielded by the roof");
+                session.runtime().view().water().amount(0, 0, 0));
         assertTrue(
-                session.runtime().view().soilMoisture().amount(3, 0, 2) > 0,
-                "the exposed roof must receive precipitation instead");
+                session.runtime().view().water().amount(-5, 0, -1) > 0,
+                "the separate depression lake must exist at setup without prewarming the ground");
+        assertEquals(
+                0,
+                session.runtime().view().soilMoisture().amount(4, 0, -1),
+                "ground under the elevated roof must start just as dry as exposed ground");
     }
 }
