@@ -4,11 +4,11 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-/** Four tiny procedural water frames shared by every visible water cell. */
+/** Small procedural water atlas shared by every visible water cell. */
 public final class ProceduralWaterArt {
 
     public static final int TILE_PIXELS = 16;
-    public static final int FRAME_COUNT = 4;
+    public static final int FRAME_COUNT = 6;
 
     private static final int PADDING = 1;
     private static final int STRIDE = TILE_PIXELS + PADDING * 2;
@@ -76,27 +76,25 @@ public final class ProceduralWaterArt {
                 TILE_PIXELS,
                 TILE_PIXELS);
 
-        // Static darker pixels keep the surface textured without flickering.
+        // A darker counter-moving ripple makes frame changes visible even at
+        // moderate zoom without creating a second render pass.
         pixmap.setColor(EvoForgePalette.WATER_DARK);
-        for (int y = 1; y < TILE_PIXELS - 1; y++) {
-            for (int x = 1; x < TILE_PIXELS - 1; x++) {
-                if (Math.floorMod(x * 13 + y * 19, 43) == 0) {
-                    pixmap.drawPixel(ox + x, oy + y);
-                }
-            }
-        }
+        wrappedSegment(pixmap, ox, oy, 13 - frame * 2, 3, 5);
+        wrappedSegment(pixmap, ox, oy, 6 - frame * 2, 9, 4);
+        wrappedSegment(pixmap, ox, oy, 1 - frame * 2, 13, 3);
 
-        // Horizontal highlights shift together between the four frames. All
-        // cells share these frames; coordinate phase in WaterRenderer makes
-        // neighbouring tiles read as one moving surface without per-cell state.
+        // Broad highlights move together for every tile. Because the pattern
+        // wraps inside the tile, repeated cells still read as one animated sheet.
+        int shift = frame * 3;
         pixmap.setColor(EvoForgePalette.WATER_LIGHT);
-        wrappedSegment(pixmap, ox, oy, frame * 2 + 1, 4, 5);
-        wrappedSegment(pixmap, ox, oy, frame * 2 + 9, 10, 4);
-        wrappedSegment(pixmap, ox, oy, frame * 2 + 5, 14, 3);
+        wrappedSegment(pixmap, ox, oy, shift + 1, 5, 6);
+        wrappedSegment(pixmap, ox, oy, shift + 9, 8, 5);
+        wrappedSegment(pixmap, ox, oy, shift + 4, 12, 4);
 
         pixmap.setColor(EvoForgePalette.WATER_HIGHLIGHT);
-        wrappedSegment(pixmap, ox, oy, frame * 2 + 3, 5, 2);
-        wrappedSegment(pixmap, ox, oy, frame * 2 + 11, 11, 2);
+        wrappedSegment(pixmap, ox, oy, shift + 3, 5, 3);
+        wrappedSegment(pixmap, ox, oy, shift + 12, 8, 2);
+        wrappedSegment(pixmap, ox, oy, shift + 7, 12, 2);
     }
 
     private static void wrappedSegment(
