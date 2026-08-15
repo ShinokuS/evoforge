@@ -68,4 +68,8 @@ public final class WaterFlowSystem {
     public int activeCellCount() {
         return flow.activeCellCount();
     }
+
+    LiquidFlowSystem liquidFlowSystem() {
+        return flow;
+    }
 }
