@@ -31,11 +31,22 @@ public final class WaterFlowSystem {
 
     private final WaterSystem water;
     private final GeometryLookup geometry;
+    private final SurfaceWaterStorageLookup surfaceStorage;
     private final WaterFlowActivity activity;
 
     public WaterFlowSystem(
             WaterSystem water,
             GeometryLookup geometry) {
+        this(
+                water,
+                geometry,
+                SurfaceWaterStorageLookup.NONE);
+    }
+
+    public WaterFlowSystem(
+            WaterSystem water,
+            GeometryLookup geometry,
+            SurfaceWaterStorageLookup surfaceStorage) {
 
         if (water == null) {
             throw new IllegalArgumentException(
@@ -45,9 +56,14 @@ public final class WaterFlowSystem {
             throw new IllegalArgumentException(
                     "geometry must not be null");
         }
+        if (surfaceStorage == null) {
+            throw new IllegalArgumentException(
+                    "surfaceStorage must not be null");
+        }
 
         this.water = water;
         this.geometry = geometry;
+        this.surfaceStorage = surfaceStorage;
         activity = water.flowActivity();
     }
 
@@ -162,7 +178,8 @@ public final class WaterFlowSystem {
                     second,
                     secondShape,
                     secondAmount,
-                    openingFloor);
+                    openingFloor,
+                    firstToSecond);
         }
 
         return planDirected(
@@ -173,7 +190,8 @@ public final class WaterFlowSystem {
                 first,
                 firstShape,
                 firstAmount,
-                openingFloor);
+                openingFloor,
+                firstToSecond.opposite());
     }
 
     private MutableTransfer planDirected(
@@ -184,7 +202,8 @@ public final class WaterFlowSystem {
             WaterCell destination,
             Shape destinationShape,
             int destinationAmount,
-            long openingFloor) {
+            long openingFloor,
+            CellFace direction) {
 
         if (sourceAmount == CellVolume.EMPTY
                 || sourceHead <= openingFloor) {
@@ -209,8 +228,19 @@ public final class WaterFlowSystem {
                 CellVolume.EMPTY,
                 sourceAmount - retainedBelowOpening);
 
+        int retainedSurface = direction.dz() == 0
+                ? CellVolume.requireValid(
+                        surfaceStorage.capacityAtWaterCell(
+                                source.x(),
+                                source.y(),
+                                source.z()))
+                : CellVolume.EMPTY;
+        int mobileAboveOpening = Math.max(
+                CellVolume.EMPTY,
+                availableAboveOpening - retainedSurface);
+
         int maximumTransfer = Math.min(
-                availableAboveOpening,
+                mobileAboveOpening,
                 destinationFree);
         if (maximumTransfer <= CellVolume.EMPTY) {
             return null;
