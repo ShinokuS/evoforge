@@ -23,14 +23,18 @@ final class WaterFlowActivity {
         active.add(cell);
     }
 
-    List<WaterCell> drainSorted() {
+    List<WaterCell> snapshotSorted() {
         if (active.isEmpty()) {
             return List.of();
         }
-
         List<WaterCell> snapshot =
                 new ArrayList<>(active);
         snapshot.sort(null);
+        return snapshot;
+    }
+
+    List<WaterCell> drainSorted() {
+        List<WaterCell> snapshot = snapshotSorted();
         active.clear();
         return snapshot;
     }
