@@ -57,7 +57,7 @@ authoritative Movement revalidation
 Surface / Interior developer observation
 ```
 
-Water quantity, SoilMoisture, Geometry, Navigation, Movement and presentation remain separate owners. The visualizer observes these facts; it does not create an alternate surface-world simulation.
+Water, SoilMoisture, Geometry, Navigation and Movement keep separate authoritative contracts/owners. Presentation is observer-only: the visualizer reads those facts and does not create an alternate surface-world simulation.
 
 The repository now treats accepted `main` states as release/milestone baselines and performs ongoing integration on `develop`. See [Development Workflow](guides/development-workflow.md).
 
