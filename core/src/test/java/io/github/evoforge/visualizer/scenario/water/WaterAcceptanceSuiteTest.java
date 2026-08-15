@@ -78,10 +78,10 @@ final class WaterAcceptanceSuiteTest {
                 "loam should absorb the complete 3 mm event before free Water forms");
         assertEquals(
                 0,
-                runtime.view().soilMoisture().amount(3, 0, -1),
-                "roofed ground must receive no direct precipitation");
+                runtime.view().soilMoisture().amount(3, 0, 0),
+                "elevated roofed ground must receive no direct precipitation");
         assertTrue(
-                runtime.view().soilMoisture().amount(3, 0, 1) > 0,
+                runtime.view().soilMoisture().amount(3, 0, 2) > 0,
                 "the exposed roof itself must receive the rain pulse");
 
         // Check late in the dry part of the same climate cycle, still twenty
@@ -93,7 +93,7 @@ final class WaterAcceptanceSuiteTest {
         assertEquals(
                 0L,
                 sumWater(runtime, -6, 6, -4, 4, 0),
-                "surface puddles must dry before the next 240-tick rain cycle");
+                "exposed surface puddles must dry before the next 240-tick rain cycle");
     }
 
     private static long sumWater(
