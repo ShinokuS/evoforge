@@ -136,7 +136,8 @@ public final class ZLevelVisualizer {
                 range.maxX(),
                 range.minY(),
                 range.maxY(),
-                state.selectedZ());
+                state.selectedZ(),
+                state.lowerDepth());
         landscapeBatch.end();
         long afterLandscape = System.nanoTime();
         objectRenderer.draw(range);
