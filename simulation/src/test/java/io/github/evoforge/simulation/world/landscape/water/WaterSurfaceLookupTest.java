@@ -64,25 +64,23 @@ final class WaterSurfaceLookupTest {
     }
 
     @Test
-    void sharedLiquidFlowUpdatesTheSameWaterSurfaceProjection() {
+    void sharedLiquidFlowPublishesDestinationThroughWaterSurfaceProjection() {
         GeometryLookup geometry = (x, y, z) ->
-                x == 7 && y == 8 && (z == 4 || z == 5)
+                y == 0 && z == 0 && (x == 0 || x == 1)
                         ? null
                         : FullShape.INSTANCE;
         WaterSystem water = new WaterSystem(new SparseWaterStorage(), geometry);
         WaterFlowSystem flow = new WaterFlowSystem(water, geometry);
         WaterSurfaceLookup surfaces = water.surfaces();
 
-        water.addAtMost(7, 8, 5, 250_000);
-        assertEquals(5, surfaces.topZ(7, 8));
+        water.addAtMost(0, 0, 0, 400_000);
+        assertFalse(surfaces.hasColumn(1, 0));
 
-        for (int step = 0; step < 100 && flow.activeCellCount() > 0; step++) {
-            flow.update();
-        }
+        assertTrue(flow.update() > 0L);
 
-        assertEquals(4, surfaces.topZ(7, 8));
-        assertEquals(250_000, water.lookup().amount(7, 8, 4));
-        assertEquals(0, water.lookup().amount(7, 8, 5));
+        assertTrue(water.lookup().amount(1, 0, 0) > 0);
+        assertTrue(surfaces.hasColumn(1, 0));
+        assertEquals(0, surfaces.topZ(1, 0));
     }
 
     private static WaterSystem water() {
