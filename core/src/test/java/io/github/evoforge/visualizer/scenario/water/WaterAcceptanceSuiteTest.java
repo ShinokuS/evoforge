@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 
@@ -99,14 +100,12 @@ final class WaterAcceptanceSuiteTest {
         ScenarioSession session = new RainHydrologyScenario().create();
         SimulationRuntime runtime = session.runtime();
 
-        // The central strip is intentionally separated from the finite lake so these
-        // assertions measure direct rain -> Soil -> puddle behavior.
         assertEquals(0L, runtime.time().tick());
         for (int x = -1; x <= 1; x++) {
             for (int y = -5; y <= 5; y++) {
                 assertEquals(
                         0,
-                        runtime.view().soilMoisture().amount(x, y, -1),
+                        retainedWater(runtime, x, y, -1),
                         "all exposed soil must start equally dry");
                 assertEquals(
                         0,
@@ -118,16 +117,13 @@ final class WaterAcceptanceSuiteTest {
         advance(runtime, 40);
         assertEquals(40L, runtime.time().tick());
         assertTrue(
-                sumSoil(runtime, -1, 1, -5, 5, -1) > 0L,
-                "soil moisture must increase during visible rain");
+                sumRetainedWater(runtime, -1, 1, -5, 5, -1) > 0L,
+                "retained Soil Water must increase during visible rain");
         assertEquals(
                 0L,
                 sumWater(runtime, -1, 1, -5, 5, 0),
                 "the early light shower must still be fully absorbed in the central strip");
 
-        // By 1.6mm, deterministic local Soil capacity variation creates uneven puddle
-        // onset: low-capacity cells retain free Water while higher-capacity neighbours
-        // still have only SoilMoisture.
         advance(runtime, 40);
         assertEquals(80L, runtime.time().tick());
         int puddlesDuringRain = 0;
@@ -135,10 +131,10 @@ final class WaterAcceptanceSuiteTest {
         for (int x = -1; x <= 1; x++) {
             for (int y = -5; y <= 5; y++) {
                 int water = runtime.view().water().amount(x, y, 0);
-                int moisture = runtime.view().soilMoisture().amount(x, y, -1);
+                int retained = retainedWater(runtime, x, y, -1);
                 if (water > 0) {
                     puddlesDuringRain++;
-                } else if (moisture > 0) {
+                } else if (retained > 0) {
                     soilOnlyDuringRain++;
                 }
             }
@@ -155,8 +151,6 @@ final class WaterAcceptanceSuiteTest {
         long lakeAfterRain = sumWater(runtime, -6, -4, -1, 1, -1);
         assertTrue(lakeAfterRain > 0L);
 
-        // Clear weather lasts substantially longer than the shower. Transient free
-        // Water dries while the separate finite lake loses volume gradually.
         advance(runtime, 120);
         assertEquals(240L, runtime.time().tick());
         assertEquals(
@@ -178,6 +172,18 @@ final class WaterAcceptanceSuiteTest {
         }
     }
 
+    private static int retainedWater(
+            SimulationRuntime runtime,
+            int x,
+            int y,
+            int z) {
+        return runtime.view().soilLiquids().amountOf(
+                WaterSystem.TYPE,
+                x,
+                y,
+                z);
+    }
+
     private static long sumWater(
             SimulationRuntime runtime,
             int minX,
@@ -195,7 +201,7 @@ final class WaterAcceptanceSuiteTest {
         return total;
     }
 
-    private static long sumSoil(
+    private static long sumRetainedWater(
             SimulationRuntime runtime,
             int minX,
             int maxX,
@@ -205,7 +211,7 @@ final class WaterAcceptanceSuiteTest {
         long total = 0L;
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
-                total += runtime.view().soilMoisture().amount(x, y, z);
+                total += retainedWater(runtime, x, y, z);
             }
         }
         return total;
