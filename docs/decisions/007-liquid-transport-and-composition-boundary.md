@@ -4,71 +4,100 @@
 
 ## Problem
 
-The first free-liquid implementation was built as Water because Water was the first real consumer. Its finite-volume flow, Geometry interaction, sparse storage frontier and conservation rules are not intrinsically Water-specific, however. Leaving those mechanics under Water would force future liquids such as blood or wine either to duplicate the solver or to pretend they are Water.
+The first liquid implementation was built as Water because Water was the first real consumer. Its finite-volume flow, Geometry interaction, sparse activity frontier, conservation rules and infiltration into porous terrain are not intrinsically Water-specific.
 
-At the same time, introducing a full mixture/chemistry model before any real mixing consumer exists would create speculative state and APIs whose required semantics are not yet known.
+Leaving those mechanics under Water would force future liquids such as blood or wine either to duplicate physical systems or to pretend they are Water. At the same time, introducing a complete free-liquid mixture/chemistry model before a real mixing milestone would create speculative APIs whose semantics are not yet known.
 
 ## Decision
 
-EvoForge separates **free-liquid transport** from **liquid-specific interactions and composition**.
+EvoForge separates **generic liquid state/transport**, **generic retained Soil composition**, and **liquid-specific gameplay/environment integrations**.
 
 ```text
-shared free-liquid foundation
-  identity + finite volume + Geometry + flow + dormancy
-                         |
-              typed integration layers
-                 /       |       \
-              Water    future    future
-              rules    liquid    liquid
+free-liquid world
+  LiquidSystem + LiquidFlowSystem
+          |
+          +----> SoilLiquidInfiltrationSystem
+          |             |
+          |             v
+          |       SoilLiquidSystem
+          |       shared pore capacity
+          |       multi-constituent retained state
+          |
+          `----> typed integrations
+                    Water / future liquids
 ```
 
-The shared `world.landscape.liquid` package owns generic free-liquid quantity and deterministic transport. `WaterSystem` is a typed facade for the built-in `water` identity and Water-specific systems keep their own responsibilities: Soil infiltration, precipitation/evaporation semantics, terrestrial wading and Water presentation.
+One free-liquid world has one authoritative `LiquidSystem` and one shared `LiquidFlowSystem`. Typed liquid integrations may adapt/filter that shared owner, but they must not create independent transport authorities over the same state.
 
-One free-liquid world has one authoritative `LiquidSystem` and one shared `LiquidFlowSystem`. Typed liquid integrations may adapt that shared owner for domain-specific consumers, but they must not create independent transport solvers over the same free-liquid state.
+The current **free-liquid** representation intentionally permits one liquid type per occupied cell. Different free liquids do not silently overwrite, coalesce or mix. Unlike occupied cells block cross-contact transfer, and simultaneous unlike inflows into one dry destination are all suppressed so deterministic ordering cannot become an accidental mixing rule.
 
-The current storage model intentionally permits **one liquid type per occupied cell**. A different incoming type is not silently overwritten, coalesced or converted. If unlike liquids meet, transfer across the contact is blocked. If unlike liquids simultaneously target the same dry cell, all contested inflows are blocked rather than allowing iteration order to choose a winner.
+This free-liquid contact rule is a temporary explicit invariant, not the intended final model of mixing.
 
-This contact rule is a temporary explicit invariant, not the intended final model of mixing.
+## Generic Soil retention
+
+Soil infiltration is generic.
+
+`SoilLiquidSystem` owns liquid retained inside porous terrain. Retained Soil state may contain several liquid constituents at the same terrain cell today because they compete for one material-owned pore capacity rather than occupying free world-cell volume.
+
+```text
+Soil capacity = 100
+Water retained = 60
+Blood retained = 25
+remaining pore capacity = 15
+```
+
+This retained composition does **not** mean free-liquid mixing or chemistry is implemented. It records constituent quantities sharing a porous medium only.
+
+`SoilLiquidInfiltrationSystem` transfers active free liquid into supporting Soil and removes exactly the amount accepted from free-liquid authority. Excess remains free. Therefore a sufficiently large blood spill can saturate Soil and naturally leave a free puddle without a battle-specific rule.
+
+`SoilHydrology` keeps the effective local material capacity and default infiltration limit. `SoilLiquidInteractionLookup` is the narrow seam for liquid/material-specific uptake. Its default preserves the material limit; future definition-backed interaction data may vary uptake by liquid identity without adding concrete-liquid switches to generic Soil code.
+
+Existing `SoilMoistureSystem` is a typed compatibility projection over retained composition for Water-oriented hydrology/presentation consumers.
 
 ## Composition seam
 
-A future mixing milestone may replace the single-component cell content with a composition/mixture representation and define contact resolution, proportional transfer, reactions and derived properties. That work should be localized around liquid content/contact semantics.
+A future free-liquid mixing milestone may replace the single-component free-cell content with a mixture representation and define contact resolution, constituent transfer, miscibility, reactions and derived physical properties.
 
-The hydraulic Geometry algorithm should continue to ask objective questions such as total free volume, surface height, openings and transfer capacity. It must not need a separate copy for Water, blood, wine or every future reagent.
+That work should remain localized around free-liquid content/contact semantics. Geometry transport should continue asking objective questions such as total free volume, surface height, openings and transfer capacity rather than requiring one solver per liquid.
+
+Retained Soil composition already provides a natural future attachment point for contamination, dilution, leaching or reactions inside porous media, but none of those processes are part of this decision.
 
 ## Liquid identity
 
-`LiquidTypeId` is a stable open identifier. The foundation does not yet introduce a large `LiquidDefinition` schema because there is no current consumer for speculative fields such as viscosity, density, flammability, temperature response, toxicity or chemistry.
+`LiquidTypeId` is a stable open identifier. Concrete identities are domain-owned rather than listed in a central enum/catalog.
 
-When the first mechanic needs one of those properties, it should become a typed definition aspect/capability rather than a switch on liquid names.
+The foundation does not introduce a large `LiquidDefinition` property bag for hypothetical viscosity, density, flammability, toxicity or chemistry. The first real mechanic that needs a property should introduce a narrow typed definition capability.
 
 ## Surface retention
 
-The generic solver accepts `LiquidSurfaceRetentionLookup(type, position)`. The lookup is typed deliberately: a supporting material may eventually retain different liquids differently. Current Water hydrology adapts the existing `SurfaceWaterStorage` capability into this generic port.
+Free-liquid horizontal runoff may consult `LiquidSurfaceRetentionLookup(type, position)`. The type is part of the query because supporting materials may eventually retain different free-liquid films differently. Current Water hydrology adapts existing `SurfaceWaterStorage` into this generic port.
+
+Surface-film retention is distinct from retained Soil pore composition.
 
 ## Consequences
 
-- one deterministic transport implementation serves arbitrary liquid identities;
-- Water remains a semantic integration rather than becoming the definition of all liquids;
-- existing Water behavior and acceptance scenarios remain valid;
-- future liquids can reuse sparse storage, Geometry capacity, flow conservation and dormancy;
-- typed liquid facades cannot accidentally fork hydraulic authority;
-- mixing cannot happen accidentally through map overwrite or solver ordering;
-- a future composition model has a clear replacement boundary;
+- one deterministic free-liquid transport implementation serves arbitrary liquid identities;
+- Soil infiltration is reusable by arbitrary liquids rather than belonging to Water;
+- several retained constituents share one Soil capacity instead of each receiving a separate capacity;
+- Water remains a semantic integration for precipitation, Water evaporation, wading and presentation;
+- future liquids can differ in Soil uptake through a narrow interaction resolver;
+- enough incoming liquid naturally leaves free excess after Soil saturation/rate limits;
+- free-liquid mixing cannot happen accidentally through storage overwrite or solver ordering;
+- future free-mixture and retained-contamination work both have explicit replacement/extension seams;
 - unsupported physical/chemical properties are not invented prematurely.
 
 ## Deliberately deferred
 
 This decision does not define:
 
-- multi-component mixtures or solution ratios;
+- multi-component **free-liquid** mixtures or solution ratios;
 - miscibility/immiscibility and phase separation;
-- density layering or buoyancy between liquids;
-- viscosity-dependent flow rates;
-- temperature, freezing, boiling or phase changes;
-- reactions, contaminants or reagent effects;
-- generic Soil absorption of arbitrary liquids;
+- density layering or buoyancy between free liquids;
+- viscosity-dependent hydraulic flow rates;
+- temperature, freezing, boiling or other phase changes;
+- chemical reactions or biological decay;
+- diffusion, displacement or leaching between retained Soil constituents;
 - generic precipitation/evaporation for arbitrary liquids;
 - generic traversal hazards or presentation for arbitrary liquids.
 
-Those belong to their first real consuming milestone.
+Those belong to future milestones with real consumers and acceptance criteria.
