@@ -3,9 +3,6 @@ package io.github.evoforge.visualizer.scenario.water;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
-import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;
-import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLookup;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 
@@ -64,21 +61,6 @@ final class WaterScenarioSupport {
         return runtime;
     }
 
-    static ScenarioSession rainySession(
-            SimulationRuntime runtime,
-            ScenarioView view,
-            WaterScenarioDiagnostics diagnostics,
-            float rainIntensity) {
-
-        return new ScenarioSession(
-                runtime,
-                view,
-                diagnostics,
-                ObjectPresentationBindings.empty(),
-                WeatherPresentationLookup.fixed(
-                        WeatherPresentation.rain(rainIntensity)));
-    }
-
     static ScenarioSession clearSession(
             SimulationRuntime runtime,
             ScenarioView view,
@@ -87,8 +69,6 @@ final class WaterScenarioSupport {
         return new ScenarioSession(
                 runtime,
                 view,
-                diagnostics,
-                ObjectPresentationBindings.empty(),
-                WeatherPresentationLookup.CLEAR_LOOKUP);
+                diagnostics);
     }
 }
