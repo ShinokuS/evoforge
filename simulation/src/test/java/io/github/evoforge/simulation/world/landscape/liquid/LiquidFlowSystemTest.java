@@ -20,12 +20,12 @@ final class LiquidFlowSystemTest {
     private static final LiquidTypeId BLOOD = LiquidTypeId.of("blood");
 
     @Test
-    void nonWaterLiquidUsesTheSharedHydraulicSolverAndPreservesIdentity() {
+    void arbitraryLiquidUsesTheSharedHydraulicSolverAndPreservesIdentity() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)
                 .open(1, 0, 0);
         LiquidSystem liquids = liquids(geometry);
-        LiquidFlowSystem flow = new LiquidFlowSystem(liquids, geometry);
+        LiquidFlowSystem flow = flow(liquids, geometry, referenceTransport());
         liquids.addAtMost(WINE, 0, 0, 0, 400_000);
 
         long moved = flow.update();
@@ -42,6 +42,36 @@ final class LiquidFlowSystemTest {
     }
 
     @Test
+    void higherKinematicViscosityMovesLessVolumeUnderIdenticalHydraulicConditions() {
+        TestGeometry geometry = new TestGeometry()
+                .open(0, 0, 0)
+                .open(1, 0, 0);
+
+        LiquidSystem referenceLiquids = liquids(geometry);
+        LiquidFlowSystem referenceFlow = flow(
+                referenceLiquids,
+                geometry,
+                type -> LiquidTransportProperties.reference());
+        referenceLiquids.addAtMost(WINE, 0, 0, 0, 400_000);
+
+        LiquidSystem viscousLiquids = liquids(geometry);
+        LiquidFlowSystem viscousFlow = flow(
+                viscousLiquids,
+                geometry,
+                type -> LiquidTransportProperties.ofKinematicViscosity(
+                        LiquidTransportProperties.REFERENCE_KINEMATIC_VISCOSITY * 4L));
+        viscousLiquids.addAtMost(BLOOD, 0, 0, 0, 400_000);
+
+        referenceFlow.update();
+        viscousFlow.update();
+
+        int referenceMoved = referenceLiquids.lookup().amount(1, 0, 0);
+        int viscousMoved = viscousLiquids.lookup().amount(1, 0, 0);
+        assertTrue(referenceMoved > viscousMoved);
+        assertTrue(viscousMoved > 0);
+    }
+
+    @Test
     void separatedLiquidTypesAdvanceInOneSharedSolveWithoutCrossContamination() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)
@@ -49,7 +79,7 @@ final class LiquidFlowSystemTest {
                 .open(10, 0, 0)
                 .open(11, 0, 0);
         LiquidSystem liquids = liquids(geometry);
-        LiquidFlowSystem flow = new LiquidFlowSystem(liquids, geometry);
+        LiquidFlowSystem flow = flow(liquids, geometry, referenceTransport());
         liquids.addAtMost(WINE, 0, 0, 0, 400_000);
         liquids.addAtMost(BLOOD, 10, 0, 0, 600_000);
 
@@ -75,7 +105,7 @@ final class LiquidFlowSystemTest {
                 .open(0, 0, 0)
                 .open(1, 0, 0);
         LiquidSystem liquids = liquids(geometry);
-        LiquidFlowSystem flow = new LiquidFlowSystem(liquids, geometry);
+        LiquidFlowSystem flow = flow(liquids, geometry, referenceTransport());
         liquids.addAtMost(WINE, 0, 0, 0, 400_000);
         liquids.addAtMost(BLOOD, 1, 0, 0, 100_000);
 
@@ -93,7 +123,7 @@ final class LiquidFlowSystemTest {
                 .open(0, 0, 0)
                 .open(1, 0, 0);
         LiquidSystem liquids = liquids(geometry);
-        LiquidFlowSystem flow = new LiquidFlowSystem(liquids, geometry);
+        LiquidFlowSystem flow = flow(liquids, geometry, referenceTransport());
         liquids.addAtMost(WINE, -1, 0, 0, 400_000);
         liquids.addAtMost(BLOOD, 1, 0, 0, 400_000);
 
@@ -104,7 +134,7 @@ final class LiquidFlowSystemTest {
     }
 
     @Test
-    void retentionCapabilityCanVaryByLiquidType() {
+    void materialSurfaceRetentionBlocksHorizontalRunoffBelowItsCapacity() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)
                 .open(1, 0, 0);
@@ -112,12 +142,24 @@ final class LiquidFlowSystemTest {
         LiquidFlowSystem flow = new LiquidFlowSystem(
                 liquids,
                 geometry,
-                (type, x, y, z) -> WINE.equals(type) ? 20_000 : 0);
+                (x, y, z) -> x == 0 ? 20_000 : 0,
+                referenceTransport());
         liquids.addAtMost(WINE, 0, 0, 0, 15_000);
 
         assertEquals(0L, flow.update());
         assertEquals(15_000, liquids.lookup().amount(0, 0, 0));
         assertEquals(0, liquids.lookup().amount(1, 0, 0));
+    }
+
+    private static LiquidFlowSystem flow(
+            LiquidSystem liquids,
+            GeometryLookup geometry,
+            LiquidTransportLookup transport) {
+        return new LiquidFlowSystem(liquids, geometry, transport);
+    }
+
+    private static LiquidTransportLookup referenceTransport() {
+        return type -> LiquidTransportProperties.reference();
     }
 
     private static LiquidSystem liquids(GeometryLookup geometry) {
