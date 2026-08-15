@@ -45,7 +45,7 @@ For acceptance math only, one tile is treated as a 1 m x 1 m footprint and one f
 One 240-tick climate cycle is treated as one scenario day for balancing rates:
 
 - rain event: 3000 units = 3.0 mm;
-- evaporation: 20 units per exposed column per tick, at most 4.8 mm over the cycle before precipitation-tick suppression;
+- evaporation: 80 units per exposed column every 4 ticks, at most 4.8 mm over the cycle before precipitation-tick suppression;
 - loam infiltration limit: 3.0 mm per rain event;
 - compacted-clay infiltration limit: 0.8 mm per event.
 
@@ -79,6 +79,7 @@ Hydrology acceptance intentionally bounds work in several independent ways:
 - finite world bounds cap the maximum hydraulic frontier;
 - non-climate stress worlds use exact initial Water rather than repeated precipitation;
 - rain occurs only once per long climate cycle;
+- evaporation is evaluated every four ticks rather than every tick in the climate acceptance world;
 - Water presentation has no per-cell persistent animation state;
 - Water diagnostics recompute only when the simulation tick changes, never once per render frame while paused;
 - rain remains a fixed-budget screen-space effect.
