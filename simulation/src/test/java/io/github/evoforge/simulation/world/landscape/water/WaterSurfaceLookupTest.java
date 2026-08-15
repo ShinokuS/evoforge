@@ -11,6 +11,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
+import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
+import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
 final class WaterSurfaceLookupTest {
 
@@ -62,16 +64,25 @@ final class WaterSurfaceLookupTest {
     }
 
     @Test
-    void flowReplacementUsesSameSurfaceBoundary() {
-        WaterSystem water = water();
+    void sharedLiquidFlowUpdatesTheSameWaterSurfaceProjection() {
+        GeometryLookup geometry = (x, y, z) ->
+                x == 7 && y == 8 && (z == 4 || z == 5)
+                        ? null
+                        : FullShape.INSTANCE;
+        WaterSystem water = new WaterSystem(new SparseWaterStorage(), geometry);
+        WaterFlowSystem flow = new WaterFlowSystem(water, geometry);
         WaterSurfaceLookup surfaces = water.surfaces();
 
-        water.replaceFromFlow(new WaterCell(7, 8, 4), 250_000);
-        water.replaceFromFlow(new WaterCell(7, 8, 9), 125_000);
-        assertEquals(9, surfaces.topZ(7, 8));
+        water.addAtMost(7, 8, 5, 250_000);
+        assertEquals(5, surfaces.topZ(7, 8));
 
-        water.replaceFromFlow(new WaterCell(7, 8, 9), 0);
+        for (int step = 0; step < 100 && flow.activeCellCount() > 0; step++) {
+            flow.update();
+        }
+
         assertEquals(4, surfaces.topZ(7, 8));
+        assertEquals(250_000, water.lookup().amount(7, 8, 4));
+        assertEquals(0, water.lookup().amount(7, 8, 5));
     }
 
     private static WaterSystem water() {
