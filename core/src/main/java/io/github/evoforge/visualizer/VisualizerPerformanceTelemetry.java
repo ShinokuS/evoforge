@@ -1,6 +1,8 @@
 package io.github.evoforge.visualizer;
 
 import com.badlogic.gdx.Gdx;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Low-overhead presentation telemetry for diagnosing frame-time spikes.
@@ -12,6 +14,8 @@ import com.badlogic.gdx.Gdx;
  */
 public final class VisualizerPerformanceTelemetry {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            "io.github.evoforge.visualizer.performance");
     private static final long LOG_INTERVAL_NANOS = 1_000_000_000L;
 
     private long windowStartNanos = System.nanoTime();
@@ -75,40 +79,32 @@ public final class VisualizerPerformanceTelemetry {
         }
 
         long sampleFrames = Math.max(1, frames);
-        Gdx.app.log(
-                "VisualizerFramePerf",
-                "fps=" + Gdx.graphics.getFramesPerSecond()
-                        + " frame avg/max="
-                        + millis(observedFrameNanos / sampleFrames)
-                        + "/" + millis(maxObservedFrameNanos) + "ms"
-                        + " cpu avg/max="
-                        + millis(cpuNanos / sampleFrames)
-                        + "/" + millis(maxCpuNanos) + "ms"
-                        + " update="
-                        + millis(updateNanos / sampleFrames)
-                        + "/" + millis(maxUpdateNanos) + "ms"
-                        + " landscape="
-                        + millis(landscapeNanos / sampleFrames)
-                        + "/" + millis(maxLandscapeNanos) + "ms"
-                        + " overlay="
-                        + millis(overlayNanos / sampleFrames)
-                        + "/" + millis(maxOverlayNanos) + "ms"
-                        + " hud="
-                        + millis(hudNanos / sampleFrames)
-                        + "/" + millis(maxHudNanos) + "ms"
-                        + " javaHeap min/max/current="
-                        + mebibytes(minJavaHeap)
-                        + "/" + mebibytes(maxJavaHeap)
-                        + "/" + mebibytes(lastJavaHeap) + "MiB"
-                        + " nativeHeap="
-                        + mebibytes(lastNativeHeap) + "MiB");
+        LOGGER.atDebug()
+                .addKeyValue("event", "perf.visualizer")
+                .addKeyValue("fps", Gdx.graphics.getFramesPerSecond())
+                .addKeyValue("sampleFrames", sampleFrames)
+                .addKeyValue("frameAvgMs", millis(observedFrameNanos / sampleFrames))
+                .addKeyValue("frameMaxMs", millis(maxObservedFrameNanos))
+                .addKeyValue("cpuAvgMs", millis(cpuNanos / sampleFrames))
+                .addKeyValue("cpuMaxMs", millis(maxCpuNanos))
+                .addKeyValue("updateAvgMs", millis(updateNanos / sampleFrames))
+                .addKeyValue("updateMaxMs", millis(maxUpdateNanos))
+                .addKeyValue("landscapeAvgMs", millis(landscapeNanos / sampleFrames))
+                .addKeyValue("landscapeMaxMs", millis(maxLandscapeNanos))
+                .addKeyValue("overlayAvgMs", millis(overlayNanos / sampleFrames))
+                .addKeyValue("overlayMaxMs", millis(maxOverlayNanos))
+                .addKeyValue("hudAvgMs", millis(hudNanos / sampleFrames))
+                .addKeyValue("hudMaxMs", millis(maxHudNanos))
+                .addKeyValue("javaHeapMinMiB", mebibytes(minJavaHeap))
+                .addKeyValue("javaHeapMaxMiB", mebibytes(maxJavaHeap))
+                .addKeyValue("javaHeapMiB", mebibytes(lastJavaHeap))
+                .addKeyValue("nativeHeapMiB", mebibytes(lastNativeHeap))
+                .log("Visualizer performance window");
 
         resetWindow(now);
     }
 
-    private void resetWindow(
-            long now) {
-
+    private void resetWindow(long now) {
         windowStartNanos = now;
         frames = 0;
         observedFrameNanos = 0L;
@@ -127,15 +123,11 @@ public final class VisualizerPerformanceTelemetry {
         maxJavaHeap = 0L;
     }
 
-    private static double millis(
-            long nanos) {
-
+    private static double millis(long nanos) {
         return Math.round(nanos / 10_000.0) / 100.0;
     }
 
-    private static double mebibytes(
-            long bytes) {
-
+    private static double mebibytes(long bytes) {
         if (bytes == Long.MAX_VALUE) {
             return 0.0;
         }

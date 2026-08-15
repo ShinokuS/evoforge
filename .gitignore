@@ -31,6 +31,10 @@ hs_err_pid*
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
 
+## Runtime logs:
+
+/logs/
+
 ## Android:
 
 /android/libs/armeabi-v7a/

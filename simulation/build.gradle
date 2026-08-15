@@ -4,9 +4,11 @@ eclipse.project.name = appName + '-simulation'
 
 dependencies {
     implementation "com.google.code.gson:gson:$gsonVersion"
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
     testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testRuntimeOnly "org.slf4j:slf4j-nop:$slf4jVersion"
 }
 
 test {

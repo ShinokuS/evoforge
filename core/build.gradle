@@ -3,6 +3,7 @@ eclipse.project.name = appName + '-core'
 
 dependencies {
   implementation project(':simulation')
+  implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
   api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
@@ -10,6 +11,7 @@ dependencies {
 
   testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+  testRuntimeOnly "org.slf4j:slf4j-nop:$slf4jVersion"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
