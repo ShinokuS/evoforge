@@ -17,10 +17,7 @@ final class ScenarioCatalogTest {
                         "cutaway", "ramp-navigation", "timed-movement",
                         "movement-patrol", "movement-click-to-move",
                         "occupancy-contention",
-                        "rain-hydrology", "water-z-stack", "water-vertical-fall",
-                        "water-equalization", "water-symmetric-split",
-                        "water-ramp-gates", "water-barrier-detour",
-                        "water-sky-shield", "water-evaporation-cycle",
+                        "rain-hydrology", "water-z-flow", "water-geometry-stress",
                         "agent-living-cow", "agent-cow-foraging",
                         "agent-cow-visual-search", "pathfinding-straight",
                         "pathfinding-structural-detour", "pathfinding-weighted-detour",
@@ -47,7 +44,7 @@ final class ScenarioCatalogTest {
         VisualizerScenario duplicate = stub("same");
         assertThrows(IllegalArgumentException.class, () -> ScenarioCatalog.ofGroups(
                 ScenarioGroup.of("first", "First", duplicate),
-                ScenarioGroup.of("second", "Second", duplicate)));
+                ScenarioGroup.of("second", "Second", duplicate))));
     }
 
     @Test
