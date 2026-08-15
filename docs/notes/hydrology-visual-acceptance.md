@@ -30,7 +30,7 @@ The `Water / Hydrology` group intentionally contains only three visual scenarios
 
 ### Rain Cycle
 
-The only continuously climate-driven acceptance world. It covers:
+The only climate-driven acceptance world. It covers:
 
 - intermittent precipitation;
 - soil-first infiltration;
