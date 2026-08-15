@@ -349,7 +349,6 @@ public final class VisualizerPrimaryHudRenderer {
         if (waterCellZ != SurfaceProjectionResolver.NO_Z) {
             rows.add(new Row(
                     "Surface retention   " + view.surfaceRetention().capacityAt(
-                            WaterSystem.TYPE,
                             x,
                             y,
                             waterCellZ),
