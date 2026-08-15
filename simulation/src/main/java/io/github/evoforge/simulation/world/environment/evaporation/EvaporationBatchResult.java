@@ -5,21 +5,21 @@ public record EvaporationBatchResult(
         int columns,
         long requested,
         long surfaceWaterRemoved,
-        long soilMoistureRemoved,
+        long retainedWaterRemoved,
         long unfulfilled) {
 
     public EvaporationBatchResult {
         if (columns < 0
                 || requested < 0L
                 || surfaceWaterRemoved < 0L
-                || soilMoistureRemoved < 0L
+                || retainedWaterRemoved < 0L
                 || unfulfilled < 0L) {
             throw new IllegalArgumentException(
                     "evaporation batch values must not be negative");
         }
 
         long accounted = Math.addExact(
-                Math.addExact(surfaceWaterRemoved, soilMoistureRemoved),
+                Math.addExact(surfaceWaterRemoved, retainedWaterRemoved),
                 unfulfilled);
         if (accounted != requested) {
             throw new IllegalArgumentException(
@@ -35,6 +35,6 @@ public record EvaporationBatchResult(
     }
 
     public long removed() {
-        return surfaceWaterRemoved + soilMoistureRemoved;
+        return surfaceWaterRemoved + retainedWaterRemoved;
     }
 }

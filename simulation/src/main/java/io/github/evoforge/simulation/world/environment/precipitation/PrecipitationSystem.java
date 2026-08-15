@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.environment.precipitation;
 
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
@@ -10,46 +10,35 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 
 /**
- * Applies an external precipitation source to an explicitly resolved exposed surface.
+ * Applies an external Water precipitation source to an explicitly resolved exposed surface.
  *
- * <p>This system does not discover sky exposure and does not know about the water
- * flow solver. Terrain targets route through soil first. Water targets add directly
- * to the exposed liquid column so rainfall over a lake does not repeatedly infiltrate
- * the terrain below it. Any volume that cannot be placed is returned to the caller.
+ * <p>This system does not discover sky exposure and does not know about the liquid
+ * flow solver. Terrain targets route Water through generic Soil retention first.
+ * Water targets add directly to the exposed free-liquid column so rainfall over a
+ * lake does not repeatedly infiltrate terrain below it. Any volume that cannot be
+ * placed is returned to the caller.
  */
 public final class PrecipitationSystem {
 
     private final TerrainLookup terrain;
     private final GeometryLookup geometry;
-    private final SoilMoistureSystem soilMoisture;
+    private final SoilLiquidSystem soilLiquids;
     private final WaterSystem water;
 
     public PrecipitationSystem(
             TerrainLookup terrain,
             GeometryLookup geometry,
-            SoilMoistureSystem soilMoisture,
+            SoilLiquidSystem soilLiquids,
             WaterSystem water) {
 
-        if (terrain == null) {
+        if (terrain == null || geometry == null || soilLiquids == null || water == null) {
             throw new IllegalArgumentException(
-                    "terrain must not be null");
-        }
-        if (geometry == null) {
-            throw new IllegalArgumentException(
-                    "geometry must not be null");
-        }
-        if (soilMoisture == null) {
-            throw new IllegalArgumentException(
-                    "soilMoisture must not be null");
-        }
-        if (water == null) {
-            throw new IllegalArgumentException(
-                    "water must not be null");
+                    "precipitation dependencies must not be null");
         }
 
         this.terrain = terrain;
         this.geometry = geometry;
-        this.soilMoisture = soilMoisture;
+        this.soilLiquids = soilLiquids;
         this.water = water;
     }
 
@@ -68,7 +57,8 @@ public final class PrecipitationSystem {
             return emptyResult();
         }
 
-        int infiltrated = soilMoisture.infiltrateAtMost(
+        int infiltrated = soilLiquids.infiltrateAtMost(
+                WaterSystem.TYPE,
                 x,
                 y,
                 terrainZ,
@@ -77,8 +67,7 @@ public final class PrecipitationSystem {
         int surfaceWater = CellVolume.EMPTY;
 
         Shape terrainShape = geometry.find(x, y, terrainZ);
-        if (remaining > CellVolume.EMPTY
-                && opensFromAbove(terrainShape)) {
+        if (remaining > CellVolume.EMPTY && opensFromAbove(terrainShape)) {
             int added = water.addAtMost(
                     x,
                     y,
@@ -88,8 +77,7 @@ public final class PrecipitationSystem {
             remaining -= added;
         }
 
-        if (remaining > CellVolume.EMPTY
-                && terrainZ < Integer.MAX_VALUE) {
+        if (remaining > CellVolume.EMPTY && terrainZ < Integer.MAX_VALUE) {
             int added = water.addAtMost(
                     x,
                     y,
@@ -129,8 +117,7 @@ public final class PrecipitationSystem {
                 remaining);
         remaining -= surfaceWater;
 
-        if (remaining > CellVolume.EMPTY
-                && waterZ < Integer.MAX_VALUE) {
+        if (remaining > CellVolume.EMPTY && waterZ < Integer.MAX_VALUE) {
             int addedAbove = water.addAtMost(
                     x,
                     y,
@@ -155,9 +142,7 @@ public final class PrecipitationSystem {
                 CellVolume.EMPTY);
     }
 
-    private static boolean opensFromAbove(
-            Shape shape) {
-
+    private static boolean opensFromAbove(Shape shape) {
         return CellSpace.boundaryOpeningFloor(
                 shape,
                 CellFace.POSITIVE_Z) != CellSpace.CLOSED;

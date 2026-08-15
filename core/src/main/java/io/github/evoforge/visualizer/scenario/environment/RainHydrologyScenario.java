@@ -12,7 +12,7 @@ import io.github.evoforge.visualizer.scenario.ScenarioView;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import io.github.evoforge.visualizer.scenario.water.WaterScenarioDiagnostics;
 
-/** Dry-start acceptance scene for rain, local soil capacity, puddles and lake drying. */
+/** Dry-start acceptance scene for rain, local Soil capacity, puddles and lake drying. */
 public final class RainHydrologyScenario implements VisualizerScenario {
 
     private static final int MIN_X = -7;
@@ -23,7 +23,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     private static final int MAX_Z = 3;
 
     // Acceptance-only physical scale: one 1m x 1m tile and one 1m full cell imply
-    // 1 mm of water depth == 1000 normalized units. The light 2.4mm shower is spread
+    // 1 mm of liquid depth == 1000 normalized units. The light 2.4mm shower is spread
     // across 120 simulation ticks instead of arriving as one artificial pulse.
     private static final long CLIMATE_CYCLE_TICKS = 360L;
     private static final long RAIN_ACTIVE_TICKS = 120L;
@@ -34,10 +34,10 @@ public final class RainHydrologyScenario implements VisualizerScenario {
 
     private static final int SOIL_BASE_CAPACITY = 2_500;
     private static final int SOIL_CAPACITY_VARIATION = 1_500;    // local 1.0..4.0 mm capacity
-    private static final int SOIL_INFILTRATION_LIMIT = 3_000;
+    private static final int SOIL_PERMEABILITY = 3_000;
     private static final long SOIL_VARIATION_SEED = 0x5EEDBEEFL;
-    private static final int SOIL_SURFACE_STORAGE = 1_200;       // 1.2 mm micro-storage
-    private static final int STONE_SURFACE_STORAGE = 500;
+    private static final int SOIL_SURFACE_RETENTION = 1_200;     // 1.2 mm microtopography
+    private static final int STONE_SURFACE_RETENTION = 500;
 
     private static final int LAKE_MIN_X = -6;
     private static final int LAKE_MAX_X = -4;
@@ -48,7 +48,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     @Override public String id() { return "rain-hydrology"; }
     @Override public String title() { return "Rain Cycle"; }
     @Override public String description() {
-        return "Long light rain: uniformly dry terrain has deterministic local soil capacity, puddles emerge unevenly during the shower, and a separate finite lake demonstrates evaporation.";
+        return "Long light rain: uniformly dry terrain has deterministic local Soil capacity, puddles emerge unevenly during the shower, and a separate finite lake demonstrates evaporation.";
     }
 
     @Override
@@ -66,20 +66,20 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         LandscapeDefinitionId stone =
                 assembly.landscapeDefinition("scenario:rain_stone");
 
-        assembly.soilHydrology(
+        assembly.soilProperties(
                 soil,
                 SOIL_BASE_CAPACITY,
-                SOIL_INFILTRATION_LIMIT);
-        assembly.soilHydrologyVariation(
+                SOIL_PERMEABILITY);
+        assembly.soilPropertiesVariation(
                 soil,
                 SOIL_VARIATION_SEED,
                 SOIL_CAPACITY_VARIATION);
-        assembly.surfaceWaterStorage(
+        assembly.surfaceRetention(
                 soil,
-                SOIL_SURFACE_STORAGE);
-        assembly.surfaceWaterStorage(
+                SOIL_SURFACE_RETENTION);
+        assembly.surfaceRetention(
                 stone,
-                STONE_SURFACE_STORAGE);
+                STONE_SURFACE_RETENTION);
         assembly.precipitation(rainSchedule);
         assembly.periodicEvaporation(
                 EVAPORATION_PER_EVENT,
@@ -88,10 +88,6 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         for (int x = MIN_X; x <= MAX_X; x++) {
             for (int y = MIN_Y; y <= MAX_Y; y++) {
                 if (insideLake(x, y)) {
-                    // The lake is deliberately the only pre-existing free Water in this
-                    // scenario. Sky-shield/roof acceptance lives in its own Water scene;
-                    // keeping it out here prevents artificial roof runoff from obscuring
-                    // the direct rain -> Soil -> puddle transition we are inspecting.
                     assembly.placeTerrain(x, y, -2, stone);
                     assembly.initialWater(
                             x,
@@ -120,9 +116,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
                 weather);
     }
 
-    private static boolean insideLake(
-            int x,
-            int y) {
+    private static boolean insideLake(int x, int y) {
         return x >= LAKE_MIN_X
                 && x <= LAKE_MAX_X
                 && y >= LAKE_MIN_Y

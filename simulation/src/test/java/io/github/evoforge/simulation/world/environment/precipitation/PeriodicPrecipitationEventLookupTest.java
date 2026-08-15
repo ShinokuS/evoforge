@@ -11,12 +11,16 @@ import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 
 final class PeriodicPrecipitationEventLookupTest {
 
@@ -89,19 +93,22 @@ final class PeriodicPrecipitationEventLookupTest {
         LandscapeSystem landscape = LandscapeSystem.create(
                 new SparseTerrainStorage(),
                 definitions);
-        SoilHydrologyDefinitions soilHydrology =
-                new SoilHydrologyDefinitions();
-        SoilMoistureSystem moisture = new SoilMoistureSystem(
-                new SparseSoilMoistureStorage(),
-                landscape.terrain(),
-                soilHydrology);
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WaterSystem.TYPE, LiquidTransportProperties.reference());
+        SoilLiquidSystem retained = new SoilLiquidSystem(
+                new SparseSoilLiquidStorage(),
+                new TerrainSoilPropertiesLookup(
+                        landscape.terrain(),
+                        new SoilPropertiesDefinitions()),
+                transport);
+        LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
                 landscape.geometry());
+        WaterSystem water = new WaterSystem(liquids);
         PrecipitationSystem precipitation = new PrecipitationSystem(
                 landscape.terrain(),
                 landscape.geometry(),
-                moisture,
+                retained,
                 water);
         SkyPrecipitationSystem sky = new SkyPrecipitationSystem(
                 new VerticalSkySurfaceSystem(

@@ -10,7 +10,12 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
+import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
 final class WaterSurfaceLookupTest {
 
@@ -62,21 +67,34 @@ final class WaterSurfaceLookupTest {
     }
 
     @Test
-    void flowReplacementUsesSameSurfaceBoundary() {
-        WaterSystem water = water();
+    void sharedLiquidFlowPublishesDestinationThroughWaterSurfaceProjection() {
+        GeometryLookup geometry = (x, y, z) ->
+                y == 0 && z == 0 && (x == 0 || x == 1)
+                        ? null
+                        : FullShape.INSTANCE;
+        LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
+                geometry);
+        WaterSystem water = new WaterSystem(liquids);
+        LiquidFlowSystem flow = new LiquidFlowSystem(
+                liquids,
+                geometry,
+                type -> LiquidTransportProperties.reference());
         WaterSurfaceLookup surfaces = water.surfaces();
 
-        water.replaceFromFlow(new WaterCell(7, 8, 4), 250_000);
-        water.replaceFromFlow(new WaterCell(7, 8, 9), 125_000);
-        assertEquals(9, surfaces.topZ(7, 8));
+        water.addAtMost(0, 0, 0, 400_000);
+        assertFalse(surfaces.hasColumn(1, 0));
 
-        water.replaceFromFlow(new WaterCell(7, 8, 9), 0);
-        assertEquals(4, surfaces.topZ(7, 8));
+        assertTrue(flow.update() > 0L);
+
+        assertTrue(water.lookup().amount(1, 0, 0) > 0);
+        assertTrue(surfaces.hasColumn(1, 0));
+        assertEquals(0, surfaces.topZ(1, 0));
     }
 
     private static WaterSystem water() {
-        return new WaterSystem(
-                new SparseWaterStorage(),
-                (x, y, z) -> null);
+        return new WaterSystem(new LiquidSystem(
+                new SparseLiquidStorage(),
+                (x, y, z) -> null));
     }
 }

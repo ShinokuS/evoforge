@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.scenario.water;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioController;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
@@ -45,13 +46,11 @@ public final class WaterScenarioDiagnostics implements ScenarioController {
 
     @Override
     public void update(long tick) {
-        if (tick == lastTick) {
-            return;
-        }
+        if (tick == lastTick) return;
         lastTick = tick;
 
         long totalWater = 0L;
-        long totalMoisture = 0L;
+        long retainedWater = 0L;
         int wetCells = 0;
         StringBuilder layers = new StringBuilder();
 
@@ -60,26 +59,26 @@ public final class WaterScenarioDiagnostics implements ScenarioController {
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
                     int water = runtime.view().water().amount(x, y, z);
-                    int moisture = runtime.view().soilMoisture().amount(x, y, z);
+                    int retained = runtime.view().soilLiquids().amountOf(
+                            WaterSystem.TYPE,
+                            x,
+                            y,
+                            z);
                     layerWater += water;
                     totalWater += water;
-                    totalMoisture += moisture;
-                    if (water > 0) {
-                        wetCells++;
-                    }
+                    retainedWater += retained;
+                    if (water > 0) wetCells++;
                 }
             }
             if (layerWater > 0) {
-                if (!layers.isEmpty()) {
-                    layers.append(" · ");
-                }
+                if (!layers.isEmpty()) layers.append(" · ");
                 layers.append('z').append(z).append('=').append(layerWater);
             }
         }
 
         String summary = "Water=" + totalWater
                 + " · wetCells=" + wetCells
-                + " · soil=" + totalMoisture
+                + " · retainedWater=" + retainedWater
                 + (layers.isEmpty() ? "" : " · " + layers);
         diagnostics = new ScenarioDiagnostics(
                 new ScenarioCellMarker[0],

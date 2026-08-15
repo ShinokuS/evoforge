@@ -13,12 +13,16 @@ import io.github.evoforge.simulation.world.environment.precipitation.Precipitati
 import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 
 final class PeriodicEvaporationSystemTest {
 
@@ -69,16 +73,19 @@ final class PeriodicEvaporationSystemTest {
                 LandscapeSystem.create(
                         new SparseTerrainStorage(),
                         definitions);
-        private final SoilHydrologyDefinitions soilHydrology =
-                new SoilHydrologyDefinitions();
-        private final SoilMoistureSystem moisture =
-                new SoilMoistureSystem(
-                        new SparseSoilMoistureStorage(),
-                        landscape.terrain(),
-                        soilHydrology);
-        private final WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
+        private final LiquidTransportDefinitions transport =
+                referenceWaterTransport();
+        private final SoilLiquidSystem soilLiquids =
+                new SoilLiquidSystem(
+                        new SparseSoilLiquidStorage(),
+                        new TerrainSoilPropertiesLookup(
+                                landscape.terrain(),
+                                new SoilPropertiesDefinitions()),
+                        transport);
+        private final LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
                 landscape.geometry());
+        private final WaterSystem water = new WaterSystem(liquids);
         private final MutableTime time = new MutableTime();
         private final RecordingScheduler scheduler = new RecordingScheduler();
         private final PeriodicEvaporationSystem periodic;
@@ -90,10 +97,10 @@ final class PeriodicEvaporationSystemTest {
             EvaporationSystem evaporation = new EvaporationSystem(
                     sky,
                     water.surfaces(),
-                    moisture.cells(),
+                    soilLiquids.cells(),
                     landscape.geometry(),
                     water,
-                    moisture);
+                    soilLiquids);
             periodic = new PeriodicEvaporationSystem(
                     evaporation,
                     new EvaporationSchedule(100_000, 5L),
@@ -101,6 +108,12 @@ final class PeriodicEvaporationSystemTest {
                     precipitation);
             periodic.bindScheduler(scheduler);
         }
+    }
+
+    private static LiquidTransportDefinitions referenceWaterTransport() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WaterSystem.TYPE, LiquidTransportProperties.reference());
+        return transport;
     }
 
     private static final class MutableTime implements SimulationTime {

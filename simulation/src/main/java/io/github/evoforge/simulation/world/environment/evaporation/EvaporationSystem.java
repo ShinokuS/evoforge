@@ -4,8 +4,8 @@ import java.util.TreeSet;
 
 import io.github.evoforge.simulation.world.environment.sky.SkySurface;
 import io.github.evoforge.simulation.world.environment.sky.SkySurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureCellsLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidCellsLookup;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
 import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
@@ -15,51 +15,50 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 
 /**
- * Simple deterministic evaporation sink over currently wet state-bearing columns.
+ * Simple deterministic Water evaporation sink over currently wet state-bearing columns.
  *
- * <p>The configured amount is an absolute volume per exposed XY column, not a
- * percentage of stored water. Surface Water is removed before retained soil moisture.
- * Covered water/moisture is not removed because every candidate is revalidated against
- * the shared vertical sky surface resolver.
+ * <p>The configured amount is an absolute Water volume per exposed XY column, not a
+ * percentage. Free Water is removed before retained Water. Other retained liquid
+ * constituents are neither candidates nor sinks of this Water-specific process.
  */
 public final class EvaporationSystem {
 
     private final SkySurfaceLookup skySurfaces;
     private final WaterSurfaceLookup waterSurfaces;
-    private final SoilMoistureCellsLookup moistureCells;
+    private final SoilLiquidCellsLookup retainedCells;
     private final GeometryLookup geometry;
     private final WaterSystem water;
-    private final SoilMoistureSystem soilMoisture;
+    private final SoilLiquidSystem soilLiquids;
 
     public EvaporationSystem(
             SkySurfaceLookup skySurfaces,
             WaterSurfaceLookup waterSurfaces,
-            SoilMoistureCellsLookup moistureCells,
+            SoilLiquidCellsLookup retainedCells,
             GeometryLookup geometry,
             WaterSystem water,
-            SoilMoistureSystem soilMoisture) {
+            SoilLiquidSystem soilLiquids) {
 
         if (skySurfaces == null
                 || waterSurfaces == null
-                || moistureCells == null
+                || retainedCells == null
                 || geometry == null
                 || water == null
-                || soilMoisture == null) {
+                || soilLiquids == null) {
             throw new IllegalArgumentException(
                     "evaporation dependencies must not be null");
         }
 
         this.skySurfaces = skySurfaces;
         this.waterSurfaces = waterSurfaces;
-        this.moistureCells = moistureCells;
+        this.retainedCells = retainedCells;
         this.geometry = geometry;
         this.water = water;
-        this.soilMoisture = soilMoisture;
+        this.soilLiquids = soilLiquids;
     }
 
     /**
-     * Removes at most {@code amountPerColumn} from every currently wet candidate
-     * column and returns exact sink accounting.
+     * Removes at most {@code amountPerColumn} of Water from every currently wet
+     * candidate column and returns exact sink accounting.
      */
     public EvaporationBatchResult applyUniform(int amountPerColumn) {
         int amount = CellVolume.requireValid(amountPerColumn);
@@ -69,7 +68,9 @@ public final class EvaporationSystem {
 
         TreeSet<Column> columns = new TreeSet<>();
         waterSurfaces.forEach((x, y, z) -> columns.add(new Column(x, y)));
-        moistureCells.forEach((x, y, z) -> columns.add(new Column(x, y)));
+        retainedCells.forEach(
+                WaterSystem.TYPE,
+                (x, y, z) -> columns.add(new Column(x, y)));
 
         if (columns.isEmpty()) {
             return EvaporationBatchResult.empty();
@@ -77,7 +78,7 @@ public final class EvaporationSystem {
 
         long requested = 0L;
         long waterRemoved = 0L;
-        long soilRemoved = 0L;
+        long retainedWaterRemoved = 0L;
         long unfulfilled = 0L;
 
         for (Column column : columns) {
@@ -89,9 +90,9 @@ public final class EvaporationSystem {
             waterRemoved = Math.addExact(
                     waterRemoved,
                     result.surfaceWaterRemoved());
-            soilRemoved = Math.addExact(
-                    soilRemoved,
-                    result.soilMoistureRemoved());
+            retainedWaterRemoved = Math.addExact(
+                    retainedWaterRemoved,
+                    result.retainedWaterRemoved());
             unfulfilled = Math.addExact(
                     unfulfilled,
                     result.unfulfilled());
@@ -101,7 +102,7 @@ public final class EvaporationSystem {
                 columns.size(),
                 requested,
                 waterRemoved,
-                soilRemoved,
+                retainedWaterRemoved,
                 unfulfilled);
     }
 
@@ -112,7 +113,7 @@ public final class EvaporationSystem {
 
         int remaining = requested;
         int waterRemoved = CellVolume.EMPTY;
-        int soilRemoved = CellVolume.EMPTY;
+        int retainedWaterRemoved = CellVolume.EMPTY;
 
         while (remaining > CellVolume.EMPTY) {
             SkySurface surface = skySurfaces.find(x, y);
@@ -131,8 +132,7 @@ public final class EvaporationSystem {
                 remaining -= removed;
                 removedThisPass += removed;
             } else {
-                if (opensFromAbove(
-                        geometry.find(x, y, surface.z()))) {
+                if (opensFromAbove(geometry.find(x, y, surface.z()))) {
                     int removed = water.removeAtMost(
                             x,
                             y,
@@ -144,12 +144,13 @@ public final class EvaporationSystem {
                 }
 
                 if (remaining > CellVolume.EMPTY) {
-                    int removed = soilMoisture.removeAtMost(
+                    int removed = soilLiquids.removeAtMost(
+                            WaterSystem.TYPE,
                             x,
                             y,
                             surface.z(),
                             remaining);
-                    soilRemoved += removed;
+                    retainedWaterRemoved += removed;
                     remaining -= removed;
                     removedThisPass += removed;
                 }
@@ -163,7 +164,7 @@ public final class EvaporationSystem {
         return new EvaporationResult(
                 requested,
                 waterRemoved,
-                soilRemoved,
+                retainedWaterRemoved,
                 remaining);
     }
 

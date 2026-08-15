@@ -2,236 +2,187 @@
 
 ## Purpose
 
-Own finite authoritative liquid-Water quantity in the shared discrete XYZ world and redistribute it locally without embedding Water into Terrain, Geometry or a universal world-cell object.
+Define Water-specific behavior on top of EvoForge's shared liquid foundations.
 
-The current foundation includes finite sparse quantity, Shape-derived free capacity, deterministic local redistribution, SurfaceWaterStorage, run-on Soil infiltration, shared sky-surface precipitation/evaporation, sparse latest-step flow diagnostics, optional finite runtime bounds and mover-specific terrestrial wading integrated into both MoveTo planning and authoritative Movement revalidation.
-
-Drinking, swimming and richer fluid mechanics remain later consumers.
+Water was the first implemented liquid. Storage, hydraulic transport, surface retention and porous-Soil retention are now generic mechanics described in [Liquids](liquids.md). `WaterSystem` is a narrow typed facade for the open `WaterSystem.TYPE` identity; precipitation, Water evaporation, wading and presentation remain explicit Water consumers.
 
 ## Ownership
 
-Water is independent landscape state:
+Authoritative free-liquid quantity belongs to `LiquidSystem`:
 
 ```text
-TerrainState   XYZ -> terrain identity | absence
-Geometry       XYZ terrain anchor -> Shape | default FullShape
-SoilMoisture   terrain XYZ -> retained finite moisture
-WaterState     XYZ -> free liquid volume | dry
+XYZ -> dry
+   or
+XYZ -> LiquidTypeId + finite free volume
 ```
 
-Shared coordinates are interaction addresses; Water does not become a Terrain field.
-
-`WaterSystem` is the authoritative mutation owner. `WaterLookup` exposes current quantity:
+Water owns the `water` identity. `WaterLookup` projects only that constituent:
 
 ```java
 int amount(int x, int y, int z);
 ```
 
-Dry Water is `CellVolume.EMPTY` (`0`). Current storage is sparse: only positive quantities require entries. Storage representation is replaceable.
-
-## Quantity and geometry
-
-Water uses the deterministic normalized cell-volume scale:
+The accepted normalized scale remains:
 
 ```text
 CellVolume.EMPTY = 0
 CellVolume.FULL  = 1_000_000
 ```
 
-This is a fraction of one discrete cell volume, not litres or a declaration that a world cell is one cubic metre.
+Water does not own a separate storage implementation or hydraulic solver.
 
-Water reads only neutral Geometry facts. It does not branch on `FullShape`, `RampShape` or future concrete Shape classes.
+## Mutation facade
 
-Important Geometry inputs are:
-
-```text
-CellSpace.capacity(shape)
-CellSpace.surfaceHeight(shape, volume)
-Shape.freeVolumeBelow(localHeight)
-Shape.boundaryOpeningFloor(CellFace)
-```
-
-A coordinate with no Shape is open space. `FullShape` has zero Water capacity. A current cardinal `RampShape` leaves a half-cell free wedge with its own height/opening profile.
-
-Navigation transition ports are not hydraulic openings.
-
-## Mutation boundary
-
-External quantity operations are bounded arithmetic:
+`WaterSystem` delegates Water mutations to the shared `LiquidSystem`:
 
 ```java
 int addAtMost(x, y, z, requested);
 int removeAtMost(x, y, z, requested);
 ```
 
-They return the volume that actually entered or left authoritative Water. Negative requests are programming errors; zero is a valid no-op.
+The returned amount is the volume actually added or removed. Geometry capacity, liquid-type collision rules, sparse state, surface projection and hydraulic wakeup remain generic responsibilities.
 
-Successful mutation updates the derived surface cache and wakes the local flow frontier. Sources/sinks such as precipitation and evaporation therefore never bypass Water ownership.
+Water-specific sources/sinks use this typed facade instead of mutating generic storage directly.
 
-## Derived wet-column surface
+## Shared hydraulic transport
 
-`WaterSystem` maintains `WaterSurfaceLookup`, the top positive-Water Z for each wet XY column.
+One runtime composes one `LiquidFlowSystem` for every free-liquid identity in that world.
 
-The cache changes only through authoritative Water mutation/flow commit. A hydraulically dormant lake therefore remains discoverable by atmosphere/presentation without scanning vertical world space or iterating the flow frontier.
+The accepted Water mechanics remain:
 
-The cache owns no independent liquid quantity.
+- Shape-derived free capacity;
+- physical face openings and vertical falling;
+- hydraulic head from world Z plus local fill height;
+- deterministic plan / limit / commit updates;
+- exact finite-volume conservation;
+- proportional simultaneous-transfer limiting;
+- fixed-point relaxation;
+- sparse active frontier and dormancy;
+- actual latest-step transfer diagnostics.
 
-## Hydraulic flow model
+Water uses `LiquidTransportProperties.reference()`, so the generic viscosity model preserves the previous reference-Water cadence.
 
-`WaterFlowSystem` owns redistribution policy but no duplicate Water amount.
+There is no `WaterFlowSystem` transport authority. Water-facing diagnostics are obtained through `WaterFlowLookup.from(liquidFlow.flowLookup())`, which filters generic flow samples by `WaterSystem.TYPE`.
 
-For a connected pair it compares hydraulic head derived from:
+See [Liquids](liquids.md) for the current single-component free-cell contact rule and transport-property model.
 
-```text
-absolute cell Z
-+
-local liquid surface height from Geometry
-```
+## Water surface projection
 
-The same comparison explains lateral equalization and downward movement. A physical face's opening floor retains Water below its sill; a closed face creates no transfer.
+`WaterSurfaceLookup` is a Water-filtered projection over generic `LiquidSurfaceLookup`. It exposes Water columns for atmosphere, traversal and presentation consumers without owning quantity.
 
-Each update is two-phase:
+## Surface retention
 
-```text
-active frontier
-      ↓
-read authoritative Water + Geometry snapshot
-      ↓
-plan local face transfers
-      ↓
-apply source/opening/storage/destination bounds
-      ↓
-deterministic proportional limiting
-      ↓
-commit aggregate deltas simultaneously
-```
-
-Water that arrives during a step cannot be forwarded again during that same step. Candidate ordering and integer remainder allocation are deterministic.
-
-The conservation invariant is exact:
+Surface microtopographic retention is now generic material data:
 
 ```text
-sum(delta over every changed cell) = 0
-```
-
-Only external sources/sinks may change total Water quantity.
-
-## SurfaceWaterStorage
-
-A supporting terrain definition may declare a finite `SurfaceWaterStorage` capacity.
-
-This reserve is **free Water**, not SoilMoisture. It stays in `WaterState`, contributes to rendering/depth, and is conserved.
-
-For same-Z horizontal flow, the source keeps the declared reserve before Water becomes mobile. The aggregate source limiter shares one reserve across simultaneous exits, preventing several neighbors from each draining the same shallow storage independently.
-
-For vertical flow (`dz != 0`) the reserve is not subtracted. Water that can physically fall through an open lower boundary is not artificially held up by a horizontal runoff threshold.
-
-## Relaxation and dormancy
-
-The solver uses deterministic fixed-point relaxation instead of directly forcing pair equality. Pair transfer and aggregate source budgets are deliberately damped, and integer arithmetic supplies a one-quantum deadband.
-
-Once no meaningful integer transfer remains, the active region sleeps:
-
-```text
-stable lake / retained puddle
+SurfaceRetentionDefinitions
         ↓
-active frontier becomes empty
+TerrainSurfaceRetentionLookup
         ↓
-flow work = 0 until another mutation wakes it
+LiquidFlowSystem
 ```
 
-`WaterFlowProcess` advances one local hydraulic step per scheduled simulation tick while work exists.
+The capacity is free-liquid volume retained on a supporting material before same-Z horizontal runoff. It is distinct from retained Soil pore volume and remains part of authoritative free-liquid state.
 
-## Water -> Soil exchange
+The former Water-specific `SurfaceWaterStorageDefinitions`, `SurfaceWaterStorageLookup` and `TerrainSurfaceWaterStorageLookup` have been removed. Water uses the same generic material capability as every other free liquid.
 
-Free Water arriving over absorbent terrain may infiltrate even when it did not originate as rain.
+The current retention value is material-owned and liquid-neutral. Future liquid-dependent wetting must be introduced through real physical properties such as surface tension/contact angle if a consumer requires them, not through Water-specific parallel storage definitions.
 
-Before each scheduled flow solve, `WaterSoilExchangeSystem` inspects the same sparse active-Water frontier, resolves supporting terrain and transfers at most the Soil's current infiltration limit/remaining capacity from Water into `SoilMoistureSystem`.
+## Soil infiltration and retained Water
 
-The exact transferred amount is removed from Water. Then ordinary Water flow runs on what remains.
+Soil infiltration is generic. `SoilLiquidSystem` owns retained composition and one shared material pore capacity.
 
-This gives one consistent physical chain:
+Water participates as one constituent:
 
 ```text
-rain/run-on source
+free Water
     ↓
-SoilMoisture if capacity remains
+SoilLiquidInfiltrationSystem
     ↓
-excess free Water
-    ↓
-hydraulic redistribution
+SoilLiquidSystem
+    ├─ retained Water
+    └─ other retained constituents
 ```
 
-See [Surface Hydrology](hydrology.md) for precipitation/evaporation composition.
+There is no separate `SoilMoistureSystem` authority or Water-only soil-exchange adapter.
 
-## Latest actual-flow diagnostics
+Porous terrain declares `SoilProperties(capacity, permeability)`. Water's reference viscosity converts permeability to the same nominal uptake rate used to configure the material. A more viscous future liquid receives a lower effective uptake rate through the generic transport math without changing Water or Soil storage code.
 
-`WaterFlowSystem` exposes sparse `WaterFlowLookup` samples from the latest evaluated transfer step.
+Water retained in Soil is read explicitly through:
 
-A sample exists only when real Water crossed a cell boundary. It records objective transfer direction/volume for diagnostics; it is not a persistent velocity field.
-
-The map is cleared before each solve. A no-transfer fixed point therefore exposes no stale motion sample. Presentation maps those facts to directional/falling animation and treats no sample as calm.
+```java
+soilLiquids.amountOf(WaterSystem.TYPE, x, y, z)
+```
 
 ## Atmosphere interaction
 
-`VerticalSkySurfaceSystem` supplies one shared topmost exposed Terrain-or-Water surface per XY column.
+Current precipitation and evaporation remain Water-specific integrations.
 
-- rainfall onto Terrain goes through SoilMoisture first and places only excess as free Water;
-- rainfall onto exposed Water adds directly to the liquid surface;
-- evaporation removes exposed free Water first and then exposed SoilMoisture;
-- covered Water is not evaporated merely because it exists in sparse storage.
+Rain behavior:
 
-Periodic/cyclic scheduling belongs to the environment layer, not `WaterSystem` itself.
+- rain onto exposed Terrain attempts generic Soil retention as Water first;
+- excess becomes free Water in available surface volume;
+- rain onto exposed Water adds directly to the Water column.
 
-## Optional finite world bounds
+Water evaporation:
 
-When `SimulationAssembly.worldBounds(...)` is configured, the shared `WorldGeometryLookup` resolves coordinates outside the inclusive box as `FullShape`. Water therefore observes one physically closed world boundary through ordinary Geometry.
+- removes exposed free Water first;
+- then removes exposed retained Water;
+- does not remove other retained constituents;
+- reports `surfaceWaterRemoved` and `retainedWaterRemoved` separately.
 
-There is no Water-specific coordinate clamp, invisible deletion or special edge rule. Without configured bounds, the earlier unbounded semantics remain intentionally available.
+Another liquid does not automatically receive Water's atmosphere semantics merely because it shares the transport foundation.
 
-Generated/unloaded/streamed world state is still separate future architecture.
+See [Surface Hydrology](hydrology.md).
 
-## Water-aware terrestrial traversal
+## Water-aware traversal
 
-Finite Water influences ordinary terrestrial movement through a separate mover-specific constraint, not by changing Navigation topology.
+`WaterWadingConstraint` remains Water-specific gameplay behavior.
 
-A `WaterWadingProfile(maxDepth)` may be attached to an object definition. The same `WaterWadingConstraint` is composed into:
-
-```text
-MoveTo advisory PathQuery
-MovementSystem start validation
-MovementActionProcessor commit revalidation
-```
-
-Raw Water changes do not increment the landscape traversal revision. Current Water is read when planning/executing, and authoritative Movement remains the final gate.
+A mover with `WaterWadingProfile(maxDepth)` evaluates current Water depth during path planning and authoritative Movement revalidation. A non-Water liquid does not automatically inherit Water's wading profile or hazard semantics.
 
 See [Water Traversal](water-traversal.md).
 
 ## Geometry changes
 
-Geometry owns Shape state; Water owns quantity. Geometry therefore never silently deletes displaced Water.
+Geometry owns Shape; liquids own quantity. Geometry changes therefore do not silently delete Water.
 
-`WaterFlowSystem.activateAt(x,y,z)` exists as the narrow hydraulic wake point for a higher-level coordinator after relevant Geometry changes. General runtime Geometry/Water displacement coordination remains future work.
+Hydraulic wakeup belongs to the shared `LiquidFlowSystem.activateAt(...)` capability. General runtime coordination of displaced liquid after arbitrary Geometry changes remains future work.
+
+## Mixing boundary
+
+Water can coexist with other liquid identities in one generic liquid world, but current free-liquid cells are single-component. Unlike-liquid contact blocks explicitly instead of being silently merged.
+
+Retained Soil composition may contain Water alongside other constituents because all share porous capacity. That does not implement free-liquid mixing, chemistry, diffusion or phase separation.
+
+See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md).
 
 ## Deliberately absent
 
-Current Water does not implement:
+Current Water integration does not implement:
 
 - drinking/Thirst interactions;
-- shallow-Water speed/cost penalties;
+- shallow-Water speed penalties beyond current wading admissibility;
 - swimming or waterborne locomotion;
 - current forces, knockback or drowning;
 - Water-body identity;
-- pressure/inertia/viscosity/turbulence/erosion;
+- detailed pressure/inertia/turbulence/erosion;
+- surface tension/contact-angle wetting;
 - object displacement volume;
 - deep groundwater/drainage;
-- automatic wake/displacement coordination for arbitrary runtime Geometry mutation;
-- generated/streamed world-bound semantics beyond optional explicit runtime bounds.
+- automatic wake/displacement coordination for arbitrary Geometry mutation;
+- arbitrary-liquid atmosphere or traversal semantics;
+- free-liquid mixtures/reactions;
+- retained-liquid diffusion, leaching or reactions.
 
-## Tests
+Kinematic viscosity is part of the generic liquid foundation and is already active for Water/free-flow/Soil uptake calculations.
 
-Headless coverage includes finite add/remove arithmetic, Shape capacity/opening behavior, exact conservation, simultaneous-exit limiting, SurfaceWaterStorage retention, vertical falling, run-on Soil infiltration, saturated-Soil behavior, deterministic convergence/dormancy, actual-flow sample clearing, cached Water surfaces, precipitation/evaporation accounting, Water-aware planning/execution and explicit finite-world containment.
+## Tests and acceptance
 
-Visual acceptance additionally covers Rain Cycle, stacked Z flow, Geometry/Ramp stress, Surface optical depth and calm/active Water presentation.
+Water headless coverage remains the regression contract for Water semantics: finite mutations, Geometry capacity/openings, conservation, vertical falling, surface retention, Soil infiltration, saturation, precipitation/evaporation accounting, Water surfaces, actual-flow diagnostics, Water wading and finite-world containment.
 
-See [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), [Water Traversal](water-traversal.md), and the historical [Water Foundation note](../notes/water-foundation.md).
+Generic liquid tests additionally verify non-Water transport, explicit transport definitions, viscosity-dependent mobility, shared Soil pore capacity, retained constituent identity and deterministic no-mix contact behavior.
+
+Visual Water acceptance remains Rain Cycle, stacked Z flow, Geometry/Ramp stress, optical depth and calm/active Water presentation.
+
+See [Liquids](liquids.md), [Surface Hydrology](hydrology.md), [Geometry and Shape](geometry.md), [Water Traversal](water-traversal.md), and the historical [Water Foundation note](../notes/water-foundation.md).

@@ -6,13 +6,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
@@ -28,7 +32,7 @@ final class PrecipitationSystemTest {
     @Test
     void soilAbsorbsBeforeExcessBecomesSurfaceWater() {
         Fixture fixture = fixture(
-                new SoilHydrology(500_000, 200_000),
+                new SoilProperties(500_000, 200_000),
                 fullTerrainGeometry());
 
         PrecipitationResult result = fixture.precipitation.applyTerrainSurface(
@@ -43,16 +47,16 @@ final class PrecipitationSystemTest {
                 result);
         assertEquals(
                 200_000,
-                fixture.soil.lookup().amount(0, 0, 0));
+                fixture.retainedWater(0, 0, 0));
         assertEquals(
                 100_000,
                 fixture.water.lookup().amount(0, 0, 1));
     }
 
     @Test
-    void moistureCapacityBoundsLaterInfiltration() {
+    void poreCapacityBoundsLaterInfiltration() {
         Fixture fixture = fixture(
-                new SoilHydrology(250_000, 200_000),
+                new SoilProperties(250_000, 200_000),
                 fullTerrainGeometry());
 
         fixture.precipitation.applyTerrainSurface(0, 0, 0, 200_000);
@@ -61,12 +65,12 @@ final class PrecipitationSystemTest {
 
         assertEquals(50_000, result.infiltrated());
         assertEquals(150_000, result.surfaceWater());
-        assertEquals(250_000, fixture.soil.lookup().amount(0, 0, 0));
+        assertEquals(250_000, fixture.retainedWater(0, 0, 0));
         assertEquals(150_000, fixture.water.lookup().amount(0, 0, 1));
     }
 
     @Test
-    void missingSoilAspectMeansNonAbsorbingTerrain() {
+    void missingSoilPropertiesMeansNonAbsorbingTerrain() {
         Fixture fixture = fixture(
                 null,
                 fullTerrainGeometry());
@@ -76,7 +80,7 @@ final class PrecipitationSystemTest {
 
         assertEquals(0, result.infiltrated());
         assertEquals(180_000, result.surfaceWater());
-        assertEquals(0, fixture.soil.lookup().amount(0, 0, 0));
+        assertEquals(0, fixture.retainedWater(0, 0, 0));
         assertEquals(180_000, fixture.water.lookup().amount(0, 0, 1));
     }
 
@@ -147,7 +151,7 @@ final class PrecipitationSystemTest {
     @Test
     void exposedWaterTargetBypassesSoilAndCanGrowIntoCellAbove() {
         Fixture fixture = fixture(
-                new SoilHydrology(CellVolume.FULL, CellVolume.FULL),
+                new SoilProperties(CellVolume.FULL, CellVolume.FULL),
                 fullTerrainGeometry());
         fixture.water.addAtMost(0, 0, 1, 900_000);
 
@@ -156,27 +160,29 @@ final class PrecipitationSystemTest {
 
         assertEquals(0, result.infiltrated());
         assertEquals(250_000, result.surfaceWater());
-        assertEquals(0, fixture.soil.lookup().amount(0, 0, 0));
+        assertEquals(0, fixture.retainedWater(0, 0, 0));
         assertEquals(CellVolume.FULL, fixture.water.lookup().amount(0, 0, 1));
         assertEquals(150_000, fixture.water.lookup().amount(0, 0, 2));
     }
 
     @Test
     void precipitationRequiresExplicitExistingTargets() {
-        SoilHydrologyDefinitions definitions = new SoilHydrologyDefinitions();
         TerrainLookup terrain = (x, y, z) -> null;
         GeometryLookup geometry = (x, y, z) -> null;
-        SoilMoistureSystem soil = new SoilMoistureSystem(
-                new SparseSoilMoistureStorage(),
-                terrain,
-                definitions);
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
-                geometry);
+        LiquidTransportDefinitions transport = referenceWaterTransport();
+        SoilLiquidSystem retained = new SoilLiquidSystem(
+                new SparseSoilLiquidStorage(),
+                new TerrainSoilPropertiesLookup(
+                        terrain,
+                        new SoilPropertiesDefinitions()),
+                transport);
+        WaterSystem water = new WaterSystem(new LiquidSystem(
+                new SparseLiquidStorage(),
+                geometry));
         PrecipitationSystem precipitation = new PrecipitationSystem(
                 terrain,
                 geometry,
-                soil,
+                retained,
                 water);
 
         assertThrows(
@@ -188,33 +194,42 @@ final class PrecipitationSystemTest {
     }
 
     private static Fixture fixture(
-            SoilHydrology hydrology,
+            SoilProperties properties,
             GeometryLookup geometry) {
 
-        SoilHydrologyDefinitions definitions = new SoilHydrologyDefinitions();
-        if (hydrology != null) {
-            definitions.put(TERRAIN_ID, hydrology);
+        SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
+        if (properties != null) {
+            definitions.put(TERRAIN_ID, properties);
         }
         definitions.freeze();
 
         TerrainLookup terrain = (x, y, z) ->
                 z == 0 ? TERRAIN_ID : null;
-        SoilMoistureSystem soil = new SoilMoistureSystem(
-                new SparseSoilMoistureStorage(),
-                terrain,
-                definitions);
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
-                geometry);
+        LiquidTransportDefinitions transport = referenceWaterTransport();
+        SoilLiquidSystem retained = new SoilLiquidSystem(
+                new SparseSoilLiquidStorage(),
+                new TerrainSoilPropertiesLookup(
+                        terrain,
+                        definitions),
+                transport);
+        WaterSystem water = new WaterSystem(new LiquidSystem(
+                new SparseLiquidStorage(),
+                geometry));
 
         return new Fixture(
-                soil,
+                retained,
                 water,
                 new PrecipitationSystem(
                         terrain,
                         geometry,
-                        soil,
+                        retained,
                         water));
+    }
+
+    private static LiquidTransportDefinitions referenceWaterTransport() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WaterSystem.TYPE, LiquidTransportProperties.reference());
+        return transport;
     }
 
     private static GeometryLookup fullTerrainGeometry() {
@@ -223,8 +238,16 @@ final class PrecipitationSystemTest {
     }
 
     private record Fixture(
-            SoilMoistureSystem soil,
+            SoilLiquidSystem retained,
             WaterSystem water,
             PrecipitationSystem precipitation) {
+
+        private int retainedWater(int x, int y, int z) {
+            return retained.lookup().amountOf(
+                    WaterSystem.TYPE,
+                    x,
+                    y,
+                    z);
+        }
     }
 }

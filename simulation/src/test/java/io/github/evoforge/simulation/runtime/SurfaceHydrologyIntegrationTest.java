@@ -5,15 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 
 final class SurfaceHydrologyIntegrationTest {
 
     @Test
-    void configuredPrecipitationRunsOnCadenceAndFeedsSoil() {
+    void configuredPrecipitationRunsOnCadenceAndFeedsRetainedWater() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId soil =
                 assembly.landscapeDefinition("test:soil");
-        assembly.soilHydrology(
+        assembly.soilProperties(
                 soil,
                 500_000,
                 100_000);
@@ -25,29 +26,29 @@ final class SurfaceHydrologyIntegrationTest {
         SimulationRuntime runtime = assembly.start();
 
         assertEquals(1, runtime.view().terrainSurfaces().columnCount());
-        assertEquals(0, runtime.view().soilMoisture().amount(3, 4, 0));
+        assertEquals(0, retainedWater(runtime, 3, 4, 0));
 
         runtime.stepper().advance();
         assertEquals(1L, runtime.time().tick());
-        assertEquals(0, runtime.view().soilMoisture().amount(3, 4, 0));
+        assertEquals(0, retainedWater(runtime, 3, 4, 0));
 
         runtime.stepper().advance();
         assertEquals(2L, runtime.time().tick());
-        assertEquals(80_000, runtime.view().soilMoisture().amount(3, 4, 0));
+        assertEquals(80_000, retainedWater(runtime, 3, 4, 0));
         assertEquals(0, runtime.view().water().amount(3, 4, 1));
 
         runtime.stepper().advance();
         runtime.stepper().advance();
         assertEquals(4L, runtime.time().tick());
-        assertEquals(160_000, runtime.view().soilMoisture().amount(3, 4, 0));
+        assertEquals(160_000, retainedWater(runtime, 3, 4, 0));
     }
 
     @Test
-    void periodicEvaporationDriesSoilAndSkipsSharedRainTicks() {
+    void periodicEvaporationDriesRetainedWaterAndSkipsSharedRainTicks() {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId soil =
                 assembly.landscapeDefinition("test:soil");
-        assembly.soilHydrology(
+        assembly.soilProperties(
                 soil,
                 1_000_000,
                 1_000_000);
@@ -64,22 +65,22 @@ final class SurfaceHydrologyIntegrationTest {
         runtime.stepper().advance();
         runtime.stepper().advance();
         assertEquals(2L, runtime.time().tick());
-        assertEquals(100_000, runtime.view().soilMoisture().amount(0, 0, 0));
+        assertEquals(100_000, retainedWater(runtime, 0, 0, 0));
 
         runtime.stepper().advance();
         assertEquals(3L, runtime.time().tick());
-        assertEquals(70_000, runtime.view().soilMoisture().amount(0, 0, 0));
+        assertEquals(70_000, retainedWater(runtime, 0, 0, 0));
 
         runtime.stepper().advance();
         assertEquals(4L, runtime.time().tick());
-        assertEquals(170_000, runtime.view().soilMoisture().amount(0, 0, 0));
+        assertEquals(170_000, retainedWater(runtime, 0, 0, 0));
 
         runtime.stepper().advance();
         runtime.stepper().advance();
         assertEquals(6L, runtime.time().tick());
         assertEquals(
                 270_000,
-                runtime.view().soilMoisture().amount(0, 0, 0));
+                retainedWater(runtime, 0, 0, 0));
     }
 
     @Test
@@ -94,8 +95,20 @@ final class SurfaceHydrologyIntegrationTest {
             runtime.stepper().advance();
         }
 
-        assertEquals(0, runtime.view().soilMoisture().amount(0, 0, 0));
+        assertEquals(0, retainedWater(runtime, 0, 0, 0));
         assertEquals(0, runtime.view().water().amount(0, 0, 1));
         assertEquals(0, runtime.view().waterSurfaces().columnCount());
+    }
+
+    private static int retainedWater(
+            SimulationRuntime runtime,
+            int x,
+            int y,
+            int z) {
+        return runtime.view().soilLiquids().amountOf(
+                WaterSystem.TYPE,
+                x,
+                y,
+                z);
     }
 }

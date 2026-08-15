@@ -10,7 +10,8 @@ import com.badlogic.gdx.math.Matrix4;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
+import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -290,20 +291,29 @@ public final class VisualizerPrimaryHudRenderer {
         }
 
         if (terrain != null) {
-            int moisture = view.soilMoisture().amount(x, y, terrainZ);
-            SoilHydrology hydrology = view.soilHydrology().find(x, y, terrainZ);
-            if (hydrology == null) {
-                rows.add(new Row("Soil moisture   n/a (non-absorbing terrain)", false, MUTED));
+            SoilProperties properties = view.soilProperties().find(x, y, terrainZ);
+            if (properties == null) {
+                rows.add(new Row("Soil retained   n/a (non-porous terrain)", false, MUTED));
             } else {
+                int retainedTotal = view.soilLiquids().totalAmount(x, y, terrainZ);
+                int retainedWater = view.soilLiquids().amountOf(
+                        WaterSystem.TYPE,
+                        x,
+                        y,
+                        terrainZ);
                 rows.add(new Row(
-                        "Soil moisture   " + moisture + " / " + hydrology.capacity(),
+                        "Soil retained   " + retainedTotal + " / " + properties.capacity(),
                         false,
                         TEXT,
-                        fraction(moisture, hydrology.capacity()),
+                        fraction(retainedTotal, properties.capacity()),
                         SOIL_FILL));
+                rows.add(new Row(
+                        "Retained Water   " + retainedWater,
+                        false,
+                        MUTED));
             }
         } else {
-            rows.add(new Row("Soil moisture   n/a", false, MUTED));
+            rows.add(new Row("Soil retained   n/a", false, MUTED));
         }
         rows.add(new Row("Objects   " + view.cells().objectCount(x, y, selectedZ), false, TEXT));
     }
@@ -328,14 +338,20 @@ public final class VisualizerPrimaryHudRenderer {
                 : z;
 
         if (terrainZ != SurfaceProjectionResolver.NO_Z) {
-            SoilHydrology hydrology = view.soilHydrology().find(x, y, terrainZ);
-            if (hydrology != null) {
-                rows.add(new Row("Soil infiltration   " + hydrology.infiltrationLimit(), false, MUTED));
+            SoilProperties properties = view.soilProperties().find(x, y, terrainZ);
+            if (properties != null) {
+                rows.add(new Row(
+                        "Soil permeability   " + properties.permeability(),
+                        false,
+                        MUTED));
             }
         }
         if (waterCellZ != SurfaceProjectionResolver.NO_Z) {
             rows.add(new Row(
-                    "Surface storage   " + view.surfaceWaterStorage().capacityAtWaterCell(x, y, waterCellZ),
+                    "Surface retention   " + view.surfaceRetention().capacityAt(
+                            x,
+                            y,
+                            waterCellZ),
                     false,
                     MUTED));
         }

@@ -26,7 +26,7 @@ final class WaterWadingRuntimeIntegrationTest {
                 assembly.landscapeDefinition("test:wading_soil");
         LandscapeDefinitionId basin =
                 assembly.landscapeDefinition("test:wading_basin");
-        assembly.soilHydrology(soil, 1_000_000, 1_000_000);
+        assembly.soilProperties(soil, 1_000_000, 1_000_000);
         assembly.periodicPrecipitation(300_000, 1L);
 
         ObjectDefinitionId walker =
@@ -74,7 +74,7 @@ final class WaterWadingRuntimeIntegrationTest {
                 assembly.landscapeDefinition("test:commit_soil");
         LandscapeDefinitionId basin =
                 assembly.landscapeDefinition("test:commit_basin");
-        assembly.soilHydrology(soil, 1_000_000, 1_000_000);
+        assembly.soilProperties(soil, 1_000_000, 1_000_000);
         assembly.periodicPrecipitation(900_000, 1L);
 
         ObjectDefinitionId walker =
