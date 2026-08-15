@@ -2,22 +2,32 @@ package io.github.evoforge.simulation.world.landscape.water;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
 
-/** Scheduler adapter that advances active Water flow one local solver step per tick. */
+/** Scheduler adapter that advances active surface hydrology one local step per tick. */
 public final class WaterFlowProcess {
 
     private static final long PROCESS_ID = 0L;
     private static final long STEP_DELAY_TICKS = 1L;
 
     private final WaterFlowSystem flow;
+    private final WaterSoilExchangeSystem soilExchange;
     private ProcessScheduler scheduler;
     private boolean scheduled;
 
+    /** Backward-compatible flow-only process used by isolated solver tests. */
     public WaterFlowProcess(WaterFlowSystem flow) {
+        this(flow, null);
+    }
+
+    public WaterFlowProcess(
+            WaterFlowSystem flow,
+            WaterSoilExchangeSystem soilExchange) {
+
         if (flow == null) {
             throw new IllegalArgumentException(
                     "flow must not be null");
         }
         this.flow = flow;
+        this.soilExchange = soilExchange;
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -33,7 +43,7 @@ public final class WaterFlowProcess {
     }
 
     /**
-     * Ensures active hydraulic work has one scheduled continuation.
+     * Ensures active hydrologic work has one scheduled continuation.
      * Repeated wakeups coalesce while a continuation is already scheduled.
      */
     public void activate() {
@@ -60,6 +70,9 @@ public final class WaterFlowProcess {
         }
 
         scheduled = false;
+        if (soilExchange != null) {
+            soilExchange.update();
+        }
         flow.update();
         activate();
     }
