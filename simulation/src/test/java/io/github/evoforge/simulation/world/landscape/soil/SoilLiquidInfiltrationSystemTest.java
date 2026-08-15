@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
@@ -19,7 +21,7 @@ final class SoilLiquidInfiltrationSystemTest {
 
     @Test
     void nonWaterLiquidUsesTheSameSoilInfiltrationMechanic() {
-        Fixture fixture = fixture(100_000, 30_000);
+        Fixture fixture = fixture(100_000, 30_000, referenceTransport());
         fixture.free.addAtMost(BLOOD, 0, 0, 0, 20_000);
 
         assertEquals(20_000L, fixture.infiltration.update());
@@ -30,7 +32,7 @@ final class SoilLiquidInfiltrationSystemTest {
 
     @Test
     void retainedWaterAndBloodCompeteForOneSharedPoreCapacity() {
-        Fixture fixture = fixture(10_000, 10_000);
+        Fixture fixture = fixture(10_000, 10_000, referenceTransport());
         fixture.free.addAtMost(WATER, 0, 0, 0, 6_000);
         assertEquals(6_000L, fixture.infiltration.update());
 
@@ -44,31 +46,24 @@ final class SoilLiquidInfiltrationSystemTest {
     }
 
     @Test
-    void excessBloodRemainsFreeAfterMaterialAndInteractionBoundedUptake() {
-        TerrainLookup terrain = terrain();
-        SoilLiquidSystem retained = new SoilLiquidSystem(
-                new SparseSoilLiquidStorage(),
-                (x, y, z) -> terrain.contains(x, y, z)
-                        ? new SoilHydrology(100_000, 20_000)
-                        : null,
-                (type, x, y, z, hydrology) -> BLOOD.equals(type)
-                        ? 3_000
-                        : hydrology.infiltrationLimit());
-        LiquidSystem free = new LiquidSystem(
-                new SparseLiquidStorage(),
-                (x, y, z) -> null);
-        SoilLiquidInfiltrationSystem infiltration =
-                new SoilLiquidInfiltrationSystem(free, terrain, retained);
-        free.addAtMost(BLOOD, 0, 0, 0, 10_000);
+    void excessViscousLiquidRemainsFreeAfterPermeabilityBoundedUptake() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WATER, LiquidTransportProperties.reference());
+        transport.put(
+                BLOOD,
+                LiquidTransportProperties.ofKinematicViscosity(
+                        LiquidTransportProperties.REFERENCE_KINEMATIC_VISCOSITY * 2L));
+        Fixture fixture = fixture(100_000, 6_000, transport);
+        fixture.free.addAtMost(BLOOD, 0, 0, 0, 10_000);
 
-        assertEquals(3_000L, infiltration.update());
-        assertEquals(3_000, retained.lookup().amountOf(BLOOD, 0, 0, -1));
-        assertEquals(7_000, free.lookup().amountOf(BLOOD, 0, 0, 0));
+        assertEquals(3_000L, fixture.infiltration.update());
+        assertEquals(3_000, fixture.retained.lookup().amountOf(BLOOD, 0, 0, -1));
+        assertEquals(7_000, fixture.free.lookup().amountOf(BLOOD, 0, 0, 0));
     }
 
     @Test
     void onePassHandlesDifferentActiveLiquidTypesOnDifferentSoilCells() {
-        Fixture fixture = fixture(100_000, 30_000);
+        Fixture fixture = fixture(100_000, 30_000, referenceTransport());
         fixture.free.addAtMost(WATER, 0, 0, 0, 7_000);
         fixture.free.addAtMost(BLOOD, 1, 0, 0, 9_000);
 
@@ -77,13 +72,17 @@ final class SoilLiquidInfiltrationSystemTest {
         assertEquals(9_000, fixture.retained.lookup().amountOf(BLOOD, 1, 0, -1));
     }
 
-    private static Fixture fixture(int capacity, int infiltrationLimit) {
+    private static Fixture fixture(
+            int capacity,
+            int permeability,
+            LiquidTransportDefinitions transport) {
         TerrainLookup terrain = terrain();
         SoilLiquidSystem retained = new SoilLiquidSystem(
                 new SparseSoilLiquidStorage(),
                 (x, y, z) -> terrain.contains(x, y, z)
-                        ? new SoilHydrology(capacity, infiltrationLimit)
-                        : null);
+                        ? new SoilProperties(capacity, permeability)
+                        : null,
+                transport);
         LiquidSystem free = new LiquidSystem(
                 new SparseLiquidStorage(),
                 (x, y, z) -> null);
@@ -91,6 +90,13 @@ final class SoilLiquidInfiltrationSystemTest {
                 free,
                 retained,
                 new SoilLiquidInfiltrationSystem(free, terrain, retained));
+    }
+
+    private static LiquidTransportDefinitions referenceTransport() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WATER, LiquidTransportProperties.reference());
+        transport.put(BLOOD, LiquidTransportProperties.reference());
+        return transport;
     }
 
     private static TerrainLookup terrain() {
