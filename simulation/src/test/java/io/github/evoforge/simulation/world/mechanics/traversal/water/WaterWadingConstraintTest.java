@@ -6,8 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -104,9 +105,10 @@ final class WaterWadingConstraintTest {
 
         private Fixture(GeometryLookup geometry) {
             this.geometry = geometry;
-            water = new WaterSystem(
-                    new SparseWaterStorage(),
+            LiquidSystem liquids = new LiquidSystem(
+                    new SparseLiquidStorage(),
                     geometry);
+            water = new WaterSystem(liquids);
         }
 
         private ObjectId createMover(int maxDepth) {
