@@ -106,13 +106,15 @@ Rejected commands also include their domain result code. Future player/debug com
 
 ### Performance
 
-`perf.visualizer` is emitted once per diagnostic window at `DEBUG`. It replaces the former large console-only performance string and records structured average/max frame, update, landscape, overlay and HUD timings together with FPS and heap measurements.
+`perf.visualizer` is emitted once per diagnostic window at `DEBUG`. It records structured average/max frame, update, landscape, overlay and HUD timings together with FPS and heap measurements.
 
-The console stays readable because it defaults to `INFO+`; the runtime file defaults to project `DEBUG`, so performance data remains available for later diagnosis without continuously occupying the console.
+`perf.landscape` is the narrower cutaway/landscape diagnostic window. It preserves the existing analysis-cache evidence as structured fields: visible cells, landscape and analysis timings, cache hits/misses, padding, cached entry count and standing-Z cache radius.
+
+Both performance streams are file-oriented `DEBUG` evidence. They must not use `INFO` merely to reach the console; the console stays readable because it defaults to `INFO+`, while the runtime file defaults to project `DEBUG`.
 
 ### libGDX
 
-The libGDX `ApplicationLogger` is bridged into the same backend as `gdx.log`, `gdx.debug` and `gdx.error`, preserving its tag and throwable where present. This avoids maintaining a second independent console-only diagnostic channel.
+The libGDX `ApplicationLogger` is bridged into the same backend as `gdx.log`, `gdx.debug` and `gdx.error`, preserving its tag and throwable where present. This avoids maintaining a second independent console-only diagnostic channel. Project-owned recurring telemetry should use project SLF4J categories directly rather than the libGDX bridge so it can retain structured fields and appropriate verbosity.
 
 ## Configuration
 
