@@ -75,6 +75,8 @@ This is an explicit temporary boundary. It is not a claim that real liquids cann
 
 The solver reads liquid identity only to preserve content and enforce the current no-mixing boundary. Hydraulic Geometry does not switch on names such as `water`, `blood` or `wine`.
 
+A runtime containing several liquid identities must compose **one shared `LiquidSystem` and one shared `LiquidFlowSystem`** for that free-liquid state. A Water-, blood- or wine-specific facade may filter or adapt that shared state for its own consumers, but it must not create a parallel transport owner for the same liquid world.
+
 `LiquidFlowProcess` owns the generic scheduled cadence: one local solve per tick while the shared activity frontier contains work, with wakeups coalesced and no continuing schedule at dormancy.
 
 A narrow `LiquidFlowPreparation` hook exists because a real current consumer needs deterministic work immediately before transport: Water can infiltrate Soil before remaining free liquid flows. The hook does not own liquid state and is not a general event bus.
@@ -109,7 +111,9 @@ LiquidSystem / LiquidFlowSystem / LiquidFlowProcess
                     └─ Water presentation
 ```
 
-`WaterFlowProcess` is now only the production hydrology adapter: it supplies Water's pre-flow Soil exchange to the generic scheduled process.
+`WaterFlowSystem` may wrap the shared `LiquidFlowSystem` to expose Water-shaped diagnostics. Its Water-only constructors are convenience composition for the current hydrology runtime and fixtures, not a model for creating one solver per liquid type.
+
+`WaterFlowProcess` is only the production hydrology adapter: it supplies Water's pre-flow Soil exchange to the generic scheduled process.
 
 This distinction is important. Reusing the same hydraulic solver does not imply that wine should infiltrate Soil like rainwater, blood should evaporate on the same schedule, or every liquid should share Water traversal rules.
 
@@ -133,12 +137,13 @@ Those questions are intentionally unanswered today. The current single-component
 ## Engineering rules
 
 1. Free-liquid quantity has one authoritative owner.
-2. Liquid-specific mechanics consume narrow typed capabilities; they do not fork the transport solver.
-3. No system may silently reinterpret one liquid identity as another.
-4. Contact between unsupported compositions must fail/block explicitly rather than depend on collection ordering.
-5. Generic liquid code must not gain speculative properties without a real consumer.
-6. Flow remains deterministic and exactly volume-conserving.
-7. Scheduling stops at hydraulic dormancy.
-8. Presentation and diagnostics are observers, never liquid authority.
+2. One free-liquid world has one shared transport solver; typed liquid facades do not fork it.
+3. Liquid-specific mechanics consume narrow typed capabilities; they do not fork the transport solver.
+4. No system may silently reinterpret one liquid identity as another.
+5. Contact between unsupported compositions must fail/block explicitly rather than depend on collection ordering.
+6. Generic liquid code must not gain speculative properties without a real consumer.
+7. Flow remains deterministic and exactly volume-conserving.
+8. Scheduling stops at hydraulic dormancy.
+9. Presentation and diagnostics are observers, never liquid authority.
 
 See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md) for the architectural boundary.
