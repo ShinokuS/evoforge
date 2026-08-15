@@ -34,7 +34,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     @Override public String id() { return "rain-hydrology"; }
     @Override public String title() { return "Rain Cycle"; }
     @Override public String description() {
-        return "Intermittent 3 mm rain pulse, soil infiltration, roof shielding and evaporation; puddles dry before the next cycle.";
+        return "Intermittent 3 mm rain pulse, soil infiltration, elevated roof shielding and evaporation; exposed puddles dry before the next cycle.";
     }
 
     @Override
@@ -48,10 +48,6 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         LandscapeDefinitionId stone =
                 assembly.landscapeDefinition("scenario:rain_stone");
 
-        // Retained volumes are expressed as equivalent water depth in this
-        // acceptance scale: 120 mm loam storage and 80 mm compacted-clay storage.
-        // Loam accepts the entire 3 mm shower; compacted clay accepts only 0.8 mm,
-        // so it produces a small transient puddle instead of long-term flooding.
         assembly.soilHydrology(loam, 120_000, 3_000);
         assembly.soilHydrology(clay, 80_000, 800);
         assembly.periodicPrecipitation(
@@ -71,11 +67,13 @@ public final class RainHydrologyScenario implements VisualizerScenario {
             }
         }
 
-        // A small roof verifies that precipitation targets the highest exposed
-        // terrain instead of the protected ground beneath it.
+        // Elevated sheltered ground prevents shallow surface runoff from entering
+        // the covered test cells laterally. The roof still owns the highest sky
+        // surface and therefore receives the precipitation itself.
         for (int x = 3; x <= 4; x++) {
             for (int y = -1; y <= 1; y++) {
-                assembly.placeTerrain(x, y, 1, loam);
+                assembly.placeTerrain(x, y, 0, loam);
+                assembly.placeTerrain(x, y, 2, loam);
             }
         }
 
