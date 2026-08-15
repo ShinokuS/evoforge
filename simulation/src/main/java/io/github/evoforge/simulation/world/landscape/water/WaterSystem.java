@@ -6,7 +6,6 @@ import java.util.List;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidStorage;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
-import io.github.evoforge.simulation.world.landscape.liquid.StandardLiquidTypes;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
 /**
@@ -18,7 +17,8 @@ import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
  */
 public final class WaterSystem {
 
-    private static final LiquidTypeId WATER = StandardLiquidTypes.WATER;
+    /** Open liquid identity owned by the Water integration, not a central catalog. */
+    public static final LiquidTypeId TYPE = LiquidTypeId.of("water");
 
     private final LiquidSystem liquids;
     private final WaterLookup lookup;
@@ -29,21 +29,21 @@ public final class WaterSystem {
             throw new IllegalArgumentException("liquids must not be null");
         }
         this.liquids = liquids;
-        lookup = (x, y, z) -> liquids.lookup().amountOf(WATER, x, y, z);
+        lookup = (x, y, z) -> liquids.lookup().amountOf(TYPE, x, y, z);
         surfaces = new WaterSurfaceLookup() {
             @Override
             public boolean hasColumn(int x, int y) {
-                return liquids.surfaces().hasColumn(WATER, x, y);
+                return liquids.surfaces().hasColumn(TYPE, x, y);
             }
 
             @Override
             public int topZ(int x, int y) {
-                return liquids.surfaces().topZ(WATER, x, y);
+                return liquids.surfaces().topZ(TYPE, x, y);
             }
 
             @Override
             public int columnCount() {
-                return liquids.surfaces().columnCount(WATER);
+                return liquids.surfaces().columnCount(TYPE);
             }
 
             @Override
@@ -52,7 +52,7 @@ public final class WaterSystem {
                     throw new IllegalArgumentException("consumer must not be null");
                 }
                 liquids.surfaces().forEach(
-                        WATER,
+                        TYPE,
                         (x, y, z, type) -> consumer.accept(x, y, z));
             }
         };
@@ -82,11 +82,11 @@ public final class WaterSystem {
     }
 
     public int addAtMost(int x, int y, int z, int requested) {
-        return liquids.addAtMost(WATER, x, y, z, requested);
+        return liquids.addAtMost(TYPE, x, y, z, requested);
     }
 
     public int removeAtMost(int x, int y, int z, int requested) {
-        return liquids.removeAtMost(WATER, x, y, z, requested);
+        return liquids.removeAtMost(TYPE, x, y, z, requested);
     }
 
     LiquidSystem liquidSystem() {
@@ -96,7 +96,7 @@ public final class WaterSystem {
     List<WaterCell> activeCellsSorted() {
         List<WaterCell> active = new ArrayList<>();
         liquids.forEachActive(
-                WATER,
+                TYPE,
                 (x, y, z) -> active.add(new WaterCell(x, y, z)));
         return active;
     }
@@ -113,7 +113,7 @@ public final class WaterSystem {
 
         @Override
         public LiquidTypeId typeAt(int x, int y, int z) {
-            return storage.amount(x, y, z) > 0 ? WATER : null;
+            return storage.amount(x, y, z) > 0 ? TYPE : null;
         }
 
         @Override
@@ -128,7 +128,7 @@ public final class WaterSystem {
                 int z,
                 LiquidTypeId type,
                 int amount) {
-            if (!WATER.equals(type)) {
+            if (!TYPE.equals(type)) {
                 throw new IllegalArgumentException(
                         "Water storage adapter cannot store " + type);
             }
