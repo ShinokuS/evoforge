@@ -6,12 +6,19 @@ import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.utils.Align;
+import io.github.evoforge.simulation.control.movement.CancelMoveToCommand;
+import io.github.evoforge.simulation.control.movement.CancelMoveToResult;
+import io.github.evoforge.simulation.control.movement.MoveToCommand;
+import io.github.evoforge.simulation.control.movement.MoveToResult;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.world.object.ObjectId;
+import io.github.evoforge.visualizer.VisualizerCommandSink;
 import io.github.evoforge.visualizer.ZLevelVisualizer;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationKind;
@@ -54,6 +61,11 @@ public final class ScenarioScreen extends ScreenAdapter {
         this.restart = restart;
         this.backToScenarios = backToScenarios;
 
+        font.setUseIntegerPositions(true);
+        font.getRegion().getTexture().setFilter(
+                Texture.TextureFilter.Nearest,
+                Texture.TextureFilter.Nearest);
+
         session = scenario.create();
         SimulationRuntime runtime = session.runtime();
         visualizer = new ZLevelVisualizer(
@@ -61,6 +73,7 @@ public final class ScenarioScreen extends ScreenAdapter {
                 runtime.time(),
                 runtime.stepper(),
                 session.objectPresentations());
+        visualizer.setInteractionBindings(session.portals(), commandSink(runtime));
         visualizer.setWeatherPresentation(session.weather());
 
         ScenarioView initial = session.view();
@@ -71,28 +84,21 @@ public final class ScenarioScreen extends ScreenAdapter {
                 initial.zoom());
 
         input = new InputMultiplexer(
-                new SessionInput(),
                 new ScenarioCellInput(session, visualizer),
-                visualizer.inputProcessor());
+                visualizer.inputProcessor(),
+                new SessionInput());
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
-    @Override
-    public void show() {
-        Gdx.input.setInputProcessor(input);
-    }
+    @Override public void show() { Gdx.input.setInputProcessor(input); }
 
     @Override
     public void render(float delta) {
         visualizer.render();
         session.update();
-
         ScenarioDiagnostics diagnostics = session.diagnostics();
         visualizer.copyWorldProjection(worldProjection);
-        diagnosticRenderer.draw(
-                diagnostics,
-                worldProjection,
-                visualizer.selectedZ());
+        diagnosticRenderer.draw(diagnostics, worldProjection, visualizer.selectedZ());
         drawScenarioLabel(diagnostics);
     }
 
@@ -121,12 +127,11 @@ public final class ScenarioScreen extends ScreenAdapter {
     private void drawScenarioLabel(ScenarioDiagnostics diagnostics) {
         batch.setProjectionMatrix(screenProjection);
         batch.begin();
-        font.getData().setScale(0.9f);
 
         String title = "SCENARIO  " + scenario.title();
         String detail = scenario.description()
                 + "   |   " + weatherLabel(session.weather().current())
-                + "   |   R restart   |   Esc scenarios";
+                + "   |   R restart   |   Esc cancel/back";
         String summary = diagnostics.summary();
         float textWidth = Math.max(1f, screenWidth - LABEL_MARGIN * 2f);
 
@@ -147,42 +152,44 @@ public final class ScenarioScreen extends ScreenAdapter {
         batch.end();
     }
 
-    private static String weatherLabel(
-            WeatherPresentation weather) {
+    private static VisualizerCommandSink commandSink(SimulationRuntime runtime) {
+        return new VisualizerCommandSink() {
+            @Override
+            public CommandFeedback moveTo(ObjectId objectId, int x, int y, int z) {
+                MoveToResult result = runtime.submit(new MoveToCommand(objectId, x, y, z));
+                return result.accepted()
+                        ? CommandFeedback.accepted("")
+                        : CommandFeedback.rejected(result.code().value());
+            }
 
-        if (weather == null) {
-            throw new IllegalStateException(
-                    "weather lookup returned null");
-        }
+            @Override
+            public CommandFeedback cancelMove(ObjectId objectId) {
+                CancelMoveToResult result = runtime.submit(new CancelMoveToCommand(objectId));
+                return result.accepted()
+                        ? CommandFeedback.accepted("")
+                        : CommandFeedback.rejected(result.code().value());
+            }
+        };
+    }
+
+    private static String weatherLabel(WeatherPresentation weather) {
+        if (weather == null) throw new IllegalStateException("weather lookup returned null");
         if (weather.kind() == WeatherPresentationKind.RAIN) {
-            return "Weather: Rain "
-                    + Math.round(weather.intensity() * 100f)
-                    + "%";
+            return "Weather: Rain " + Math.round(weather.intensity() * 100f) + "%";
         }
         return "Weather: Clear";
     }
 
     private float measure(String text, float targetWidth) {
-        glyphLayout.setText(
-                font,
-                text,
-                Color.WHITE,
-                targetWidth,
-                Align.left,
-                true);
+        glyphLayout.setText(font, text, Color.WHITE, targetWidth, Align.left, true);
         return Math.max(font.getLineHeight(), glyphLayout.height);
     }
 
-    private void drawShadowed(
-            String text,
-            float x,
-            float y,
-            float targetWidth,
-            Color color) {
+    private void drawShadowed(String text, float x, float y, float targetWidth, Color color) {
         font.setColor(Color.BLACK);
-        font.draw(batch, text, x + 1f, y - 1f, targetWidth, Align.left, true);
+        font.draw(batch, text, Math.round(x + 1f), Math.round(y - 1f), targetWidth, Align.left, true);
         font.setColor(color);
-        font.draw(batch, text, x, y, targetWidth, Align.left, true);
+        font.draw(batch, text, Math.round(x), Math.round(y), targetWidth, Align.left, true);
     }
 
     private final class SessionInput extends InputAdapter {

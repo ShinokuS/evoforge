@@ -87,6 +87,11 @@ public final class PeriodicPrecipitationSystem
                 || (scheduled && tick == nextEvaluationTick);
     }
 
+    /** Whether the configured atmospheric rain window is active at this tick. */
+    public boolean activeAt(long tick) {
+        return schedule.activeAt(tick);
+    }
+
     public boolean scheduled() {
         return scheduled;
     }
@@ -109,10 +114,11 @@ public final class PeriodicPrecipitationSystem
                     "precipitation process is already scheduled");
         }
 
+        long delay = schedule.delayToNextEvent(time.tick());
         try {
             nextEvaluationTick = Math.addExact(
                     time.tick(),
-                    schedule.intervalTicks());
+                    delay);
         } catch (ArithmeticException exception) {
             throw new IllegalStateException(
                     "precipitation schedule tick overflow",
@@ -121,7 +127,7 @@ public final class PeriodicPrecipitationSystem
 
         scheduled = true;
         scheduler.scheduleAfter(
-                schedule.intervalTicks(),
+                delay,
                 PROCESS_ID);
     }
 

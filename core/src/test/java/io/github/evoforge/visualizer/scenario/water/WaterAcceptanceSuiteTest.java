@@ -1,5 +1,6 @@
 package io.github.evoforge.visualizer.scenario.water;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,7 +14,7 @@ import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 final class WaterAcceptanceSuiteTest {
 
     @Test
-    void zFlowContainsRealStackedPoolAndSettlesToNoActualTransfer() {
+    void zFlowContainsRealStackedPoolAndSettlesToFlatStableSurface() {
         ScenarioSession session = new WaterZStackScenario().create();
         SimulationRuntime runtime = session.runtime();
 
@@ -38,12 +39,26 @@ final class WaterAcceptanceSuiteTest {
             }
         }
 
-        long settledTotal = sumWaterAllZ(runtime, -9, 9, -5, 5, 0, 4);
+        int minTop = Integer.MAX_VALUE;
+        int maxTop = Integer.MIN_VALUE;
+        for (int x = -6; x <= -5; x++) {
+            for (int y = -1; y <= 0; y++) {
+                int amount = runtime.view().water().amount(x, y, 1);
+                minTop = Math.min(minTop, amount);
+                maxTop = Math.max(maxTop, amount);
+            }
+        }
+        assertTrue(
+                maxTop - minTop <= 7,
+                "identical settled cells exceeded the integer relaxation fixed point: min="
+                        + minTop + ", max=" + maxTop);
+
+        int[] settledCells = waterSnapshot(runtime, -9, 9, -5, 5, 0, 4);
         advance(runtime, 12);
-        assertEquals(
-                settledTotal,
-                sumWaterAllZ(runtime, -9, 9, -5, 5, 0, 4),
-                "settled Water must stay at the same fixed point without hidden oscillation");
+        assertArrayEquals(
+                settledCells,
+                waterSnapshot(runtime, -9, 9, -5, 5, 0, 4),
+                "settled Water must keep every cell at the same fixed point without hidden oscillation");
     }
 
     @Test
@@ -80,12 +95,14 @@ final class WaterAcceptanceSuiteTest {
     }
 
     @Test
-    void rainCycleStartsDryFormsUnevenPuddlesAndEvaporatesSeparateLake() {
+    void rainCycleWetsSoilAndFormsPuddlesWhileRainIsStillFalling() {
         ScenarioSession session = new RainHydrologyScenario().create();
         SimulationRuntime runtime = session.runtime();
 
+        // The central strip is intentionally separated from the finite lake so these
+        // assertions measure direct rain -> Soil -> puddle behavior.
         assertEquals(0L, runtime.time().tick());
-        for (int x = -2; x <= 3; x++) {
+        for (int x = -1; x <= 1; x++) {
             for (int y = -5; y <= 5; y++) {
                 assertEquals(
                         0,
@@ -98,49 +115,59 @@ final class WaterAcceptanceSuiteTest {
             }
         }
 
-        long initialLake = sumWater(runtime, -6, -4, -1, 1, -1);
-        assertTrue(initialLake > 0L);
-
-        // Before the first shower at tick 120 the isolated lake must already lose
-        // finite Water to evaporation while the dry ground stays dry.
-        advance(runtime, 80);
-        long evaporatedLake = sumWater(runtime, -6, -4, -1, 1, -1);
-        assertTrue(evaporatedLake > 0L);
-        assertTrue(evaporatedLake < initialLake);
-
-        // Finish the first shower. All cells receive the same 3 mm input, but their
-        // deterministic local maximum Soil capacity differs.
         advance(runtime, 40);
-        assertEquals(120L, runtime.time().tick());
+        assertEquals(40L, runtime.time().tick());
+        assertTrue(
+                sumSoil(runtime, -1, 1, -5, 5, -1) > 0L,
+                "soil moisture must increase during visible rain");
+        assertEquals(
+                0L,
+                sumWater(runtime, -1, 1, -5, 5, 0),
+                "the early light shower must still be fully absorbed in the central strip");
 
-        int puddled = 0;
-        int absorbed = 0;
-        for (int x = -2; x <= 3; x++) {
+        // By 1.6mm, deterministic local Soil capacity variation creates uneven puddle
+        // onset: low-capacity cells retain free Water while higher-capacity neighbours
+        // still have only SoilMoisture.
+        advance(runtime, 40);
+        assertEquals(80L, runtime.time().tick());
+        int puddlesDuringRain = 0;
+        int soilOnlyDuringRain = 0;
+        for (int x = -1; x <= 1; x++) {
             for (int y = -5; y <= 5; y++) {
-                if (runtime.view().water().amount(x, y, 0) > 0) {
-                    puddled++;
-                } else {
-                    absorbed++;
+                int water = runtime.view().water().amount(x, y, 0);
+                int moisture = runtime.view().soilMoisture().amount(x, y, -1);
+                if (water > 0) {
+                    puddlesDuringRain++;
+                } else if (moisture > 0) {
+                    soilOnlyDuringRain++;
                 }
             }
         }
-        assertTrue(puddled > 0, "low-capacity cells must form puddles");
-        assertTrue(absorbed > 0, "higher-capacity cells must absorb the same shower");
-        assertEquals(
-                0,
-                runtime.view().soilMoisture().amount(4, 0, -1),
-                "ground beneath the elevated roof must remain shielded");
+        assertTrue(
+                puddlesDuringRain > 0,
+                "low-capacity soil must puddle while rain is still falling");
+        assertTrue(
+                soilOnlyDuringRain > 0,
+                "higher-capacity soil must remain surface-dry under the same rainfall");
 
-        // The deliberately dry climate phase removes both transient puddles and
-        // retained moisture before the next shower while the deeper lake remains.
-        advance(runtime, 100);
+        advance(runtime, 40);
+        assertEquals(120L, runtime.time().tick());
+        long lakeAfterRain = sumWater(runtime, -6, -4, -1, 1, -1);
+        assertTrue(lakeAfterRain > 0L);
+
+        // Clear weather lasts substantially longer than the shower. Transient free
+        // Water dries while the separate finite lake loses volume gradually.
+        advance(runtime, 120);
+        assertEquals(240L, runtime.time().tick());
         assertEquals(
                 0L,
-                sumWater(runtime, -2, 3, -5, 5, 0),
-                "transient puddles must dry before the next shower");
+                sumWater(runtime, -1, 1, -5, 5, 0),
+                "transient central puddles must dry during the clear part of the cycle");
+        long lakeDuringDry = sumWater(runtime, -6, -4, -1, 1, -1);
+        assertTrue(lakeDuringDry > 0L);
         assertTrue(
-                sumWater(runtime, -6, -4, -1, 1, -1) > 0L,
-                "the finite lake should evaporate gradually rather than disappear in one cycle");
+                lakeDuringDry < lakeAfterRain,
+                "the separate lake must visibly evaporate after rain stops");
     }
 
     private static void advance(
@@ -168,7 +195,23 @@ final class WaterAcceptanceSuiteTest {
         return total;
     }
 
-    private static long sumWaterAllZ(
+    private static long sumSoil(
+            SimulationRuntime runtime,
+            int minX,
+            int maxX,
+            int minY,
+            int maxY,
+            int z) {
+        long total = 0L;
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                total += runtime.view().soilMoisture().amount(x, y, z);
+            }
+        }
+        return total;
+    }
+
+    private static int[] waterSnapshot(
             SimulationRuntime runtime,
             int minX,
             int maxX,
@@ -176,11 +219,18 @@ final class WaterAcceptanceSuiteTest {
             int maxY,
             int minZ,
             int maxZ) {
-
-        long total = 0L;
+        int width = maxX - minX + 1;
+        int height = maxY - minY + 1;
+        int depth = maxZ - minZ + 1;
+        int[] snapshot = new int[Math.multiplyExact(Math.multiplyExact(width, height), depth)];
+        int index = 0;
         for (int z = minZ; z <= maxZ; z++) {
-            total += sumWater(runtime, minX, maxX, minY, maxY, z);
+            for (int x = minX; x <= maxX; x++) {
+                for (int y = minY; y <= maxY; y++) {
+                    snapshot[index++] = runtime.view().water().amount(x, y, z);
+                }
+            }
         }
-        return total;
+        return snapshot;
     }
 }

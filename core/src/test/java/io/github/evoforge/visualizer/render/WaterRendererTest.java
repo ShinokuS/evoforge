@@ -5,6 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
+import io.github.evoforge.visualizer.visual.WaterMotion;
+import io.github.evoforge.visualizer.visual.WaterOpticalDepthResolver;
+
 final class WaterRendererTest {
 
     @Test
@@ -26,9 +30,28 @@ final class WaterRendererTest {
     }
 
     @Test
+    void surfaceOpacityStartsNonZeroAndDeepWaterBecomesEffectivelyOpaque() {
+        float film = WaterRenderer.surfaceOpacityForDepth(1);
+        float halfCell = WaterRenderer.surfaceOpacityForDepth(CellVolume.FULL / 2);
+        float oneCell = WaterRenderer.surfaceOpacityForDepth(CellVolume.FULL);
+        float twoCells = WaterRenderer.surfaceOpacityForDepth(CellVolume.FULL * 2);
+        float deep = WaterRenderer.surfaceOpacityForDepth(
+                WaterOpticalDepthResolver.MAX_OPTICAL_DEPTH);
+        float deeper = WaterRenderer.surfaceOpacityForDepth(Integer.MAX_VALUE);
+
+        assertTrue(film >= 0.18f);
+        assertTrue(halfCell > film);
+        assertTrue(oneCell > halfCell);
+        assertTrue(twoCells > oneCell);
+        assertTrue(deep >= 0.95f, "deep Water should visually hide the bottom");
+        assertEquals(deep, deeper);
+    }
+
+    @Test
     void invalidOrUnavailableCapacityDrawsNoWater() {
         assertEquals(0f, WaterRenderer.opacityFor(100_000, 0));
         assertEquals(0f, WaterRenderer.opacityFor(-1, 1_000_000));
+        assertEquals(0f, WaterRenderer.surfaceOpacityForDepth(0));
     }
 
     @Test
@@ -40,5 +63,24 @@ final class WaterRendererTest {
         assertEquals(
                 WaterRenderer.depthOpacity(6),
                 WaterRenderer.depthOpacity(12));
+    }
+
+    @Test
+    void calmWaterUsesOneStaticFrameAcrossNeighbouringCellsAndWallClockPhases() {
+        int first = WaterRenderer.presentationFrame(
+                WaterMotion.CALM,
+                0,
+                0,
+                4,
+                2);
+        int second = WaterRenderer.presentationFrame(
+                WaterMotion.CALM,
+                17,
+                -9,
+                1,
+                5);
+
+        assertEquals(first, second);
+        assertEquals(0, first);
     }
 }

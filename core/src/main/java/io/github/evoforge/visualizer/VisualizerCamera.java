@@ -106,11 +106,20 @@ public final class VisualizerCamera {
             int screenX,
             int screenY) {
 
+        WorldPoint point = worldAt(screenX, screenY);
+        return new Cell(
+                MathUtils.floor(point.x()),
+                MathUtils.floor(point.y()));
+    }
+
+    /** Precise world-space pick used when an interaction occupies only part of a cell. */
+    public WorldPoint worldAt(
+            int screenX,
+            int screenY) {
+
         pick.set(screenX, screenY, 0f);
         camera.unproject(pick);
-        return new Cell(
-                MathUtils.floor(pick.x),
-                MathUtils.floor(pick.y));
+        return new WorldPoint(pick.x, pick.y);
     }
 
     public float worldUnitsPerPixel() {
@@ -139,5 +148,10 @@ public final class VisualizerCamera {
     public record Cell(
             int x,
             int y) {
+    }
+
+    public record WorldPoint(
+            float x,
+            float y) {
     }
 }

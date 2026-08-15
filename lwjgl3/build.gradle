@@ -31,6 +31,7 @@ if (JavaVersion.current().isJava9Compatible()) {
 dependencies {
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+  implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
   implementation project(':core')
 
   if(enableGraalNative == 'true') {
@@ -195,7 +196,6 @@ startScripts.classpath = project.tasks.jar.outputs.files
 // This only applies to Gradle tasks, not main methods debugged when launching a main() method directly.
 // As a more general solution, set the environment variable __GL_THREADED_OPTIMIZATIONS to 0 globally, on Linux
 // machines with Nvidia GPUs where you need to debug LWJGL3 apps and games.
-// You can also set __GL_THREADED_OPTIMIZATIONS to 0 in run configurations, which you would need per main() method.
 // StartupHelper will still restart the JVM to set this environment variable when run as a distributable JAR, which is
 // a good thing for end users. They won't need to ever set the debug-specific environment variable.
 tasks.withType(JavaExec.class).configureEach {

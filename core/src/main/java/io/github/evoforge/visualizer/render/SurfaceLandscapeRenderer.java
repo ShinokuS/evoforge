@@ -1,0 +1,129 @@
+package io.github.evoforge.visualizer.render;
+
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
+import io.github.evoforge.visualizer.visual.LandscapeTopology;
+import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
+import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
+import io.github.evoforge.visualizer.visual.SurfaceReliefEdgeArt;
+
+/** Default open-world renderer: one highest terrain surface per visible XY column. */
+public final class SurfaceLandscapeRenderer {
+
+    private final SimulationView view;
+    private final ShapePresentationRegistry shapePresentations;
+    private final SurfaceProjectionResolver surfaces;
+    private final SurfaceReliefEdgeArt reliefEdges = new SurfaceReliefEdgeArt();
+
+    public SurfaceLandscapeRenderer(
+            SimulationView view,
+            ShapePresentationRegistry shapePresentations,
+            SurfaceProjectionResolver surfaces) {
+        if (view == null || shapePresentations == null || surfaces == null) {
+            throw new IllegalArgumentException("surface renderer dependencies must not be null");
+        }
+        this.view = view;
+        this.shapePresentations = shapePresentations;
+        this.surfaces = surfaces;
+    }
+
+    public void draw(
+            SpriteBatch batch,
+            int minX,
+            int maxX,
+            int minY,
+            int maxY) {
+        if (batch == null) throw new IllegalArgumentException("batch must not be null");
+
+        // Keep the canonical terrain atlas together so SpriteBatch does not flush per cell.
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                drawTerrainCell(batch, x, y);
+            }
+        }
+
+        // Relief edges share one tiny atlas and are drawn as one second texture pass.
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                drawReliefCell(batch, x, y);
+            }
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    public void setFilter(Texture.TextureFilter filter) {
+        reliefEdges.setFilter(filter);
+    }
+
+    public void dispose() {
+        reliefEdges.dispose();
+    }
+
+    private void drawTerrainCell(SpriteBatch batch, int x, int y) {
+        SurfaceProjectionResolver.SurfaceCell cell = surfaces.resolve(x, y);
+        if (!cell.hasTerrain()) return;
+
+        int z = cell.terrainZ();
+        int variant = LandscapeTopology.variant(
+                x,
+                y,
+                z,
+                ProceduralLandscapePack.SURFACE_VARIANTS);
+        int topology = neighbourMask(x, y, z);
+        TextureRegion region = shapePresentations.terrainRegion(
+                cell.shape(),
+                topology,
+                variant,
+                false);
+        batch.setColor(Color.WHITE);
+        batch.draw(region, x, y, 1f, 1f);
+    }
+
+    private void drawReliefCell(SpriteBatch batch, int x, int y) {
+        if (!view.terrainSurfaces().hasColumn(x, y)) return;
+        int z = view.terrainSurfaces().topZ(x, y);
+
+        drawReliefEdge(batch, x, y, z, x, y + 1, SurfaceReliefEdgeArt.Side.NORTH);
+        drawReliefEdge(batch, x, y, z, x + 1, y, SurfaceReliefEdgeArt.Side.EAST);
+        drawReliefEdge(batch, x, y, z, x, y - 1, SurfaceReliefEdgeArt.Side.SOUTH);
+        drawReliefEdge(batch, x, y, z, x - 1, y, SurfaceReliefEdgeArt.Side.WEST);
+    }
+
+    private void drawReliefEdge(
+            SpriteBatch batch,
+            int x,
+            int y,
+            int z,
+            int neighbourX,
+            int neighbourY,
+            SurfaceReliefEdgeArt.Side side) {
+        boolean neighbourPresent = view.terrainSurfaces().hasColumn(neighbourX, neighbourY);
+        if (neighbourPresent && view.terrainSurfaces().topZ(neighbourX, neighbourY) == z) return;
+
+        // Missing surface is visually a drop beyond the current tile.
+        boolean raised = !neighbourPresent || z > view.terrainSurfaces().topZ(neighbourX, neighbourY);
+        batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
+    }
+
+    private int neighbourMask(int x, int y, int z) {
+        int mask = 0;
+        if (sameSurface(x, y + 1, z)) mask |= LandscapeTopology.N;
+        if (sameSurface(x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
+        if (sameSurface(x + 1, y, z)) mask |= LandscapeTopology.E;
+        if (sameSurface(x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
+        if (sameSurface(x, y - 1, z)) mask |= LandscapeTopology.S;
+        if (sameSurface(x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
+        if (sameSurface(x - 1, y, z)) mask |= LandscapeTopology.W;
+        if (sameSurface(x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
+        return LandscapeTopology.normalize(mask);
+    }
+
+    private boolean sameSurface(int x, int y, int z) {
+        return view.terrainSurfaces().hasColumn(x, y)
+                && view.terrainSurfaces().topZ(x, y) == z;
+    }
+}

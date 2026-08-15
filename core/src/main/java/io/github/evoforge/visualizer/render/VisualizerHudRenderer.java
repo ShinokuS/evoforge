@@ -31,21 +31,21 @@ import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Screen-space status and a concise living-world inspector with optional technical details. */
+/** Screen-space runtime status and living-world inspector. */
 public final class VisualizerHudRenderer {
     private static final int INSPECT_EXPOSURE_DISTANCE = 12;
     private static final float PANEL_MARGIN = 12f;
-    private static final float PANEL_PADDING = 14f;
-    private static final float ROW_GAP = 4f;
-    private static final float COLUMN_GAP = 10f;
-    private static final float BAR_HEIGHT = 9f;
+    private static final float PANEL_PADDING = 16f;
+    private static final float ROW_GAP = 6f;
+    private static final float COLUMN_GAP = 12f;
+    private static final float BAR_HEIGHT = 11f;
 
-    private static final Color PANEL = new Color(0.035f, 0.045f, 0.052f, 0.96f);
-    private static final Color PANEL_BORDER = new Color(0.24f, 0.30f, 0.31f, 1f);
-    private static final Color TITLE = new Color(0.86f, 0.96f, 0.84f, 1f);
-    private static final Color SECTION = new Color(0.63f, 0.82f, 0.65f, 1f);
-    private static final Color TEXT = new Color(0.94f, 0.96f, 0.95f, 1f);
-    private static final Color MUTED = new Color(0.68f, 0.73f, 0.72f, 1f);
+    private static final Color PANEL = new Color(0.030f, 0.040f, 0.047f, 0.97f);
+    private static final Color PANEL_BORDER = new Color(0.28f, 0.35f, 0.35f, 1f);
+    private static final Color TITLE = new Color(0.89f, 0.98f, 0.87f, 1f);
+    private static final Color SECTION = new Color(0.67f, 0.87f, 0.69f, 1f);
+    private static final Color TEXT = new Color(0.96f, 0.98f, 0.97f, 1f);
+    private static final Color MUTED = new Color(0.73f, 0.79f, 0.77f, 1f);
     private static final Color BAR_BACKGROUND = new Color(0.13f, 0.17f, 0.17f, 1f);
     private static final Color NEED_FILL = new Color(0.90f, 0.57f, 0.22f, 1f);
     private static final Color RESOURCE_FILL = new Color(0.33f, 0.72f, 0.35f, 1f);
@@ -106,24 +106,20 @@ public final class VisualizerHudRenderer {
 
     public void draw() {
         float availableWidth = Math.max(1f, width - PANEL_MARGIN * 2f);
-        float statusWidth = Math.min(760f, availableWidth);
+        float statusWidth = Math.min(520f, availableWidth);
         String statusLine = (time.running() ? "RUNNING" : "PAUSED")
                 + "   Tick " + simulationTime.tick()
                 + "   FPS " + Gdx.graphics.getFramesPerSecond()
-                + "   Z " + state.selectedZ()
                 + "   Zoom " + camera.zoomLabel();
-        String helpLine = "Space run/pause  |  N step  |  LMB inspect/cycle  |  WASD pan  |  wheel zoom  |  F6 technical "
-                + onOff(state.showTechnicalDetails());
         float statusContentWidth = Math.max(1f, statusWidth - PANEL_PADDING * 2f);
-        float statusLineHeight = measureWrapped(statusLine, statusContentWidth, 1f);
-        float helpLineHeight = measureWrapped(helpLine, statusContentWidth, 1f);
-        float statusHeight = PANEL_PADDING * 2f + statusLineHeight + 6f + helpLineHeight;
+        float statusLineHeight = measureWrapped(statusLine, statusContentWidth, 1.18f);
+        float statusHeight = PANEL_PADDING * 2f + statusLineHeight;
         float statusX = PANEL_MARGIN;
         float statusY = height - PANEL_MARGIN - statusHeight;
 
         VisualizerState.CellSelection selectedCell = state.selectedCell();
         ObjectId selectedObject = state.selectedObject();
-        float inspectorWidth = Math.min(430f, availableWidth);
+        float inspectorWidth = Math.min(470f, availableWidth);
         List<InspectorRow> rows = selectedCell == null
                 ? List.of()
                 : cachedInspectorRows(selectedCell, selectedObject);
@@ -132,7 +128,7 @@ public final class VisualizerHudRenderer {
                 : cachedLayoutRows(rows, inspectorWidth);
 
         float inspectorHeight = Math.min(
-                Math.max(130f, PANEL_PADDING * 2f + rowsHeight(layoutRows)),
+                Math.max(146f, PANEL_PADDING * 2f + rowsHeight(layoutRows)),
                 Math.max(1f, height - PANEL_MARGIN * 2f));
         float inspectorX = width - PANEL_MARGIN - inspectorWidth;
         float inspectorY = height - PANEL_MARGIN - inspectorHeight;
@@ -159,8 +155,6 @@ public final class VisualizerHudRenderer {
                 statusHeight,
                 statusWidth,
                 statusLine,
-                helpLine,
-                statusLineHeight,
                 selectedCell != null,
                 inspectorX,
                 inspectorY,
@@ -196,7 +190,7 @@ public final class VisualizerHudRenderer {
                 InspectorRow row = layout.row();
                 if (row.kind() == RowKind.BAR) {
                     float barX = inspectorX + PANEL_PADDING;
-                    float barY = rowTop - layout.height() + 3f;
+                    float barY = rowTop - layout.height() + 4f;
                     float barWidth = Math.max(1f, inspectorWidth - PANEL_PADDING * 2f);
                     shapes.setColor(BAR_BACKGROUND);
                     shapes.rect(barX, barY, barWidth, BAR_HEIGHT);
@@ -221,8 +215,6 @@ public final class VisualizerHudRenderer {
             float statusHeight,
             float statusWidth,
             String statusLine,
-            String helpLine,
-            float statusLineHeight,
             boolean hasInspector,
             float inspectorX,
             float inspectorY,
@@ -231,16 +223,12 @@ public final class VisualizerHudRenderer {
             List<LayoutRow> rows) {
         batch.setProjectionMatrix(projection);
         batch.begin();
-        font.getData().setScale(1f);
 
         float statusContentWidth = Math.max(1f, statusWidth - PANEL_PADDING * 2f);
         float statusTop = statusY + statusHeight - PANEL_PADDING;
+        font.getData().setScale(1.18f);
         font.setColor(TEXT);
         font.draw(batch, statusLine, statusX + PANEL_PADDING, statusTop,
-                statusContentWidth, Align.left, true);
-        font.setColor(MUTED);
-        font.draw(batch, helpLine, statusX + PANEL_PADDING,
-                statusTop - statusLineHeight - 6f,
                 statusContentWidth, Align.left, true);
 
         if (hasInspector) {
@@ -256,17 +244,18 @@ public final class VisualizerHudRenderer {
                 switch (row.kind()) {
                     case TITLE -> {
                         font.setColor(TITLE);
-                        font.getData().setScale(1.20f);
+                        font.getData().setScale(1.27f);
                         font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
                                 contentWidth, Align.left, true);
-                        font.getData().setScale(1f);
                     }
                     case SECTION -> {
                         font.setColor(SECTION);
+                        font.getData().setScale(1.08f);
                         font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
                                 contentWidth, Align.left, true);
                     }
                     case TEXT -> {
+                        font.getData().setScale(1.04f);
                         font.setColor(row.muted() ? MUTED : TEXT);
                         if (row.value() == null || row.value().isBlank()) {
                             font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
@@ -279,7 +268,8 @@ public final class VisualizerHudRenderer {
                         }
                     }
                     case BAR -> {
-                        float valueColumn = Math.min(90f, Math.max(54f, contentWidth * 0.26f));
+                        font.getData().setScale(1.04f);
+                        float valueColumn = Math.min(98f, Math.max(60f, contentWidth * 0.26f));
                         float barLabelWidth = Math.max(1f, contentWidth - valueColumn - COLUMN_GAP);
                         font.setColor(TEXT);
                         font.draw(batch, row.label(), inspectorX + PANEL_PADDING, rowTop,
@@ -300,6 +290,7 @@ public final class VisualizerHudRenderer {
             }
         }
         batch.end();
+        font.getData().setScale(1f);
     }
 
     private List<InspectorRow> cachedInspectorRows(
@@ -340,22 +331,22 @@ public final class VisualizerHudRenderer {
 
     private float measuredRowHeight(InspectorRow row, float contentWidth) {
         return switch (row.kind()) {
-            case TITLE -> Math.max(25f, measureWrapped(row.label(), contentWidth, 1.20f));
-            case SECTION -> Math.max(19f, measureWrapped(row.label(), contentWidth, 1f));
+            case TITLE -> Math.max(29f, measureWrapped(row.label(), contentWidth, 1.27f));
+            case SECTION -> Math.max(22f, measureWrapped(row.label(), contentWidth, 1.08f));
             case TEXT -> {
                 if (row.value() == null || row.value().isBlank()) {
-                    yield Math.max(17f, measureWrapped(row.label(), contentWidth, 1f));
+                    yield Math.max(20f, measureWrapped(row.label(), contentWidth, 1.04f));
                 }
                 float labelWidth = labelColumnWidth(contentWidth);
                 float valueWidth = Math.max(1f, contentWidth - labelWidth - COLUMN_GAP);
                 yield Math.max(
-                        17f,
+                        20f,
                         Math.max(
-                                measureWrapped(row.label(), labelWidth, 1f),
-                                measureWrapped(row.value(), valueWidth, 1f)));
+                                measureWrapped(row.label(), labelWidth, 1.04f),
+                                measureWrapped(row.value(), valueWidth, 1.04f)));
             }
-            case BAR -> 36f;
-            case SPACER -> 5f;
+            case BAR -> 41f;
+            case SPACER -> 7f;
         };
     }
 
@@ -374,7 +365,7 @@ public final class VisualizerHudRenderer {
     }
 
     private static float labelColumnWidth(float contentWidth) {
-        return Math.min(126f, Math.max(82f, contentWidth * 0.32f));
+        return Math.min(142f, Math.max(92f, contentWidth * 0.34f));
     }
 
     private List<InspectorRow> inspectorRows(
@@ -400,7 +391,7 @@ public final class VisualizerHudRenderer {
         ObjectPresentation presentation = objectPresentations.get(object.definitionId());
         rows.add(title(presentation == null ? "Object" : presentation.displayName()));
         if (stackCount > 1) {
-            rows.add(muted("Several objects share this cell · click again to cycle", null));
+            rows.add(muted("Several objects share this cell - click again to cycle", null));
         }
 
         appendBehavior(rows, selectedObject);
@@ -482,11 +473,11 @@ public final class VisualizerHudRenderer {
         if (view.growth().has(objectId)) {
             GrowthStatus status = view.growth().status(objectId);
             if (status == GrowthStatus.DORMANT_FULL) {
-                rows.add(text("Growth", "Full grown · dormant"));
+                rows.add(text("Growth", "Full grown - dormant"));
             } else {
                 long next = view.growth().nextEvaluationTick(objectId);
                 long remaining = Math.max(0L, next - simulationTime.tick());
-                rows.add(text("Growth", "Regrowing · next in " + remaining + " ticks"));
+                rows.add(text("Growth", "Regrowing - next in " + remaining + " ticks"));
             }
         }
     }
@@ -519,23 +510,23 @@ public final class VisualizerHudRenderer {
         VisionSnapshot vision = view.vision().snapshot(objectId);
         if (vision != null) {
             rows.add(text("Vision", "range " + vision.range()
-                    + " · FOV " + vision.horizontalFovDegrees()
-                    + "° · objects " + vision.objects().size()));
+                    + " - FOV " + vision.horizontalFovDegrees()
+                    + " deg - objects " + vision.objects().size()));
         }
 
         AgentSearchTrace search = view.searches().currentSearch(objectId);
         if (search != null) {
-            rows.add(text("Search raw", search.status() + " · headings " + search.headingsObserved()));
+            rows.add(text("Search raw", search.status() + " - headings " + search.headingsObserved()));
         }
 
         AgentDecisionTrace decision = view.agents().lastDecision(objectId);
         if (decision != null) {
-            rows.add(text("Decision", "t" + decision.tick() + " · candidates " + decision.candidates().size()));
+            rows.add(text("Decision", "t" + decision.tick() + " - candidates " + decision.candidates().size()));
             AgentCandidateTrace selected = decision.selected();
             if (selected != null) {
                 rows.add(text("Winner", objectLabel(selected.sourceId())
-                        + " · score " + selected.score()
-                        + " · benefit " + selected.expectedBenefit()));
+                        + " - score " + selected.score()
+                        + " - benefit " + selected.expectedBenefit()));
             }
         }
 
@@ -543,8 +534,8 @@ public final class VisualizerHudRenderer {
             GrowthTrace growth = view.growth().lastEvaluation(objectId);
             String last = growth == null
                     ? "none"
-                    : "t" + growth.tick() + " · resolved " + growth.resolvedAmount()
-                            + " · applied " + growth.appliedAmount();
+                    : "t" + growth.tick() + " - resolved " + growth.resolvedAmount()
+                            + " - applied " + growth.appliedAmount();
             rows.add(text("Growth raw", last));
         }
     }
@@ -570,7 +561,7 @@ public final class VisualizerHudRenderer {
         return switch (search.status()) {
             case SWEEPING -> "Looking around for " + goal;
             case EXPLORING -> "Exploring for " + goal;
-            case RELOCATION_BLOCKED -> "Search route blocked · reconsidering";
+            case RELOCATION_BLOCKED -> "Search route blocked - reconsidering";
         };
     }
 
@@ -666,7 +657,6 @@ public final class VisualizerHudRenderer {
         return Math.max(0f, Math.min(1f, value));
     }
 
-    private static String onOff(boolean value) { return value ? "ON" : "OFF"; }
     private static InspectorRow title(String label) { return new InspectorRow(RowKind.TITLE, label, null, -1f, TITLE, false); }
     private static InspectorRow section(String label) { return new InspectorRow(RowKind.SECTION, label, null, -1f, SECTION, false); }
     private static InspectorRow text(String label, String value) { return new InspectorRow(RowKind.TEXT, label, value, -1f, TEXT, false); }

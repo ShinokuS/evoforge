@@ -2,6 +2,7 @@ package io.github.evoforge.visualizer.scenario.environment;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;
@@ -22,12 +23,14 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     private static final int MAX_Z = 3;
 
     // Acceptance-only physical scale: one 1m x 1m tile and one 1m full cell imply
-    // 1 mm of water depth == 1000 normalized units.
-    private static final long CLIMATE_CYCLE_TICKS = 120L;
-    private static final int RAIN_EVENT_VOLUME = 3_000;          // 3.0 mm shower
+    // 1 mm of water depth == 1000 normalized units. The light 2.4mm shower is spread
+    // across 120 simulation ticks instead of arriving as one artificial pulse.
+    private static final long CLIMATE_CYCLE_TICKS = 360L;
+    private static final long RAIN_ACTIVE_TICKS = 120L;
+    private static final long RAIN_PULSE_INTERVAL_TICKS = 1L;
+    private static final int RAIN_PULSE_VOLUME = 20;             // 0.020 mm/tick, 2.4 mm total
     private static final long EVAPORATION_INTERVAL_TICKS = 4L;
-    private static final int EVAPORATION_PER_EVENT = 250;        // up to 7.5 mm / cycle
-    private static final int VISUAL_RAIN_TICKS = 24;
+    private static final int EVAPORATION_PER_EVENT = 60;         // 3.6 mm potential over dry window
 
     private static final int SOIL_BASE_CAPACITY = 2_500;
     private static final int SOIL_CAPACITY_VARIATION = 1_500;    // local 1.0..4.0 mm capacity
@@ -45,11 +48,17 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     @Override public String id() { return "rain-hydrology"; }
     @Override public String title() { return "Rain Cycle"; }
     @Override public String description() {
-        return "Dry equal SoilMoisture, deterministic local capacity variation, puddle onset, surface retention and a separate finite evaporation lake.";
+        return "Long light rain: uniformly dry terrain has deterministic local soil capacity, puddles emerge unevenly during the shower, and a separate finite lake demonstrates evaporation.";
     }
 
     @Override
     public ScenarioSession create() {
+        PrecipitationSchedule rainSchedule = PrecipitationSchedule.cyclic(
+                RAIN_PULSE_VOLUME,
+                RAIN_PULSE_INTERVAL_TICKS,
+                RAIN_ACTIVE_TICKS,
+                CLIMATE_CYCLE_TICKS);
+
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z);
         LandscapeDefinitionId soil =
@@ -71,9 +80,7 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         assembly.surfaceWaterStorage(
                 stone,
                 STONE_SURFACE_STORAGE);
-        assembly.periodicPrecipitation(
-                RAIN_EVENT_VOLUME,
-                CLIMATE_CYCLE_TICKS);
+        assembly.precipitation(rainSchedule);
         assembly.periodicEvaporation(
                 EVAPORATION_PER_EVENT,
                 EVAPORATION_INTERVAL_TICKS);
@@ -81,6 +88,10 @@ public final class RainHydrologyScenario implements VisualizerScenario {
         for (int x = MIN_X; x <= MAX_X; x++) {
             for (int y = MIN_Y; y <= MAX_Y; y++) {
                 if (insideLake(x, y)) {
+                    // The lake is deliberately the only pre-existing free Water in this
+                    // scenario. Sky-shield/roof acceptance lives in its own Water scene;
+                    // keeping it out here prevents artificial roof runoff from obscuring
+                    // the direct rain -> Soil -> puddle transition we are inspecting.
                     assembly.placeTerrain(x, y, -2, stone);
                     assembly.initialWater(
                             x,
@@ -93,25 +104,13 @@ public final class RainHydrologyScenario implements VisualizerScenario {
             }
         }
 
-        // A small elevated impermeable roof keeps the old sky-exposure acceptance
-        // without pre-wetting the scene. The ground below starts as dry as everywhere else.
-        for (int x = 4; x <= 5; x++) {
-            for (int y = -1; y <= 1; y++) {
-                assembly.placeTerrain(x, y, 1, stone);
-            }
-        }
-
         SimulationRuntime runtime = assembly.start();
         WaterScenarioDiagnostics diagnostics = new WaterScenarioDiagnostics(
                 runtime, MIN_X, MAX_X, MIN_Y, MAX_Y, -1, MAX_Z);
-        WeatherPresentationLookup weather = () -> {
-            long phase = Math.floorMod(
-                    runtime.time().tick(),
-                    CLIMATE_CYCLE_TICKS);
-            return phase >= CLIMATE_CYCLE_TICKS - VISUAL_RAIN_TICKS
-                    ? WeatherPresentation.rain(0.72f)
-                    : WeatherPresentation.CLEAR;
-        };
+        WeatherPresentationLookup weather = () ->
+                rainSchedule.activeAt(runtime.time().tick())
+                        ? WeatherPresentation.rain(0.60f)
+                        : WeatherPresentation.CLEAR;
 
         return new ScenarioSession(
                 runtime,
