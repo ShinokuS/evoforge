@@ -4,11 +4,11 @@
 
 Define Water-specific behavior on top of EvoForge's shared liquid foundations.
 
-Water was the first implemented liquid, so the original storage and hydraulic solver were historically named after Water. Those generic mechanics now live in [Liquids](liquids.md). `WaterSystem` is a narrow typed facade for its open `WaterSystem.TYPE` identity; atmosphere interaction, traversal and presentation remain explicit Water consumers.
+Water was the first implemented liquid. Storage, hydraulic transport, surface retention and porous-Soil retention are now generic mechanics described in [Liquids](liquids.md). `WaterSystem` is a narrow typed facade for the open `WaterSystem.TYPE` identity; precipitation, Water evaporation, wading and presentation remain explicit Water consumers.
 
 ## Ownership
 
-Authoritative free-liquid quantity is owned by `LiquidSystem`:
+Authoritative free-liquid quantity belongs to `LiquidSystem`:
 
 ```text
 XYZ -> dry
@@ -16,154 +16,173 @@ XYZ -> dry
 XYZ -> LiquidTypeId + finite free volume
 ```
 
-Water owns the open liquid identity `water`. `WaterLookup` projects only that identity:
+Water owns the `water` identity. `WaterLookup` projects only that constituent:
 
 ```java
 int amount(int x, int y, int z);
 ```
 
-Water-specific callers therefore do not need generic composition knowledge, while transport is no longer duplicated or hard-wired to Water.
-
-The accepted normalized volume scale is unchanged:
+The accepted normalized scale remains:
 
 ```text
 CellVolume.EMPTY = 0
 CellVolume.FULL  = 1_000_000
 ```
 
-## Mutation boundary
+Water does not own a separate storage implementation or hydraulic solver.
 
-`WaterSystem` delegates bounded arithmetic to the shared liquid owner:
+## Mutation facade
+
+`WaterSystem` delegates Water mutations to the shared `LiquidSystem`:
 
 ```java
 int addAtMost(x, y, z, requested);
 int removeAtMost(x, y, z, requested);
 ```
 
-The result is the volume that actually entered or left Water. Geometry capacity, sparse wet/dry state and hydraulic wakeup are owned by the generic liquid foundation.
+The returned amount is the volume actually added or removed. Geometry capacity, liquid-type collision rules, sparse state, surface projection and hydraulic wakeup remain generic responsibilities.
 
-Water-specific sources and sinks such as precipitation and Water evaporation still go through this facade rather than mutating generic storage directly.
+Water-specific sources/sinks use this typed facade instead of mutating generic storage directly.
 
 ## Shared hydraulic transport
 
-`WaterFlowSystem` is a Water-facing adapter over `LiquidFlowSystem`.
+One runtime composes one `LiquidFlowSystem` for every free-liquid identity in that world.
 
-The physical behavior accepted during the Water milestone is preserved:
+The accepted Water mechanics remain:
 
-- Shape-derived free capacity and liquid surface height;
-- boundary opening floors and vertical falling;
-- deterministic two-phase plan/limit/commit updates;
-- exact volume conservation;
-- proportional limiting of simultaneous transfers;
-- fixed-point relaxation and integer dormancy;
-- sparse active frontier;
-- latest actual-transfer diagnostics.
+- Shape-derived free capacity;
+- physical face openings and vertical falling;
+- hydraulic head from world Z plus local fill height;
+- deterministic plan / limit / commit updates;
+- exact finite-volume conservation;
+- proportional simultaneous-transfer limiting;
+- fixed-point relaxation;
+- sparse active frontier and dormancy;
+- actual latest-step transfer diagnostics.
 
-The generic solver preserves liquid identity while moving volume. It does not branch on names such as Water, blood or wine.
+Water uses `LiquidTransportProperties.reference()`, so the generic viscosity model preserves the previous reference-Water cadence.
 
-A multi-liquid runtime composes one shared `LiquidFlowSystem`; `WaterFlowSystem` can wrap that solver to expose Water-only diagnostics rather than creating a second hydraulic authority.
+There is no `WaterFlowSystem` transport authority. Water-facing diagnostics are obtained through `WaterFlowLookup.from(liquidFlow.flowLookup())`, which filters generic flow samples by `WaterSystem.TYPE`.
 
-See [Liquids](liquids.md) for the current free-liquid single-component contact rule and future mixture seam.
+See [Liquids](liquids.md) for the current single-component free-cell contact rule and transport-property model.
 
 ## Water surface projection
 
-`WaterSurfaceLookup` is a Water-filtered projection over generic free-liquid surfaces. It continues to expose the highest positive-Water Z for each XY column and deterministic wet-column iteration.
+`WaterSurfaceLookup` is a Water-filtered projection over generic `LiquidSurfaceLookup`. It exposes Water columns for atmosphere, traversal and presentation consumers without owning quantity.
 
-The projection owns no liquid quantity. It exists for Water-specific atmosphere/presentation consumers.
+## Surface retention
 
-## SurfaceWaterStorage
+Surface microtopographic retention is now generic material data:
 
-The existing landscape `SurfaceWaterStorage` capability remains Water-specific definition data.
+```text
+SurfaceRetentionDefinitions
+        ↓
+TerrainSurfaceRetentionLookup
+        ↓
+LiquidFlowSystem
+```
 
-It represents finite free Water retained by a supporting material surface before horizontal runoff. It is not retained Soil pore liquid, is not deleted, and remains part of authoritative free-liquid volume.
+The capacity is free-liquid volume retained on a supporting material before same-Z horizontal runoff. It is distinct from retained Soil pore volume and remains part of authoritative free-liquid state.
 
-The shared solver consumes a typed `LiquidSurfaceRetentionLookup`. `WaterFlowSystem` adapts `SurfaceWaterStorage` into that port only for the Water identity. This leaves room for future liquids to define different surface retention without changing hydraulic Geometry.
+The former Water-specific `SurfaceWaterStorageDefinitions`, `SurfaceWaterStorageLookup` and `TerrainSurfaceWaterStorageLookup` have been removed. Water uses the same generic material capability as every other free liquid.
 
-As before, the reserve applies only to same-Z horizontal runoff. Vertical falling through a physical opening does not subtract the reserve.
+The current retention value is material-owned and liquid-neutral. Future liquid-dependent wetting must be introduced through real physical properties such as surface tension/contact angle if a consumer requires them, not through Water-specific parallel storage definitions.
 
-## Soil infiltration and Water moisture
+## Soil infiltration and retained Water
 
-Soil infiltration is no longer a Water-only physical mechanism. `SoilLiquidInfiltrationSystem` can transfer any active free-liquid identity into supporting porous terrain, while `SoilLiquidSystem` owns the retained composition and one shared material pore capacity.
+Soil infiltration is generic. `SoilLiquidSystem` owns retained composition and one shared material pore capacity.
 
-Water participates through the same mechanism:
+Water participates as one constituent:
 
 ```text
 free Water
     ↓
-generic Soil liquid infiltration
+SoilLiquidInfiltrationSystem
     ↓
-retained Soil composition
-    ↓
-SoilMoistureSystem(WATER) projection
+SoilLiquidSystem
+    ├─ retained Water
+    └─ other retained constituents
 ```
 
-`SoilMoistureSystem` remains the Water-shaped compatibility capability used by current rain, evaporation, inspector and related consumers. It projects only the configured Water constituent even when the underlying Soil cell also retains another liquid.
+There is no separate `SoilMoistureSystem` authority or Water-only soil-exchange adapter.
 
-The current `WaterSoilExchangeSystem` is only a compatibility adapter for existing Water-oriented runtime wiring; its actual active-liquid infiltration pass delegates to the generic Soil mechanism.
+Porous terrain declares `SoilProperties(capacity, permeability)`. Water's reference viscosity converts permeability to the same nominal uptake rate used to configure the material. A more viscous future liquid receives a lower effective uptake rate through the generic transport math without changing Water or Soil storage code.
 
-A future liquid/material interaction resolver may give blood, wine or another liquid a different infiltration limit from Water without changing the generic storage model.
+Water retained in Soil is read explicitly through:
+
+```java
+soilLiquids.amountOf(WaterSystem.TYPE, x, y, z)
+```
 
 ## Atmosphere interaction
 
-Current precipitation and evaporation remain Water integrations.
+Current precipitation and evaporation remain Water-specific integrations.
 
-`VerticalSkySurfaceSystem` and the current environment composition still operate on the production Water surface capability:
+Rain behavior:
 
-- rain onto Terrain fills retained Water capacity first and places excess as free Water;
-- rain onto exposed Water adds to Water;
-- Water evaporation removes exposed free Water before exposed retained Water moisture;
-- covered Water is not evaporated merely because it exists in storage.
+- rain onto exposed Terrain attempts generic Soil retention as Water first;
+- excess becomes free Water in available surface volume;
+- rain onto exposed Water adds directly to the Water column.
 
-Retained blood or wine does not automatically evaporate on Water's schedule. When another liquid becomes an atmosphere participant, its source/sink semantics must be introduced explicitly.
+Water evaporation:
+
+- removes exposed free Water first;
+- then removes exposed retained Water;
+- does not remove other retained constituents;
+- reports `surfaceWaterRemoved` and `retainedWaterRemoved` separately.
+
+Another liquid does not automatically receive Water's atmosphere semantics merely because it shares the transport foundation.
 
 See [Surface Hydrology](hydrology.md).
 
-## Water-aware terrestrial traversal
+## Water-aware traversal
 
-`WaterWadingConstraint` remains Water-specific gameplay/locomotion behavior.
+`WaterWadingConstraint` remains Water-specific gameplay behavior.
 
-A mover with `WaterWadingProfile(maxDepth)` evaluates current Water depth during path planning and authoritative Movement revalidation. Reusing the same hydraulic solver or Soil-infiltration mechanic for another liquid does not automatically give that liquid Water's wading semantics or hazard behavior.
+A mover with `WaterWadingProfile(maxDepth)` evaluates current Water depth during path planning and authoritative Movement revalidation. A non-Water liquid does not automatically inherit Water's wading profile or hazard semantics.
 
 See [Water Traversal](water-traversal.md).
 
 ## Geometry changes
 
-Geometry owns Shape state; liquid systems own quantity. Geometry therefore never silently deletes displaced Water.
+Geometry owns Shape; liquids own quantity. Geometry changes therefore do not silently delete Water.
 
-`WaterFlowSystem.activateAt(x,y,z)` remains the Water-facing hydraulic wake point for a higher-level coordinator after relevant Geometry changes. General runtime displacement coordination remains future work.
+Hydraulic wakeup belongs to the shared `LiquidFlowSystem.activateAt(...)` capability. General runtime coordination of displaced liquid after arbitrary Geometry changes remains future work.
 
 ## Mixing boundary
 
-Water can coexist in the same generic liquid world with future liquid identities, but current **free-liquid** cell content is single-component. Unsupported unlike-liquid contact is blocked rather than implicitly merged.
+Water can coexist with other liquid identities in one generic liquid world, but current free-liquid cells are single-component. Unlike-liquid contact blocks explicitly instead of being silently merged.
 
-Retained Soil composition may already hold several constituents because they share porous capacity; that does not implement free-liquid mixing, chemistry, reactions or phase separation.
+Retained Soil composition may contain Water alongside other constituents because all share porous capacity. That does not implement free-liquid mixing, chemistry, diffusion or phase separation.
 
-Free-liquid mixing remains a separate design milestone. See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md).
+See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md).
 
 ## Deliberately absent
 
 Current Water integration does not implement:
 
 - drinking/Thirst interactions;
-- shallow-Water speed penalties;
+- shallow-Water speed penalties beyond current wading admissibility;
 - swimming or waterborne locomotion;
 - current forces, knockback or drowning;
 - Water-body identity;
-- detailed pressure/inertia/viscosity/turbulence/erosion;
+- detailed pressure/inertia/turbulence/erosion;
+- surface tension/contact-angle wetting;
 - object displacement volume;
 - deep groundwater/drainage;
 - automatic wake/displacement coordination for arbitrary Geometry mutation;
-- generated/streamed world-bound semantics beyond optional explicit runtime bounds;
 - arbitrary-liquid atmosphere or traversal semantics;
 - free-liquid mixtures/reactions;
 - retained-liquid diffusion, leaching or reactions.
 
+Kinematic viscosity is part of the generic liquid foundation and is already active for Water/free-flow/Soil uptake calculations.
+
 ## Tests and acceptance
 
-Existing Water headless coverage remains the regression contract for Water behavior: finite add/remove arithmetic, Shape capacity/openings, exact conservation, simultaneous-exit limiting, SurfaceWaterStorage, vertical falling, run-on Soil infiltration, saturated Soil behavior, deterministic dormancy, actual-flow diagnostics, cached Water surfaces, precipitation/evaporation accounting, Water-aware traversal and finite-world containment.
+Water headless coverage remains the regression contract for Water semantics: finite mutations, Geometry capacity/openings, conservation, vertical falling, surface retention, Soil infiltration, saturation, precipitation/evaporation accounting, Water surfaces, actual-flow diagnostics, Water wading and finite-world containment.
 
-Generic liquid/Soil tests additionally prove that non-Water identities use the same hydraulic solver, can use the same Soil-infiltration mechanism, share one retained pore capacity, preserve their retained identity and cannot accidentally mix in free-liquid storage through overwrite or deterministic iteration order.
+Generic liquid tests additionally verify non-Water transport, explicit transport definitions, viscosity-dependent mobility, shared Soil pore capacity, retained constituent identity and deterministic no-mix contact behavior.
 
-Visual Water acceptance remains Rain Cycle, stacked Z flow, Geometry/Ramp stress, Surface optical depth and calm/active Water presentation.
+Visual Water acceptance remains Rain Cycle, stacked Z flow, Geometry/Ramp stress, optical depth and calm/active Water presentation.
 
 See [Liquids](liquids.md), [Surface Hydrology](hydrology.md), [Geometry and Shape](geometry.md), [Water Traversal](water-traversal.md), and the historical [Water Foundation note](../notes/water-foundation.md).
