@@ -42,6 +42,34 @@ final class LiquidFlowSystemTest {
     }
 
     @Test
+    void separatedLiquidTypesAdvanceInOneSharedSolveWithoutCrossContamination() {
+        TestGeometry geometry = new TestGeometry()
+                .open(0, 0, 0)
+                .open(1, 0, 0)
+                .open(10, 0, 0)
+                .open(11, 0, 0);
+        LiquidSystem liquids = liquids(geometry);
+        LiquidFlowSystem flow = new LiquidFlowSystem(liquids, geometry);
+        liquids.addAtMost(WINE, 0, 0, 0, 400_000);
+        liquids.addAtMost(BLOOD, 10, 0, 0, 600_000);
+
+        assertTrue(flow.update() > 0L);
+
+        assertEquals(WINE, liquids.lookup().typeAt(1, 0, 0));
+        assertEquals(BLOOD, liquids.lookup().typeAt(11, 0, 0));
+        assertEquals(
+                400_000,
+                liquids.lookup().amountOf(WINE, 0, 0, 0)
+                        + liquids.lookup().amountOf(WINE, 1, 0, 0));
+        assertEquals(
+                600_000,
+                liquids.lookup().amountOf(BLOOD, 10, 0, 0)
+                        + liquids.lookup().amountOf(BLOOD, 11, 0, 0));
+        assertEquals(0, liquids.lookup().amountOf(BLOOD, 1, 0, 0));
+        assertEquals(0, liquids.lookup().amountOf(WINE, 11, 0, 0));
+    }
+
+    @Test
     void unlikeOccupiedLiquidsMeetAtExplicitNoMixBoundary() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)
