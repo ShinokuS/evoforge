@@ -10,7 +10,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
@@ -69,8 +72,14 @@ final class WaterSurfaceLookupTest {
                 y == 0 && z == 0 && (x == 0 || x == 1)
                         ? null
                         : FullShape.INSTANCE;
-        WaterSystem water = new WaterSystem(new SparseWaterStorage(), geometry);
-        WaterFlowSystem flow = new WaterFlowSystem(water, geometry);
+        LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
+                geometry);
+        WaterSystem water = new WaterSystem(liquids);
+        LiquidFlowSystem flow = new LiquidFlowSystem(
+                liquids,
+                geometry,
+                type -> LiquidTransportProperties.reference());
         WaterSurfaceLookup surfaces = water.surfaces();
 
         water.addAtMost(0, 0, 0, 400_000);
@@ -84,8 +93,8 @@ final class WaterSurfaceLookupTest {
     }
 
     private static WaterSystem water() {
-        return new WaterSystem(
-                new SparseWaterStorage(),
-                (x, y, z) -> null);
+        return new WaterSystem(new LiquidSystem(
+                new SparseLiquidStorage(),
+                (x, y, z) -> null));
     }
 }
