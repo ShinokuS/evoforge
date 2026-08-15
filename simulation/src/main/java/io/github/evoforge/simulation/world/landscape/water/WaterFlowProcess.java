@@ -1,19 +1,20 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
 import io.github.evoforge.simulation.time.ProcessScheduler;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowPreparation;
 
-/** Scheduler adapter that advances active surface hydrology one local step per tick. */
+/**
+ * Water-hydrology adapter around the shared scheduled liquid-flow process.
+ *
+ * <p>The generic process owns cadence/dormancy. Water contributes only its
+ * deterministic pre-flow Soil exchange.
+ */
 public final class WaterFlowProcess {
 
-    private static final long PROCESS_ID = 0L;
-    private static final long STEP_DELAY_TICKS = 1L;
+    private final LiquidFlowProcess delegate;
 
-    private final WaterFlowSystem flow;
-    private final WaterSoilExchangeSystem soilExchange;
-    private ProcessScheduler scheduler;
-    private boolean scheduled;
-
-    /** Backward-compatible flow-only process used by isolated solver tests. */
+    /** Flow-only adapter used by isolated Water solver tests. */
     public WaterFlowProcess(WaterFlowSystem flow) {
         this(flow, null);
     }
@@ -23,68 +24,29 @@ public final class WaterFlowProcess {
             WaterSoilExchangeSystem soilExchange) {
 
         if (flow == null) {
-            throw new IllegalArgumentException(
-                    "flow must not be null");
+            throw new IllegalArgumentException("flow must not be null");
         }
-        this.flow = flow;
-        this.soilExchange = soilExchange;
+        LiquidFlowPreparation preparation = soilExchange == null
+                ? LiquidFlowPreparation.NONE
+                : soilExchange::update;
+        delegate = new LiquidFlowProcess(
+                flow.liquidFlowSystem(),
+                preparation);
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
-        if (scheduler == null) {
-            throw new IllegalArgumentException(
-                    "scheduler must not be null");
-        }
-        if (this.scheduler != null) {
-            throw new IllegalStateException(
-                    "water flow scheduler is already bound");
-        }
-        this.scheduler = scheduler;
+        delegate.bindScheduler(scheduler);
     }
 
-    /**
-     * Ensures active hydrologic work has one scheduled continuation.
-     * Repeated wakeups coalesce while a continuation is already scheduled.
-     */
     public void activate() {
-        requireScheduler();
-        if (scheduled || flow.activeCellCount() == 0) {
-            return;
-        }
-
-        scheduled = true;
-        scheduler.scheduleAfter(
-                STEP_DELAY_TICKS,
-                PROCESS_ID);
+        delegate.activate();
     }
 
     public void resume(long processId) {
-        requireScheduler();
-        if (processId != PROCESS_ID) {
-            throw new IllegalStateException(
-                    "unknown water flow process: " + processId);
-        }
-        if (!scheduled) {
-            throw new IllegalStateException(
-                    "water flow process is not scheduled");
-        }
-
-        scheduled = false;
-        if (soilExchange != null) {
-            soilExchange.update();
-        }
-        flow.update();
-        activate();
+        delegate.resume(processId);
     }
 
     public boolean scheduled() {
-        return scheduled;
-    }
-
-    private void requireScheduler() {
-        if (scheduler == null) {
-            throw new IllegalStateException(
-                    "water flow scheduler is not bound");
-        }
+        return delegate.scheduled();
     }
 }
