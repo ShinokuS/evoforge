@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
-import io.github.evoforge.simulation.world.landscape.liquid.StandardLiquidTypes;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
@@ -35,7 +34,7 @@ final class WaterLiquidFacadeTest {
         assertEquals(blood, liquids.surfaces().topType(3, 4));
         assertEquals(
                 100_000,
-                liquids.lookup().amountOf(StandardLiquidTypes.WATER, 3, 4, 1));
+                liquids.lookup().amountOf(WaterSystem.TYPE, 3, 4, 1));
     }
 
     @Test
