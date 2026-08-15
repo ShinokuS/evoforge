@@ -1,7 +1,5 @@
 package io.github.evoforge.simulation.world.landscape.liquid;
 
-import java.util.List;
-
 import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
@@ -195,6 +193,5 @@ public final class LiquidSystem {
             throw new IllegalArgumentException(
                     "requested liquid volume must not be negative: " + requested);
         }
-        CellVolume.requireValid(requested);
     }
 }
