@@ -134,7 +134,7 @@ levelAfter
 maxLevel
 ```
 
-These diagnostics are intended for the integrated living-Cow inspector and animation/debug layer.
+These read projections remain available to focused Agent scenarios, headless diagnostics and any future richer physiology inspector. The current generic Surface inspector does not duplicate Need progression state in its normal cell/object card.
 
 ## Agent relationship
 
@@ -174,6 +174,6 @@ Not implemented here:
 - starvation damage or death;
 - thresholds with bespoke physiological consequences;
 - event-driven agent wake-up;
-- visual state and animation.
+- dedicated rich physiology presentation.
 
 Those features should be introduced by their first concrete consumers while preserving `NeedSystem` ownership and the resolver boundary.
