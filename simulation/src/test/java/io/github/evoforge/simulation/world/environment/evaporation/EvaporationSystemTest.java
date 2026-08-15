@@ -36,7 +36,7 @@ final class EvaporationSystemTest {
 
         assertEquals(1, result.columns());
         assertEquals(100_000L, result.surfaceWaterRemoved());
-        assertEquals(0L, result.soilMoistureRemoved());
+        assertEquals(0L, result.retainedWaterRemoved());
         assertEquals(400_000, fixture.water.lookup().amount(0, 0, 1));
         assertEquals(300_000, fixture.retainedWater(0, 0, 0));
     }
@@ -52,7 +52,7 @@ final class EvaporationSystemTest {
                 fixture.evaporation.applyUniform(100_000);
 
         assertEquals(40_000L, result.surfaceWaterRemoved());
-        assertEquals(60_000L, result.soilMoistureRemoved());
+        assertEquals(60_000L, result.retainedWaterRemoved());
         assertEquals(0L, result.unfulfilled());
         assertEquals(0, fixture.water.lookup().amount(0, 0, 1));
         assertEquals(140_000, fixture.retainedWater(0, 0, 0));
@@ -88,7 +88,7 @@ final class EvaporationSystemTest {
                 fixture.evaporation.applyUniform(150_000);
 
         assertEquals(100_000L, result.surfaceWaterRemoved());
-        assertEquals(50_000L, result.soilMoistureRemoved());
+        assertEquals(50_000L, result.retainedWaterRemoved());
         assertEquals(150_000, fixture.retainedWater(0, 0, 0));
     }
 
