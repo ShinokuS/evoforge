@@ -39,6 +39,7 @@ assets/       definition and presentation source data
 16. **Optimization preserves semantics.** Scheduling, sleeping processes, analytical progression, batching, indexing and compact representations may reduce computational work only when they preserve the authoritative outcome required by the mechanic; optimization must not replace distant-world behavior with different rules merely because nobody is watching.
 17. **Measure hot paths before changing representation.** Once a path is proven hot, avoid unnecessary scans, allocations, boxing and temporary collections.
 18. **Fundamental mechanics are observable and testable.** New systems arrive with headless correctness tests and a diagnostic strategy.
+19. **World containment is shared geometry, not per-domain edge policy.** When a runtime configures finite `WorldBounds`, the common Geometry view presents coordinates outside that box as physically closed. Water, Navigation, Movement and other geometry consumers must not each invent a different map-edge rule. A runtime with no configured bounds may deliberately retain unbounded semantics.
 
 ## Extension discipline
 
@@ -73,25 +74,29 @@ Authoritative positions use:
 (int x, int y, int z)
 ```
 
-`int` is the public representation, not a promise that every integer is a valid world coordinate. World bounds, packed internal coordinates and chunk/region policy remain separate representation decisions.
+`int` is the public coordinate representation, not a promise that every integer is a usable coordinate in every runtime.
+
+A `SimulationAssembly` may configure one inclusive finite `WorldBounds`. Its shared `WorldGeometryLookup` resolves every coordinate outside that box as `FullShape`, so generic physical/structural consumers observe one closed boundary through their ordinary Geometry dependency. Setup placement and initial Water also reject coordinates outside configured bounds.
+
+If no bounds are configured, the runtime preserves the earlier unbounded coordinate semantics. Chunk/region layout, generated versus unloaded state, packed internal coordinates and streaming remain separate future representation decisions.
 
 Shared XYZ coordinates are addresses; they do not imply a universal owner of all state at that coordinate.
 
 ## Core relationship of traversal systems
 
 ```text
-Geometry       local structural shape semantics
+Geometry        local structural/physical shape semantics
     ↓
-Navigation     does a directed structural edge exist?
+Navigation      does a directed structural edge exist?
     ↓
-TransitionCost what is the actor-independent intrinsic price of that edge?
+TransitionCost  what is the actor-independent intrinsic price of that edge?
     ↓
-Occupancy      is relevant space dynamically available/claimed?
+Occupancy       is relevant space dynamically available/claimed?
     ↓
-Movement       can this actor start and complete the concrete move?
+Movement        can this actor start and complete the concrete move?
 ```
 
-Pathfinding is a consumer of these facts, not their owner. It must not invent a second topology or cost model.
+Pathfinding is a consumer of these facts, not their owner. It must not invent a second topology or cost model. Dynamic mover constraints such as Water wading may filter advisory Pathfinding and are revalidated by Movement, but they still do not become Navigation topology.
 
 ## Time and execution
 

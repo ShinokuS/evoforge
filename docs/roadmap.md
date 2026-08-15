@@ -1,81 +1,81 @@
 # Roadmap
 
-This page tracks only milestone state and deliberately deferred work. Detailed current semantics live in [`systems/`](systems/runtime.md).
+This page tracks milestone state and deliberately deferred work. Detailed current semantics live in [`systems/`](systems/runtime.md); historical design exploration lives in [`notes/`](notes/).
 
 ## Completed foundations
 
-- Object identity and immutable definitions
-- Discrete simulation time, Scheduler and ProcessScheduler binding
-- Object Spatial ownership and cell index
-- Landscape/Terrain ownership and coordinated landscape mutations
-- Geometry contract, `FullShape`, cardinal `RampShape` and transition algebra
-- Neutral deterministic cell-volume Geometry contract with `FullShape` / `RampShape` volumetric semantics
-- Structural Navigation
-- Actor-independent TransitionCost
-- Generic Control/Command backbone
-- Production `SimulationAssembly` / `SimulationRuntime` / `SimulationView`
-- Timed adjacent Movement
-- Scenario test harness
-- Live multi-Z procedural visualizer with geometric cutaway, diagnostics and performance telemetry
-- Presentation ownership cleanup and typed Shape presentation bindings
-- Documentation v2: English-only canonical Markdown + VitePress + Development Journal
-- Exclusive object Occupancy with immediate execution destination reservations
-- Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions, derived hierarchy/reachability and focused diagnostics
-- Observable one-edge Movement completion and long-range `MoveTo` lifecycle over the existing edge primitive
-- Movement visualizer scenarios: multi-level waypoint patrol and interactive visible-surface LMB-select / RMB-MoveTo with route diagnostics
-- Generic autonomous-agent foundation: open Needs/capabilities, directed Vision, physical orientation, deterministic decision traces and mechanic-owned opportunities
-- Coordinate-free unknown-source Search with local visual sweep, correlated multi-cell exploration and generic active-route diagnostics
-- Finite authoritative Consumable Stock separated from physiological benefit
-- Definition-driven scheduled Growth with narrow stock replenishment and an external effective-rate resolver
-- Generic scheduled Need progression for open NeedIds with narrow deficit mutation and an external effective-rate resolver
-- Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation
-- Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth, timed grazing, state-driven presentation and full developer inspector
-- Finite authoritative Water quantity with sparse storage and Shape-derived cell capacity
-- Neutral free-space Shape geometry plus deterministic local Water redistribution with hydraulic head, exact conservation and dormant active-frontier processing
+- Object identity and immutable definitions.
+- Discrete simulation time, Scheduler and ProcessScheduler binding.
+- Object Spatial ownership and cell index.
+- Landscape/Terrain ownership and coordinated landscape mutations.
+- Geometry contract, `FullShape`, cardinal `RampShape`, neutral physical free-space facts and transition algebra.
+- Structural Navigation over the shared Geometry contract.
+- Actor-independent `TransitionCost` and a conservative global lower bound for admissible search.
+- Generic Control/Command backbone with open namespaced result codes.
+- Production `SimulationAssembly` / `SimulationRuntime` / `SimulationView` composition boundary.
+- Exclusive object Occupancy with immediate execution destination reservations.
+- Deterministic timed adjacent Movement with fractional carry and completion-time revalidation.
+- Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions and derived hierarchy/reachability preflight.
+- Long-range `MoveTo` lifecycle over the existing one-edge Movement primitive, including route-level cancellation that stops after at most the currently scheduled atomic edge.
+- Movement visualizer scenarios and authoritative route diagnostics.
+- Generic autonomous-agent foundation: open Needs/capabilities, directed Vision, physical orientation, deterministic decision traces and mechanic-owned opportunities.
+- Coordinate-free unknown-source Search with local visual sweep, relative exploration and production MoveTo execution.
+- Finite authoritative Consumable Stock separated from physiological benefit.
+- Definition-driven scheduled Growth with narrow stock replenishment and an external effective-rate resolver.
+- Generic scheduled Need progression for open `NeedId`s with narrow deficit mutation and an external effective-rate resolver.
+- Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation.
+- Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth and timed grazing.
+- Finite authoritative Water quantity with sparse storage and Shape-derived cell capacity.
+- Deterministic local Water redistribution with hydraulic head, exact conservation, bounded relaxation and dormant active-frontier processing.
+- Material `SurfaceWaterStorage`: shallow free Water can remain conserved without becoming perpetual horizontal thin-film runoff; vertical falling remains independent of that horizontal reserve.
+- Surface Hydrology: cyclic precipitation, finite SoilMoisture, deterministic coordinate-local soil capacity variation, run-on Water -> Soil exchange and finite exposed-surface evaporation.
+- Water-aware terrestrial traversal: definition-driven wading depth is composed into MoveTo advice and revalidated at authoritative Movement start/commit.
+- Hydrology visual acceptance: Rain Cycle, stacked Z flow, Geometry/Ramp stress, actual-flow diagnostics, calm-water fixed point checks and hydrology-aware inspector values.
+- Surface-first visualizer presentation with explicit `SURFACE`, `INTERIOR` and `DEBUG_SLICE` perspectives, cell-centric interaction and bounded debug overlays.
+- Optional explicit finite `WorldBounds` through shared `WorldGeometryLookup`; outside a configured runtime box is physically closed without per-domain map-edge rules.
+- Documentation v2: English-only canonical Markdown + VitePress + Development Journal.
+
+## Accepted baseline
+
+The current stable baseline closes the first Water / Surface-Hydrology milestone. Its important integration chain is now:
+
+```text
+precipitation
+    ↓
+SoilMoisture first
+    ↓
+excess authoritative Water
+    ↓
+run-on infiltration + local hydraulic flow
+    ↓
+finite evaporation
+    ↓
+water-aware MoveTo advice
+    ↓
+authoritative Movement revalidation
+    ↓
+Surface / Interior developer observation
+```
+
+Water, SoilMoisture, Geometry, Navigation and Movement keep separate authoritative contracts/owners. Presentation is observer-only: the visualizer reads those facts and does not create an alternate surface-world simulation.
+
+The repository now treats accepted `main` states as release/milestone baselines and performs ongoing integration on `develop`. See [Development Workflow](guides/development-workflow.md).
 
 ## Current living-world sequence
 
+The next direct living-world consumers remain:
+
 ```text
-rain + soil moisture + simple evaporation
-    ↓
-water-aware traversal / Pathfinding integration
-    ↓
-hydrology visual acceptance
-    ↓
 Thirst + Drink
     ↓
-real Utility competition
+real Utility competition between motivations
     ↓
 Intent persistence / interruption
     ↓
 representative scale profiling
 ```
 
-The integrated Living Cow slice is the first completed end-to-end visual acceptance foundation. It demonstrates the closed loop:
-
-```text
-plant regrows finite biomass
-    ↓
-Hunger progresses over time
-    ↓
-Cow perceives/searches/selects food
-    ↓
-MoveTo route
-    ↓
-provider-owned timed grazing
-    ↓
-Hunger decreases + biomass decreases
-    ↓
-cycle continues
-```
-
-The visualizer exposes authoritative cell/object selection, stacked objects, Vision, routes, Needs, Need progression, resources, Growth, decisions and timed-use progress. Grass, Clover and Dandelion share production mechanics while differing through definition and presentation data.
-
-Water now has the first complete redistribution foundation: finite authoritative quantity, neutral Shape free-space geometry, one-law hydraulic-head flow, deterministic two-phase commit, integer convergence and local dormancy. Stable water is not scanned globally, and navigation ports remain independent from physical fluid openings.
-
-The next Water slice introduces explicit environmental inputs and sinks: rain, soil moisture/infiltration and deliberately simple exposed-surface evaporation. That work should use the existing finite source/sink arithmetic and wake the local flow frontier rather than teaching the solver about weather or soil.
-
-Water-state churn and traversal-semantic change remain separate concerns so microscopic fluid updates cannot globally stale unrelated PathSearch work. Water-aware traversal comes only after environmental hydrology is visually accepted.
+Thirst/Drink should consume the existing finite Water and generic opportunity/use boundaries rather than adding a Water-specific AI path. Real Hunger + Thirst competition is the first reason to replace the provisional single-motivation scoring with a richer utility model.
 
 Representative scale profiling remains mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
 
@@ -93,42 +93,44 @@ The following remain outside the mandatory immediate sequence and require their 
 
 ## Deferred presentation work
 
-- explicit adjacent-layer X-ray/build mode
-- real roofs/structures/large objects contributing to presentation visibility volume
-- partial optical transmission for glass/water/smoke/foliage
-- lighting as a separate authoritative mechanic
-- additional terrain materials and material transitions
-- larger creature/tree/building/equipment art beyond the active vertical slice
-- richer shadows/compositing
-- generated-atlas export tooling
-- visual chunk/dirty caches until profiling requires them
+- adjacent-layer X-ray/build tooling beyond the current explicit Debug Slice;
+- richer roof/structure/large-object visibility-volume semantics beyond current terrain-driven Surface projection and explicit presentation portals;
+- partial optical transmission for glass/smoke/foliage;
+- lighting as a separate authoritative mechanic;
+- additional terrain materials and material transitions;
+- larger creature/tree/building/equipment art beyond active vertical slices;
+- richer shadows/compositing;
+- generated-atlas/export tooling if asset authoring demonstrates the need;
+- broader visual chunk/dirty caches only when profiling requires them.
 
 ## Deferred movement/navigation work
 
-- early movement cancellation and reactive wake-up
-- falling, climbing, jumping, swimming and flying
-- actor-specific terrain affinity/locomotion
-- automatic waiting/replanning inside `MoveTo`
-- persistent route cache
-- portal/multi-level hierarchy refinement beyond the current exact reachability preflight
-- incremental/replanning pathfinder strategies such as D*/LPA*
-- JPS/JPS-3D specializations where traversal properties permit correct pruning
-- background pathfinding threads
-- path-wide/space-time planning reservations
-- temporal/SIPP-like path planning
-- yielding, swap/displacement, pushing and multi-agent deadlock resolution
-- bounded multi-agent planners such as WHCA*/CBS when local conflict cases require them
-- flow-field/group navigation
-- coordinated following/group movement and early source release
+- mid-edge cancellation/reactive wake-up; current MoveTo cancellation safely lets an already scheduled atomic edge finish and starts no later edge;
+- falling, climbing, jumping, swimming and flying;
+- actor-specific terrain affinity/locomotion beyond the current Water-wading constraint;
+- automatic waiting/replanning inside `MoveTo`;
+- persistent route cache;
+- portal/multi-level hierarchy refinement beyond current exact reachability preflight;
+- incremental/replanning pathfinder strategies such as D*/LPA*;
+- JPS/JPS-3D specializations where traversal properties permit correct pruning;
+- background pathfinding threads;
+- path-wide/space-time planning reservations;
+- temporal/SIPP-like path planning;
+- yielding, swap/displacement, pushing and multi-agent deadlock resolution;
+- bounded multi-agent planners such as WHCA*/CBS when local conflict cases require them;
+- flow-field/group navigation;
+- coordinated following/group movement and early source release.
 
 ## Deferred world/storage work
 
-- generation algorithm and authoritative RNG stream policy
-- chunk/region dimensions
-- unloaded vs absent vs not-generated state
-- world bounds and packed coordinate representation
-- persistence/network boundaries
-- authoritative multithreaded mutation
+- generation algorithm and authoritative RNG stream policy;
+- chunk/region dimensions and loaded/unloaded/generated state;
+- generated or streamed world-bound policy beyond the current optional explicit finite runtime box;
+- packed coordinate representation;
+- persistence/network boundaries;
+- authoritative multithreaded mutation.
+
+A future loaded-state model must not silently treat `UNLOADED/UNKNOWN` as ordinary empty geometry. The current explicit `WorldBounds` is a finite runtime containment mechanism, not a world-generation or streaming design.
 
 ## Activation rule
 

@@ -16,32 +16,44 @@ A scenario must not introduce fake versions of simulation mechanics just to make
 
 ## Organization
 
-Scenario implementations are grouped by the simulation domain they demonstrate:
+Scenario implementations are grouped beside the domain/composition they demonstrate:
 
 ```text
 visualizer/scenario/
   shared catalog/session/diagnostic contracts
+  agent/
+  environment/
   geometry/
   movement/
   occupancy/
   pathfinding/
+  water/
 ```
 
 Tests mirror the same domain packages. Keep shared presentation contracts/helpers at the scenario root; keep mechanic-specific fixtures, controllers and helpers beside the scenarios that use them.
 
-`ScenarioCatalog` also exposes the same domains as explicit `ScenarioGroup` entries. Group membership is metadata owned by the catalog, not inferred from class names or title prefixes. This keeps the filesystem, Java packages and scenario browser aligned while still allowing titles to change freely.
+`ScenarioCatalog.standard()` exposes explicit browser groups that currently include:
 
-When a genuinely new domain appears (for example future agent scenarios), add one focused package/group rather than returning to a flat root directory.
+```text
+Geometry & Navigation
+Movement
+Occupancy
+Water / Hydrology
+Agents
+Pathfinding
+```
+
+Browser grouping is metadata owned by the catalog, not inferred from Java package names or title prefixes. A cross-system scenario may therefore live beside the composition it owns while being presented under the most useful browser group; `RainHydrologyScenario` is the current example (`environment/` package, `Water / Hydrology` group).
 
 ## Adding a scenario
 
-1. Add a small Java class under the matching `visualizer/scenario/<domain>/` package implementing `VisualizerScenario`.
+1. Add a small Java class under the most appropriate `visualizer/scenario/<domain>/` package implementing `VisualizerScenario`.
 2. Build the world through production `SimulationAssembly`.
 3. Keep the scene focused on one understandable behavior or interaction.
-4. Return a fresh `ScenarioSession` containing the new `SimulationRuntime` and a presentation-only `ScenarioView`.
-5. Register the scenario in the matching `ScenarioGroup` in `ScenarioCatalog.standard()`.
+4. Return a fresh `ScenarioSession` containing the new `SimulationRuntime` and presentation-only initial view/bindings needed by that scene.
+5. Register the scenario in the appropriate explicit `ScenarioGroup` in `ScenarioCatalog.standard()`.
 6. Add headless tests in the matching scenario test package for meaningful setup/invariants.
-7. Run the desktop visualizer and manually verify the scene, relevant overlays, search/group placement and restart behavior.
+7. Run the desktop visualizer and manually verify the scene, relevant overlays, search/group placement, interaction and restart behavior.
 
 A normal scenario should read approximately like a compact example of the mechanic. If understanding it requires unrelated mountains, actors, structures and diagnostics, split it.
 
@@ -62,9 +74,9 @@ Search temporarily exposes matching groups even when they are normally collapsed
 
 ## Determinism and restart
 
-`VisualizerScenario.create()` must be safe to call repeatedly and must create a fresh runtime every time.
+`VisualizerScenario.create()` must be safe to call repeatedly and create a fresh runtime every time.
 
-`R` is defined as reconstruction, not mutation:
+`R` is reconstruction, not mutation:
 
 ```text
 old runtime discarded
@@ -76,13 +88,19 @@ fresh runtime at the same deterministic initial state
 
 Do not add debug-only `reset()`/`clearEverything()` methods to simulation systems to support visualizer restart.
 
-If a scenario later uses procedural generation, ordinary restart repeats the same fixed seed. A different seed is a separate explicit tool action.
+If a scenario later uses procedural generation, ordinary restart should repeat the same explicit seed unless a separate tool action intentionally requests a new seed.
 
 ## Presentation boundary
 
-Scenario metadata and `ScenarioView` may choose where the camera initially looks and which standing Z opens first. They must not change authoritative rules according to visibility, camera position or player proximity.
+Scenario metadata and `ScenarioView` may choose where the camera initially looks and which presentation perspective opens first. Portals/weather/object bindings may configure presentation metadata. None of these may change authoritative simulation rules according to visibility, camera position or player proximity.
 
 The generic `ZLevelVisualizer` remains shared by every scenario. Do not create subsystem-specific visualizer implementations such as `MovementVisualizer` or `PathfinderVisualizer`.
+
+## Surface / Interior interaction
+
+The current visualizer defaults to Surface projection. A scenario that demonstrates covered local space may provide explicit presentation portals/Interior bounds, but the portal itself must not create physical connectivity or teleport an object.
+
+If a scenario exposes Move actions, command submission must go through the ordinary production command/runtime boundary. Hover route preview remains advisory and may not become a scenario-owned movement implementation.
 
 ## Keep scenarios small
 
@@ -104,6 +122,6 @@ Extract shared scenario helpers only after actual repetition appears. Helpers ma
 
 ## Performance scenarios
 
-Small explanatory scenarios and scale benchmarks serve different purposes.
+Small explanatory scenarios and scale benchmarks serve different purposes. Do not inflate a basic semantic scenario merely to make it double as a benchmark.
 
-A future `Pathfinder — Basic` scenario may contain one small route and obstacles for understanding. A separate representative workload may later contain large terrain and many agents for profiling. Do not inflate the basic scenario merely to make it double as a benchmark.
+When a milestone has desktop/manual acceptance criteria, record them in its working PR/Development Journal while they are active. Once the milestone is merged, canonical system pages should describe the resulting semantics; historical acceptance notes remain non-normative.

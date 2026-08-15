@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Growth models an object's intrinsic ability to increase a bounded consumable quantity over simulation time.
+Model an object's intrinsic ability to restore a bounded consumable quantity over simulation time.
 
-The first production consumer is plant biomass represented by `ConsumableStock`. This is deliberately not a claim that every future biological process, tree dimension, crop lifecycle or material transformation is the same mechanic.
+The first production consumer is plant biomass represented by `ConsumableStock`. This does not mean every future biological process, tree dimension, crop lifecycle or material transformation belongs to the same mechanic.
 
 ## Ownership
 
@@ -15,7 +15,7 @@ baseAmount
 intervalTicks
 ```
 
-`GrowthSystem` owns the growth lifecycle:
+`GrowthSystem` owns the growth process lifecycle:
 
 ```text
 GROWING
@@ -26,11 +26,11 @@ last GrowthTrace
 
 It does **not** own the quantity being grown. Mutable quantity remains authoritative in `ConsumableStockSystem`.
 
-Growth receives only the narrow `ConsumableStockReplenishment` mutation capability. No generic stock setter is exposed.
+Growth receives only the narrow `ConsumableStockReplenishment` mutation capability; it has no generic stock setter.
 
 ## Effective growth boundary
 
-`GrowthSystem` does not know about sunlight, rain, snow, temperature, soil, seasons or weather.
+`GrowthSystem` does not directly know about sunlight, precipitation, SoilMoisture, temperature, seasons or other environment state.
 
 Before applying one scheduled pulse it asks a `GrowthRateResolver`:
 
@@ -42,33 +42,32 @@ GrowthRateResolver
 effective amount for this interval
 ```
 
-The current runtime uses `IntrinsicGrowthRateResolver`, which simply returns `baseAmount`.
+The current production runtime uses `IntrinsicGrowthRateResolver`, which returns `baseAmount`.
 
-This seam is intentionally stronger than hard-coding a list of conditions into Growth. Future environmental mechanics should own their own authoritative state and expose narrow read capabilities. A richer resolver can compose those capabilities and return an effective amount without changing `GrowthSystem`.
+This is an intentional extension seam. EvoForge now has authoritative precipitation/SoilMoisture/Water mechanics, but they are **not yet coupled into plant Growth** merely because the data exists. A future environmental resolver may consume those owners through narrow read capabilities when a real plant/ecology milestone defines the semantics.
 
-Example future composition direction:
+That future composition might look like:
 
 ```text
-SunlightSystem ───────┐
-SoilMoistureSystem ───┤
-TemperatureSystem ────┼─> environmental GrowthRateResolver ─> GrowthSystem
-SnowCoverSystem ──────┘
+SoilMoistureLookup ─┐
+TemperatureLookup ──┼─> environmental GrowthRateResolver -> GrowthSystem
+LightLookup ─────────┘
 ```
 
-The project intentionally does **not** define a universal `GrowthConditionType` enum, a central condition switch, or a permanent formula such as `sun * rain * temperature` before real environmental consumers exist. The first real condition will justify the composition algebra that fits its semantics.
+The project does not predefine a universal `GrowthConditionType` enum or one permanent formula before the first real environmental-growth consumer establishes the required algebra.
 
 ## Scheduled and dormant semantics
 
-A definition such as:
+For:
 
 ```text
 baseAmount = 3
 intervalTicks = 12
 ```
 
-means a non-full object is evaluated after 12 simulation ticks. With the current intrinsic resolver, each evaluation requests 3 quantity units.
+a non-full object is evaluated after 12 simulation ticks. With the current intrinsic resolver, each evaluation requests 3 stock units.
 
-`ConsumableStockSystem` clamps the actual addition to remaining capacity. When the stock reaches capacity, `GrowthSystem` enters `DORMANT_FULL` and deliberately schedules no further growth evaluation.
+`ConsumableStockSystem` clamps actual replenishment to remaining capacity. When capacity is reached, Growth becomes `DORMANT_FULL` and schedules no further Growth evaluation.
 
 ```text
 stock < capacity
@@ -78,21 +77,21 @@ GROWING
 stock == capacity
     ↓
 DORMANT_FULL
-    ↓ no growth ticks
+    ↓ no Growth task
 stock is consumed
-    ↓ narrow stock-reduction notification
+    ↓ narrow reduction notification
 GROWING again
 ```
 
-`ConsumableStockSystem` remains the sole authoritative quantity owner. After successful consumption it emits only a narrow `ConsumableStockReductionSink` notification through a composition-root relay. Growth reacts to that notification only for objects that already have a Growth definition and are currently dormant.
+`ConsumableStockSystem` remains the sole quantity owner. After successful consumption it emits only a narrow `ConsumableStockReductionSink` notification through a composition-root relay. Growth reacts only for objects that have a Growth definition and are currently dormant.
 
-A full plant therefore does not wake periodically merely to discover that zero quantity can be added. This is runtime semantics, not a presentation optimization.
+A full plant therefore does not wake periodically merely to rediscover that it is full. This is simulation scheduling semantics, not a presentation optimization.
 
-A non-full object whose `GrowthRateResolver` currently returns zero remains scheduled because an environmental condition may become favorable at a later interval. Sleeping on environmental conditions belongs to the future condition mechanics that can actually signal such changes; it is not guessed inside Growth today.
+A non-full object whose resolver returns zero remains scheduled at its configured interval because the current Growth owner cannot know when an external condition will become favorable. A future condition mechanic may justify a more reactive wake/sleep contract.
 
-## Data aspect
+## Definition aspect
 
-Growth is an independent object-definition aspect:
+Growth is an independent object-definition aspect, composed with finite stock rather than hidden inside it:
 
 ```json
 {
@@ -107,63 +106,39 @@ Growth is an independent object-definition aspect:
 }
 ```
 
-Grass, Clover and Dandelion can therefore share the same production Growth code while differing only in definition data.
+Grass, Clover and Dandelion therefore share one production Growth mechanic while differing in definition/presentation data.
 
-`GrowthDefinitionCompiler` is registered by the object-definition composition root like any other independent aspect. `ObjectDefinitionBootstrap` contains no Growth-specific branch.
+A definition with Growth currently requires the runtime object to own `ConsumableStock`. Missing stock is configuration/invariant failure, not an expected world rejection.
 
 ## Diagnostics
 
-`SimulationView.growth()` exposes read-only `GrowthLookup`:
+`SimulationView.growth()` exposes read-only `GrowthLookup` facts such as process status, next evaluation tick and latest `GrowthTrace`.
 
-```text
-has(object)
-status(object)               GROWING | DORMANT_FULL
-nextEvaluationTick(object)   -1 while dormant
-lastEvaluation(object)
-```
+`GrowthTrace` records the evaluation tick, resolved amount, actual applied amount and resulting quantity/capacity.
 
-`GrowthTrace` records:
-
-```text
-tick
-resolvedAmount
-appliedAmount
-quantityAfter
-capacity
-```
-
-The normal developer inspector translates these mechanics into concise presentation such as `Regrowing · next in 6 ticks` or `Full grown · dormant`. Raw trace data remains available only in technical-details mode.
+Current generic Surface UI does not render the older dedicated Growth/Need dashboard; these read contracts remain available to focused scenarios/tests and to any future dedicated Agent/ecology diagnostic UI.
 
 ## Invariants
 
-A definition with Growth currently requires the object instance to own `ConsumableStock`. Missing stock is a configuration/invariant failure at runtime assembly, not an ordinary world outcome.
-
-A resolver may return zero to suppress growth. Negative growth is rejected as an invariant failure; decay/withering is not silently represented as negative Growth and should receive its own semantics when needed.
+- Growth never mutates stock except through `ConsumableStockReplenishment`;
+- replenishment never exceeds stock capacity;
+- a full Growth-enabled stock is dormant until real consumption wakes it;
+- a resolver may return zero but not negative growth;
+- decay/withering is not represented by negative Growth and requires its own semantics if introduced.
 
 ## Current proofs
 
-Headless tests cover:
-
-- scheduled stock restoration;
-- strict capacity clamping;
-- different plant definitions sharing one Growth mechanic;
-- Growth without a stock target failing configuration;
-- a substituted resolver suppressing or boosting growth without modifying `GrowthSystem`;
-- a full plant scheduling no growth work;
-- real stock consumption waking exactly that dormant growth process;
-- the process returning to `DORMANT_FULL` once capacity is restored;
-- data-defined Growth compilation and freeze behavior.
+Headless coverage includes scheduled restoration, strict capacity clamping, several plant definitions sharing one mechanic, invalid Growth-without-stock configuration, substituted resolver suppression/boosting, dormant-full scheduling, real stock consumption waking exactly that process, returning to dormancy at capacity and definition freeze/compilation behavior.
 
 ## Explicitly deferred
 
-Not implemented yet:
+The following are not yet **Growth inputs**, even where a corresponding environment mechanic already exists:
 
-- sunlight or day/night influence;
-- rain / soil moisture;
-- temperature and snow cover;
-- seasons;
-- nutrient/soil chemistry;
-- fractional/sub-interval growth accumulation;
-- plant age, life stages, reproduction, withering or death.
+- SoilMoisture / precipitation influence;
+- sunlight/day-night;
+- temperature/snow/seasons;
+- nutrients/soil chemistry;
+- fractional/sub-interval accumulation;
+- plant age/life stages/reproduction/withering/death.
 
-Those features should extend independent world mechanics and the resolver boundary only when they have real consumers.
+They should extend independent owners and the resolver boundary only when a real consumer defines the needed semantics.

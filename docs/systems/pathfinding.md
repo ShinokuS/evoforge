@@ -4,7 +4,7 @@
 
 Find disposable long-range spatial routes without becoming an authoritative world owner.
 
-Pathfinding consumes the same traversal facts used by Movement:
+Pathfinding consumes the same structural/cost facts used by Movement:
 
 ```text
 NavigationLookup
@@ -12,6 +12,9 @@ NavigationLookup
 
 TransitionCostLookup
     actor-independent intrinsic edge price
+
+PathTransitionConstraint
+    optional query-local advisory filter
 
 Pathfinder
     cheapest/admissible spatial route advice
@@ -31,7 +34,7 @@ while (search.status() == RUNNING) {
 }
 ```
 
-`PathSearch` is deliberately resumable. The budget is a deterministic count of node expansions, never wall-clock milliseconds. Faster and slower machines therefore do not receive different pathfinding semantics merely because one CPU reaches a time limit sooner.
+`PathSearch` is resumable. The budget is a deterministic count of node expansions, never wall-clock milliseconds, so CPU speed does not become simulation semantics.
 
 Terminal states are:
 
@@ -42,27 +45,19 @@ STALE
 CANCELLED
 ```
 
-`RUNNING` is the only non-terminal state.
+`NO_PATH` is expected domain data. `STALE` means versioned traversal/query-local facts changed while the search was suspended. `CANCELLED` means the consumer discarded unfinished computational work.
 
-`NO_PATH` is an expected domain result. `STALE` means traversal facts or a versioned query-local constraint changed while the search was suspended. `CANCELLED` means the consumer explicitly discarded unfinished computational work.
+## PathQuery and constraints
 
-## Path query
+`PathQuery` contains source XYZ, goal XYZ and a `PathTransitionConstraint`.
 
-`PathQuery` currently contains:
+The default constraint allows every structurally valid Navigation edge. A constraint can only filter; it cannot create an edge that Navigation does not expose.
 
-```text
-source XYZ
-goal XYZ
-PathTransitionConstraint
-```
+A dynamic constraint may expose a revision. A resumable search captures that revision and becomes `STALE` if the constraint's relevant snapshot changes between slices.
 
-The default constraint allows every structurally valid Navigation edge.
+Current production MoveTo uses this seam for mover-aware advisory filtering. Water wading is the first real dynamic consumer: it filters paths for a mover without changing Navigation topology. Relative Agent Search also composes a visible-cell constraint for its query.
 
-A constraint is advisory query policy layered after Navigation; it cannot create an edge that Navigation does not expose. Dynamic constraints may expose a revision. A resumable search captures that revision at start and becomes `STALE` if it changes between slices.
-
-This seam is intentionally narrower than actor-specific locomotion or multi-agent planning. It allows a future consumer to filter current facts without creating alternate Navigation systems for cows, humans, doors or occupancy policy.
-
-## Route value
+## PathRoute
 
 `PathRoute` is immutable and disposable.
 
@@ -71,20 +66,20 @@ Its steps:
 - exclude the source;
 - include the goal;
 - preserve XYZ for every step;
-- expose the shared intrinsic total transition cost.
+- expose shared intrinsic total transition cost.
 
 `source == goal` is `FOUND` with zero steps and zero cost.
 
-A route is advice:
+Execution remains separate:
 
 ```text
 Pathfinder route
     ↓
-future MoveTo chooses next edge
+MoveTo selects next advised edge
     ↓
-MoveStep revalidates Navigation + Occupancy
+Movement revalidates Navigation + mover constraint + Occupancy
     ↓
-Movement executes one timed edge
+one timed edge commits or fails
 ```
 
 Later route cells are never execution reservations.
@@ -97,67 +92,41 @@ It uses:
 
 - `NavigationLookup` for directed neighbors;
 - `TransitionCostLookup` for every accepted edge price;
-- a deterministic heuristic;
-- a primitive reusable search workspace;
-- deterministic tie-breaking.
+- query-local constraint after structural validity;
+- deterministic heuristic and tie-breaking;
+- a primitive reusable search workspace.
 
-The search never branches on concrete Shape types and never has a private terrain price table.
+The search never branches on concrete Shape types and never owns a private terrain price table.
 
-### Deterministic neighbor order
+### Direction order and workspace
 
-`TransitionDirections` is the canonical ordered enumeration of all 26 immediate 3D directions. Generic graph consumers no longer need to invent their own nested direction loops.
+`TransitionDirections` is the canonical ordered enumeration of all 26 immediate 3D directions. Equal-cost frontier ties are resolved deterministically rather than through hash iteration.
 
-Equal-cost frontier ties are resolved deterministically rather than relying on `HashMap` iteration order.
-
-### Primitive workspace
-
-The exact hot loop does not allocate a `Cell`/`Node` object per discovered search state.
-
-The reusable workspace contains primitive arrays for:
-
-```text
-XYZ
-g / h
-parent
-node state
-binary heap
-coordinate → node index table
-```
-
-The coordinate index is open-addressed and the frontier is an index heap. Workspace is returned to a small pool on `FOUND`, `NO_PATH`, `STALE` or `CANCELLED`; the final immutable route is the intentional result allocation.
-
-This is a deliberate hot-path choice: path search is expected to touch thousands or more states per request, so per-node object garbage would be an obvious scalability cost rather than a speculative micro-optimization.
+The exact hot loop uses primitive arrays for XYZ, costs, parents, state, heap and coordinate-to-node indexing rather than allocating a node object per discovered state. The workspace is pooled and released on every terminal outcome; the final immutable route is intentional result allocation.
 
 ## Admissible lower bound
 
-A* does not hard-code assumptions about terrain or future Shapes.
+A* does not hard-code terrain/Shape assumptions.
 
-Traversal definitions maintain the minimum registered surface cost. Geometry exposes a conservative minimum traversal factor across Shapes currently present. `TransitionCostLowerBoundCalculator` derives a guaranteed positive global edge-cost floor from those authoritative cost-domain facts.
+Traversal definitions maintain the minimum registered surface cost. Geometry exposes a conservative minimum traversal factor across current Shapes. `TransitionCostLowerBoundCalculator` derives a positive global lower bound, and `PathHeuristics.chebyshev(...)` combines it with the minimum number of 26-neighbor steps.
 
-Current `PathHeuristics.chebyshev(...)` combines that floor with the minimum number of 26-neighbor steps to the goal. It is intentionally conservative but admissible. `PathHeuristics.ZERO` remains available as a Dijkstra/reference mode.
+`PathHeuristics.ZERO` remains a Dijkstra/reference mode.
 
-New Shapes that can return traversal factors below neutral must expose a conservative `minimumTraversalFactor()`. The generic Pathfinder still never recognizes their concrete class.
+A new Shape with factors below neutral must expose a conservative `minimumTraversalFactor()`; generic Pathfinder still does not recognize its concrete type.
 
 ## Traversal revisions
 
-A search may span multiple simulation cycles. Mixing topology/cost facts from different world revisions inside one route would be incorrect.
+A suspended search must not mix topology/cost facts from different accepted landscape revisions.
 
-`LandscapeSystem` therefore exposes traversal-domain revision facts that change whenever accepted landscape/Shape mutation can alter Navigation or TransitionCost.
+Landscape traversal change tracking exposes a monotonic revision plus the latest changed coordinate. Exact search captures the revision at start and becomes `STALE` if it changes before a later search slice.
 
-One change tracker stores:
+The changed coordinate is a narrow read fact for derived cache invalidation, not an authoritative event bus.
 
-```text
-revision
-latest changed XYZ
-```
-
-An exact search captures the revision at start. Any later change makes the suspended search `STALE`.
-
-The latest changed coordinate is not event infrastructure and does not grant mutation to caches. It is a narrow read projection used by derived pathfinding caches for invalidation.
+Dynamic query-local constraints follow the same principle through their own optional revision.
 
 ## Dynamic 3D hierarchy
 
-The production runtime currently composes:
+Production runtime composes:
 
 ```text
 PathHierarchyIndex
@@ -167,131 +136,85 @@ ExactAStarPathfinder
 HierarchicalPathfinder
 ```
 
-The current hierarchy is deliberately an **exactness-preserving reachability/cache preflight**, not a claim to full portal HPA*.
+The hierarchy is currently an **exactness-preserving reachability/cache preflight**, not portal HPA*.
 
-### Cluster index
-
-`PathHierarchyIndex` partitions space into replaceable 3D clusters. The current production configuration is `8 × 8 × 8` cells.
-
-For one cluster it derives directed outgoing cluster transitions by inspecting authoritative Navigation on boundary cells. Because real movement edges are immediate, only boundary source cells can cross to another cluster.
-
-The index is derived state:
+`PathHierarchyIndex` partitions space into replaceable 3D clusters (current standard configuration `8 x 8 x 8`). It derives directed inter-cluster reachability from authoritative Navigation at cluster boundaries.
 
 ```text
 Navigation = truth
 PathHierarchyIndex = acceleration cache
 ```
 
-A cached cluster edge means at least one real Navigation edge crosses that boundary. The index never creates a new cell transition or owns topology.
+A missing coarse route can safely prove `NO_PATH`: any real immediate-neighbor route would have to induce a cluster crossing sequence.
 
-### Exactness rule
-
-A missing coarse route can safely prove `NO_PATH`: any real cell route would necessarily induce a sequence of crossed clusters.
-
-A present coarse route cannot by itself prove that source and goal are connected through the internal cells of those clusters. Therefore a positive coarse result always delegates to the exact Pathfinder before a route is returned.
-
-This gives safe early reachability rejection and a stable hierarchy/invalidation foundation without returning approximate or fabricated routes.
-
-If representative reachable searches later justify portal macro-edges or multi-level refinement, those remain implementation changes behind the same `Pathfinder` contract.
+A positive coarse route cannot prove source/goal internal connectivity, so it always delegates to exact search before returning a route. The hierarchy never fabricates a cell path.
 
 ### Cache invalidation
 
-The hierarchy polls traversal revision when read.
+The hierarchy synchronizes against traversal revision on read.
 
-If exactly one revision was observed since its last synchronization, it locally removes only cached source clusters whose Navigation queries could have depended on the changed anchor under current Navigation read locality.
+If one revision was observed, it locally drops cached source clusters whose Navigation queries could depend on the changed anchor under current read locality. If several revisions were missed and only the newest coordinate is available, it conservatively clears globally.
 
-If multiple revisions were missed, only the newest coordinate is known, so the cache conservatively clears globally.
+This preserves exactness without making Landscape push authoritative events into Pathfinding caches.
 
-This avoids an authoritative EventBus/listener dependency while never keeping known-stale hierarchy facts.
+## MoveTo execution model
 
-## Metrics
+Current production `MoveToSystem` is the first long-range execution consumer.
 
-Every `PathSearch` exposes algorithm-neutral counters:
+Its path search is computational work, not actor travel time: current production advances the search in deterministic expansion chunks to a terminal result without advancing simulation time between chunks, then executes route edges through ordinary Movement.
 
-```text
-expanded nodes
-generated transitions
-relaxed nodes
-reopened nodes
-peak frontier
-```
+MoveTo holds one locomotion claim across planning and child edges. Route advice can become unusable later; each concrete edge is revalidated independently.
 
-The hierarchy separately exposes cache diagnostics:
-
-```text
-cached clusters
-cache hits / misses
-rebuilt clusters
-Navigation queries
-local invalidations
-global invalidations
-```
-
-These are diagnostic/profiling facts, not gameplay semantics.
+Route-level cancellation is also separate from Pathfinder cancellation. Cancelling MoveTo stops future route execution after at most the current accepted Movement edge; `PathSearch.cancel()` merely discards unfinished computational search work.
 
 ## Occupancy boundary
 
-Occupancy is intentionally not converted into Navigation topology or permanent hierarchy connectivity.
+Occupancy is intentionally not converted into structural Navigation or permanent hierarchy connectivity.
 
-A structurally valid route may later encounter an `OCCUPIED` or `RESERVED` immediate destination. Future MoveTo/agent policy decides whether to wait, retry or request another disposable route.
+A structurally valid route may later encounter an occupied/reserved immediate destination. Current MoveTo terminates when a required concrete edge cannot start/commit; automatic waiting/replanning/yielding remains future Movement/agent policy.
 
-A query-local constraint can observe dynamic availability when a consumer explicitly wants that policy. If it reads mutable facts across a resumable search, it must expose a revision so the result cannot mix snapshots.
+A query-local constraint may observe dynamic availability when a consumer explicitly wants that advisory policy. If the fact can change while a search is genuinely suspended, the constraint must expose revision semantics.
 
 Execution reservation and route planning remain separate concerns.
 
+## World bounds
+
+Pathfinder has no special coordinate-edge rule. When a runtime configures finite `WorldBounds`, shared Geometry presents outside coordinates as closed `FullShape`; Navigation therefore exposes no structural route through the boundary.
+
+Unconfigured runtimes retain unbounded coordinate semantics. Future generated/unloaded/streamed world state must not be silently treated as ordinary empty path space.
+
+## Metrics
+
+Every `PathSearch` exposes algorithm-neutral counters such as expanded nodes, generated transitions, relaxations/reopens and peak frontier.
+
+The hierarchy separately exposes cache diagnostics including cached clusters, hits/misses, rebuilt clusters, Navigation queries and local/global invalidations.
+
+These are profiling facts, not gameplay semantics.
+
 ## Separate future problem domains
 
-The `Pathfinder` interface represents one-agent spatial route search. It is not intended to absorb every navigation problem.
+The current `Pathfinder` interface represents one-agent spatial route search. Temporal conflict planning, bounded multi-agent coordination and group/flow navigation are different problem domains even if they share traversal facts.
 
-Future needs remain conceptually distinct:
+Do not turn the spatial Pathfinder API into one giant mode switch for all of them.
 
-```text
-Spatial Pathfinder
-    A* / hierarchical / JPS-like / incremental strategies
+## Tests and visual diagnostics
 
-Temporal Pathfinder
-    safe-interval / space-time planning when timing itself is part of the query
+Headless coverage includes weighted optimality, deterministic expansion budgets/ties, zero-step success, `NO_PATH`, constraint filtering/staleness, explicit search cancellation, traversal-revision staleness, hierarchy exact preflight/invalidation, production composition, multi-Z Ramp routing and heuristic-versus-Dijkstra optimal-cost comparison.
 
-Multi-Agent Planner
-    coordinated conflict planning for a bounded group
+Additional integration proves mover-aware Water constraints can steer MoveTo around currently over-deep destinations while authoritative Movement still revalidates real execution.
 
-Group navigation
-    flow-field / formation-oriented strategies
-```
-
-These may share low-level traversal facts but should not become one giant switch-filled API.
-
-## Testing and diagnostics
-
-Headless coverage includes:
-
-- weighted route chooses lower total TransitionCost rather than fewer cells;
-- deterministic expansion budgets and tie-breaking;
-- `NO_PATH` and zero-step success;
-- query constraint filtering and constraint staleness;
-- explicit cancellation;
-- traversal-revision staleness;
-- hierarchy directed reachability and exact refinement;
-- hierarchy local/global invalidation behavior;
-- production runtime composition;
-- production two-level Ramp route across Z;
-- representative open-grid comparison showing a strong admissible heuristic reduces expansions without changing optimal cost.
-
-Focused visualizer scenarios separately demonstrate straight routing, structural detours, weighted detours, multi-Z ramps, unreachable goals, hierarchy boundaries and dynamic invalidation.
+Focused visualizer scenarios demonstrate straight routes, structural/weighted detours, multi-Z ramps, unreachable goals, hierarchy boundaries and dynamic invalidation.
 
 ## Deferred by evidence, not architecture
-
-The current contracts deliberately leave room for, but do not yet implement:
 
 - portal/multi-level hierarchical refinement for reachable-route acceleration;
 - persistent route caching;
 - incremental D*/LPA*-style replanning;
 - JPS/JPS-3D specializations where graph properties permit correct pruning;
 - background pathfinding threads;
-- path-wide/space-time reservations;
-- SIPP-like temporal planning;
-- WHCA*/CBS-like multi-agent coordination;
-- flow fields/group navigation;
-- actor-specific locomotion/terrain affinity.
+- path-wide/space-time reservations and SIPP-like temporal planning;
+- WHCA*/CBS-like bounded multi-agent coordination;
+- flow-field/group navigation;
+- broader actor-specific locomotion/terrain affinity beyond current query-local Water wading and search constraints.
 
-These additions do not require changing Navigation truth, TransitionCost ownership, the disposable-route rule or the public algorithm-neutral Pathfinder lifecycle.
+These additions must preserve Navigation truth, TransitionCost ownership, disposable-route semantics and the algorithm-neutral `PathSearch` lifecycle.

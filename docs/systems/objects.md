@@ -16,8 +16,10 @@ Consumers use read-only object lookup capabilities where mutation is unnecessary
 
 ## Does not own
 
-Position, movement rate, active actions, inventories or future agent state. Those belong to their mechanic owners.
+Position, orientation, movement rate, active Movement/MoveTo state, Occupancy reservations, Needs, finite stock, Growth, Agent intent/search state, inventories or environmental facts. Those belong to their mechanic owners.
 
 ## Invariant
 
 A mechanic that needs per-object mutable state stores it in the mechanic, keyed by `ObjectId`, rather than expanding `WorldObject` into a god object.
+
+Definition identity may select immutable mechanic aspects/presentation bindings through their own registries; it does not turn `WorldObject` into a concrete-class behavior switch.

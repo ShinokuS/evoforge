@@ -33,7 +33,8 @@ const sidebar: DefaultTheme.SidebarItem[] = [
     text: 'Project',
     items: [
       { text: 'Architecture', link: '/architecture' },
-      { text: 'Roadmap', link: '/roadmap' }
+      { text: 'Roadmap', link: '/roadmap' },
+      { text: 'Development Workflow', link: '/guides/development-workflow' }
     ]
   },
   { text: 'Systems', items: sectionItems('systems') },
@@ -59,6 +60,7 @@ export default defineConfig({
     nav: [
       { text: 'Architecture', link: '/architecture' },
       { text: 'Roadmap', link: '/roadmap' },
+      { text: 'Workflow', link: '/guides/development-workflow' },
       { text: 'Systems', link: '/systems/runtime' },
       { text: 'Journal', link: '/notes/' },
       { text: 'GitHub', link: 'https://github.com/ShinokuS/evoforge' }

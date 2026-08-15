@@ -15,6 +15,19 @@ The authoritative simulation lives in the pure-Java `simulation` module. libGDX 
 
 The same Markdown is published through VitePress/GitHub Pages. There is no parallel translation or Wiki source tree.
 
+## Development
+
+EvoForge uses a lightweight integration workflow:
+
+- `main` — stable, accepted milestone baseline;
+- `develop` — integration branch for the next milestone;
+- `feature/*` — focused production slices branched from `develop`;
+- `experiment/*` — disposable investigations that do not have to be merged.
+
+Feature work returns to `develop` through pull requests and CI. A completed milestone moves from `develop` to `main` only after automated checks, documentation reconciliation and required manual acceptance; accepted `main` milestones are marked by immutable version tags.
+
+See [`docs/guides/development-workflow.md`](docs/guides/development-workflow.md) for the full branch, merge, release and recovery policy.
+
 ## Modules
 
 - `simulation` — domain and simulation code, headless-testable and independent of libGDX.
