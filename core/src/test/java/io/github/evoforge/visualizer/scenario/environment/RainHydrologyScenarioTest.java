@@ -29,10 +29,10 @@ final class RainHydrologyScenarioTest {
                 "loam should absorb its direct 3 mm rain event before free Water forms");
         assertEquals(
                 0,
-                session.runtime().view().soilMoisture().amount(3, 0, -1),
-                "covered ground must remain shielded by the roof");
+                session.runtime().view().soilMoisture().amount(3, 0, 0),
+                "elevated covered ground must remain shielded by the roof");
         assertTrue(
-                session.runtime().view().soilMoisture().amount(3, 0, 1) > 0,
+                session.runtime().view().soilMoisture().amount(3, 0, 2) > 0,
                 "the exposed roof must receive precipitation instead");
     }
 }
