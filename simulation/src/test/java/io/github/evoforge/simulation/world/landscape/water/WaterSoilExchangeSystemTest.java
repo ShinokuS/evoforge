@@ -5,13 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
 import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
 import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilHydrologyLookup;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
 final class WaterSoilExchangeSystemTest {
@@ -55,6 +57,19 @@ final class WaterSoilExchangeSystemTest {
         assertEquals(10_000, total(fixture));
     }
 
+    @Test
+    void nonWaterLiquidDoesNotInheritWaterSoilInfiltration() {
+        Fixture fixture = fixture(100_000, 30_000);
+        LiquidTypeId blood = LiquidTypeId.of("blood");
+        fixture.liquids.addAtMost(blood, 0, 0, 0, 20_000);
+
+        assertEquals(0L, fixture.exchange.update());
+        assertEquals(
+                20_000,
+                fixture.liquids.lookup().amountOf(blood, 0, 0, 0));
+        assertEquals(0, fixture.soil.lookup().amount(0, 0, -1));
+    }
+
     private static Fixture fixture(
             int capacity,
             int infiltrationLimit) {
@@ -75,15 +90,16 @@ final class WaterSoilExchangeSystemTest {
                         terrain,
                         definitions));
         GeometryLookup geometry = (x, y, z) -> null;
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
+        LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
                 geometry);
+        WaterSystem water = new WaterSystem(liquids);
         WaterSoilExchangeSystem exchange =
                 new WaterSoilExchangeSystem(
                         water,
                         terrain,
                         soil);
-        return new Fixture(water, soil, exchange);
+        return new Fixture(liquids, water, soil, exchange);
     }
 
     private static int total(Fixture fixture) {
@@ -92,6 +108,7 @@ final class WaterSoilExchangeSystemTest {
     }
 
     private record Fixture(
+            LiquidSystem liquids,
             WaterSystem water,
             SoilMoistureSystem soil,
             WaterSoilExchangeSystem exchange) {
