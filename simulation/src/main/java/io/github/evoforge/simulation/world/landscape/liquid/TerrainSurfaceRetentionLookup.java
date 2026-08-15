@@ -7,7 +7,8 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
  * Resolves microtopographic free-liquid retention from supporting terrain.
  *
  * <p>Free liquid may share a cell with partial terrain (for example a Ramp),
- * otherwise the immediately lower terrain cell is the supporting surface.
+ * otherwise the immediately lower terrain cell is the supporting surface. Current
+ * retention is material-owned and therefore intentionally ignores liquid identity.
  */
 public final class TerrainSurfaceRetentionLookup
         implements LiquidSurfaceRetentionLookup {
@@ -27,7 +28,14 @@ public final class TerrainSurfaceRetentionLookup
     }
 
     @Override
-    public int capacityAt(int x, int y, int z) {
+    public int capacityAt(
+            LiquidTypeId type,
+            int x,
+            int y,
+            int z) {
+        if (type == null) {
+            throw new IllegalArgumentException("liquid type must not be null");
+        }
         LandscapeDefinitionId current = terrain.find(x, y, z);
         if (current != null) {
             return definitions.getOrZero(current);
