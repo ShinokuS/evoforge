@@ -5,8 +5,8 @@ import io.github.evoforge.simulation.world.agent.need.NeedLookup;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionLookup;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureLookup;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidLookup;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
@@ -38,8 +38,8 @@ public record SimulationView(
         TerrainSurfaceLookup terrainSurfaces,
         TerrainRevisionLookup terrainRevision,
         GeometryLookup geometry,
-        SoilMoistureLookup soilMoisture,
-        SoilHydrologyLookup soilHydrology,
+        SoilLiquidLookup soilLiquids,
+        SoilPropertiesLookup soilProperties,
         SurfaceWaterStorageLookup surfaceWaterStorage,
         WaterLookup water,
         WaterSurfaceLookup waterSurfaces,
@@ -59,8 +59,8 @@ public record SimulationView(
     public SimulationView {
         if (objects == null || transforms == null || orientations == null || vision == null
                 || terrain == null || terrainExtents == null || terrainSurfaces == null
-                || terrainRevision == null || geometry == null || soilMoisture == null
-                || soilHydrology == null || surfaceWaterStorage == null
+                || terrainRevision == null || geometry == null || soilLiquids == null
+                || soilProperties == null || surfaceWaterStorage == null
                 || water == null || waterSurfaces == null || waterFlow == null
                 || navigation == null || occupancy == null || cells == null
                 || pathfinder == null || moveTo == null || needs == null
