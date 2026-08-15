@@ -26,9 +26,14 @@ import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 /** Hosts one fresh scenario runtime and the shared generic visualizer. */
 public final class ScenarioScreen extends ScreenAdapter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ScenarioScreen.class);
+    private static final Logger COMMAND_LOGGER = LoggerFactory.getLogger("io.github.evoforge.command");
     private static final float LABEL_MARGIN = 14f;
     private static final float LABEL_GAP = 5f;
 
@@ -45,6 +50,7 @@ public final class ScenarioScreen extends ScreenAdapter {
     private final Matrix4 screenProjection = new Matrix4();
     private final Matrix4 worldProjection = new Matrix4();
     private int screenWidth = 1;
+    private boolean active;
 
     public ScenarioScreen(
             VisualizerScenario scenario,
@@ -90,7 +96,20 @@ public final class ScenarioScreen extends ScreenAdapter {
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
-    @Override public void show() { Gdx.input.setInputProcessor(input); }
+    @Override
+    public void show() {
+        if (!active) {
+            MDC.put("scenario", scenario.id());
+            active = true;
+            LOGGER.atInfo()
+                    .addKeyValue("event", "scenario.start")
+                    .addKeyValue("scenarioId", scenario.id())
+                    .addKeyValue("scenarioTitle", scenario.title())
+                    .addKeyValue("tick", session.runtime().time().tick())
+                    .log("Scenario started");
+        }
+        Gdx.input.setInputProcessor(input);
+    }
 
     @Override
     public void render(float delta) {
@@ -112,6 +131,15 @@ public final class ScenarioScreen extends ScreenAdapter {
 
     @Override
     public void hide() {
+        if (active) {
+            LOGGER.atInfo()
+                    .addKeyValue("event", "scenario.stop")
+                    .addKeyValue("scenarioId", scenario.id())
+                    .addKeyValue("tick", session.runtime().time().tick())
+                    .log("Scenario stopped");
+            active = false;
+            MDC.remove("scenario");
+        }
         if (Gdx.input.getInputProcessor() == input) Gdx.input.setInputProcessor(null);
     }
 
@@ -152,11 +180,23 @@ public final class ScenarioScreen extends ScreenAdapter {
         batch.end();
     }
 
-    private static VisualizerCommandSink commandSink(SimulationRuntime runtime) {
+    private VisualizerCommandSink commandSink(SimulationRuntime runtime) {
         return new VisualizerCommandSink() {
             @Override
             public CommandFeedback moveTo(ObjectId objectId, int x, int y, int z) {
                 MoveToResult result = runtime.submit(new MoveToCommand(objectId, x, y, z));
+                var event = COMMAND_LOGGER.atDebug()
+                        .addKeyValue("event", "command.move_to")
+                        .addKeyValue("tick", runtime.time().tick())
+                        .addKeyValue("objectId", objectId.asLong())
+                        .addKeyValue("targetX", x)
+                        .addKeyValue("targetY", y)
+                        .addKeyValue("targetZ", z)
+                        .addKeyValue("result", result.accepted() ? "accepted" : "rejected");
+                if (!result.accepted()) {
+                    event.addKeyValue("code", result.code().value());
+                }
+                event.log("MoveTo command submitted");
                 return result.accepted()
                         ? CommandFeedback.accepted("")
                         : CommandFeedback.rejected(result.code().value());
@@ -165,6 +205,15 @@ public final class ScenarioScreen extends ScreenAdapter {
             @Override
             public CommandFeedback cancelMove(ObjectId objectId) {
                 CancelMoveToResult result = runtime.submit(new CancelMoveToCommand(objectId));
+                var event = COMMAND_LOGGER.atDebug()
+                        .addKeyValue("event", "command.cancel_move")
+                        .addKeyValue("tick", runtime.time().tick())
+                        .addKeyValue("objectId", objectId.asLong())
+                        .addKeyValue("result", result.accepted() ? "accepted" : "rejected");
+                if (!result.accepted()) {
+                    event.addKeyValue("code", result.code().value());
+                }
+                event.log("CancelMove command submitted");
                 return result.accepted()
                         ? CommandFeedback.accepted("")
                         : CommandFeedback.rejected(result.code().value());
@@ -196,10 +245,20 @@ public final class ScenarioScreen extends ScreenAdapter {
         @Override
         public boolean keyDown(int keycode) {
             if (keycode == Input.Keys.R) {
+                LOGGER.atInfo()
+                        .addKeyValue("event", "scenario.restart_request")
+                        .addKeyValue("scenarioId", scenario.id())
+                        .addKeyValue("tick", session.runtime().time().tick())
+                        .log("Scenario restart requested");
                 restart.run();
                 return true;
             }
             if (keycode == Input.Keys.ESCAPE) {
+                LOGGER.atInfo()
+                        .addKeyValue("event", "scenario.exit_request")
+                        .addKeyValue("scenarioId", scenario.id())
+                        .addKeyValue("tick", session.runtime().time().tick())
+                        .log("Return to scenario menu requested");
                 backToScenarios.run();
                 return true;
             }
