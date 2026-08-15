@@ -24,6 +24,8 @@ shared free-liquid foundation
 
 The shared `world.landscape.liquid` package owns generic free-liquid quantity and deterministic transport. `WaterSystem` is a typed facade for the built-in `water` identity and Water-specific systems keep their own responsibilities: Soil infiltration, precipitation/evaporation semantics, terrestrial wading and Water presentation.
 
+One free-liquid world has one authoritative `LiquidSystem` and one shared `LiquidFlowSystem`. Typed liquid integrations may adapt that shared owner for domain-specific consumers, but they must not create independent transport solvers over the same free-liquid state.
+
 The current storage model intentionally permits **one liquid type per occupied cell**. A different incoming type is not silently overwritten, coalesced or converted. If unlike liquids meet, transfer across the contact is blocked. If unlike liquids simultaneously target the same dry cell, all contested inflows are blocked rather than allowing iteration order to choose a winner.
 
 This contact rule is a temporary explicit invariant, not the intended final model of mixing.
@@ -50,6 +52,7 @@ The generic solver accepts `LiquidSurfaceRetentionLookup(type, position)`. The l
 - Water remains a semantic integration rather than becoming the definition of all liquids;
 - existing Water behavior and acceptance scenarios remain valid;
 - future liquids can reuse sparse storage, Geometry capacity, flow conservation and dormancy;
+- typed liquid facades cannot accidentally fork hydraulic authority;
 - mixing cannot happen accidentally through map overwrite or solver ordering;
 - a future composition model has a clear replacement boundary;
 - unsupported physical/chemical properties are not invented prematurely.
