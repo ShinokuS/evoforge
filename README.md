@@ -1,63 +1,82 @@
 # EvoForge
 
-EvoForge is a deterministic emergent-simulation project built with Java 21 and libGDX.
+EvoForge is a deterministic headless simulation engine with a thin libGDX desktop visualizer for development and acceptance work.
 
-The authoritative simulation lives in the pure-Java `simulation` module. libGDX modules are presentation/launcher layers and must not become owners of simulation state.
+## Current baseline
 
-## Documentation
+The accepted baseline currently includes:
 
-- [`docs/architecture.md`](docs/architecture.md) — global cross-system architecture contract.
-- [`docs/roadmap.md`](docs/roadmap.md) — milestone status and intentionally deferred work.
-- [`docs/systems/`](docs/systems/) — one canonical semantic page per implemented subsystem.
-- [`docs/decisions/`](docs/decisions/) — durable architectural rationale.
-- [`docs/guides/`](docs/guides/) — practical development recipes.
-- [`docs/notes/`](docs/notes/) — non-normative Development Journal.
+- sparse multi-Z terrain with Shape-aware Geometry;
+- exact pathfinding and MoveTo over the authoritative navigation/traversal model;
+- deterministic person needs, knowledge, search, use-actions and scheduled world processes;
+- finite Surface Water with Geometry-aware storage, Z flow, Soil infiltration, precipitation and evaporation;
+- a scenario-driven Surface/Interior/Debug-Slice visualizer with contextual interaction and diagnostics.
 
-The same Markdown is published through VitePress/GitHub Pages. There is no parallel translation or Wiki source tree.
+The current development sequence is tracked in [Roadmap](docs/roadmap.md).
 
-## Development
+## Repository layout
 
-EvoForge uses a lightweight integration workflow:
+```text
+simulation/   deterministic simulation model and tests
+core/         libGDX visualizer
+lwjgl3/       desktop launcher
+assets/       definition and presentation assets
+docs/         normative architecture/system docs and development journal
+```
 
-- `main` — stable, accepted milestone baseline;
-- `develop` — integration branch for the next milestone;
-- `feature/*` — focused production slices branched from `develop`;
-- `experiment/*` — disposable investigations that do not have to be merged.
+## Build and test
 
-Feature work returns to `develop` through pull requests and CI. A completed milestone moves from `develop` to `main` only after automated checks, documentation reconciliation and required manual acceptance; accepted `main` milestones are marked by immutable version tags.
-
-See [`docs/guides/development-workflow.md`](docs/guides/development-workflow.md) for the full branch, merge, release and recovery policy.
-
-## Modules
-
-- `simulation` — domain and simulation code, headless-testable and independent of libGDX.
-- `core` — shared libGDX application/presentation layer.
-- `lwjgl3` — desktop launcher.
-- `assets` — definitions and presentation assets.
-
-## Tests
+Java 21 is required.
 
 ```bash
-./gradlew :simulation:test --rerun-tasks --console=plain
+./gradlew test
 ```
 
-Windows:
-
-```bat
-.\gradlew.bat :simulation:test --rerun-tasks --console=plain
-```
-
-Run the full repository test suite when changing cross-module code:
+Run the desktop visualizer:
 
 ```bash
-./gradlew test --rerun-tasks --console=plain
+./gradlew lwjgl3:run
 ```
 
-Documentation:
+Build the documentation site:
 
 ```bash
 npm ci
 npm run docs:build
 ```
 
-The project uses the included Gradle wrapper. Avoid routine `clean`; normal incremental test/build tasks are preferred unless a clean build is specifically required.
+## Development model
+
+Routine work does not go directly to `main`.
+
+```text
+main
+  accepted, green milestones only
+
+develop
+  integration branch for the next milestone
+
+feature/*
+  focused production slices -> PR -> develop
+
+experiment/*
+  disposable spikes; no promise of integration
+
+hotfix/*
+  urgent recovery from main
+```
+
+Start feature work from `develop`, merge it through a pull request, prefer squash merges into `develop`, and delete the topic branch afterwards. A milestone reaches `main` only after repository tests, documentation build, normative documentation reconciliation and relevant manual/performance acceptance are complete. The preferred milestone merge is an explicit merge commit so `main` remains a readable sequence of accepted baselines.
+
+See [Development Workflow](docs/guides/development-workflow.md) and [Decision 005](docs/decisions/005-development-branching-model.md).
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
+- [Documentation guide](docs/guides/documentation.md)
+- [Development workflow](docs/guides/development-workflow.md)
+- [Visualizer controls](docs/guides/visualizer.md)
+- [System documentation](docs/systems)
+- [Architecture decisions](docs/decisions)
+- [Development journal](docs/notes)
