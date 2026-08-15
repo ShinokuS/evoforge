@@ -40,7 +40,6 @@ public final class VisualizerPerformanceTelemetry {
     private long lastNativeHeap;
 
     public void record(
-            long tick,
             float deltaSeconds,
             long frameCpuNanos,
             long updateCpuNanos,
@@ -82,7 +81,6 @@ public final class VisualizerPerformanceTelemetry {
         long sampleFrames = Math.max(1, frames);
         LOGGER.atDebug()
                 .addKeyValue("event", "perf.visualizer")
-                .addKeyValue("tick", tick)
                 .addKeyValue("fps", Gdx.graphics.getFramesPerSecond())
                 .addKeyValue("sampleFrames", sampleFrames)
                 .addKeyValue("frameAvgMs", millis(observedFrameNanos / sampleFrames))
