@@ -1,36 +1,71 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import java.util.ArrayList;
+import java.util.List;
 
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
+import io.github.evoforge.simulation.world.landscape.liquid.StandardLiquidTypes;
+import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
+
+/**
+ * Water-specific capability facade over the shared free-liquid owner.
+ *
+ * <p>Water hydrology consumers keep a narrow Water API while transport/storage
+ * mechanics live in {@link LiquidSystem}. This prevents rain, Soil and traversal
+ * semantics from becoming implicit rules for every future liquid type.
+ */
 public final class WaterSystem {
 
-    private final WaterStorage storage;
-    private final GeometryLookup geometry;
-    private final WaterLookup lookup;
-    private final WaterFlowActivity flowActivity =
-            new WaterFlowActivity();
-    private final WaterSurfaceIndex surfaceIndex =
-            new WaterSurfaceIndex();
+    private static final LiquidTypeId WATER = StandardLiquidTypes.WATER;
 
+    private final LiquidSystem liquids;
+    private final WaterLookup lookup;
+    private final WaterSurfaceLookup surfaces;
+
+    public WaterSystem(LiquidSystem liquids) {
+        if (liquids == null) {
+            throw new IllegalArgumentException("liquids must not be null");
+        }
+        this.liquids = liquids;
+        lookup = (x, y, z) -> liquids.lookup().amountOf(WATER, x, y, z);
+        surfaces = new WaterSurfaceLookup() {
+            @Override
+            public boolean hasColumn(int x, int y) {
+                return liquids.surfaces().hasColumn(WATER, x, y);
+            }
+
+            @Override
+            public int topZ(int x, int y) {
+                return liquids.surfaces().topZ(WATER, x, y);
+            }
+
+            @Override
+            public int columnCount() {
+                return liquids.surfaces().columnCount(WATER);
+            }
+
+            @Override
+            public void forEach(WaterSurfaceConsumer consumer) {
+                if (consumer == null) {
+                    throw new IllegalArgumentException("consumer must not be null");
+                }
+                liquids.surfaces().forEach(
+                        WATER,
+                        (x, y, z, type) -> consumer.accept(x, y, z));
+            }
+        };
+    }
+
+    /**
+     * Compatibility constructor for narrow Water fixtures. Production composition
+     * owns one shared {@link LiquidSystem} and uses {@link #WaterSystem(LiquidSystem)}.
+     */
     public WaterSystem(
             WaterStorage storage,
             GeometryLookup geometry) {
-
-        if (storage == null) {
-            throw new IllegalArgumentException(
-                    "storage must not be null");
-        }
-        if (geometry == null) {
-            throw new IllegalArgumentException(
-                    "geometry must not be null");
-        }
-
-        this.storage = storage;
-        this.geometry = geometry;
-        lookup = storage::amount;
+        this(new LiquidSystem(new WaterStorageAdapter(storage), geometry));
     }
 
     public WaterLookup lookup() {
@@ -38,140 +73,66 @@ public final class WaterSystem {
     }
 
     public WaterSurfaceLookup surfaces() {
-        return surfaceIndex.lookup();
+        return surfaces;
     }
 
-    /**
-     * Adds no more than {@code requested} volume and returns the amount that
-     * actually entered the cell. The operation never exceeds current geometric
-     * free capacity.
-     */
-    public int addAtMost(
-            int x,
-            int y,
-            int z,
-            int requested) {
+    public int addAtMost(int x, int y, int z, int requested) {
+        return liquids.addAtMost(WATER, x, y, z, requested);
+    }
 
-        requireNonNegative(requested);
-        if (requested == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
+    public int removeAtMost(int x, int y, int z, int requested) {
+        return liquids.removeAtMost(WATER, x, y, z, requested);
+    }
+
+    LiquidSystem liquidSystem() {
+        return liquids;
+    }
+
+    List<WaterCell> activeCellsSorted() {
+        List<WaterCell> active = new ArrayList<>();
+        liquids.forEachActive(
+                WATER,
+                (x, y, z) -> active.add(new WaterCell(x, y, z)));
+        return active;
+    }
+
+    private static final class WaterStorageAdapter implements LiquidStorage {
+        private final WaterStorage storage;
+
+        private WaterStorageAdapter(WaterStorage storage) {
+            if (storage == null) {
+                throw new IllegalArgumentException("storage must not be null");
+            }
+            this.storage = storage;
         }
 
-        int current = currentAmount(x, y, z);
-        int capacity = capacity(x, y, z);
-        int available = Math.max(
-                CellVolume.EMPTY,
-                capacity - current);
-        int added = Math.min(requested, available);
-
-        if (added == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
+        @Override
+        public LiquidTypeId typeAt(int x, int y, int z) {
+            return storage.amount(x, y, z) > 0 ? WATER : null;
         }
 
-        replaceStoredAmount(
-                x,
-                y,
-                z,
-                current + added);
-        flowActivity.activate(x, y, z);
-        return added;
-    }
-
-    /**
-     * Removes no more than {@code requested} volume and returns the amount that
-     * actually left the cell.
-     */
-    public int removeAtMost(
-            int x,
-            int y,
-            int z,
-            int requested) {
-
-        requireNonNegative(requested);
-        if (requested == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
+        @Override
+        public int amount(int x, int y, int z) {
+            return storage.amount(x, y, z);
         }
 
-        int current = currentAmount(x, y, z);
-        int removed = Math.min(requested, current);
-        if (removed == CellVolume.EMPTY) {
-            return CellVolume.EMPTY;
+        @Override
+        public void put(
+                int x,
+                int y,
+                int z,
+                LiquidTypeId type,
+                int amount) {
+            if (!WATER.equals(type)) {
+                throw new IllegalArgumentException(
+                        "Water storage adapter cannot store " + type);
+            }
+            storage.put(x, y, z, amount);
         }
 
-        int remaining = current - removed;
-        replaceStoredAmount(
-                x,
-                y,
-                z,
-                remaining);
-        flowActivity.activate(x, y, z);
-        return removed;
-    }
-
-    WaterFlowActivity flowActivity() {
-        return flowActivity;
-    }
-
-    void replaceFromFlow(
-            WaterCell cell,
-            int amount) {
-
-        replaceStoredAmount(
-                cell.x(),
-                cell.y(),
-                cell.z(),
-                amount);
-    }
-
-    private void replaceStoredAmount(
-            int x,
-            int y,
-            int z,
-            int amount) {
-
-        int validated = CellVolume.requireValid(amount);
-        int previous = currentAmount(x, y, z);
-
-        if (validated == CellVolume.EMPTY) {
+        @Override
+        public void remove(int x, int y, int z) {
             storage.remove(x, y, z);
-        } else {
-            storage.put(x, y, z, validated);
-        }
-
-        if (previous == CellVolume.EMPTY
-                && validated > CellVolume.EMPTY) {
-            surfaceIndex.becameWet(x, y, z);
-        } else if (previous > CellVolume.EMPTY
-                && validated == CellVolume.EMPTY) {
-            surfaceIndex.becameDry(x, y, z);
-        }
-    }
-
-    private int currentAmount(
-            int x,
-            int y,
-            int z) {
-
-        return CellVolume.requireValid(
-                storage.amount(x, y, z));
-    }
-
-    private int capacity(
-            int x,
-            int y,
-            int z) {
-
-        Shape shape = geometry.find(x, y, z);
-        return CellSpace.capacity(shape);
-    }
-
-    private static void requireNonNegative(
-            int requested) {
-
-        if (requested < CellVolume.EMPTY) {
-            throw new IllegalArgumentException(
-                    "requested water volume must not be negative: "
-                            + requested);
         }
     }
 }
