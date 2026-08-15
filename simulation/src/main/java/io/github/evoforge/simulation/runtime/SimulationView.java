@@ -5,11 +5,14 @@ import io.github.evoforge.simulation.world.agent.need.NeedLookup;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionLookup;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
+import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyLookup;
 import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageLookup;
+import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockLookup;
@@ -36,8 +39,11 @@ public record SimulationView(
         TerrainRevisionLookup terrainRevision,
         GeometryLookup geometry,
         SoilMoistureLookup soilMoisture,
+        SoilHydrologyLookup soilHydrology,
+        SurfaceWaterStorageLookup surfaceWaterStorage,
         WaterLookup water,
         WaterSurfaceLookup waterSurfaces,
+        WaterFlowLookup waterFlow,
         NavigationLookup navigation,
         OccupancyLookup occupancy,
         CellObjectLookup cells,
@@ -54,9 +60,11 @@ public record SimulationView(
         if (objects == null || transforms == null || orientations == null || vision == null
                 || terrain == null || terrainExtents == null || terrainSurfaces == null
                 || terrainRevision == null || geometry == null || soilMoisture == null
-                || water == null || waterSurfaces == null || navigation == null
-                || occupancy == null || cells == null || pathfinder == null || moveTo == null
-                || needs == null || needProgression == null || consumableStocks == null
+                || soilHydrology == null || surfaceWaterStorage == null
+                || water == null || waterSurfaces == null || waterFlow == null
+                || navigation == null || occupancy == null || cells == null
+                || pathfinder == null || moveTo == null || needs == null
+                || needProgression == null || consumableStocks == null
                 || growth == null || agents == null || searches == null) {
             throw new IllegalArgumentException("simulation view capabilities must not be null");
         }
