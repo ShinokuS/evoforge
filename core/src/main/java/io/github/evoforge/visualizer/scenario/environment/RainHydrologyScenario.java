@@ -26,7 +26,8 @@ public final class RainHydrologyScenario implements VisualizerScenario {
     // A 240-tick climate cycle is treated as one scenario day for rate balancing.
     private static final long CLIMATE_CYCLE_TICKS = 240L;
     private static final int RAIN_EVENT_VOLUME = 3_000;       // 3.0 mm / cycle
-    private static final int EVAPORATION_PER_TICK = 20;       // 4.8 mm / cycle gross
+    private static final long EVAPORATION_INTERVAL_TICKS = 4L;
+    private static final int EVAPORATION_PER_EVENT = 80;      // 4.8 mm / cycle gross
     private static final int VISUAL_RAIN_TICKS = 20;
     private static final int PREWARM_TICKS = 240;
 
@@ -57,8 +58,8 @@ public final class RainHydrologyScenario implements VisualizerScenario {
                 RAIN_EVENT_VOLUME,
                 CLIMATE_CYCLE_TICKS);
         assembly.periodicEvaporation(
-                EVAPORATION_PER_TICK,
-                1L);
+                EVAPORATION_PER_EVENT,
+                EVAPORATION_INTERVAL_TICKS);
 
         for (int x = MIN_X; x <= MAX_X; x++) {
             for (int y = MIN_Y; y <= MAX_Y; y++) {
