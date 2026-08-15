@@ -1,26 +1,51 @@
 package io.github.evoforge;
 
+import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.Version;
+import com.badlogic.gdx.graphics.GL20;
+import io.github.evoforge.logging.Slf4jApplicationLogger;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Launches the scenario-driven simulation debug visualizer. */
 public final class Main extends Game {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
 
     private ScenarioCatalog scenarios;
 
     @Override
     public void create() {
+        Gdx.app.setApplicationLogger(new Slf4jApplicationLogger());
+        Gdx.app.setLogLevel(Application.LOG_DEBUG);
+
+        LOGGER.atInfo()
+                .addKeyValue("event", "app.ready")
+                .addKeyValue("libgdx", Version.VERSION)
+                .addKeyValue("backend", Gdx.app.getType())
+                .addKeyValue("windowWidth", Gdx.graphics.getWidth())
+                .addKeyValue("windowHeight", Gdx.graphics.getHeight())
+                .addKeyValue("glVendor", Gdx.gl.glGetString(GL20.GL_VENDOR))
+                .addKeyValue("glRenderer", Gdx.gl.glGetString(GL20.GL_RENDERER))
+                .addKeyValue("glVersion", Gdx.gl.glGetString(GL20.GL_VERSION))
+                .log("EvoForge application ready");
+
         scenarios = ScenarioCatalog.standard();
         showScenarioMenuNow();
     }
 
     @Override
     public void dispose() {
+        LOGGER.atInfo()
+                .addKeyValue("event", "app.dispose")
+                .log("Disposing EvoForge application");
         Screen current = getScreen();
         if (current != null) {
             current.dispose();
