@@ -78,7 +78,7 @@ public final class EvaporationSystem {
 
         long requested = 0L;
         long waterRemoved = 0L;
-        long soilRemoved = 0L;
+        long retainedWaterRemoved = 0L;
         long unfulfilled = 0L;
 
         for (Column column : columns) {
@@ -90,9 +90,9 @@ public final class EvaporationSystem {
             waterRemoved = Math.addExact(
                     waterRemoved,
                     result.surfaceWaterRemoved());
-            soilRemoved = Math.addExact(
-                    soilRemoved,
-                    result.soilMoistureRemoved());
+            retainedWaterRemoved = Math.addExact(
+                    retainedWaterRemoved,
+                    result.retainedWaterRemoved());
             unfulfilled = Math.addExact(
                     unfulfilled,
                     result.unfulfilled());
@@ -102,7 +102,7 @@ public final class EvaporationSystem {
                 columns.size(),
                 requested,
                 waterRemoved,
-                soilRemoved,
+                retainedWaterRemoved,
                 unfulfilled);
     }
 
@@ -113,7 +113,7 @@ public final class EvaporationSystem {
 
         int remaining = requested;
         int waterRemoved = CellVolume.EMPTY;
-        int soilRemoved = CellVolume.EMPTY;
+        int retainedWaterRemoved = CellVolume.EMPTY;
 
         while (remaining > CellVolume.EMPTY) {
             SkySurface surface = skySurfaces.find(x, y);
@@ -150,7 +150,7 @@ public final class EvaporationSystem {
                             y,
                             surface.z(),
                             remaining);
-                    soilRemoved += removed;
+                    retainedWaterRemoved += removed;
                     remaining -= removed;
                     removedThisPass += removed;
                 }
@@ -164,7 +164,7 @@ public final class EvaporationSystem {
         return new EvaporationResult(
                 requested,
                 waterRemoved,
-                soilRemoved,
+                retainedWaterRemoved,
                 remaining);
     }
 
