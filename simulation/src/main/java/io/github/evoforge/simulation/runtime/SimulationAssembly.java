@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.runtime;
 
 import io.github.evoforge.simulation.control.core.CommandDispatcher;
+import io.github.evoforge.simulation.control.movement.CancelMoveToCommand;
+import io.github.evoforge.simulation.control.movement.CancelMoveToHandler;
 import io.github.evoforge.simulation.control.movement.MoveStepCommand;
 import io.github.evoforge.simulation.control.movement.MoveStepHandler;
 import io.github.evoforge.simulation.control.movement.MoveToCommand;
@@ -274,14 +276,35 @@ public final class SimulationAssembly {
         return this;
     }
 
+    public SimulationAssembly precipitation(
+            PrecipitationSchedule schedule) {
+        requireNotStarted();
+        if (schedule == null) {
+            throw new IllegalArgumentException(
+                    "precipitation schedule must not be null");
+        }
+        precipitationSchedule = schedule;
+        return this;
+    }
+
     public SimulationAssembly periodicPrecipitation(
             int amountPerColumn,
             long intervalTicks) {
-        requireNotStarted();
-        precipitationSchedule = new PrecipitationSchedule(
+        return precipitation(new PrecipitationSchedule(
                 amountPerColumn,
-                intervalTicks);
-        return this;
+                intervalTicks));
+    }
+
+    public SimulationAssembly cyclicPrecipitation(
+            int amountPerColumn,
+            long intervalTicks,
+            long activeTicks,
+            long cycleTicks) {
+        return precipitation(PrecipitationSchedule.cyclic(
+                amountPerColumn,
+                intervalTicks,
+                activeTicks,
+                cycleTicks));
     }
 
     public SimulationAssembly periodicEvaporation(
@@ -766,6 +789,7 @@ public final class SimulationAssembly {
         dispatcher.register(ReplaceTerrainCommand.class, new ReplaceTerrainHandler(landscape));
         dispatcher.register(MoveStepCommand.class, new MoveStepHandler(movement));
         dispatcher.register(MoveToCommand.class, new MoveToHandler(moveTo));
+        dispatcher.register(CancelMoveToCommand.class, new CancelMoveToHandler(moveTo));
 
         SimulationView view = new SimulationView(
                 objects,

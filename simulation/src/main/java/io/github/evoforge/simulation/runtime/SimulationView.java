@@ -18,7 +18,7 @@ import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthLookup;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToLookup;
+import io.github.evoforge.simulation.world.mechanics.movement.MoveToView;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
@@ -48,7 +48,7 @@ public record SimulationView(
         OccupancyLookup occupancy,
         CellObjectLookup cells,
         Pathfinder pathfinder,
-        MoveToLookup moveTo,
+        MoveToView moveTo,
         NeedLookup needs,
         NeedProgressionLookup needProgression,
         ConsumableStockLookup consumableStocks,

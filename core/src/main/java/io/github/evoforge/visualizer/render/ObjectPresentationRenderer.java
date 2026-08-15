@@ -11,9 +11,11 @@ import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import io.github.evoforge.visualizer.VisualizerState;
+import io.github.evoforge.visualizer.VisualizerViewMode;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentation;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.presentation.object.ObjectVisualFamily;
+import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
 
 /** Presentation-only procedural object art driven exclusively by read-only simulation state. */
 public final class ObjectPresentationRenderer {
@@ -37,6 +39,7 @@ public final class ObjectPresentationRenderer {
     private final VisualizerState state;
     private final VisualizerCamera camera;
     private final ObjectPresentationBindings bindings;
+    private final SurfaceProjectionResolver surfaces;
     private final ShapeRenderer shapes = new ShapeRenderer();
 
     public ObjectPresentationRenderer(
@@ -53,6 +56,7 @@ public final class ObjectPresentationRenderer {
         this.state = state;
         this.camera = camera;
         this.bindings = bindings;
+        surfaces = new SurfaceProjectionResolver(view);
     }
 
     public void draw(VisualizerCamera.VisibleRange range) {
@@ -60,9 +64,11 @@ public final class ObjectPresentationRenderer {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int x = range.minX(); x <= range.maxX(); x++) {
             for (int y = range.minY(); y <= range.maxY(); y++) {
-                int count = view.cells().objectCount(x, y, state.selectedZ());
+                int z = visibleZ(x, y);
+                if (z == SurfaceProjectionResolver.NO_Z) continue;
+                int count = view.cells().objectCount(x, y, z);
                 for (int index = 0; index < count; index++) {
-                    ObjectId id = view.cells().objectAt(x, y, state.selectedZ(), index);
+                    ObjectId id = view.cells().objectAt(x, y, z, index);
                     WorldObject object = view.objects().get(id);
                     if (object == null) continue;
                     ObjectPresentation presentation = bindings.get(object.definitionId());
@@ -86,6 +92,22 @@ public final class ObjectPresentationRenderer {
 
     public void dispose() {
         shapes.dispose();
+    }
+
+    private int visibleZ(int x, int y) {
+        if (state.viewMode() == VisualizerViewMode.SURFACE) {
+            return surfaces.standingZ(x, y);
+        }
+        if (state.viewMode() == VisualizerViewMode.INTERIOR) {
+            if (state.interior() == null
+                    || x < state.interior().minX() || x > state.interior().maxX()
+                    || y < state.interior().minY() || y > state.interior().maxY()
+                    || state.selectedZ() < state.interior().minZ()
+                    || state.selectedZ() > state.interior().maxZ()) {
+                return SurfaceProjectionResolver.NO_Z;
+            }
+        }
+        return state.selectedZ();
     }
 
     private void drawGeneric(WorldObject object, float cx, float cy) {

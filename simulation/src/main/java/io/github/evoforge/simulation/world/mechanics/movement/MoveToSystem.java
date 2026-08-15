@@ -19,7 +19,7 @@ import java.util.Map;
  */
 public final class MoveToSystem
         implements MovementStepCompletionSink,
-        MoveToLookup {
+        MoveToView {
 
     private static final int PATH_EXPANSION_CHUNK = 4096;
 
@@ -31,6 +31,12 @@ public final class MoveToSystem
             ResultCode.of("movement", "no_path");
     private static final ResultCode PATH_STALE =
             ResultCode.of("movement", "path_stale");
+    private static final ResultCode CANCEL_REQUESTED =
+            ResultCode.of("movement", "move_to_cancel_requested");
+    private static final ResultCode CANCELLED =
+            ResultCode.of("movement", "move_to_cancelled");
+    private static final ResultCode NO_ACTIVE_MOVE_TO =
+            ResultCode.of("movement", "no_active_move_to");
 
     private final TransformLookup transforms;
     private final Pathfinder pathfinder;
@@ -149,6 +155,56 @@ public final class MoveToSystem
                 actionId);
     }
 
+    /**
+     * Starts disposable planning with the same mover-specific constraint composition
+     * as authoritative MoveTo, but without acquiring a movement claim.
+     */
+    @Override
+    public PathSearch beginPreview(
+            ObjectId objectId,
+            int goalX,
+            int goalY,
+            int goalZ) {
+
+        if (objectId == null) {
+            throw new IllegalArgumentException("objectId must not be null");
+        }
+        if (!transforms.has(objectId)) {
+            throw new IllegalArgumentException("object has no transform: " + objectId);
+        }
+        return beginPathSearch(
+                objectId,
+                goalX,
+                goalY,
+                goalZ,
+                PathTransitionConstraint.ALLOW_ALL);
+    }
+
+    /**
+     * Requests cancellation of an active long-range order.
+     *
+     * <p>An already scheduled atomic Movement edge is allowed to complete so its
+     * occupancy reservation and scheduler state remain consistent. No further edge
+     * is started after that completion. If no edge is currently active, cancellation
+     * completes immediately.</p>
+     */
+    public MoveToCancelAttempt cancel(ObjectId objectId) {
+        if (objectId == null) {
+            throw new IllegalArgumentException("objectId must not be null");
+        }
+
+        ActiveMoveTo active = activeByObject.get(objectId);
+        if (active == null) {
+            return MoveToCancelAttempt.rejected(NO_ACTIVE_MOVE_TO);
+        }
+
+        active.cancelRequested = true;
+        if (active.childActionId == null) {
+            finish(active, false, CANCELLED);
+        }
+        return MoveToCancelAttempt.accepted(CANCEL_REQUESTED);
+    }
+
     @Override
     public void completed(
             MovementStepCompletion completion) {
@@ -170,6 +226,11 @@ public final class MoveToSystem
                     "movement completion does not match active MoveTo child");
         }
         active.childActionId = null;
+
+        if (active.cancelRequested) {
+            finish(active, false, CANCELLED);
+            return;
+        }
 
         if (!completion.committed()) {
             finish(
@@ -230,28 +291,12 @@ public final class MoveToSystem
                             + active.objectId);
         }
 
-        PathTransitionConstraint constraint =
-                queryConstraints.constraintFor(
-                        active.objectId,
-                        active.constraint);
-        if (constraint == null) {
-            throw new IllegalStateException(
-                    "MoveTo query constraint provider returned null");
-        }
-
-        PathSearch search = pathfinder.begin(
-                PathQuery.between(
-                                transforms.x(active.objectId),
-                                transforms.y(active.objectId),
-                                transforms.z(active.objectId),
-                                active.goalX,
-                                active.goalY,
-                                active.goalZ)
-                        .withConstraint(constraint));
-        if (search == null) {
-            throw new IllegalStateException(
-                    "pathfinder returned null search");
-        }
+        PathSearch search = beginPathSearch(
+                active.objectId,
+                active.goalX,
+                active.goalY,
+                active.goalZ,
+                active.constraint);
 
         PathSearchStatus status = search.status();
         while (status == PathSearchStatus.RUNNING) {
@@ -285,6 +330,36 @@ public final class MoveToSystem
         startNextStep(active);
     }
 
+    private PathSearch beginPathSearch(
+            ObjectId objectId,
+            int goalX,
+            int goalY,
+            int goalZ,
+            PathTransitionConstraint callerConstraint) {
+
+        PathTransitionConstraint constraint =
+                queryConstraints.constraintFor(objectId, callerConstraint);
+        if (constraint == null) {
+            throw new IllegalStateException(
+                    "MoveTo query constraint provider returned null");
+        }
+
+        PathSearch search = pathfinder.begin(
+                PathQuery.between(
+                                transforms.x(objectId),
+                                transforms.y(objectId),
+                                transforms.z(objectId),
+                                goalX,
+                                goalY,
+                                goalZ)
+                        .withConstraint(constraint));
+        if (search == null) {
+            throw new IllegalStateException(
+                    "pathfinder returned null search");
+        }
+        return search;
+    }
+
     private void startNextStep(
             ActiveMoveTo active) {
 
@@ -295,6 +370,10 @@ public final class MoveToSystem
         if (active.childActionId != null) {
             throw new IllegalStateException(
                     "MoveTo already has an active movement child");
+        }
+        if (active.cancelRequested) {
+            finish(active, false, CANCELLED);
+            return;
         }
 
         if (active.nextStepIndex >= active.route.size()) {
@@ -418,6 +497,7 @@ public final class MoveToSystem
         private PathRoute route;
         private int nextStepIndex;
         private MovementActionId childActionId;
+        private boolean cancelRequested;
 
         private ActiveMoveTo(
                 MoveToActionId actionId,

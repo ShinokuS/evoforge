@@ -14,9 +14,10 @@ import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLoo
  */
 public final class RainRenderer {
 
-    private static final int MAX_STREAKS = 96;
-    private static final int FAR_STREAKS = 32;
-    private static final float OFFSCREEN_MARGIN = 32f;
+    static final int MAX_STREAKS = 160;
+    private static final int MIN_STREAKS = 44;
+    private static final int FAR_STREAKS = 48;
+    private static final float OFFSCREEN_MARGIN = 40f;
 
     private WeatherPresentationLookup weather;
     private final ShapeRenderer shapes = new ShapeRenderer();
@@ -68,10 +69,8 @@ public final class RainRenderer {
             return;
         }
 
-        float intensity = current.intensity();
-        int active = Math.min(
-                MAX_STREAKS,
-                20 + Math.round((MAX_STREAKS - 20) * intensity));
+        float intensity = clamp01(current.intensity());
+        int active = activeStreakCount(intensity);
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(
@@ -79,14 +78,14 @@ public final class RainRenderer {
                 GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.setProjectionMatrix(projection);
 
-        // One translucent veil gives the scene a rainy atmosphere without a
-        // framebuffer/post-processing pass.
+        // A restrained veil makes the weather state immediately legible while the
+        // streaks still carry the visible falling direction.
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(
-                0.08f,
-                0.13f,
+                0.07f,
+                0.12f,
                 0.16f,
-                0.035f + 0.055f * intensity);
+                0.050f + 0.075f * intensity);
         shapes.rect(0f, 0f, width, height);
         shapes.end();
 
@@ -96,26 +95,33 @@ public final class RainRenderer {
         int farCount = Math.min(FAR_STREAKS, active);
         shapes.setColor(
                 0.62f,
-                0.78f,
-                0.86f,
-                0.22f + 0.10f * intensity);
+                0.80f,
+                0.90f,
+                0.30f + 0.16f * intensity);
         for (int index = 0; index < farCount; index++) {
-            drawStreak(index, presentationSeconds, 230f, 7f, 3f);
+            drawStreak(index, presentationSeconds, 270f, 12f, 4f);
         }
 
         shapes.setColor(
-                0.74f,
-                0.88f,
-                0.94f,
-                0.32f + 0.16f * intensity);
+                0.82f,
+                0.93f,
+                0.98f,
+                0.46f + 0.26f * intensity);
         for (int index = farCount; index < active; index++) {
-            drawStreak(index, presentationSeconds, 390f, 12f, 5f);
+            drawStreak(index, presentationSeconds, 470f, 21f, 7f);
         }
         shapes.end();
     }
 
     public void dispose() {
         shapes.dispose();
+    }
+
+    static int activeStreakCount(float intensity) {
+        float clamped = clamp01(intensity);
+        return Math.min(
+                MAX_STREAKS,
+                MIN_STREAKS + Math.round((MAX_STREAKS - MIN_STREAKS) * clamped));
     }
 
     private void drawStreak(
@@ -134,7 +140,7 @@ public final class RainRenderer {
         float x = positiveModulo(
                 seedX[index] * spanX + travel * 0.18f,
                 spanX) - OFFSCREEN_MARGIN;
-        float variance = 0.80f + seedX[index] * 0.35f;
+        float variance = 0.78f + seedX[index] * 0.38f;
         shapes.line(
                 x,
                 y,
@@ -165,5 +171,9 @@ public final class RainRenderer {
 
         float result = value % modulus;
         return result < 0f ? result + modulus : result;
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
     }
 }
