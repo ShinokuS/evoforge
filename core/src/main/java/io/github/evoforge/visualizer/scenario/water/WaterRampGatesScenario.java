@@ -70,7 +70,7 @@ public final class WaterRampGatesScenario implements VisualizerScenario {
         assembly.initialWater(7, -2, 0, 700_000);
 
         SimulationRuntime runtime =
-                WaterScenarioSupport.startAndAdvance(assembly, 10);
+                WaterScenarioSupport.startAndAdvance(assembly, 24);
         WaterScenarioDiagnostics diagnostics = new WaterScenarioDiagnostics(
                 runtime, MIN_X, MAX_X, MIN_Y, MAX_Y, 0, 1);
 
