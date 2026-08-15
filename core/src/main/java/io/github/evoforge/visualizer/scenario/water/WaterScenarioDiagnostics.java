@@ -6,7 +6,7 @@ import io.github.evoforge.visualizer.scenario.ScenarioController;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 
 /** Small bounded diagnostics for focused Water acceptance worlds. */
-final class WaterScenarioDiagnostics implements ScenarioController {
+public final class WaterScenarioDiagnostics implements ScenarioController {
 
     private final SimulationRuntime runtime;
     private final int minX;
@@ -18,7 +18,7 @@ final class WaterScenarioDiagnostics implements ScenarioController {
     private ScenarioDiagnostics diagnostics = ScenarioDiagnostics.NONE;
     private long lastTick = Long.MIN_VALUE;
 
-    WaterScenarioDiagnostics(
+    public WaterScenarioDiagnostics(
             SimulationRuntime runtime,
             int minX,
             int maxX,
