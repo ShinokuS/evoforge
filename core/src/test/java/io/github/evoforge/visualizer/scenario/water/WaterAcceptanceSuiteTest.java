@@ -47,6 +47,9 @@ final class WaterAcceptanceSuiteTest {
                     runtime.view().water().amount(-1, y, 0),
                     "FullShape barrier must never contain Water");
         }
+        assertTrue(
+                sumWater(runtime, 0, 2, -6, 0, 0) > 0L,
+                "Water must route around the open end instead of stopping at the barrier");
 
         assertTrue(
                 runtime.view().water().amount(6, 2, 0) > 0,
