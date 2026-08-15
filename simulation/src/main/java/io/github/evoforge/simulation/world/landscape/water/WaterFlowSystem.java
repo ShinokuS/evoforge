@@ -386,16 +386,43 @@ public final class WaterFlowSystem {
         for (Map.Entry<WaterCell, List<MutableTransfer>> entry
                 : outgoing.entrySet()) {
 
+            WaterCell source = entry.getKey();
             List<MutableTransfer> group = entry.getValue();
             group.sort(Comparator.comparing(
                     transfer -> transfer.destination));
 
-            int sourceAmount = amount(entry.getKey());
+            int sourceAmount = amount(source);
             int relaxedSourceLimit =
                     sourceAmount / RELAXATION_DIVISOR;
             proportionallyLimit(
                     group,
                     relaxedSourceLimit);
+
+            int verticalOut = CellVolume.EMPTY;
+            List<MutableTransfer> horizontal = new ArrayList<>();
+            for (MutableTransfer transfer : group) {
+                if (transfer.destination.z() != source.z()) {
+                    verticalOut = Math.addExact(
+                            verticalOut,
+                            transfer.amount);
+                } else {
+                    horizontal.add(transfer);
+                }
+            }
+
+            if (!horizontal.isEmpty()) {
+                int retainedSurface = CellVolume.requireValid(
+                        surfaceStorage.capacityAtWaterCell(
+                                source.x(),
+                                source.y(),
+                                source.z()));
+                int horizontalLimit = Math.max(
+                        CellVolume.EMPTY,
+                        sourceAmount - verticalOut - retainedSurface);
+                proportionallyLimit(
+                        horizontal,
+                        horizontalLimit);
+            }
         }
     }
 
