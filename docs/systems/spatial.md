@@ -7,18 +7,22 @@ Own authoritative positions of runtime `WorldObject` instances and maintain inde
 ## Owns
 
 ```text
-ObjectId → (x, y, z)
+ObjectId -> (x, y, z)
 ```
 
-`SpatialSystem` is the sole authoritative object-position owner. `ObjectSpatialIndex` / cell lookup are derived indexes used for efficient spatial reads.
+`SpatialSystem` is the sole authoritative object-position owner. `CellSpatialIndex` / `CellObjectLookup` are derived indexes used for efficient cell-oriented reads.
 
 ## Does not own
 
-Terrain, water, temperature or other environmental state merely because those systems also use XYZ addresses.
+Terrain, Water, SoilMoisture, temperature or other environmental state merely because those systems also use XYZ addresses.
+
+Finite runtime containment is likewise not a second Spatial coordinate owner. `SimulationAssembly` rejects setup placement outside configured `WorldBounds`, while shared Geometry closes out-of-bounds physical space for runtime consumers.
 
 ## Movement relationship
 
 Timed Movement does not create a second authoritative position. While an action is in flight, Spatial remains at the source. Only successful completion-time revalidation authorizes the final `SpatialSystem.move` to the destination.
+
+Occupancy derives physical `OCCUPIED` state from current object positions and owns only execution reservations; it does not duplicate authoritative XYZ.
 
 ## Presentation relationship
 
@@ -26,4 +30,4 @@ The visualizer reads objects by visible cells through `CellObjectLookup`; it doe
 
 ## Deferred
 
-Occupancy/reservations are a separate dynamic-availability concern and must not be hidden inside Spatial indexes.
+Multi-cell footprints, packed coordinates, chunk-aware indexes and streaming/persistence representations remain separate future decisions. They must preserve the same authoritative position contract.
