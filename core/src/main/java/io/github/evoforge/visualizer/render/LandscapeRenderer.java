@@ -9,10 +9,14 @@ import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.visual.LandscapeSliceResolver;
 import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Draws authoritative landscape using geometry-derived cutaway visibility. */
 public final class LandscapeRenderer {
 
+    private static final Logger PERFORMANCE_LOGGER = LoggerFactory.getLogger(
+            "io.github.evoforge.visualizer.performance.landscape");
     private static final int EXPOSURE_DISTANCE = 12;
     private static final int STANDING_Z_CACHE_RADIUS = 4;
     private static final int MIN_ANALYSIS_PADDING = 8;
@@ -213,21 +217,21 @@ public final class LandscapeRenderer {
         }
 
         long frames = Math.max(1, perfFrames);
-        Gdx.app.log(
-                "VisualizerPerf",
-                "fps=" + Gdx.graphics.getFramesPerSecond()
-                        + " visible=" + lastVisibleCells
-                        + " landscape avg/max="
-                        + millis(perfLandscapeNanos / frames)
-                        + "/" + millis(perfMaxLandscapeNanos) + "ms"
-                        + " analysis avg/max="
-                        + millis(perfAnalysisNanos / frames)
-                        + "/" + millis(perfMaxAnalysisNanos) + "ms"
-                        + " cache hit/miss="
-                        + perfCacheHits + "/" + perfCacheMisses
-                        + " padding=" + lastAnalysisPadding
-                        + " cached=" + cachedEntryCount()
-                        + " zRadius=" + STANDING_Z_CACHE_RADIUS);
+        PERFORMANCE_LOGGER.atDebug()
+                .addKeyValue("event", "perf.landscape")
+                .addKeyValue("fps", Gdx.graphics.getFramesPerSecond())
+                .addKeyValue("sampleFrames", frames)
+                .addKeyValue("visibleCells", lastVisibleCells)
+                .addKeyValue("landscapeAvgMs", millis(perfLandscapeNanos / frames))
+                .addKeyValue("landscapeMaxMs", millis(perfMaxLandscapeNanos))
+                .addKeyValue("analysisAvgMs", millis(perfAnalysisNanos / frames))
+                .addKeyValue("analysisMaxMs", millis(perfMaxAnalysisNanos))
+                .addKeyValue("cacheHits", perfCacheHits)
+                .addKeyValue("cacheMisses", perfCacheMisses)
+                .addKeyValue("analysisPadding", lastAnalysisPadding)
+                .addKeyValue("cachedEntries", cachedEntryCount())
+                .addKeyValue("standingZCacheRadius", STANDING_Z_CACHE_RADIUS)
+                .log("Landscape performance window");
 
         perfWindowStartNanos = now;
         perfAnalysisNanos = 0L;
