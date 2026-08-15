@@ -60,10 +60,13 @@ import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSurfaceRetentionLookup;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
+import io.github.evoforge.simulation.world.landscape.liquid.SurfaceRetentionDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.TerrainSurfaceRetentionLookup;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidInfiltrationSystem;
 import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
@@ -75,9 +78,6 @@ import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesVariatio
 import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
-import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageDefinitions;
-import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageLookup;
-import io.github.evoforge.simulation.world.landscape.water.TerrainSurfaceWaterStorageLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
@@ -139,7 +139,7 @@ public final class SimulationAssembly {
     private final LandscapeTraversalDefinitions landscapeTraversalDefinitions;
     private final SoilPropertiesDefinitions soilPropertiesDefinitions;
     private final SoilPropertiesVariationDefinitions soilPropertiesVariationDefinitions;
-    private final SurfaceWaterStorageDefinitions surfaceWaterStorageDefinitions;
+    private final SurfaceRetentionDefinitions surfaceRetentionDefinitions;
     private final LiquidTransportDefinitions liquidTransportDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
@@ -181,7 +181,7 @@ public final class SimulationAssembly {
         landscapeTraversalDefinitions = new LandscapeTraversalDefinitions();
         soilPropertiesDefinitions = new SoilPropertiesDefinitions();
         soilPropertiesVariationDefinitions = new SoilPropertiesVariationDefinitions();
-        surfaceWaterStorageDefinitions = new SurfaceWaterStorageDefinitions();
+        surfaceRetentionDefinitions = new SurfaceRetentionDefinitions();
         liquidTransportDefinitions = new LiquidTransportDefinitions();
         liquidTransportDefinitions.put(
                 WaterSystem.TYPE,
@@ -224,11 +224,6 @@ public final class SimulationAssembly {
 
     public static SimulationAssembly create() { return new SimulationAssembly(); }
 
-    /**
-     * Closes the simulation inside one inclusive integer box. Outside coordinates
-     * become physically solid to Geometry consumers while unconfigured assemblies
-     * preserve the historical unbounded-world behavior.
-     */
     public SimulationAssembly worldBounds(
             int minX,
             int maxX,
@@ -253,7 +248,6 @@ public final class SimulationAssembly {
         return definitionId;
     }
 
-    /** Declares physical porous properties for one landscape material. */
     public SimulationAssembly soilProperties(
             LandscapeDefinitionId definitionId,
             int capacity,
@@ -266,7 +260,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Adds deterministic coordinate-local variation to a material Soil capacity. */
     public SimulationAssembly soilPropertiesVariation(
             LandscapeDefinitionId definitionId,
             long seed,
@@ -279,7 +272,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Declares physical transport data for an open liquid identity. */
     public SimulationAssembly liquidTransport(
             LiquidTypeId type,
             long kinematicViscositySquareMicrometersPerSecond) {
@@ -291,13 +283,13 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Declares how much free Water a material surface retains before horizontal runoff. */
-    public SimulationAssembly surfaceWaterStorage(
+    /** Declares material microtopography that retains free liquid before horizontal runoff. */
+    public SimulationAssembly surfaceRetention(
             LandscapeDefinitionId definitionId,
             int capacity) {
         requireNotStarted();
         requireLandscapeDefinition(definitionId);
-        surfaceWaterStorageDefinitions.put(definitionId, capacity);
+        surfaceRetentionDefinitions.put(definitionId, capacity);
         return this;
     }
 
@@ -518,7 +510,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Adds exact finite free liquid during setup. */
     public SimulationAssembly initialLiquid(
             LiquidTypeId type,
             int x,
@@ -541,7 +532,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Adds exact finite Water during setup without creating a precipitation source. */
     public SimulationAssembly initialWater(int x, int y, int z, int amount) {
         return initialLiquid(WaterSystem.TYPE, x, y, z, amount);
     }
@@ -553,7 +543,7 @@ public final class SimulationAssembly {
         landscapeTraversalDefinitions.freeze();
         soilPropertiesDefinitions.freeze();
         soilPropertiesVariationDefinitions.freeze();
-        surfaceWaterStorageDefinitions.freeze();
+        surfaceRetentionDefinitions.freeze();
         liquidTransportDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
@@ -581,16 +571,14 @@ public final class SimulationAssembly {
         SimulationClock clock = new SimulationClock();
         SimulationStepper stepper = new SimulationStepper(clock, scheduler);
 
-        SurfaceWaterStorageLookup surfaceStorage =
-                new TerrainSurfaceWaterStorageLookup(
+        LiquidSurfaceRetentionLookup surfaceRetention =
+                new TerrainSurfaceRetentionLookup(
                         landscape.terrain(),
-                        surfaceWaterStorageDefinitions);
+                        surfaceRetentionDefinitions);
         LiquidFlowSystem liquidFlow = new LiquidFlowSystem(
                 liquids,
                 worldGeometry,
-                (type, x, y, z) -> WaterSystem.TYPE.equals(type)
-                        ? surfaceStorage.capacityAtWaterCell(x, y, z)
-                        : 0,
+                surfaceRetention,
                 liquidTransportDefinitions);
         SoilLiquidInfiltrationSystem infiltration = new SoilLiquidInfiltrationSystem(
                 liquids,
@@ -830,7 +818,7 @@ public final class SimulationAssembly {
                 worldGeometry,
                 soilLiquids.lookup(),
                 soilProperties,
-                surfaceStorage,
+                surfaceRetention,
                 water.lookup(),
                 water.surfaces(),
                 WaterFlowLookup.from(liquidFlow.flowLookup()),
