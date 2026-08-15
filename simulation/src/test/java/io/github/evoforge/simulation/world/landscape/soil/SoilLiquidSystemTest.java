@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 
@@ -14,7 +16,7 @@ final class SoilLiquidSystemTest {
 
     @Test
     void severalRetainedLiquidsShareOneMaterialOwnedPoreCapacity() {
-        SoilLiquidSystem soil = soil(10_000, 10_000);
+        SoilLiquidSystem soil = soil(10_000, 10_000, referenceTransport());
 
         assertEquals(6_000, soil.infiltrateAtMost(WATER, 1, 2, 3, 6_000));
         assertEquals(4_000, soil.infiltrateAtMost(BLOOD, 1, 2, 3, 6_000));
@@ -28,24 +30,32 @@ final class SoilLiquidSystemTest {
     }
 
     @Test
-    void liquidMaterialInteractionCanVaryUptakeWithoutChangingStorageModel() {
-        SoilLiquidInteractionLookup interactions =
-                (type, x, y, z, hydrology) -> BLOOD.equals(type)
-                        ? 2_000
-                        : hydrology.infiltrationLimit();
-        SoilLiquidSystem soil = new SoilLiquidSystem(
-                new SparseSoilLiquidStorage(),
-                (x, y, z) -> new SoilHydrology(20_000, 8_000),
-                interactions);
+    void sameMaterialPermeabilityProducesSlowerUptakeForMoreViscousLiquid() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WATER, LiquidTransportProperties.reference());
+        transport.put(
+                BLOOD,
+                LiquidTransportProperties.ofKinematicViscosity(
+                        LiquidTransportProperties.REFERENCE_KINEMATIC_VISCOSITY * 2L));
+        SoilLiquidSystem soil = soil(100_000, 8_000, transport);
 
-        assertEquals(2_000, soil.infiltrateAtMost(BLOOD, 0, 0, 0, 10_000));
-        assertEquals(8_000, soil.infiltrateAtMost(WATER, 0, 0, 0, 10_000));
-        assertEquals(10_000, soil.lookup().totalAmount(0, 0, 0));
+        assertEquals(8_000, soil.infiltrateAtMost(WATER, 0, 0, 0, 20_000));
+        assertEquals(4_000, soil.infiltrateAtMost(BLOOD, 1, 0, 0, 20_000));
+    }
+
+    @Test
+    void permeabilityAloneChangesUptakeForSameLiquid() {
+        LiquidTransportDefinitions transport = referenceTransport();
+        SoilLiquidSystem fast = soil(100_000, 12_000, transport);
+        SoilLiquidSystem slow = soil(100_000, 3_000, transport);
+
+        assertEquals(12_000, fast.infiltrateAtMost(WATER, 0, 0, 0, 20_000));
+        assertEquals(3_000, slow.infiltrateAtMost(WATER, 0, 0, 0, 20_000));
     }
 
     @Test
     void removingOneConstituentPreservesOtherRetainedComposition() {
-        SoilLiquidSystem soil = soil(20_000, 20_000);
+        SoilLiquidSystem soil = soil(20_000, 20_000, referenceTransport());
         soil.infiltrateAtMost(WATER, 0, 0, 0, 7_000);
         soil.infiltrateAtMost(BLOOD, 0, 0, 0, 5_000);
 
@@ -58,22 +68,20 @@ final class SoilLiquidSystemTest {
         assertEquals(0, soil.cells().cellCount(BLOOD));
     }
 
-    @Test
-    void moistureFacadeProjectsOnlyItsConfiguredConstituent() {
-        SoilLiquidSystem retained = soil(20_000, 20_000);
-        SoilMoistureSystem moisture = new SoilMoistureSystem(retained, WATER);
-
-        retained.infiltrateAtMost(BLOOD, 0, 0, 0, 4_000);
-        retained.infiltrateAtMost(WATER, 0, 0, 0, 3_000);
-
-        assertEquals(3_000, moisture.lookup().amount(0, 0, 0));
-        assertEquals(1, moisture.cells().wetCellCount());
-        assertEquals(7_000, retained.lookup().totalAmount(0, 0, 0));
-    }
-
-    private static SoilLiquidSystem soil(int capacity, int infiltrationLimit) {
+    private static SoilLiquidSystem soil(
+            int capacity,
+            int permeability,
+            LiquidTransportDefinitions transport) {
         return new SoilLiquidSystem(
                 new SparseSoilLiquidStorage(),
-                (x, y, z) -> new SoilHydrology(capacity, infiltrationLimit));
+                (x, y, z) -> new SoilProperties(capacity, permeability),
+                transport);
+    }
+
+    private static LiquidTransportDefinitions referenceTransport() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WATER, LiquidTransportProperties.reference());
+        transport.put(BLOOD, LiquidTransportProperties.reference());
+        return transport;
     }
 }
