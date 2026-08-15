@@ -5,13 +5,13 @@ import io.github.evoforge.simulation.world.agent.need.NeedLookup;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionLookup;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSurfaceRetentionLookup;
 import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidLookup;
 import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
@@ -40,7 +40,7 @@ public record SimulationView(
         GeometryLookup geometry,
         SoilLiquidLookup soilLiquids,
         SoilPropertiesLookup soilProperties,
-        SurfaceWaterStorageLookup surfaceWaterStorage,
+        LiquidSurfaceRetentionLookup surfaceRetention,
         WaterLookup water,
         WaterSurfaceLookup waterSurfaces,
         WaterFlowLookup waterFlow,
@@ -60,7 +60,7 @@ public record SimulationView(
         if (objects == null || transforms == null || orientations == null || vision == null
                 || terrain == null || terrainExtents == null || terrainSurfaces == null
                 || terrainRevision == null || geometry == null || soilLiquids == null
-                || soilProperties == null || surfaceWaterStorage == null
+                || soilProperties == null || surfaceRetention == null
                 || water == null || waterSurfaces == null || waterFlow == null
                 || navigation == null || occupancy == null || cells == null
                 || pathfinder == null || moveTo == null || needs == null
