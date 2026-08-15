@@ -58,11 +58,18 @@ import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyVariation;
+import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyVariationDefinitions;
 import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilHydrologyLookup;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageDefinitions;
+import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageLookup;
+import io.github.evoforge.simulation.world.landscape.water.TerrainSurfaceWaterStorageLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterFlowProcess;
 import io.github.evoforge.simulation.world.landscape.water.WaterFlowSystem;
+import io.github.evoforge.simulation.world.landscape.water.WaterSoilExchangeSystem;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
@@ -123,6 +130,8 @@ public final class SimulationAssembly {
     private final DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions;
     private final LandscapeTraversalDefinitions landscapeTraversalDefinitions;
     private final SoilHydrologyDefinitions soilHydrologyDefinitions;
+    private final SoilHydrologyVariationDefinitions soilHydrologyVariationDefinitions;
+    private final SurfaceWaterStorageDefinitions surfaceWaterStorageDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
     private final WaterWadingDefinitions waterWadingDefinitions;
@@ -160,6 +169,8 @@ public final class SimulationAssembly {
         landscapeDefinitions = new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
         landscapeTraversalDefinitions = new LandscapeTraversalDefinitions();
         soilHydrologyDefinitions = new SoilHydrologyDefinitions();
+        soilHydrologyVariationDefinitions = new SoilHydrologyVariationDefinitions();
+        surfaceWaterStorageDefinitions = new SurfaceWaterStorageDefinitions();
         objectDefinitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
         movementDefinitions = new MovementDefinitions();
         waterWadingDefinitions = new WaterWadingDefinitions();
@@ -177,8 +188,10 @@ public final class SimulationAssembly {
         worldGeometry = new WorldGeometryLookup(landscape.geometry());
         soilMoisture = new SoilMoistureSystem(
                 new SparseSoilMoistureStorage(),
-                landscape.terrain(),
-                soilHydrologyDefinitions);
+                new TerrainSoilHydrologyLookup(
+                        landscape.terrain(),
+                        soilHydrologyDefinitions,
+                        soilHydrologyVariationDefinitions));
         water = new WaterSystem(
                 new SparseWaterStorage(),
                 worldGeometry);
@@ -233,6 +246,31 @@ public final class SimulationAssembly {
         soilHydrologyDefinitions.put(
                 definitionId,
                 new SoilHydrology(capacity, infiltrationLimit));
+        return this;
+    }
+
+    /** Adds deterministic coordinate-local variation to a material Soil capacity. */
+    public SimulationAssembly soilHydrologyVariation(
+            LandscapeDefinitionId definitionId,
+            long seed,
+            int capacityAmplitude) {
+        requireNotStarted();
+        requireLandscapeDefinition(definitionId);
+        soilHydrologyVariationDefinitions.put(
+                definitionId,
+                new SoilHydrologyVariation(seed, capacityAmplitude));
+        return this;
+    }
+
+    /** Declares how much free Water a material surface retains before horizontal runoff. */
+    public SimulationAssembly surfaceWaterStorage(
+            LandscapeDefinitionId definitionId,
+            int capacity) {
+        requireNotStarted();
+        requireLandscapeDefinition(definitionId);
+        surfaceWaterStorageDefinitions.put(
+                definitionId,
+                capacity);
         return this;
     }
 
@@ -461,6 +499,8 @@ public final class SimulationAssembly {
         landscapeDefinitions.freeze();
         landscapeTraversalDefinitions.freeze();
         soilHydrologyDefinitions.freeze();
+        soilHydrologyVariationDefinitions.freeze();
+        surfaceWaterStorageDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
         waterWadingDefinitions.freeze();
@@ -487,10 +527,22 @@ public final class SimulationAssembly {
         SimulationClock clock = new SimulationClock();
         SimulationStepper stepper = new SimulationStepper(clock, scheduler);
 
+        SurfaceWaterStorageLookup surfaceStorage =
+                new TerrainSurfaceWaterStorageLookup(
+                        landscape.terrain(),
+                        surfaceWaterStorageDefinitions);
         WaterFlowSystem waterFlow = new WaterFlowSystem(
                 water,
-                worldGeometry);
-        WaterFlowProcess waterFlowProcess = new WaterFlowProcess(waterFlow);
+                worldGeometry,
+                surfaceStorage);
+        WaterSoilExchangeSystem waterSoilExchange =
+                new WaterSoilExchangeSystem(
+                        water,
+                        landscape.terrain(),
+                        soilMoisture);
+        WaterFlowProcess waterFlowProcess = new WaterFlowProcess(
+                waterFlow,
+                waterSoilExchange);
         HandlerId waterFlowHandlerId = scheduledHandlers.register(waterFlowProcess::resume);
         ProcessScheduler waterFlowScheduler =
                 new BoundProcessScheduler(clock, scheduler, waterFlowHandlerId);
