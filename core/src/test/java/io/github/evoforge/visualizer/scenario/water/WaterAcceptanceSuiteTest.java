@@ -61,39 +61,75 @@ final class WaterAcceptanceSuiteTest {
     }
 
     @Test
-    void rainCycleCreatesOnlyTransientPuddlesAndShieldsCoveredGround() {
+    void rainCycleStartsDryFormsUnevenPuddlesAndEvaporatesSeparateLake() {
         ScenarioSession session = new RainHydrologyScenario().create();
         SimulationRuntime runtime = session.runtime();
 
-        assertEquals(240L, runtime.time().tick());
-        assertTrue(
-                sumWater(runtime, -6, -2, -4, 4, 0) > 0L,
-                "impermeable surface should form a shallow puddle after the rain pulse");
-        assertTrue(
-                sumWater(runtime, -1, 1, -4, 4, 0) > 0L,
-                "low-infiltration clay should overflow a fraction of the shower");
-        assertEquals(
-                0L,
-                sumWater(runtime, 2, 6, -4, 4, 0),
-                "loam should absorb the complete 3 mm event before free Water forms");
-        assertEquals(
-                0,
-                runtime.view().soilMoisture().amount(3, 0, 0),
-                "elevated roofed ground must receive no direct precipitation");
-        assertTrue(
-                runtime.view().soilMoisture().amount(3, 0, 2) > 0,
-                "the exposed roof itself must receive the rain pulse");
-
-        // Check late in the dry part of the same climate cycle, still twenty
-        // ticks before the next 3 mm precipitation event at tick 480.
-        for (int tick = 0; tick < 220; tick++) {
-            runtime.stepper().advance();
+        assertEquals(0L, runtime.time().tick());
+        for (int x = -2; x <= 3; x++) {
+            for (int y = -5; y <= 5; y++) {
+                assertEquals(
+                        0,
+                        runtime.view().soilMoisture().amount(x, y, -1),
+                        "all exposed soil must start equally dry");
+                assertEquals(
+                        0,
+                        runtime.view().water().amount(x, y, 0),
+                        "dry soil acceptance must not start with puddles");
+            }
         }
 
+        long initialLake = sumWater(runtime, -6, -4, -1, 1, -1);
+        assertTrue(initialLake > 0L);
+
+        // Before the first shower at tick 120 the isolated lake must already lose
+        // finite Water to evaporation while the dry ground stays dry.
+        advance(runtime, 80);
+        long evaporatedLake = sumWater(runtime, -6, -4, -1, 1, -1);
+        assertTrue(evaporatedLake > 0L);
+        assertTrue(evaporatedLake < initialLake);
+
+        // Finish the first shower. All cells receive the same 3 mm input, but their
+        // deterministic local maximum Soil capacity differs.
+        advance(runtime, 40);
+        assertEquals(120L, runtime.time().tick());
+
+        int puddled = 0;
+        int absorbed = 0;
+        for (int x = -2; x <= 3; x++) {
+            for (int y = -5; y <= 5; y++) {
+                if (runtime.view().water().amount(x, y, 0) > 0) {
+                    puddled++;
+                } else {
+                    absorbed++;
+                }
+            }
+        }
+        assertTrue(puddled > 0, "low-capacity cells must form puddles");
+        assertTrue(absorbed > 0, "higher-capacity cells must absorb the same shower");
+        assertEquals(
+                0,
+                runtime.view().soilMoisture().amount(4, 0, -1),
+                "ground beneath the elevated roof must remain shielded");
+
+        // The deliberately dry climate phase removes both transient puddles and
+        // retained moisture before the next shower while the deeper lake remains.
+        advance(runtime, 100);
         assertEquals(
                 0L,
-                sumWater(runtime, -6, 6, -4, 4, 0),
-                "exposed surface puddles must dry before the next 240-tick rain cycle");
+                sumWater(runtime, -2, 3, -5, 5, 0),
+                "transient puddles must dry before the next shower");
+        assertTrue(
+                sumWater(runtime, -6, -4, -1, 1, -1) > 0L,
+                "the finite lake should evaporate gradually rather than disappear in one cycle");
+    }
+
+    private static void advance(
+            SimulationRuntime runtime,
+            int ticks) {
+        for (int tick = 0; tick < ticks; tick++) {
+            runtime.stepper().advance();
+        }
     }
 
     private static long sumWater(
