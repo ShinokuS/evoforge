@@ -58,22 +58,28 @@ import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipit
 import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyVariation;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyVariationDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
-import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilHydrologyLookup;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidInfiltrationSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesVariation;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesVariationDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageDefinitions;
 import io.github.evoforge.simulation.world.landscape.water.SurfaceWaterStorageLookup;
 import io.github.evoforge.simulation.world.landscape.water.TerrainSurfaceWaterStorageLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowProcess;
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowSystem;
-import io.github.evoforge.simulation.world.landscape.water.WaterSoilExchangeSystem;
+import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
@@ -131,9 +137,10 @@ import java.util.Set;
 public final class SimulationAssembly {
     private final DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions;
     private final LandscapeTraversalDefinitions landscapeTraversalDefinitions;
-    private final SoilHydrologyDefinitions soilHydrologyDefinitions;
-    private final SoilHydrologyVariationDefinitions soilHydrologyVariationDefinitions;
+    private final SoilPropertiesDefinitions soilPropertiesDefinitions;
+    private final SoilPropertiesVariationDefinitions soilPropertiesVariationDefinitions;
     private final SurfaceWaterStorageDefinitions surfaceWaterStorageDefinitions;
+    private final LiquidTransportDefinitions liquidTransportDefinitions;
     private final DefinitionRegistry<ObjectDefinitionId> objectDefinitions;
     private final MovementDefinitions movementDefinitions;
     private final WaterWadingDefinitions waterWadingDefinitions;
@@ -149,7 +156,9 @@ public final class SimulationAssembly {
     private final GrowthDefinitions growthDefinitions;
     private final LandscapeSystem landscape;
     private final WorldGeometryLookup worldGeometry;
-    private final SoilMoistureSystem soilMoisture;
+    private final LiquidSystem liquids;
+    private final SoilPropertiesLookup soilProperties;
+    private final SoilLiquidSystem soilLiquids;
     private final WaterSystem water;
     private final NavigationSystem navigation;
     private final ObjectRepository objects;
@@ -170,9 +179,13 @@ public final class SimulationAssembly {
     private SimulationAssembly() {
         landscapeDefinitions = new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
         landscapeTraversalDefinitions = new LandscapeTraversalDefinitions();
-        soilHydrologyDefinitions = new SoilHydrologyDefinitions();
-        soilHydrologyVariationDefinitions = new SoilHydrologyVariationDefinitions();
+        soilPropertiesDefinitions = new SoilPropertiesDefinitions();
+        soilPropertiesVariationDefinitions = new SoilPropertiesVariationDefinitions();
         surfaceWaterStorageDefinitions = new SurfaceWaterStorageDefinitions();
+        liquidTransportDefinitions = new LiquidTransportDefinitions();
+        liquidTransportDefinitions.put(
+                WaterSystem.TYPE,
+                LiquidTransportProperties.reference());
         objectDefinitions = new DefinitionRegistry<>(ObjectDefinitionId::of, ObjectDefinitionId::asInt);
         movementDefinitions = new MovementDefinitions();
         waterWadingDefinitions = new WaterWadingDefinitions();
@@ -188,15 +201,16 @@ public final class SimulationAssembly {
         growthDefinitions = new GrowthDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
         worldGeometry = new WorldGeometryLookup(landscape.geometry());
-        soilMoisture = new SoilMoistureSystem(
-                new SparseSoilMoistureStorage(),
-                new TerrainSoilHydrologyLookup(
-                        landscape.terrain(),
-                        soilHydrologyDefinitions,
-                        soilHydrologyVariationDefinitions));
-        water = new WaterSystem(
-                new SparseWaterStorage(),
-                worldGeometry);
+        liquids = new LiquidSystem(new SparseLiquidStorage(), worldGeometry);
+        soilProperties = new TerrainSoilPropertiesLookup(
+                landscape.terrain(),
+                soilPropertiesDefinitions,
+                soilPropertiesVariationDefinitions);
+        soilLiquids = new SoilLiquidSystem(
+                new SparseSoilLiquidStorage(),
+                soilProperties,
+                liquidTransportDefinitions);
+        water = new WaterSystem(liquids);
         navigation = new NavigationSystem(worldGeometry);
         objects = new ObjectRepository();
         objectFactory = new ObjectFactory(objects, objectDefinitions);
@@ -239,28 +253,41 @@ public final class SimulationAssembly {
         return definitionId;
     }
 
-    public SimulationAssembly soilHydrology(
+    /** Declares physical porous properties for one landscape material. */
+    public SimulationAssembly soilProperties(
             LandscapeDefinitionId definitionId,
             int capacity,
-            int infiltrationLimit) {
+            int permeability) {
         requireNotStarted();
         requireLandscapeDefinition(definitionId);
-        soilHydrologyDefinitions.put(
+        soilPropertiesDefinitions.put(
                 definitionId,
-                new SoilHydrology(capacity, infiltrationLimit));
+                new SoilProperties(capacity, permeability));
         return this;
     }
 
     /** Adds deterministic coordinate-local variation to a material Soil capacity. */
-    public SimulationAssembly soilHydrologyVariation(
+    public SimulationAssembly soilPropertiesVariation(
             LandscapeDefinitionId definitionId,
             long seed,
             int capacityAmplitude) {
         requireNotStarted();
         requireLandscapeDefinition(definitionId);
-        soilHydrologyVariationDefinitions.put(
+        soilPropertiesVariationDefinitions.put(
                 definitionId,
-                new SoilHydrologyVariation(seed, capacityAmplitude));
+                new SoilPropertiesVariation(seed, capacityAmplitude));
+        return this;
+    }
+
+    /** Declares physical transport data for an open liquid identity. */
+    public SimulationAssembly liquidTransport(
+            LiquidTypeId type,
+            long kinematicViscositySquareMicrometersPerSecond) {
+        requireNotStarted();
+        liquidTransportDefinitions.put(
+                type,
+                LiquidTransportProperties.ofKinematicViscosity(
+                        kinematicViscositySquareMicrometersPerSecond));
         return this;
     }
 
@@ -270,14 +297,11 @@ public final class SimulationAssembly {
             int capacity) {
         requireNotStarted();
         requireLandscapeDefinition(definitionId);
-        surfaceWaterStorageDefinitions.put(
-                definitionId,
-                capacity);
+        surfaceWaterStorageDefinitions.put(definitionId, capacity);
         return this;
     }
 
-    public SimulationAssembly precipitation(
-            PrecipitationSchedule schedule) {
+    public SimulationAssembly precipitation(PrecipitationSchedule schedule) {
         requireNotStarted();
         if (schedule == null) {
             throw new IllegalArgumentException(
@@ -378,7 +402,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Declares when a Need becomes strong enough to generate autonomous environmental action. */
     public SimulationAssembly needMotivation(
             ObjectDefinitionId definitionId,
             NeedId needId,
@@ -402,7 +425,6 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Declares general knowledge that this agent definition knows the need has environmental solutions. */
     public SimulationAssembly knowsNeedSolution(ObjectDefinitionId definitionId, NeedId needId) {
         requireNotStarted(); requireObjectDefinition(definitionId);
         needSolutionKnowledgeDefinitions.add(definitionId, needId);
@@ -496,24 +518,32 @@ public final class SimulationAssembly {
         return this;
     }
 
-    /** Adds exact finite Water during setup without creating a precipitation source. */
-    public SimulationAssembly initialWater(
+    /** Adds exact finite free liquid during setup. */
+    public SimulationAssembly initialLiquid(
+            LiquidTypeId type,
             int x,
             int y,
             int z,
             int amount) {
         requireNotStarted();
         requireInsideWorld(x, y, z);
-        int added = water.addAtMost(x, y, z, amount);
-        if (added != amount) {
-            if (added > 0) {
-                water.removeAtMost(x, y, z, added);
-            }
+        if (!liquidTransportDefinitions.has(type)) {
             throw new IllegalArgumentException(
-                    "initial Water does not fit cell geometry: requested="
-                            + amount + ", accepted=" + added);
+                    "liquid transport properties must be configured before placement: " + type);
+        }
+        int added = liquids.addAtMost(type, x, y, z, amount);
+        if (added != amount) {
+            if (added > 0) liquids.removeAtMost(type, x, y, z, added);
+            throw new IllegalArgumentException(
+                    "initial liquid does not fit cell geometry/contact invariant: requested="
+                            + amount + ", accepted=" + added + ", type=" + type);
         }
         return this;
+    }
+
+    /** Adds exact finite Water during setup without creating a precipitation source. */
+    public SimulationAssembly initialWater(int x, int y, int z, int amount) {
+        return initialLiquid(WaterSystem.TYPE, x, y, z, amount);
     }
 
     public SimulationRuntime start() {
@@ -521,9 +551,10 @@ public final class SimulationAssembly {
         started = true;
         landscapeDefinitions.freeze();
         landscapeTraversalDefinitions.freeze();
-        soilHydrologyDefinitions.freeze();
-        soilHydrologyVariationDefinitions.freeze();
+        soilPropertiesDefinitions.freeze();
+        soilPropertiesVariationDefinitions.freeze();
         surfaceWaterStorageDefinitions.freeze();
+        liquidTransportDefinitions.freeze();
         objectDefinitions.freeze();
         movementDefinitions.freeze();
         waterWadingDefinitions.freeze();
@@ -554,23 +585,25 @@ public final class SimulationAssembly {
                 new TerrainSurfaceWaterStorageLookup(
                         landscape.terrain(),
                         surfaceWaterStorageDefinitions);
-        WaterFlowSystem waterFlow = new WaterFlowSystem(
-                water,
+        LiquidFlowSystem liquidFlow = new LiquidFlowSystem(
+                liquids,
                 worldGeometry,
-                surfaceStorage);
-        WaterSoilExchangeSystem waterSoilExchange =
-                new WaterSoilExchangeSystem(
-                        water,
-                        landscape.terrain(),
-                        soilMoisture);
-        WaterFlowProcess waterFlowProcess = new WaterFlowProcess(
-                waterFlow,
-                waterSoilExchange);
-        HandlerId waterFlowHandlerId = scheduledHandlers.register(waterFlowProcess::resume);
-        ProcessScheduler waterFlowScheduler =
-                new BoundProcessScheduler(clock, scheduler, waterFlowHandlerId);
-        waterFlowProcess.bindScheduler(waterFlowScheduler);
-        waterFlowProcess.activate();
+                (type, x, y, z) -> WaterSystem.TYPE.equals(type)
+                        ? surfaceStorage.capacityAtWaterCell(x, y, z)
+                        : 0,
+                liquidTransportDefinitions);
+        SoilLiquidInfiltrationSystem infiltration = new SoilLiquidInfiltrationSystem(
+                liquids,
+                landscape.terrain(),
+                soilLiquids);
+        LiquidFlowProcess liquidFlowProcess = new LiquidFlowProcess(
+                liquidFlow,
+                infiltration::update);
+        HandlerId liquidFlowHandlerId = scheduledHandlers.register(liquidFlowProcess::resume);
+        ProcessScheduler liquidFlowScheduler =
+                new BoundProcessScheduler(clock, scheduler, liquidFlowHandlerId);
+        liquidFlowProcess.bindScheduler(liquidFlowScheduler);
+        liquidFlowProcess.activate();
 
         VerticalSkySurfaceSystem skySurfaces = new VerticalSkySurfaceSystem(
                 landscape.terrainSurfaces(),
@@ -581,7 +614,7 @@ public final class SimulationAssembly {
             PrecipitationSystem precipitation = new PrecipitationSystem(
                     landscape.terrain(),
                     worldGeometry,
-                    soilMoisture,
+                    soilLiquids,
                     water);
             SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
                     skySurfaces,
@@ -594,13 +627,10 @@ public final class SimulationAssembly {
             precipitationEvents = periodicPrecipitation;
             HandlerId precipitationHandlerId = scheduledHandlers.register(processId -> {
                 periodicPrecipitation.resume(processId);
-                waterFlowProcess.activate();
+                liquidFlowProcess.activate();
             });
             ProcessScheduler precipitationScheduler =
-                    new BoundProcessScheduler(
-                            clock,
-                            scheduler,
-                            precipitationHandlerId);
+                    new BoundProcessScheduler(clock, scheduler, precipitationHandlerId);
             periodicPrecipitation.bindScheduler(precipitationScheduler);
             periodicPrecipitation.start();
         }
@@ -609,10 +639,10 @@ public final class SimulationAssembly {
             EvaporationSystem evaporation = new EvaporationSystem(
                     skySurfaces,
                     water.surfaces(),
-                    soilMoisture.cells(),
+                    soilLiquids.cells(),
                     worldGeometry,
                     water,
-                    soilMoisture);
+                    soilLiquids);
             PeriodicEvaporationSystem periodicEvaporation =
                     new PeriodicEvaporationSystem(
                             evaporation,
@@ -622,14 +652,11 @@ public final class SimulationAssembly {
             HandlerId evaporationHandlerId = scheduledHandlers.register(processId -> {
                 periodicEvaporation.resume(processId);
                 if (periodicEvaporation.lastResult().surfaceWaterRemoved() > 0L) {
-                    waterFlowProcess.activate();
+                    liquidFlowProcess.activate();
                 }
             });
             ProcessScheduler evaporationScheduler =
-                    new BoundProcessScheduler(
-                            clock,
-                            scheduler,
-                            evaporationHandlerId);
+                    new BoundProcessScheduler(clock, scheduler, evaporationHandlerId);
             periodicEvaporation.bindScheduler(evaporationScheduler);
             periodicEvaporation.start();
         }
@@ -801,12 +828,12 @@ public final class SimulationAssembly {
                 landscape.terrainSurfaces(),
                 landscape.terrainRevision(),
                 worldGeometry,
-                soilMoisture.lookup(),
-                soilMoisture::hydrologyAt,
+                soilLiquids.lookup(),
+                soilProperties,
                 surfaceStorage,
                 water.lookup(),
                 water.surfaces(),
-                waterFlow.flowLookup(),
+                WaterFlowLookup.from(liquidFlow.flowLookup()),
                 navigation.lookup(),
                 occupancy,
                 cells.lookup(),
@@ -835,10 +862,7 @@ public final class SimulationAssembly {
         }
     }
 
-    private void requireInsideWorld(
-            int x,
-            int y,
-            int z) {
+    private void requireInsideWorld(int x, int y, int z) {
         if (!worldGeometry.contains(x, y, z)) {
             throw new IllegalArgumentException(
                     "coordinate is outside configured world bounds: ("
