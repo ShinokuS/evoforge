@@ -14,7 +14,7 @@ where can that volume flow?
 when has the local region reached a dormant fixed point?
 ```
 
-Water is the first production liquid identity, but blood, wine or another future liquid can use the same storage and hydraulic solver without copying Water code.
+Water is the first production liquid identity, but blood, wine or another future liquid can use the same storage, hydraulic solver and flow scheduling without copying Water code.
 
 ## Ownership
 
@@ -26,7 +26,7 @@ XYZ -> dry
 XYZ -> one LiquidTypeId + finite volume
 ```
 
-`LiquidLookup` is read-only. `LiquidStorage` is replaceable implementation detail. Current production-compatible storage is sparse, so dry cells allocate no entry.
+`LiquidLookup` is read-only. `LiquidStorage` is replaceable implementation detail. Current storage is sparse, so dry cells allocate no entry.
 
 The normalized amount still uses `CellVolume`:
 
@@ -75,6 +75,10 @@ This is an explicit temporary boundary. It is not a claim that real liquids cann
 
 The solver reads liquid identity only to preserve content and enforce the current no-mixing boundary. Hydraulic Geometry does not switch on names such as `water`, `blood` or `wine`.
 
+`LiquidFlowProcess` owns the generic scheduled cadence: one local solve per tick while the shared activity frontier contains work, with wakeups coalesced and no continuing schedule at dormancy.
+
+A narrow `LiquidFlowPreparation` hook exists because a real current consumer needs deterministic work immediately before transport: Water can infiltrate Soil before remaining free liquid flows. The hook does not own liquid state and is not a general event bus.
+
 ## Surface retention seam
 
 Horizontal runoff can consult:
@@ -96,14 +100,16 @@ Derived surfaces own no quantity. They exist for exposure, presentation and othe
 Water-specific semantics stay outside the generic transport owner:
 
 ```text
-LiquidSystem / LiquidFlowSystem
-            ↓ typed WATER facade
-         WaterSystem
-            ├─ Water -> SoilMoisture exchange
-            ├─ precipitation / evaporation
-            ├─ Water wading constraint
-            └─ Water presentation
+LiquidSystem / LiquidFlowSystem / LiquidFlowProcess
+                    ↓ typed WATER facade
+                 WaterSystem
+                    ├─ Water -> SoilMoisture exchange
+                    ├─ precipitation / evaporation
+                    ├─ Water wading constraint
+                    └─ Water presentation
 ```
+
+`WaterFlowProcess` is now only the production hydrology adapter: it supplies Water's pre-flow Soil exchange to the generic scheduled process.
 
 This distinction is important. Reusing the same hydraulic solver does not imply that wine should infiltrate Soil like rainwater, blood should evaporate on the same schedule, or every liquid should share Water traversal rules.
 
@@ -132,6 +138,7 @@ Those questions are intentionally unanswered today. The current single-component
 4. Contact between unsupported compositions must fail/block explicitly rather than depend on collection ordering.
 5. Generic liquid code must not gain speculative properties without a real consumer.
 6. Flow remains deterministic and exactly volume-conserving.
-7. Presentation and diagnostics are observers, never liquid authority.
+7. Scheduling stops at hydraulic dormancy.
+8. Presentation and diagnostics are observers, never liquid authority.
 
 See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md) for the architectural boundary.
