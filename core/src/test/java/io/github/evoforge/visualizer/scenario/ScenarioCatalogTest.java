@@ -44,7 +44,7 @@ final class ScenarioCatalogTest {
         VisualizerScenario duplicate = stub("same");
         assertThrows(IllegalArgumentException.class, () -> ScenarioCatalog.ofGroups(
                 ScenarioGroup.of("first", "First", duplicate),
-                ScenarioGroup.of("second", "Second", duplicate))));
+                ScenarioGroup.of("second", "Second", duplicate)));
     }
 
     @Test
