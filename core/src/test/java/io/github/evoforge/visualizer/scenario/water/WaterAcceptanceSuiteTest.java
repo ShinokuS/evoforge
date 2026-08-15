@@ -81,7 +81,9 @@ final class WaterAcceptanceSuiteTest {
                 runtime.view().soilMoisture().amount(3, 0, 1) > 0,
                 "the exposed roof itself must receive the rain pulse");
 
-        for (int tick = 0; tick < 180; tick++) {
+        // Check late in the dry part of the same climate cycle, still twenty
+        // ticks before the next 3 mm precipitation event at tick 480.
+        for (int tick = 0; tick < 220; tick++) {
             runtime.stepper().advance();
         }
 
