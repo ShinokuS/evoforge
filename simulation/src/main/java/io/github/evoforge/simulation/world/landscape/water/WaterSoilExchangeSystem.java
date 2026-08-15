@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.landscape.water;
 
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowPreparation;
 import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidInfiltrationSystem;
 import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
@@ -11,7 +12,7 @@ import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
  * liquid identity. This adapter remains only because the current production
  * composition is still entered through Water-shaped capabilities.
  */
-public final class WaterSoilExchangeSystem {
+public final class WaterSoilExchangeSystem implements LiquidFlowPreparation {
 
     private final SoilLiquidInfiltrationSystem delegate;
 
@@ -34,5 +35,10 @@ public final class WaterSoilExchangeSystem {
     /** Runs one generic active-liquid infiltration pass before shared flow. */
     public long update() {
         return delegate.update();
+    }
+
+    @Override
+    public void prepare() {
+        update();
     }
 }

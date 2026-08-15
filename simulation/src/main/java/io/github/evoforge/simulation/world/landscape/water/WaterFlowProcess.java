@@ -5,10 +5,11 @@ import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowPreparatio
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
 
 /**
- * Water-hydrology adapter around the shared scheduled liquid-flow process.
+ * Water-facing adapter around the shared scheduled liquid-flow process.
  *
- * <p>The generic process owns cadence/dormancy. Water contributes only its
- * deterministic pre-flow Soil exchange.
+ * <p>The generic process owns cadence/dormancy and accepts a generic deterministic
+ * pre-flow preparation capability. Current Water-oriented runtime wiring supplies
+ * Soil liquid infiltration through that seam.
  */
 public final class WaterFlowProcess {
 
@@ -21,19 +22,15 @@ public final class WaterFlowProcess {
 
     public WaterFlowProcess(
             WaterFlowSystem flow,
-            WaterSoilExchangeSystem soilExchange) {
-
-        if (soilExchange == null) {
-            throw new IllegalArgumentException("soil exchange must not be null");
-        }
-        this.delegate = createDelegate(flow, soilExchange::update);
-    }
-
-    private WaterFlowProcess(
-            WaterFlowSystem flow,
             LiquidFlowPreparation preparation) {
 
-        this.delegate = createDelegate(flow, preparation);
+        if (flow == null || preparation == null) {
+            throw new IllegalArgumentException(
+                    "Water flow process dependencies must not be null");
+        }
+        delegate = new LiquidFlowProcess(
+                flow.liquidFlowSystem(),
+                preparation);
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -50,17 +47,5 @@ public final class WaterFlowProcess {
 
     public boolean scheduled() {
         return delegate.scheduled();
-    }
-
-    private static LiquidFlowProcess createDelegate(
-            WaterFlowSystem flow,
-            LiquidFlowPreparation preparation) {
-
-        if (flow == null) {
-            throw new IllegalArgumentException("flow must not be null");
-        }
-        return new LiquidFlowProcess(
-                flow.liquidFlowSystem(),
-                preparation);
     }
 }
