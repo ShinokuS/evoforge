@@ -59,8 +59,13 @@ public final class WaterSystem {
     }
 
     /**
-     * Compatibility constructor for narrow Water fixtures. Production composition
-     * owns one shared {@link LiquidSystem} and uses {@link #WaterSystem(LiquidSystem)}.
+     * Water-only composition adapter retained for the current hydrology runtime
+     * and narrow fixtures. It still creates a {@link LiquidSystem} as the single
+     * authoritative free-liquid owner; the supplied {@link WaterStorage} is only
+     * adapted as that owner's storage implementation.
+     *
+     * <p>A composition that needs more than the Water identity should own one
+     * shared {@link LiquidSystem} and pass it to {@link #WaterSystem(LiquidSystem)}.
      */
     public WaterSystem(
             WaterStorage storage,
