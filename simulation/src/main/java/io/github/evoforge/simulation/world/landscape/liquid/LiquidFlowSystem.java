@@ -17,10 +17,16 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
  * Deterministic local redistribution of finite free-liquid quantity.
  *
  * <p>The solver owns no liquid state. It reads one authoritative snapshot,
- * derives local transfers from hydraulic head and Geometry, bounds them
- * deterministically and commits aggregate deltas through {@link LiquidSystem}.
+ * derives local transfers from hydraulic head, Geometry and transport properties,
+ * bounds them deterministically and commits aggregate deltas through
+ * {@link LiquidSystem}.
  *
- * <p>The current content model is single-component per cell. Different liquid
+ * <p>Kinematic viscosity affects only mobility: the same hydraulic equilibrium is
+ * sought for every liquid, while more viscous liquids realize a smaller fraction
+ * of that transfer per tick. The reference-viscosity liquid preserves the original
+ * one-half relaxation cadence exactly.
+ *
+ * <p>The current content model is single-component per free cell. Different liquid
  * types do not implicitly mix. An occupied unlike destination rejects transfer;
  * if several unlike liquids simultaneously target the same dry cell, every
  * contested inflow is suppressed for that step. This symmetric boundary is an
@@ -28,11 +34,10 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
  */
 public final class LiquidFlowSystem {
 
-    private static final int RELAXATION_DIVISOR = 2;
-
     private final LiquidSystem liquids;
     private final GeometryLookup geometry;
     private final LiquidSurfaceRetentionLookup surfaceRetention;
+    private final LiquidTransportLookup transport;
     private final LiquidFlowActivity activity;
     private final TreeMap<LiquidCell, LiquidFlowSample> lastFlow = new TreeMap<>();
     private final LiquidFlowLookup flowLookup =
@@ -40,22 +45,28 @@ public final class LiquidFlowSystem {
 
     public LiquidFlowSystem(
             LiquidSystem liquids,
-            GeometryLookup geometry) {
-        this(liquids, geometry, LiquidSurfaceRetentionLookup.NONE);
+            GeometryLookup geometry,
+            LiquidTransportLookup transport) {
+        this(liquids, geometry, LiquidSurfaceRetentionLookup.NONE, transport);
     }
 
     public LiquidFlowSystem(
             LiquidSystem liquids,
             GeometryLookup geometry,
-            LiquidSurfaceRetentionLookup surfaceRetention) {
+            LiquidSurfaceRetentionLookup surfaceRetention,
+            LiquidTransportLookup transport) {
 
-        if (liquids == null || geometry == null || surfaceRetention == null) {
+        if (liquids == null
+                || geometry == null
+                || surfaceRetention == null
+                || transport == null) {
             throw new IllegalArgumentException(
                     "liquid flow dependencies must not be null");
         }
         this.liquids = liquids;
         this.geometry = geometry;
         this.surfaceRetention = surfaceRetention;
+        this.transport = transport;
         this.activity = liquids.flowActivity();
     }
 
@@ -183,10 +194,12 @@ public final class LiquidFlowSystem {
                 source, sourceShape, sourceAmount,
                 destination, destinationShape, destinationAmount,
                 maximumTransfer);
-        int relaxedTransfer = equilibriumTransfer / RELAXATION_DIVISOR;
-        if (relaxedTransfer <= CellVolume.EMPTY) return null;
+        int transfer = LiquidTransportMath.relaxedFlowAmount(
+                equilibriumTransfer,
+                transport.require(type));
+        if (transfer <= CellVolume.EMPTY) return null;
 
-        return new MutableTransfer(source, destination, type, relaxedTransfer);
+        return new MutableTransfer(source, destination, type, transfer);
     }
 
     private int equilibriumTransfer(
@@ -258,7 +271,11 @@ public final class LiquidFlowSystem {
             group.sort(Comparator.comparing(transfer -> transfer.destination));
 
             int sourceAmount = amount(source);
-            proportionallyLimit(group, sourceAmount / RELAXATION_DIVISOR);
+            LiquidTypeId sourceType = type(source);
+            int mobilityBudget = LiquidTransportMath.mobilityAdjustedAmount(
+                    sourceAmount / 2,
+                    transport.require(sourceType));
+            proportionallyLimit(group, mobilityBudget);
 
             int verticalOut = CellVolume.EMPTY;
             List<MutableTransfer> horizontal = new ArrayList<>();
@@ -272,7 +289,6 @@ public final class LiquidFlowSystem {
             }
 
             if (!horizontal.isEmpty()) {
-                LiquidTypeId sourceType = type(source);
                 int retainedSurface = CellVolume.requireValid(
                         surfaceRetention.capacityAt(
                                 sourceType, source.x(), source.y(), source.z()));
