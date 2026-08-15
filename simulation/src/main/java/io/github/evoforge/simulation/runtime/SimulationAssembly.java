@@ -70,6 +70,7 @@ import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStock
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.WorldGeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinitions;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthSystem;
@@ -106,6 +107,7 @@ import io.github.evoforge.simulation.world.pathfinding.PathHierarchyConfig;
 import io.github.evoforge.simulation.world.pathfinding.PathHierarchyIndex;
 import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
 import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
 import io.github.evoforge.simulation.world.spatial.orientation.OrientationSystem;
@@ -135,6 +137,7 @@ public final class SimulationAssembly {
     private final ConsumableStockDefinitions consumableStockDefinitions;
     private final GrowthDefinitions growthDefinitions;
     private final LandscapeSystem landscape;
+    private final WorldGeometryLookup worldGeometry;
     private final SoilMoistureSystem soilMoisture;
     private final WaterSystem water;
     private final NavigationSystem navigation;
@@ -171,14 +174,15 @@ public final class SimulationAssembly {
         consumableStockDefinitions = new ConsumableStockDefinitions();
         growthDefinitions = new GrowthDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
+        worldGeometry = new WorldGeometryLookup(landscape.geometry());
         soilMoisture = new SoilMoistureSystem(
                 new SparseSoilMoistureStorage(),
                 landscape.terrain(),
                 soilHydrologyDefinitions);
         water = new WaterSystem(
                 new SparseWaterStorage(),
-                landscape.geometry());
-        navigation = new NavigationSystem(landscape.geometry());
+                worldGeometry);
+        navigation = new NavigationSystem(worldGeometry);
         objects = new ObjectRepository();
         objectFactory = new ObjectFactory(objects, objectDefinitions);
         cells = new CellSpatialIndex();
@@ -190,6 +194,24 @@ public final class SimulationAssembly {
     }
 
     public static SimulationAssembly create() { return new SimulationAssembly(); }
+
+    /**
+     * Closes the simulation inside one inclusive integer box. Outside coordinates
+     * become physically solid to Geometry consumers while unconfigured assemblies
+     * preserve the historical unbounded-world behavior.
+     */
+    public SimulationAssembly worldBounds(
+            int minX,
+            int maxX,
+            int minY,
+            int maxY,
+            int minZ,
+            int maxZ) {
+        requireNotStarted();
+        worldGeometry.configureBounds(
+                new WorldBounds(minX, maxX, minY, maxY, minZ, maxZ));
+        return this;
+    }
 
     public LandscapeDefinitionId landscapeDefinition(String key) {
         return landscapeDefinition(key, SurfaceTraversalCost.NEUTRAL_UNITS);
@@ -391,6 +413,7 @@ public final class SimulationAssembly {
 
     public SimulationAssembly placeObject(ObjectId objectId, int x, int y, int z) {
         requireNotStarted();
+        requireInsideWorld(x, y, z);
         OperationResults.requireAccepted(objectPlacement.place(objectId, x, y, z));
         WorldObject object = objects.get(objectId);
         if (object == null) throw new IllegalStateException("placed object disappeared from repository: " + objectId);
@@ -400,13 +423,35 @@ public final class SimulationAssembly {
 
     public SimulationAssembly placeTerrain(int x, int y, int z, LandscapeDefinitionId definitionId) {
         requireNotStarted();
+        requireInsideWorld(x, y, z);
         OperationResults.requireAccepted(landscape.placeTerrain(x, y, z, definitionId));
         return this;
     }
 
     public SimulationAssembly setShape(int x, int y, int z, Shape shape) {
         requireNotStarted();
+        requireInsideWorld(x, y, z);
         landscape.setShape(x, y, z, shape);
+        return this;
+    }
+
+    /** Adds exact finite Water during setup without creating a precipitation source. */
+    public SimulationAssembly initialWater(
+            int x,
+            int y,
+            int z,
+            int amount) {
+        requireNotStarted();
+        requireInsideWorld(x, y, z);
+        int added = water.addAtMost(x, y, z, amount);
+        if (added != amount) {
+            if (added > 0) {
+                water.removeAtMost(x, y, z, added);
+            }
+            throw new IllegalArgumentException(
+                    "initial Water does not fit cell geometry: requested="
+                            + amount + ", accepted=" + added);
+        }
         return this;
     }
 
@@ -444,12 +489,13 @@ public final class SimulationAssembly {
 
         WaterFlowSystem waterFlow = new WaterFlowSystem(
                 water,
-                landscape.geometry());
+                worldGeometry);
         WaterFlowProcess waterFlowProcess = new WaterFlowProcess(waterFlow);
         HandlerId waterFlowHandlerId = scheduledHandlers.register(waterFlowProcess::resume);
         ProcessScheduler waterFlowScheduler =
                 new BoundProcessScheduler(clock, scheduler, waterFlowHandlerId);
         waterFlowProcess.bindScheduler(waterFlowScheduler);
+        waterFlowProcess.activate();
 
         VerticalSkySurfaceSystem skySurfaces = new VerticalSkySurfaceSystem(
                 landscape.terrainSurfaces(),
@@ -459,7 +505,7 @@ public final class SimulationAssembly {
         if (precipitationSchedule != null) {
             PrecipitationSystem precipitation = new PrecipitationSystem(
                     landscape.terrain(),
-                    landscape.geometry(),
+                    worldGeometry,
                     soilMoisture,
                     water);
             SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
@@ -489,7 +535,7 @@ public final class SimulationAssembly {
                     skySurfaces,
                     water.surfaces(),
                     soilMoisture.cells(),
-                    landscape.geometry(),
+                    worldGeometry,
                     water,
                     soilMoisture);
             PeriodicEvaporationSystem periodicEvaporation =
@@ -517,7 +563,7 @@ public final class SimulationAssembly {
                 objects,
                 waterWadingDefinitions,
                 water.lookup(),
-                landscape.geometry());
+                worldGeometry);
 
         MovementStepCompletionRelay movementCompletions = new MovementStepCompletionRelay();
         MovementActionProcessor movementActions = new MovementActionProcessor(
@@ -534,7 +580,7 @@ public final class SimulationAssembly {
         ProcessScheduler movementScheduler = new BoundProcessScheduler(clock, scheduler, movementHandlerId);
 
         TransitionCostCalculator transitionCosts = new TransitionCostCalculator(
-                landscape.terrain(), landscape.geometry(), landscapeTraversalDefinitions);
+                landscape.terrain(), worldGeometry, landscapeTraversalDefinitions);
         TransitionCostLowerBoundLookup transitionCostBounds = new TransitionCostLowerBoundCalculator(
                 landscapeTraversalDefinitions, landscape.shapeTraversalBounds());
         ExactAStarPathfinder exactPathfinder = new ExactAStarPathfinder(
@@ -678,7 +724,7 @@ public final class SimulationAssembly {
                 landscape.terrainExtents(),
                 landscape.terrainSurfaces(),
                 landscape.terrainRevision(),
-                landscape.geometry(),
+                worldGeometry,
                 soilMoisture.lookup(),
                 water.lookup(),
                 water.surfaces(),
@@ -707,6 +753,17 @@ public final class SimulationAssembly {
     private void requireObjectDefinition(ObjectDefinitionId definitionId) {
         if (!objectDefinitions.contains(definitionId)) {
             throw new IllegalArgumentException("unknown object definition: " + definitionId);
+        }
+    }
+
+    private void requireInsideWorld(
+            int x,
+            int y,
+            int z) {
+        if (!worldGeometry.contains(x, y, z)) {
+            throw new IllegalArgumentException(
+                    "coordinate is outside configured world bounds: ("
+                            + x + ", " + y + ", " + z + ")");
         }
     }
 
