@@ -2,22 +2,22 @@
 
 ## Purpose
 
-Model the finite **Water** surface cycle while using generic free-liquid transport and generic Soil retention underneath Water-specific weather behavior.
+Model the finite Water surface cycle while using generic free-liquid transport and generic retained-Soil mechanics underneath Water-specific atmosphere behavior.
 
-Current production composition is Water-oriented:
+Current production composition is:
 
 ```text
-periodic / cyclic precipitation
+periodic / cyclic Water precipitation
         ↓
 shared vertical sky surface
-        ├─ exposed Water -> Water directly
-        └─ exposed Terrain -> retained Water first
+        ├─ exposed Water -> add to free Water
+        └─ exposed Terrain -> retain Water in Soil first
                               ↓
                          excess free Water
                               ↓
-generic active-liquid Soil infiltration
+generic SoilLiquidInfiltrationSystem
                               ↓
-                  shared free-liquid flow
+                  shared LiquidFlowSystem
                               ↓
                     dormant fixed point
 
@@ -28,132 +28,137 @@ shared vertical sky surface revalidation
         └─ exposed retained Water second
 ```
 
-Precipitation and evaporation are deterministic Water forcings, not generic rules for every liquid. Soil infiltration itself is generic.
+Precipitation and evaporation are Water-specific forcings. Soil retention and free-liquid transport are generic.
 
 ## Ownership
 
-Authoritative state remains independent:
+Authoritative state remains separate:
 
 ```text
-Terrain          XYZ -> landscape definition
-SoilLiquidSystem terrain XYZ -> retained constituent composition
-LiquidSystem     XYZ -> one free LiquidTypeId + free volume
-Water            typed projection of LiquidSystem identity "water"
-SoilMoisture     typed Water projection of SoilLiquidSystem
+Terrain           XYZ -> landscape definition
+SoilLiquidSystem  terrain XYZ -> retained constituent composition
+LiquidSystem      XYZ -> one free LiquidTypeId + free volume
+WaterSystem       typed facade for LiquidTypeId "water"
 ```
 
-One Soil cell has one material-owned pore capacity shared by all retained constituents. Water and blood do not each receive a separate full Soil capacity.
+There is no separate authoritative `SoilMoistureSystem`. Water retained in Soil is read directly as the Water constituent of `SoilLiquidSystem`.
 
-Derived indexes are caches/read projections rather than additional world truth:
+One porous terrain cell has one material-owned capacity shared by every retained constituent.
 
-- `TerrainSurfaceLookup` — highest occupied terrain Z per XY column;
-- generic `LiquidSurfaceLookup` — sparse free-liquid surfaces;
-- Water-filtered `WaterSurfaceLookup` — Water columns for current hydrology consumers;
-- generic `SoilLiquidCellsLookup` — retained-liquid terrain cells;
-- `SoilMoistureCellsLookup` — Water-retaining projection used by current Water evaporation/presentation.
+Derived read-side indexes include:
 
-See [Liquids](liquids.md) for the generic liquid/content boundaries.
+- `TerrainSurfaceLookup` — highest terrain Z by XY column;
+- `LiquidSurfaceLookup` — sparse generic free-liquid surfaces;
+- `WaterSurfaceLookup` — Water-filtered surface projection;
+- `SoilLiquidCellsLookup` — retained-liquid terrain cells.
 
-## Soil hydrology
+See [Liquids](liquids.md) for the generic liquid/content boundary.
 
-Whether terrain absorbs liquid remains definition data. A landscape definition may declare finite `capacity` and `infiltrationLimit`; absence of Soil hydrology means non-absorbing terrain.
+## Soil properties
 
-`SoilLiquidSystem` owns retained composition and bounded arithmetic:
+Absorption is definition-driven through `SoilProperties`:
 
-```java
-infiltrateAtMost(type, x, y, z, requested)
-removeAtMost(type, x, y, z, requested)
+```text
+capacity      total shared pore volume
+permeability  nominal uptake per tick for the reference-viscosity liquid
 ```
 
-Infiltration is bounded by requested volume, the remaining **shared** local pore capacity and an effective liquid/material infiltration limit. `SoilLiquidInteractionLookup` is the narrow extension point for making different liquids infiltrate a material differently. Its current default preserves the existing material `infiltrationLimit`.
+A landscape definition without Soil properties is non-absorbing.
 
-A material may additionally declare `SoilHydrologyVariation(seed, capacityAmplitude)`. `TerrainSoilHydrologyLookup` combines the immutable material base with a deterministic coordinate hash. Only effective capacity varies; starting retained content is never randomized and no runtime RNG stream is consumed.
+`TerrainSoilPropertiesLookup` resolves the local material properties. Optional `SoilPropertiesVariation(seed, capacityAmplitude)` deterministically varies capacity by coordinates and definition id; it does not consume runtime RNG, alter permeability or pre-fill retained state.
 
-`SoilMoistureSystem` remains a Water-oriented projection for existing hydrology consumers rather than a second retained-state authority.
+For a free liquid touching porous Soil, the effective one-step uptake rate is material permeability adjusted by that liquid's kinematic viscosity:
+
+```text
+effectiveRate
+    = permeability * referenceViscosity / liquidViscosity
+```
+
+`SoilLiquidSystem.infiltrateAtMost(...)` then bounds accepted volume by requested volume, remaining shared pore capacity and that effective rate.
+
+This replaces the previous `SoilHydrology(infiltrationLimit)` and Water-only soil-moisture abstraction. Liquid/material differences are produced from independent physical properties rather than identity pair tables.
 
 ## Shared vertical sky surface
 
-`VerticalSkySurfaceSystem` currently combines cached Terrain and production Water surfaces. For one XY column it reports the current vertically exposed surface as Terrain or Water.
+`VerticalSkySurfaceSystem` combines cached Terrain and Water surface projections. For one XY column it reports the currently exposed Terrain or Water surface.
 
-Important consequences remain:
+Consequences:
 
 - higher terrain shields lower terrain/Water from vertical atmosphere effects;
 - Water above terrain becomes the exposed lake surface;
-- a wet Water-only column remains vertically addressable;
+- a Water-only column remains addressable;
 - an empty column creates no hydrology state merely because atmosphere exists.
 
-A Water/Terrain tie remains terrain-first under the current coarse-cell convention. Sub-cell atmospheric exposure is not modeled.
+A Water/Terrain tie is terrain-first under the current coarse-cell convention. Sub-cell atmospheric exposure remains outside the model.
 
-The current sky contract is deliberately Water-oriented. When another liquid becomes an atmosphere participant, sky/contact semantics must be extended explicitly rather than assuming Water behavior.
+The sky contract is intentionally Water-oriented today. Other atmosphere-participating liquids require explicit future semantics.
 
 ## Precipitation
 
-`PrecipitationSystem` exposes two Water-cycle targets:
+`PrecipitationSystem` exposes Water-cycle operations:
 
 ```java
 applyTerrainSurface(x, y, terrainZ, amount)
 applyWaterSurface(x, y, waterZ, amount)
 ```
 
-Terrain precipitation follows:
+Rain onto Terrain follows:
 
 ```text
-input
-  ↓
-retained Water infiltration
-  ↓
-remaining volume
-  ↓
+input Water
+    ↓
+SoilLiquidSystem.infiltrateAtMost(WATER, ...)
+    ↓
+remaining Water
+    ↓
 free Water in geometry-open surface space / cell above
-  ↓
+    ↓
 unplaced remainder
 ```
 
-An exposed Water target bypasses Soil and adds directly to the Water column.
+Rain onto an exposed Water surface bypasses Soil and adds directly to the Water column.
 
-Every result preserves exact finite accounting:
+Accounting is exact:
 
 ```text
 input = infiltrated + surfaceWater + unplaced
 ```
 
-`PrecipitationSchedule` supports ordinary periodic pulses and cyclic active windows. The Rain Cycle acceptance scenario uses this so physical precipitation and visible rain begin/end from the same deterministic schedule.
+`PrecipitationSchedule` supports periodic pulses and cyclic active windows. The Rain Cycle scenario uses the same schedule for physical rain and visible weather timing.
 
-## Run-on free liquid -> Soil infiltration
+## Run-on free liquid -> Soil
 
-Precipitation is not the only path from free liquid into Soil.
+Rain is not the only path into retained Soil state.
 
-`SoilLiquidInfiltrationSystem` inspects every currently active free-liquid cell before the next shared flow solve. It resolves supporting terrain, asks retained Soil authority to accept at most the current constituent and removes exactly that accepted amount from `LiquidSystem`.
-
-The current `WaterSoilExchangeSystem` is a compatibility adapter for existing Water-oriented wiring; its actual pass delegates to this generic mechanism.
-
-Conceptual order is:
+`SoilLiquidInfiltrationSystem` inspects active free-liquid cells immediately before the next shared hydraulic solve. It resolves supporting terrain, asks `SoilLiquidSystem` to retain that cell's actual constituent, and removes exactly the accepted volume from `LiquidSystem`.
 
 ```text
 LiquidFlowProcess resume
         ↓
-generic SoilLiquidInfiltrationSystem
+SoilLiquidInfiltrationSystem.update()
         ↓
 LiquidFlowSystem.update()
 ```
 
-So run-on Water still wets dry supporting Soil before continuing downstream, while a future blood spill can use the same physical mechanism. If Soil reaches its shared capacity or accepts only part of the incoming amount this step, the excess remains free and can form/run off as a puddle.
+This mechanism is liquid-agnostic. Water run-on wets Soil before continuing downstream; blood or another future constituent uses the same process. Excess after capacity/rate limits stays free.
 
-## Surface storage before horizontal runoff
+No Water-only exchange wrapper participates in runtime composition.
 
-A landscape definition may declare `SurfaceWaterStorage`: finite free Water retained on its supporting surface before horizontal runoff becomes mobile.
+## Surface retention before horizontal runoff
 
-This volume remains authoritative **free Water**. It is distinct from retained Soil pore composition.
+A landscape material may declare generic surface-retention capacity through `SurfaceRetentionDefinitions`.
 
-The generic flow solver consumes a typed `LiquidSurfaceRetentionLookup`. Current Water composition adapts `SurfaceWaterStorage` into that capability for the Water identity only. This leaves future liquids free to define different surface-film retention behavior.
+`TerrainSurfaceRetentionLookup` resolves this finite material-owned microtopographic reserve. It remains authoritative **free liquid**, distinct from retained Soil pore composition.
 
-The reserve applies only to same-Z horizontal transfers. Vertical falling through a valid opening does not subtract it. Multiple exits share one source reserve through aggregate outgoing limiting.
+The reserve applies to same-Z horizontal runoff only. Valid vertical falling is unaffected. Multiple horizontal exits share one source reserve through aggregate limiting.
+
+The current surface-retention capability is liquid-neutral. The former Water-only `SurfaceWaterStorage*` model has been removed rather than retained as a parallel definition path.
 
 ## Evaporation
 
-Current evaporation is a finite absolute **Water** sink per exposed wet XY candidate, not percentage decay.
+Current evaporation is a finite absolute Water sink per exposed wet XY candidate, not percentage decay.
 
-Candidates come from Water columns and positive Water-moisture cells; the system does not scan the whole terrain. Every candidate is revalidated through the current sky-surface lookup before removal.
+Candidate columns come from Water surfaces and retained Soil cells that contain the Water constituent. The system does not scan all terrain.
 
 Removal order is:
 
@@ -163,64 +168,65 @@ Removal order is:
 3. unfulfilled remainder
 ```
 
-Exact accounting remains:
+Exact accounting is:
 
 ```text
-requested = surfaceWaterRemoved + soilMoistureRemoved + unfulfilled
+requested = surfaceWaterRemoved + retainedWaterRemoved + unfulfilled
 ```
 
-If precipitation occurs on the same simulation tick, periodic evaporation is suppressed for that tick independent of scheduler handler ordering.
+If precipitation occurs on the same simulation tick, periodic evaporation is suppressed independent of scheduler handler ordering.
 
-No evaporation behavior is implied for another free or retained liquid constituent.
+Other retained constituents are neither candidates nor sinks of this Water-specific process.
 
-## Flow cadence and dormancy
+## Flow cadence and diagnostics
 
-Successful free-liquid mutation wakes the shared hydraulic frontier. `WaterFlowProcess` currently remains a Water-shaped composition adapter around the generic scheduled liquid process; the underlying flow cadence and dormancy belong to `LiquidFlowProcess`/`LiquidFlowSystem`.
+Successful free-liquid mutation wakes the shared `LiquidFlowSystem` activity frontier. `LiquidFlowProcess` schedules one local solve per tick while work remains and stops at dormancy.
 
-A settled lake/puddle therefore becomes dormant and costs no continuing flow work until a later mutation wakes it.
+There is no separate Water transport process. `WaterFlowLookup.from(genericFlowLookup)` filters actual latest-step generic transfer diagnostics by Water identity for presentation/debug consumers.
 
-Latest Water transfers remain exposed through `WaterFlowLookup`; internally they are filtered from typed generic liquid-flow samples. A sample is actual latest-step transfer, not a persistent velocity field.
+A flow sample is a latest-step transfer observation, not a persistent velocity field.
 
 ## Optional finite world bounds
 
-A runtime may configure `SimulationAssembly.worldBounds(...)`. `WorldGeometryLookup` resolves coordinates outside the inclusive box as `FullShape`, so free-liquid flow sees a closed physical boundary through ordinary Geometry and needs no liquid-specific map-edge rule.
+`SimulationAssembly.worldBounds(...)` may configure inclusive finite bounds. `WorldGeometryLookup` resolves coordinates outside them as `FullShape`, so free-liquid flow sees the same closed physical boundary as other Geometry consumers.
 
-Without configured bounds, unbounded semantics remain intentionally available.
+Without configured bounds, unbounded coordinate semantics remain available.
 
 ## Mixing boundary
 
-Hydrology does not define free-liquid mixing. Current free-liquid cells are single-component and unlike-liquid contact is blocked explicitly rather than silently merged.
+Hydrology does not define free-liquid mixing. Current free cells are single-component and unlike contact is explicitly blocked rather than silently merged.
 
-Retained Soil state may contain multiple constituents sharing pore capacity. This is composition bookkeeping inside porous material, not implemented miscibility, chemistry, diffusion, reactions or phase separation.
+Retained Soil may contain multiple constituent quantities sharing pore capacity. That is porous composition bookkeeping, not implemented miscibility, chemistry, diffusion, reactions or phase separation.
 
-A future free-liquid mixture milestone remains separate. See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md).
+See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md).
 
 ## Deliberately absent
 
 The current hydrology/environment foundation does not implement:
 
 - full Weather state, moving storm fronts or spatial rainfall fields;
-- temperature, humidity, solar radiation or wind-driven evaporation rates;
+- temperature, humidity, solar radiation or wind-driven evaporation;
 - object/canopy atmospheric occlusion;
 - deep drainage/groundwater;
 - plant uptake;
 - terrain erosion;
 - derived water-body identity;
-- detailed pressure, inertia, viscosity or turbulence;
+- pressure/inertia/turbulence;
+- surface tension/contact-angle wetting physics;
 - generic atmosphere/traversal rules for arbitrary liquids;
 - free-liquid mixtures or reactions;
 - retained-liquid diffusion, displacement, leaching or reactions;
-- generated/streamed world-bound semantics beyond the explicit finite runtime box;
+- generated/streamed bounds beyond explicit runtime `WorldBounds`;
 - automatic hydraulic wake coordination for arbitrary runtime Geometry changes.
 
-These should be added by their first real consumers rather than by expanding Terrain or creating a giant environment cell.
+Kinematic viscosity **is implemented** as a generic liquid transport property and affects both free-liquid mobility and Soil infiltration rate.
 
 ## Tests and acceptance
 
-Headless Water coverage includes finite precipitation/evaporation accounting, shared sky targeting, exposed/covered behavior, deterministic local Soil variation, run-on infiltration, saturated Soil, SurfaceWaterStorage invariants, vertical falling, cyclic rain cadence, dormancy and finite-world containment.
+Headless Water coverage includes finite precipitation/evaporation accounting, shared sky targeting, exposed/covered behavior, deterministic local Soil-capacity variation, run-on infiltration, saturated Soil, surface-retention invariants, vertical falling, cyclic rain cadence, dormancy, Water wading and finite-world containment.
 
-Generic liquid/Soil coverage additionally proves that non-Water liquid identities reuse the same hydraulic solver, use the same Soil-infiltration mechanism, can coexist as separate retained constituents sharing one pore capacity, and leave excess free when uptake is bounded.
+Generic liquid/Soil coverage proves that non-Water identities reuse the shared solver, preserve identity, use the same Soil-retention mechanism, compete for one pore capacity, respond to viscosity, and leave excess free when uptake is bounded.
 
-The visual Rain Cycle acceptance still proves dry start, Water-retained Soil wetting while rain is visible, uneven puddle onset, finite lake evaporation and hydrology-aware inspection.
+The visual Rain Cycle acceptance remains the manual parity gate for dry start, retained-Water wetting, uneven puddling, evaporation and inspection.
 
 See [Liquids](liquids.md), [Water](water.md), [Water Traversal](water-traversal.md), [Geometry and Shape](geometry.md), and [Definitions](definitions.md).
