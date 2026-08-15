@@ -8,22 +8,26 @@ import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
-import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 
 final class SkyPrecipitationSystemTest {
 
     @Test
     void highestTerrainRoofReceivesRainInsteadOfCoveredSoil() {
         Fixture fixture = new Fixture();
-        fixture.soilHydrology.put(
+        fixture.soilProperties.put(
                 fixture.soil,
-                new SoilHydrology(800_000, 800_000));
+                new SoilProperties(800_000, 800_000));
         fixture.landscape.placeTerrain(0, 0, 0, fixture.soil);
         fixture.landscape.placeTerrain(0, 0, 3, fixture.roof);
 
@@ -34,16 +38,16 @@ final class SkyPrecipitationSystemTest {
         assertEquals(120_000L, result.input());
         assertEquals(0L, result.infiltrated());
         assertEquals(120_000L, result.surfaceWater());
-        assertEquals(0, fixture.moisture.lookup().amount(0, 0, 0));
+        assertEquals(0, fixture.retainedWater(0, 0, 0));
         assertEquals(120_000, fixture.water.lookup().amount(0, 0, 4));
     }
 
     @Test
     void exposedWaterAboveTerrainReceivesRainWithoutSoilInfiltration() {
         Fixture fixture = new Fixture();
-        fixture.soilHydrology.put(
+        fixture.soilProperties.put(
                 fixture.soil,
-                new SoilHydrology(800_000, 800_000));
+                new SoilProperties(800_000, 800_000));
         fixture.landscape.placeTerrain(2, 5, 0, fixture.soil);
         fixture.water.addAtMost(2, 5, 1, 400_000);
 
@@ -53,7 +57,7 @@ final class SkyPrecipitationSystemTest {
         assertEquals(1, result.columns());
         assertEquals(0L, result.infiltrated());
         assertEquals(150_000L, result.surfaceWater());
-        assertEquals(0, fixture.moisture.lookup().amount(2, 5, 0));
+        assertEquals(0, fixture.retainedWater(2, 5, 0));
         assertEquals(550_000, fixture.water.lookup().amount(2, 5, 1));
     }
 
@@ -76,9 +80,9 @@ final class SkyPrecipitationSystemTest {
     @Test
     void terrainSurfaceStillInfiltratesBeforeCreatingFreeWater() {
         Fixture fixture = new Fixture();
-        fixture.soilHydrology.put(
+        fixture.soilProperties.put(
                 fixture.soil,
-                new SoilHydrology(500_000, 100_000));
+                new SoilProperties(500_000, 100_000));
         fixture.landscape.placeTerrain(-4, 1, 7, fixture.soil);
 
         PrecipitationBatchResult result =
@@ -86,7 +90,7 @@ final class SkyPrecipitationSystemTest {
 
         assertEquals(100_000L, result.infiltrated());
         assertEquals(150_000L, result.surfaceWater());
-        assertEquals(100_000, fixture.moisture.lookup().amount(-4, 1, 7));
+        assertEquals(100_000, fixture.retainedWater(-4, 1, 7));
         assertEquals(150_000, fixture.water.lookup().amount(-4, 1, 8));
     }
 
@@ -121,26 +125,30 @@ final class SkyPrecipitationSystemTest {
                 definitions.register("test:soil");
         private final LandscapeDefinitionId roof =
                 definitions.register("test:roof");
-        private final SoilHydrologyDefinitions soilHydrology =
-                new SoilHydrologyDefinitions();
+        private final SoilPropertiesDefinitions soilProperties =
+                new SoilPropertiesDefinitions();
         private final LandscapeSystem landscape =
                 LandscapeSystem.create(
                         new SparseTerrainStorage(),
                         definitions);
-        private final SoilMoistureSystem moisture =
-                new SoilMoistureSystem(
-                        new SparseSoilMoistureStorage(),
-                        landscape.terrain(),
-                        soilHydrology);
-        private final WaterSystem water =
-                new WaterSystem(
-                        new SparseWaterStorage(),
-                        landscape.geometry());
+        private final LiquidTransportDefinitions transport =
+                referenceWaterTransport();
+        private final SoilLiquidSystem retained =
+                new SoilLiquidSystem(
+                        new SparseSoilLiquidStorage(),
+                        new TerrainSoilPropertiesLookup(
+                                landscape.terrain(),
+                                soilProperties),
+                        transport);
+        private final LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
+                landscape.geometry());
+        private final WaterSystem water = new WaterSystem(liquids);
         private final PrecipitationSystem precipitation =
                 new PrecipitationSystem(
                         landscape.terrain(),
                         landscape.geometry(),
-                        moisture,
+                        retained,
                         water);
 
         private SkyPrecipitationSystem sky() {
@@ -150,5 +158,19 @@ final class SkyPrecipitationSystemTest {
                             water.surfaces()),
                     precipitation);
         }
+
+        private int retainedWater(int x, int y, int z) {
+            return retained.lookup().amountOf(
+                    WaterSystem.TYPE,
+                    x,
+                    y,
+                    z);
+        }
+    }
+
+    private static LiquidTransportDefinitions referenceWaterTransport() {
+        LiquidTransportDefinitions transport = new LiquidTransportDefinitions();
+        transport.put(WaterSystem.TYPE, LiquidTransportProperties.reference());
+        return transport;
     }
 }
