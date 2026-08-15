@@ -9,7 +9,10 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -21,16 +24,13 @@ final class WaterFlowLookupTest {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)
                 .open(1, 0, 0);
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
-                geometry);
-        WaterFlowSystem flow = new WaterFlowSystem(water, geometry);
+        Fixture fixture = fixture(geometry);
 
-        water.addAtMost(0, 0, 0, 100_000);
-        flow.update();
+        fixture.water.addAtMost(0, 0, 0, 100_000);
+        fixture.flow.update();
 
-        WaterFlowSample source = flow.flowLookup().find(0, 0, 0);
-        WaterFlowSample destination = flow.flowLookup().find(1, 0, 0);
+        WaterFlowSample source = fixture.waterFlow.find(0, 0, 0);
+        WaterFlowSample destination = fixture.waterFlow.find(1, 0, 0);
         assertNotNull(source);
         assertNotNull(destination);
         assertEquals(1, source.dx());
@@ -38,13 +38,13 @@ final class WaterFlowLookupTest {
         assertEquals(0, source.dz());
         assertEquals(source, destination);
 
-        for (int step = 0; step < 64 && flow.activeCellCount() > 0; step++) {
-            flow.update();
+        for (int step = 0; step < 64 && fixture.flow.activeCellCount() > 0; step++) {
+            fixture.flow.update();
         }
 
-        assertEquals(0, flow.activeCellCount());
-        assertNull(flow.flowLookup().find(0, 0, 0));
-        assertNull(flow.flowLookup().find(1, 0, 0));
+        assertEquals(0, fixture.flow.activeCellCount());
+        assertNull(fixture.waterFlow.find(0, 0, 0));
+        assertNull(fixture.waterFlow.find(1, 0, 0));
     }
 
     @Test
@@ -52,19 +52,35 @@ final class WaterFlowLookupTest {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 1)
                 .open(0, 0, 0);
-        WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
-                geometry);
-        WaterFlowSystem flow = new WaterFlowSystem(water, geometry);
+        Fixture fixture = fixture(geometry);
 
-        water.addAtMost(0, 0, 1, 20_000);
-        flow.update();
+        fixture.water.addAtMost(0, 0, 1, 20_000);
+        fixture.flow.update();
 
-        WaterFlowSample sample = flow.flowLookup().find(0, 0, 1);
+        WaterFlowSample sample = fixture.waterFlow.find(0, 0, 1);
         assertNotNull(sample);
         assertEquals(0, sample.dx());
         assertEquals(0, sample.dy());
         assertEquals(-1, sample.dz());
+    }
+
+    private static Fixture fixture(GeometryLookup geometry) {
+        LiquidSystem liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
+        WaterSystem water = new WaterSystem(liquids);
+        LiquidFlowSystem flow = new LiquidFlowSystem(
+                liquids,
+                geometry,
+                type -> LiquidTransportProperties.reference());
+        return new Fixture(
+                water,
+                flow,
+                WaterFlowLookup.from(flow.flowLookup()));
+    }
+
+    private record Fixture(
+            WaterSystem water,
+            LiquidFlowSystem flow,
+            WaterFlowLookup waterFlow) {
     }
 
     private record Cell(int x, int y, int z) {
