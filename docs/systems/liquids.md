@@ -39,7 +39,7 @@ The scale is a fraction of discrete cell volume, not litres.
 
 ## Identity
 
-`LiquidTypeId` is an open semantic identifier. `StandardLiquidTypes.WATER` defines the built-in Water identity.
+`LiquidTypeId` is an open semantic identifier, intentionally not a central enum/catalog. The Water integration owns its current built-in identity as `WaterSystem.TYPE`; a future liquid integration may own its own identity without modifying generic liquid code.
 
 The foundation intentionally does not attach an omnibus property bag to every liquid. There is currently no authoritative meaning for hypothetical viscosity, density, flammability, toxicity or chemistry fields. The first mechanic that actually needs such a property should introduce a narrow typed definition capability.
 
@@ -138,12 +138,13 @@ Those questions are intentionally unanswered today. The current single-component
 
 1. Free-liquid quantity has one authoritative owner.
 2. One free-liquid world has one shared transport solver; typed liquid facades do not fork it.
-3. Liquid-specific mechanics consume narrow typed capabilities; they do not fork the transport solver.
-4. No system may silently reinterpret one liquid identity as another.
-5. Contact between unsupported compositions must fail/block explicitly rather than depend on collection ordering.
-6. Generic liquid code must not gain speculative properties without a real consumer.
-7. Flow remains deterministic and exactly volume-conserving.
-8. Scheduling stops at hydraulic dormancy.
-9. Presentation and diagnostics are observers, never liquid authority.
+3. Liquid identities are open and domain-owned; generic liquid code does not maintain a catalog of concrete liquids.
+4. Liquid-specific mechanics consume narrow typed capabilities; they do not fork the transport solver.
+5. No system may silently reinterpret one liquid identity as another.
+6. Contact between unsupported compositions must fail/block explicitly rather than depend on collection ordering.
+7. Generic liquid code must not gain speculative properties without a real consumer.
+8. Flow remains deterministic and exactly volume-conserving.
+9. Scheduling stops at hydraulic dormancy.
+10. Presentation and diagnostics are observers, never liquid authority.
 
 See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md) for the architectural boundary.
