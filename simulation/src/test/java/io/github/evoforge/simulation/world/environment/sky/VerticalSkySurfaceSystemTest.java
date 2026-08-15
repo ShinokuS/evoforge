@@ -11,9 +11,10 @@ import org.junit.jupiter.api.Test;
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.landscape.water.storage.SparseWaterStorage;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
 
 final class VerticalSkySurfaceSystemTest {
@@ -87,9 +88,10 @@ final class VerticalSkySurfaceSystemTest {
                 LandscapeSystem.create(
                         new SparseTerrainStorage(),
                         definitions);
-        private final WaterSystem water = new WaterSystem(
-                new SparseWaterStorage(),
+        private final LiquidSystem liquids = new LiquidSystem(
+                new SparseLiquidStorage(),
                 landscape.geometry());
+        private final WaterSystem water = new WaterSystem(liquids);
         private final VerticalSkySurfaceSystem sky =
                 new VerticalSkySurfaceSystem(
                         landscape.terrainSurfaces(),
