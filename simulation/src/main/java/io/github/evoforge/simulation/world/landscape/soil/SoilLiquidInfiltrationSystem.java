@@ -5,60 +5,53 @@ import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
-/**
- * Deterministic transfer from active free liquid into retained Soil composition.
- *
- * <p>The mechanism is liquid-agnostic. Liquid/material-specific uptake belongs to
- * {@link SoilLiquidInteractionLookup}; unsupported free-liquid mixing remains a
- * separate concern of the free-liquid content model.
- */
+/** Deterministic transfer from active free liquid into retained Soil composition. */
 public final class SoilLiquidInfiltrationSystem {
 
     private final LiquidSystem freeLiquids;
     private final TerrainLookup terrain;
-    private final SoilLiquidSystem retainedLiquids;
+    private final SoilLiquidRetention retention;
 
     public SoilLiquidInfiltrationSystem(
             LiquidSystem freeLiquids,
             TerrainLookup terrain,
             SoilLiquidSystem retainedLiquids) {
+        this(
+                freeLiquids,
+                terrain,
+                retainedLiquids == null ? null : retainedLiquids::infiltrateAtMost);
+    }
 
-        if (freeLiquids == null || terrain == null || retainedLiquids == null) {
+    public SoilLiquidInfiltrationSystem(
+            LiquidSystem freeLiquids,
+            TerrainLookup terrain,
+            SoilLiquidRetention retention) {
+        if (freeLiquids == null || terrain == null || retention == null) {
             throw new IllegalArgumentException(
                     "Soil liquid infiltration dependencies must not be null");
         }
         this.freeLiquids = freeLiquids;
         this.terrain = terrain;
-        this.retainedLiquids = retainedLiquids;
+        this.retention = retention;
     }
 
-    /** Infiltrates every currently active free-liquid cell in stable cell order. */
     public long update() {
         long[] infiltratedTotal = {0L};
         freeLiquids.forEachActive((x, y, z) -> {
             LiquidTypeId type = freeLiquids.lookup().typeAt(x, y, z);
             if (type == null) return;
-
             int amount = freeLiquids.lookup().amount(x, y, z);
             if (amount <= CellVolume.EMPTY) return;
 
             int terrainZ = supportingTerrainZ(x, y, z);
             if (terrainZ == Integer.MIN_VALUE) return;
 
-            int infiltrated = retainedLiquids.infiltrateAtMost(
-                    type,
-                    x,
-                    y,
-                    terrainZ,
-                    amount);
+            int infiltrated = retention.infiltrateAtMost(
+                    type, x, y, terrainZ, amount);
             if (infiltrated <= CellVolume.EMPTY) return;
 
             int removed = freeLiquids.removeAtMost(
-                    type,
-                    x,
-                    y,
-                    z,
-                    infiltrated);
+                    type, x, y, z, infiltrated);
             if (removed != infiltrated) {
                 throw new IllegalStateException(
                         "free liquid changed during deterministic Soil infiltration at ("
@@ -66,9 +59,7 @@ public final class SoilLiquidInfiltrationSystem {
                                 + ", infiltrated=" + infiltrated
                                 + ", removed=" + removed);
             }
-            infiltratedTotal[0] = Math.addExact(
-                    infiltratedTotal[0],
-                    infiltrated);
+            infiltratedTotal[0] = Math.addExact(infiltratedTotal[0], infiltrated);
         });
         return infiltratedTotal[0];
     }
@@ -77,8 +68,6 @@ public final class SoilLiquidInfiltrationSystem {
         if (terrain.contains(x, y, z)) return z;
         if (z == Integer.MIN_VALUE) return Integer.MIN_VALUE;
         int below = z - 1;
-        return terrain.contains(x, y, below)
-                ? below
-                : Integer.MIN_VALUE;
+        return terrain.contains(x, y, below) ? below : Integer.MIN_VALUE;
     }
 }

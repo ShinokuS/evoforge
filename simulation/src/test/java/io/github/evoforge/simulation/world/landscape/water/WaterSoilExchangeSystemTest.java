@@ -10,9 +10,10 @@ import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrology;
 import io.github.evoforge.simulation.world.landscape.soil.SoilHydrologyDefinitions;
+import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
 import io.github.evoforge.simulation.world.landscape.soil.SoilMoistureSystem;
 import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilHydrologyLookup;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilMoistureStorage;
+import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
@@ -29,7 +30,7 @@ final class WaterSoilExchangeSystemTest {
         assertEquals(20_000L, fixture.exchange.update());
         assertEquals(0, fixture.water.lookup().amount(0, 0, 0));
         assertEquals(20_000, fixture.soil.lookup().amount(0, 0, -1));
-        assertEquals(20_000, total(fixture));
+        assertEquals(20_000, totalWater(fixture));
     }
 
     @Test
@@ -43,7 +44,7 @@ final class WaterSoilExchangeSystemTest {
         assertEquals(0L, fixture.exchange.update());
         assertEquals(7_000, fixture.water.lookup().amount(0, 0, 0));
         assertEquals(10_000, fixture.soil.lookup().amount(0, 0, -1));
-        assertEquals(17_000, total(fixture));
+        assertEquals(17_000, totalWater(fixture));
     }
 
     @Test
@@ -54,19 +55,20 @@ final class WaterSoilExchangeSystemTest {
         assertEquals(3_000L, fixture.exchange.update());
         assertEquals(7_000, fixture.water.lookup().amount(0, 0, 0));
         assertEquals(3_000, fixture.soil.lookup().amount(0, 0, -1));
-        assertEquals(10_000, total(fixture));
+        assertEquals(10_000, totalWater(fixture));
     }
 
     @Test
-    void nonWaterLiquidDoesNotInheritWaterSoilInfiltration() {
+    void nonWaterLiquidUsesTheSameGenericSoilInfiltrationMechanic() {
         Fixture fixture = fixture(100_000, 30_000);
         LiquidTypeId blood = LiquidTypeId.of("blood");
         fixture.liquids.addAtMost(blood, 0, 0, 0, 20_000);
 
-        assertEquals(0L, fixture.exchange.update());
+        assertEquals(20_000L, fixture.exchange.update());
+        assertEquals(0, fixture.liquids.lookup().amountOf(blood, 0, 0, 0));
         assertEquals(
                 20_000,
-                fixture.liquids.lookup().amountOf(blood, 0, 0, 0));
+                fixture.retained.lookup().amountOf(blood, 0, 0, -1));
         assertEquals(0, fixture.soil.lookup().amount(0, 0, -1));
     }
 
@@ -84,11 +86,16 @@ final class WaterSoilExchangeSystemTest {
                 x == 0 && y == 0 && z == -1
                         ? SOIL
                         : null;
-        SoilMoistureSystem soil = new SoilMoistureSystem(
-                new SparseSoilMoistureStorage(),
+        TerrainSoilHydrologyLookup hydrology =
                 new TerrainSoilHydrologyLookup(
                         terrain,
-                        definitions));
+                        definitions);
+        SoilLiquidSystem retained = new SoilLiquidSystem(
+                new SparseSoilLiquidStorage(),
+                hydrology);
+        SoilMoistureSystem soil = new SoilMoistureSystem(
+                retained,
+                WaterSystem.TYPE);
         GeometryLookup geometry = (x, y, z) -> null;
         LiquidSystem liquids = new LiquidSystem(
                 new SparseLiquidStorage(),
@@ -99,10 +106,10 @@ final class WaterSoilExchangeSystemTest {
                         water,
                         terrain,
                         soil);
-        return new Fixture(liquids, water, soil, exchange);
+        return new Fixture(liquids, water, retained, soil, exchange);
     }
 
-    private static int total(Fixture fixture) {
+    private static int totalWater(Fixture fixture) {
         return fixture.water.lookup().amount(0, 0, 0)
                 + fixture.soil.lookup().amount(0, 0, -1);
     }
@@ -110,6 +117,7 @@ final class WaterSoilExchangeSystemTest {
     private record Fixture(
             LiquidSystem liquids,
             WaterSystem water,
+            SoilLiquidSystem retained,
             SoilMoistureSystem soil,
             WaterSoilExchangeSystem exchange) {
     }

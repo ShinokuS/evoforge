@@ -95,6 +95,17 @@ public final class SoilMoistureSystem {
         return liquids.hydrologyAt(x, y, z);
     }
 
+    /** Generic retained-liquid capability used by shared Soil infiltration. */
+    public int infiltrateAtMost(
+            LiquidTypeId type,
+            int x,
+            int y,
+            int z,
+            int requested) {
+        return liquids.infiltrateAtMost(type, x, y, z, requested);
+    }
+
+    /** Retains only this facade's configured moisture constituent. */
     public int infiltrateAtMost(
             int x,
             int y,
