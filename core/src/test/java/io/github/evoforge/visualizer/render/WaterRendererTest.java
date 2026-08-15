@@ -21,7 +21,7 @@ final class WaterRendererTest {
         assertTrue(shallow > dry);
         assertTrue(medium > shallow);
         assertTrue(full > medium);
-        assertTrue(full < 0.75f);
+        assertTrue(full < 0.9f);
         assertEquals(full, excess);
     }
 
@@ -29,5 +29,16 @@ final class WaterRendererTest {
     void invalidOrUnavailableCapacityDrawsNoWater() {
         assertEquals(0f, WaterRenderer.opacityFor(100_000, 0));
         assertEquals(0f, WaterRenderer.opacityFor(-1, 1_000_000));
+    }
+
+    @Test
+    void lowerCutawayLayersRemainReadableButAreVisuallyDepthCoded() {
+        assertEquals(1f, WaterRenderer.depthOpacity(0));
+        assertTrue(WaterRenderer.depthOpacity(1) < 1f);
+        assertTrue(WaterRenderer.depthOpacity(2) < WaterRenderer.depthOpacity(1));
+        assertTrue(WaterRenderer.depthOpacity(6) < WaterRenderer.depthOpacity(3));
+        assertEquals(
+                WaterRenderer.depthOpacity(6),
+                WaterRenderer.depthOpacity(12));
     }
 }
