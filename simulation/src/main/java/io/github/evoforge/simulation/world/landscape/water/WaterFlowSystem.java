@@ -2,7 +2,6 @@ package io.github.evoforge.simulation.world.landscape.water;
 
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSample;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
-import io.github.evoforge.simulation.world.landscape.liquid.StandardLiquidTypes;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 
 /**
@@ -29,7 +28,7 @@ public final class WaterFlowSystem {
         this.flow = flow;
         flowLookup = (x, y, z) -> {
             LiquidFlowSample sample = flow.flowLookup().find(x, y, z);
-            if (sample == null || !StandardLiquidTypes.WATER.equals(sample.type())) {
+            if (sample == null || !WaterSystem.TYPE.equals(sample.type())) {
                 return null;
             }
             return new WaterFlowSample(
@@ -93,7 +92,7 @@ public final class WaterFlowSystem {
         return new LiquidFlowSystem(
                 water.liquidSystem(),
                 geometry,
-                (type, x, y, z) -> StandardLiquidTypes.WATER.equals(type)
+                (type, x, y, z) -> WaterSystem.TYPE.equals(type)
                         ? surfaceStorage.capacityAtWaterCell(x, y, z)
                         : 0);
     }
