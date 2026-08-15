@@ -33,6 +33,10 @@ public final class WaterFlowSystem {
     private final GeometryLookup geometry;
     private final SurfaceWaterStorageLookup surfaceStorage;
     private final WaterFlowActivity activity;
+    private final TreeMap<WaterCell, WaterFlowSample> lastFlow =
+            new TreeMap<>();
+    private final WaterFlowLookup flowLookup = (x, y, z) ->
+            lastFlow.get(new WaterCell(x, y, z));
 
     public WaterFlowSystem(
             WaterSystem water,
@@ -67,11 +71,18 @@ public final class WaterFlowSystem {
         activity = water.flowActivity();
     }
 
+    /** Actual sparse transfer state from the latest evaluated solver step. */
+    public WaterFlowLookup flowLookup() {
+        return flowLookup;
+    }
+
     /**
      * Redistributes one deterministic local flow step and returns the total volume
      * that crossed cell boundaries during this update.
      */
     public long update() {
+        lastFlow.clear();
+
         List<WaterCell> activeCells =
                 activity.drainSorted();
         if (activeCells.isEmpty()) {
@@ -484,6 +495,7 @@ public final class WaterFlowSystem {
             moved = Math.addExact(
                     moved,
                     transfer.amount);
+            recordFlow(transfer);
         }
 
         if (moved == CellVolume.EMPTY) {
@@ -537,6 +549,29 @@ public final class WaterFlowSystem {
         }
 
         return moved;
+    }
+
+    private void recordFlow(
+            MutableTransfer transfer) {
+
+        WaterFlowSample sample = new WaterFlowSample(
+                transfer.destination.x() - transfer.source.x(),
+                transfer.destination.y() - transfer.source.y(),
+                transfer.destination.z() - transfer.source.z(),
+                transfer.amount);
+        recordDominant(transfer.source, sample);
+        recordDominant(transfer.destination, sample);
+    }
+
+    private void recordDominant(
+            WaterCell cell,
+            WaterFlowSample candidate) {
+
+        WaterFlowSample existing = lastFlow.get(cell);
+        if (existing == null
+                || candidate.amount() > existing.amount()) {
+            lastFlow.put(cell, candidate);
+        }
     }
 
     private long sharedOpeningFloor(
