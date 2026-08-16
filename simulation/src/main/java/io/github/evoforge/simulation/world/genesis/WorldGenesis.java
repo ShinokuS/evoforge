@@ -23,7 +23,7 @@ public record WorldGenesis(
         return new WorldGenesis(
                 spec,
                 masterSeed,
-                GenerationRevision.V1,
+                GenerationRevision.V2,
                 RngRevision.V1);
     }
 }
