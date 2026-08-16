@@ -57,6 +57,7 @@ public final class LivingCowScenario implements VisualizerScenario {
     @Override public String description() {
         return "Two autonomous Cows balance Hunger and Thirst in a changing meadow: plants regrow, a permanent lake sits at the map edge, and light cyclic rain creates only a few temporary puddles in shallow micro-basins.";
     }
+    @Override public boolean manualMovementEnabled() { return false; }
 
     @Override
     public ScenarioSession create() {
