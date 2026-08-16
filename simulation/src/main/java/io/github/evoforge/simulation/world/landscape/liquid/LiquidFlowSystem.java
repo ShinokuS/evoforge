@@ -32,6 +32,11 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
  * if several unlike liquids simultaneously target the same dry cell, every
  * contested inflow is suppressed for that step. This symmetric boundary is an
  * explicit placeholder for a future composition/mixing model, not a priority rule.
+ *
+ * <p>Latest-step diagnostics publish the dominant axis of each cell's aggregate
+ * net transfer vector rather than whichever individual edge happened to carry the
+ * largest transfer. Symmetric inflow/outflow therefore cancels instead of becoming
+ * an artificial presentation direction.
  */
 public final class LiquidFlowSystem {
 
@@ -379,6 +384,7 @@ public final class LiquidFlowSystem {
     private long commit(List<MutableTransfer> transfers) {
         Map<LiquidCell, Integer> deltas = new TreeMap<>();
         Map<LiquidCell, LiquidTypeId> incomingTypes = new TreeMap<>();
+        Map<LiquidCell, FlowAccumulator> netFlow = new TreeMap<>();
         long moved = 0L;
 
         for (MutableTransfer transfer : transfers) {
@@ -394,7 +400,7 @@ public final class LiquidFlowSystem {
                                 + transfer.destination);
             }
             moved = Math.addExact(moved, transfer.amount);
-            recordFlow(transfer);
+            accumulateNetFlow(netFlow, transfer);
         }
 
         if (moved == CellVolume.EMPTY) return CellVolume.EMPTY;
@@ -437,6 +443,7 @@ public final class LiquidFlowSystem {
             liquids.replaceFromFlow(cell, nextType, nextAmount);
         }
 
+        publishNetFlow(netFlow);
         for (MutableTransfer transfer : transfers) {
             if (transfer.amount <= CellVolume.EMPTY) continue;
             activity.activate(transfer.source);
@@ -445,24 +452,23 @@ public final class LiquidFlowSystem {
         return moved;
     }
 
-    private void recordFlow(MutableTransfer transfer) {
-        LiquidFlowSample sample = new LiquidFlowSample(
-                transfer.type,
-                transfer.destination.x() - transfer.source.x(),
-                transfer.destination.y() - transfer.source.y(),
-                transfer.destination.z() - transfer.source.z(),
-                transfer.amount);
-        recordDominant(transfer.source, sample);
-        recordDominant(transfer.destination, sample);
+    private static void accumulateNetFlow(
+            Map<LiquidCell, FlowAccumulator> netFlow,
+            MutableTransfer transfer) {
+
+        int dx = transfer.destination.x() - transfer.source.x();
+        int dy = transfer.destination.y() - transfer.source.y();
+        int dz = transfer.destination.z() - transfer.source.z();
+        netFlow.computeIfAbsent(transfer.source, ignored -> new FlowAccumulator())
+                .add(transfer.type, dx, dy, dz, transfer.amount);
+        netFlow.computeIfAbsent(transfer.destination, ignored -> new FlowAccumulator())
+                .add(transfer.type, dx, dy, dz, transfer.amount);
     }
 
-    private void recordDominant(LiquidCell cell, LiquidFlowSample candidate) {
-        LiquidFlowSample existing = lastFlow.get(cell);
-        if (existing == null
-                || candidate.amount() > existing.amount()
-                || (candidate.amount() == existing.amount()
-                        && candidate.type().compareTo(existing.type()) < 0)) {
-            lastFlow.put(cell, candidate);
+    private void publishNetFlow(Map<LiquidCell, FlowAccumulator> netFlow) {
+        for (Map.Entry<LiquidCell, FlowAccumulator> entry : netFlow.entrySet()) {
+            LiquidFlowSample sample = entry.getValue().sample();
+            if (sample != null) lastFlow.put(entry.getKey(), sample);
         }
     }
 
@@ -527,6 +533,53 @@ public final class LiquidFlowSystem {
 
     private static long baseHeight(LiquidCell cell) {
         return (long) cell.z() * CellSpace.FULL_HEIGHT;
+    }
+
+    private static final class FlowAccumulator {
+        private LiquidTypeId type;
+        private long xFlux;
+        private long yFlux;
+        private long zFlux;
+
+        private void add(
+                LiquidTypeId type,
+                int dx,
+                int dy,
+                int dz,
+                int amount) {
+            if (this.type == null) this.type = type;
+            else if (!this.type.equals(type)) {
+                throw new IllegalStateException(
+                        "one liquid cell accumulated multiple flow identities");
+            }
+            xFlux = Math.addExact(xFlux, Math.multiplyExact((long) dx, amount));
+            yFlux = Math.addExact(yFlux, Math.multiplyExact((long) dy, amount));
+            zFlux = Math.addExact(zFlux, Math.multiplyExact((long) dz, amount));
+        }
+
+        private LiquidFlowSample sample() {
+            long absX = Math.abs(xFlux);
+            long absY = Math.abs(yFlux);
+            long absZ = Math.abs(zFlux);
+            if (absX == 0L && absY == 0L && absZ == 0L) return null;
+
+            int dx = 0;
+            int dy = 0;
+            int dz = 0;
+            long magnitude;
+            if (absZ >= absX && absZ >= absY) {
+                dz = Long.signum(zFlux);
+                magnitude = absZ;
+            } else if (absX >= absY) {
+                dx = Long.signum(xFlux);
+                magnitude = absX;
+            } else {
+                dy = Long.signum(yFlux);
+                magnitude = absY;
+            }
+            int boundedMagnitude = (int) Math.min((long) CellVolume.FULL, magnitude);
+            return new LiquidFlowSample(type, dx, dy, dz, boundedMagnitude);
+        }
     }
 
     private static final class MutableTransfer {
