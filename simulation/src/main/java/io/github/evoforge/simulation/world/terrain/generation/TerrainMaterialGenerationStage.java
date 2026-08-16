@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.terrain.generation;
 
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
@@ -26,6 +27,26 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
             ElevationField elevation,
             DrainageField drainage,
             CompiledTerrainProfile profile) {
+        return generateInternal(elevation, drainage, null, profile);
+    }
+
+    @Override
+    public TerrainMaterialField generate(
+            ElevationField elevation,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
+        if (surfaceHydrology == null) {
+            throw new IllegalArgumentException("surfaceHydrology must not be null");
+        }
+        return generateInternal(elevation, drainage, surfaceHydrology, profile);
+    }
+
+    private TerrainMaterialField generateInternal(
+            ElevationField elevation,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
         if (elevation == null || drainage == null || profile == null) {
             throw new IllegalArgumentException(
                     "terrain material generation dependencies must not be null");
@@ -33,6 +54,10 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         WorldBounds bounds = elevation.bounds();
         if (!bounds.equals(drainage.bounds())) {
             throw new IllegalArgumentException("elevation and drainage bounds must match");
+        }
+        if (surfaceHydrology != null && !bounds.equals(surfaceHydrology.bounds())) {
+            throw new IllegalArgumentException(
+                    "surface hydrology bounds must match terrain generation bounds");
         }
 
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -74,9 +99,15 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 groundDepth[index] = (byte) (groundProfile
                         ? groundDepthFor(context.maximumSlope())
                         : 0);
-                depositionDepth[index] = (byte) (surfaceDeposition
+                int deposition = surfaceDeposition
                         ? depositionDepthFor(context)
-                        : 0);
+                        : 0;
+                if (surfaceDeposition
+                        && surfaceHydrology != null
+                        && surfaceHydrology.isShoreline(worldX, worldY)) {
+                    deposition = Math.max(1, deposition);
+                }
+                depositionDepth[index] = (byte) deposition;
                 index++;
             }
         }
