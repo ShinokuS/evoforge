@@ -21,6 +21,7 @@ public final class CowForagingScenario implements VisualizerScenario {
     @Override public String description() {
         return "A hungry autonomous cow evaluates visible finite Grass and Hay stocks, then consumes real source quantity without a cow-specific behavior script.";
     }
+    @Override public boolean manualMovementEnabled() { return false; }
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
