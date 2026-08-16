@@ -6,9 +6,8 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 /** Replaceable deterministic algorithm that derives material strata from generated causal facts. */
 @FunctionalInterface
 public interface TerrainMaterialGenerator {
-
     TerrainMaterialField generate(
             ElevationField elevation,
             DrainageField drainage,
-            TerrainPalette palette);
+            CompiledTerrainProfile profile);
 }
