@@ -1,6 +1,5 @@
 package io.github.evoforge.simulation.world.geology;
 
-import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.genesis.GenerationPurposeId;
 import io.github.evoforge.simulation.world.genesis.GenerationRandom;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
@@ -36,14 +35,11 @@ public final class GeologyGenerationStage implements GeologyGenerator {
     }
 
     @Override
-    public GeologyField generate(WorldGenesis genesis, ElevationField elevation) {
-        if (genesis == null || elevation == null) {
-            throw new IllegalArgumentException("geology generation dependencies must not be null");
+    public GeologyField generate(WorldGenesis genesis) {
+        if (genesis == null) {
+            throw new IllegalArgumentException("genesis must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
-        if (!bounds.equals(elevation.bounds())) {
-            throw new IllegalArgumentException("geology and elevation bounds must match genesis");
-        }
 
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
