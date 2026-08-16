@@ -50,7 +50,7 @@ public final class VisualizerInteractionController extends InputAdapter {
     }
 
     public void setManualMovementEnabled(boolean enabled) {
-        menus.close();
+        if (!enabled) menus.close();
         moveTargeting.setEnabled(enabled);
     }
 
