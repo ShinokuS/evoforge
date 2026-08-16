@@ -2,26 +2,25 @@ package io.github.evoforge.simulation.world.terrain.generation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.DrainageGenerationStage;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 final class TerrainMaterialGenerationStageTest {
-
     private static final TerrainMaterialKey TOPSOIL = TerrainMaterialKey.of("test:topsoil");
     private static final TerrainMaterialKey SOIL = TerrainMaterialKey.of("test:soil");
     private static final TerrainMaterialKey SAND = TerrainMaterialKey.of("test:sand");
     private static final TerrainMaterialKey ROCK = TerrainMaterialKey.of("test:rock");
 
     @Test
-    void flatStableGroundBuildsTopsoilSoilThenRock() {
+    void flatStableGroundBuildsSurfaceSubsurfaceThenBedrock() {
         TestElevationField elevation = constantElevation(0L, -5, 5);
-        TerrainMaterialField field = generate(elevation, naturalGroundPalette());
+        TerrainMaterialField field = generate(elevation, naturalGroundProfile(materials()));
 
         assertEquals(TOPSOIL, field.materialAt(1, 1, 0));
         assertEquals(SOIL, field.materialAt(1, 1, -1));
@@ -40,32 +39,28 @@ final class TerrainMaterialGenerationStageTest {
                         0, 2 * cell, 0,
                         0, 0, 0
                 });
-        TerrainMaterialField materials = generate(
-                elevation,
-                naturalGroundPalette());
+        TerrainMaterialField result = generate(elevation, naturalGroundProfile(materials()));
 
-        assertEquals(ROCK, materials.materialAt(1, 1, 2));
+        assertEquals(ROCK, result.materialAt(1, 1, 2));
     }
 
     @Test
-    void lowSlopeDrainageDepressionAccumulatesSandWithoutAbsoluteHeightRule() {
+    void lowSlopeDrainageDepressionAccumulatesSedimentWithoutAbsoluteHeightRule() {
         TestElevationField elevation = shallowBowl(0, -5, 5);
-        TerrainMaterialField materials = generate(
-                elevation,
-                naturalGroundAndDepositionPalette());
+        TerrainMaterialField result = generate(elevation, fullProfile(materials()));
 
-        assertEquals(SAND, materials.materialAt(1, 1, -1));
-        assertEquals(SAND, materials.materialAt(1, 1, -2));
-        assertEquals(SOIL, materials.materialAt(1, 1, -3));
+        assertEquals(SAND, result.materialAt(1, 1, -1));
+        assertEquals(SAND, result.materialAt(1, 1, -2));
+        assertEquals(SOIL, result.materialAt(1, 1, -3));
     }
 
     @Test
     void verticalTranslationPreservesRelativeMaterialPattern() {
         TestElevationField base = shallowBowl(0, -5, 5);
         TestElevationField shifted = shallowBowl(7, 2, 12);
-        TerrainPalette palette = naturalGroundAndDepositionPalette();
-        TerrainMaterialField first = generate(base, palette);
-        TerrainMaterialField second = generate(shifted, palette);
+        CompiledTerrainProfile profile = fullProfile(materials());
+        TerrainMaterialField first = generate(base, profile);
+        TerrainMaterialField second = generate(shifted, profile);
 
         for (int y = 0; y <= 2; y++) {
             for (int x = 0; x <= 2; x++) {
@@ -83,48 +78,81 @@ final class TerrainMaterialGenerationStageTest {
         }
     }
 
+    @Test
+    void changingMaterialSetPreservesStructureAndOnlyChangesMaterialIdentities() {
+        TestElevationField elevation = shallowBowl(0, -5, 5);
+        Map<TerrainMaterialRole, TerrainMaterialKey> firstMaterials = materials();
+        Map<TerrainMaterialRole, TerrainMaterialKey> secondMaterials = Map.of(
+                TerrainMaterialRole.SURFACE, TerrainMaterialKey.of("test:volcanic_surface"),
+                TerrainMaterialRole.SUBSURFACE, TerrainMaterialKey.of("test:ash_subsurface"),
+                TerrainMaterialRole.SEDIMENT, TerrainMaterialKey.of("test:black_sediment"),
+                TerrainMaterialRole.BEDROCK, TerrainMaterialKey.of("test:basalt"));
+        TerrainMaterialField first = generate(elevation, fullProfile(firstMaterials));
+        TerrainMaterialField second = generate(elevation, fullProfile(secondMaterials));
+
+        for (int y = 0; y <= 2; y++) {
+            for (int x = 0; x <= 2; x++) {
+                int surface = elevation.elevationAt(x, y);
+                for (int z = elevation.bounds().minZ(); z <= surface; z++) {
+                    TerrainMaterialRole role = roleOf(firstMaterials, first.materialAt(x, y, z));
+                    assertEquals(secondMaterials.get(role), second.materialAt(x, y, z));
+                }
+            }
+        }
+    }
+
     private static TerrainMaterialField generate(
             TestElevationField elevation,
-            TerrainPalette palette) {
+            CompiledTerrainProfile profile) {
         DrainageField drainage = new DrainageGenerationStage().generate(elevation);
-        return new TerrainMaterialGenerationStage().generate(
-                elevation,
-                drainage,
-                palette);
+        return new TerrainMaterialGenerationStage().generate(elevation, drainage, profile);
     }
 
-    private static TerrainPalette naturalGroundPalette() {
-        return palette(List.of(new TerrainPreset(
-                TerrainPresetCatalog.NATURAL_GROUND,
-                TerrainPresetCapability.GROUND_PROFILE)));
+    private static CompiledTerrainProfile naturalGroundProfile(
+            Map<TerrainMaterialRole, TerrainMaterialKey> materials) {
+        return compile(
+                List.of(TerrainPresetCatalog.NATURAL_GROUND),
+                materials);
     }
 
-    private static TerrainPalette naturalGroundAndDepositionPalette() {
-        return palette(List.of(
-                new TerrainPreset(
+    private static CompiledTerrainProfile fullProfile(
+            Map<TerrainMaterialRole, TerrainMaterialKey> materials) {
+        return compile(
+                List.of(
                         TerrainPresetCatalog.NATURAL_GROUND,
-                        TerrainPresetCapability.GROUND_PROFILE),
-                new TerrainPreset(
-                        TerrainPresetCatalog.DEPOSITIONAL_SAND,
-                        TerrainPresetCapability.SURFACE_DEPOSITION)));
+                        TerrainPresetCatalog.DEPOSITIONAL_SAND),
+                materials);
     }
 
-    private static TerrainPalette palette(List<TerrainPreset> presets) {
-        return new TerrainPalette(
-                "test:terrain",
-                presets,
-                new TerrainPaletteMaterials(TOPSOIL, SOIL, SAND, ROCK));
+    private static CompiledTerrainProfile compile(
+            List<String> presetKeys,
+            Map<TerrainMaterialRole, TerrainMaterialKey> materials) {
+        return new TerrainProfileCompiler().compile(
+                new TerrainProfileDefinition("test:terrain", presetKeys, "test:materials"),
+                new TerrainMaterialSetDefinition("test:materials", materials));
     }
 
-    private static TestElevationField constantElevation(
-            long subunits,
-            int minZ,
-            int maxZ) {
+    private static Map<TerrainMaterialRole, TerrainMaterialKey> materials() {
+        return Map.of(
+                TerrainMaterialRole.SURFACE, TOPSOIL,
+                TerrainMaterialRole.SUBSURFACE, SOIL,
+                TerrainMaterialRole.SEDIMENT, SAND,
+                TerrainMaterialRole.BEDROCK, ROCK);
+    }
+
+    private static TerrainMaterialRole roleOf(
+            Map<TerrainMaterialRole, TerrainMaterialKey> materials,
+            TerrainMaterialKey key) {
+        for (Map.Entry<TerrainMaterialRole, TerrainMaterialKey> entry : materials.entrySet()) {
+            if (entry.getValue().equals(key)) return entry.getKey();
+        }
+        throw new AssertionError("unknown test material: " + key);
+    }
+
+    private static TestElevationField constantElevation(long subunits, int minZ, int maxZ) {
         long[] elevations = new long[9];
         java.util.Arrays.fill(elevations, subunits);
-        return field(
-                new WorldBounds(0, 2, 0, 2, minZ, maxZ),
-                elevations);
+        return field(new WorldBounds(0, 2, 0, 2, minZ, maxZ), elevations);
     }
 
     private static TestElevationField shallowBowl(
@@ -144,9 +172,7 @@ final class TerrainMaterialGenerationStageTest {
                 });
     }
 
-    private static TestElevationField field(
-            WorldBounds bounds,
-            long[] elevations) {
+    private static TestElevationField field(WorldBounds bounds, long[] elevations) {
         return new TestElevationField(bounds, elevations);
     }
 
@@ -155,9 +181,7 @@ final class TerrainMaterialGenerationStageTest {
         private final int width;
         private final long[] elevations;
 
-        private TestElevationField(
-                WorldBounds bounds,
-                long[] elevations) {
+        private TestElevationField(WorldBounds bounds, long[] elevations) {
             this.bounds = bounds;
             this.width = bounds.maxX() - bounds.minX() + 1;
             this.elevations = elevations.clone();
