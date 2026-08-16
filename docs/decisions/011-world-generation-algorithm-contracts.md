@@ -12,22 +12,25 @@ The opposite extreme is also harmful: a generic plugin framework invented before
 
 Each generation layer exposes the narrowest typed algorithm contract required by its semantic input and output. Orchestration depends on that contract, not on a concrete implementation.
 
-The first proven seam is:
+The first two proven seams are:
 
 ```text
 ElevationGenerator
     generate(WorldGenesis) -> ElevationField
+
+DrainageGenerator
+    generate(ElevationField) -> DrainageField
 ```
 
-`ElevationGenerationStage` is the default implementation and interprets the supported `GenerationRevision` carried by `WorldGenesis`. `WorldAtlasGenerator` composes an `ElevationGenerator`; its default composition selects that implementation, while alternate implementations may be injected without changing Atlas consumers.
+`ElevationGenerationStage` is the default elevation implementation and interprets the supported `GenerationRevision` carried by `WorldGenesis`. `DrainageGenerationStage` consumes only the precise elevation fact it actually needs. `WorldAtlasGenerator` composes both contracts in causal order; alternate implementations may be injected without changing Atlas consumers.
 
-Future layers follow the same rule when their real dependencies are known. A drainage algorithm, for example, should consume the exact upstream facts it requires and return a `DrainageField`; it should not receive a universal mutable `WorldGeneratorContext` merely for convenience.
+Future layers follow the same rule when their real dependencies are known. A climate or geology algorithm receives the exact upstream facts required by its semantics; it does not receive a universal mutable `WorldGeneratorContext` merely for convenience.
 
 Evaluators and selectors follow the same discipline: introduce a typed evaluator contract when an evaluator has a concrete semantic question to answer. Do not create one universal evaluator interface or service locator in advance.
 
-Generated fact contracts remain independent from algorithm contracts. Downstream systems read `ElevationField` or future fact interfaces, never the Java class that authored them.
+Generated fact contracts remain independent from algorithm contracts. Downstream systems read `ElevationField`, `DrainageField` or future fact interfaces, never the Java class that authored them.
 
-`GenerationRevision` describes authored-world compatibility, not Java implementation identity. Replacing an algorithm with an implementation that intentionally changes generated facts for the same declared inputs requires a new generation revision. Refactors or alternate implementations claiming the same revision must preserve the declared semantics and frozen compatibility expectations.
+`GenerationRevision` describes authored-world compatibility, not Java implementation identity. Replacing an algorithm with an implementation that intentionally changes already-declared generated facts for the same declared inputs requires a new generation revision. Refactors or alternate implementations claiming the same revision must preserve the declared semantics and frozen compatibility expectations.
 
 ## Consequences
 
@@ -35,6 +38,7 @@ Generated fact contracts remain independent from algorithm contracts. Downstream
 - orchestration remains small as the pipeline grows;
 - downstream stages depend on semantic facts instead of concrete generators;
 - one implementation may preserve several historical generation revisions when their compatibility behavior remains executable;
+- causal dependencies are visible in Java signatures rather than hidden in ambient context;
 - new algorithms do not require central `instanceof`, enum switches or edits to unrelated stages;
 - validators can remain outside algorithms and continue protecting layer invariants;
 - plugin registries or discovery mechanisms are added only if real runtime/configuration selection requires them;
