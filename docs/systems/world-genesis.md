@@ -12,7 +12,7 @@ World Genesis owns immutable provenance for a generated world and the determinis
 WorldSpec
 masterSeed
 GenerationRevision
-a RngRevision
+RngRevision
 ```
 
 `WorldGenesis.current(...)` currently declares `evoforge:worldgen-v1` with `evoforge:rng-v1`.
