@@ -1,7 +1,5 @@
 package io.github.evoforge.simulation.world.agent.decision;
 
-import io.github.evoforge.simulation.world.object.ObjectId;
-
 /** One perceived possibility recorded on the common deterministic Utility scale. */
 public record AgentCandidateTrace(
         String providerId,
@@ -33,19 +31,5 @@ public record AgentCandidateTrace(
         if (motivation == null || motivation.isBlank()) {
             throw new IllegalArgumentException("motivation must not be blank");
         }
-    }
-
-    /** Temporary presentation bridge; remove once the HUD uses source-neutral targetKey directly. */
-    @Deprecated(forRemoval = true)
-    public ObjectId sourceId() {
-        if (!targetKey.startsWith("object:")) return null;
-        long value = Long.parseLong(targetKey.substring("object:".length()));
-        return ObjectId.of((int) (value & 0xFFFF_FFFFL), (int) (value >>> 32));
-    }
-
-    /** Temporary presentation bridge; final score is the common Utility value. */
-    @Deprecated(forRemoval = true)
-    public long score() {
-        return utility;
     }
 }
