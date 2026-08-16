@@ -153,7 +153,7 @@ final class HydroClimateForcingSystemTest {
             }
 
             @Override
-            public CellVolumeRate potentialEvaporationAt(int x, int y) {
+            public CellVolumeRate evaporativeDemandAt(int x, int y) {
                 return evaporation.at(x, y);
             }
         };
