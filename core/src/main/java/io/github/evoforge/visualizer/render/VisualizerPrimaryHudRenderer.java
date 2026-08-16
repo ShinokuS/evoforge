@@ -9,11 +9,17 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.time.SimulationTime;
+import io.github.evoforge.simulation.world.agent.decision.AgentDecisionTrace;
+import io.github.evoforge.simulation.world.agent.decision.AgentIntentPhase;
+import io.github.evoforge.simulation.world.agent.decision.AgentIntentTrace;
+import io.github.evoforge.simulation.world.agent.need.NeedId;
+import io.github.evoforge.simulation.world.agent.search.AgentSearchTrace;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.growth.GrowthStatus;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.visualizer.VisualizerCamera;
@@ -24,11 +30,10 @@ import io.github.evoforge.visualizer.presentation.object.ObjectPresentation;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
 import io.github.evoforge.visualizer.visual.WaterOpticalDepthResolver;
-
 import java.util.ArrayList;
 import java.util.List;
 
-/** Runtime status plus a content-sized selected cell/object card. */
+/** Runtime status plus a content-sized selected object/terrain inspector. */
 public final class VisualizerPrimaryHudRenderer {
 
     private static final Color PANEL = new Color(0.030f, 0.040f, 0.047f, 0.97f);
@@ -37,7 +42,12 @@ public final class VisualizerPrimaryHudRenderer {
     private static final Color TEXT = new Color(0.94f, 0.97f, 0.95f, 1f);
     private static final Color MUTED = new Color(0.70f, 0.77f, 0.73f, 1f);
     private static final Color MOVE = new Color(0.48f, 0.84f, 1.00f, 1f);
+    private static final Color TAB_ACTIVE = new Color(0.16f, 0.25f, 0.24f, 1f);
+    private static final Color TAB_INACTIVE = new Color(0.075f, 0.095f, 0.10f, 1f);
     private static final Color BAR_BACKGROUND = new Color(0.13f, 0.17f, 0.17f, 1f);
+    private static final Color NEED_FILL = new Color(0.90f, 0.57f, 0.22f, 1f);
+    private static final Color ACTION_FILL = new Color(0.34f, 0.67f, 0.89f, 1f);
+    private static final Color RESOURCE_FILL = new Color(0.33f, 0.72f, 0.35f, 1f);
     private static final Color WATER_FILL = new Color(0.35f, 0.72f, 0.88f, 1f);
     private static final Color SOIL_FILL = new Color(0.67f, 0.55f, 0.29f, 1f);
     private static final float MARGIN = 12f;
@@ -46,6 +56,9 @@ public final class VisualizerPrimaryHudRenderer {
     private static final float ROW_GAP = 3f;
     private static final float BAR_GAP = 3f;
     private static final float BAR_HEIGHT = 8f;
+    private static final float TAB_HEIGHT = 28f;
+    private static final float TAB_GAP = 8f;
+    private static final float MIN_TABBED_CONTENT_WIDTH = 250f;
 
     private final SimulationView view;
     private final SimulationTime simulationTime;
@@ -64,6 +77,8 @@ public final class VisualizerPrimaryHudRenderer {
     private int width = 1;
     private int height = 1;
     private float lastSelectionPanelHeight;
+    private TabBounds objectTabBounds = TabBounds.NONE;
+    private TabBounds terrainTabBounds = TabBounds.NONE;
 
     public VisualizerPrimaryHudRenderer(
             SimulationView view,
@@ -102,6 +117,14 @@ public final class VisualizerPrimaryHudRenderer {
         drawSelectionCard();
     }
 
+    /** Returns the inspector tab under one libGDX screen-space click, or null. */
+    public VisualizerState.InspectorTab tabAt(int screenX, int screenY) {
+        float uiY = height - screenY;
+        if (objectTabBounds.contains(screenX, uiY)) return VisualizerState.InspectorTab.OBJECT;
+        if (terrainTabBounds.contains(screenX, uiY)) return VisualizerState.InspectorTab.TERRAIN;
+        return null;
+    }
+
     /** Height reserved at the top-right for the selected cell/object card. */
     public float rightPanelReservedHeight() {
         return lastSelectionPanelHeight <= 0f ? 0f : lastSelectionPanelHeight + MARGIN;
@@ -134,17 +157,21 @@ public final class VisualizerPrimaryHudRenderer {
     private void drawSelectionCard() {
         VisualizerState.CellSelection cell = state.selectedCell();
         if (cell == null) {
+            clearTabBounds();
             lastSelectionPanelHeight = 0f;
             return;
         }
 
-        List<Row> rows = selectionRows(cell);
+        ObjectId selected = validSelectedObject();
+        boolean tabbed = selected != null;
+        List<Row> rows = selectionRows(cell, selected);
         if (rows.isEmpty()) {
+            clearTabBounds();
             lastSelectionPanelHeight = 0f;
             return;
         }
 
-        float contentWidth = 1f;
+        float contentWidth = tabbed ? MIN_TABBED_CONTENT_WIDTH : 1f;
         float contentHeight = 0f;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
@@ -154,17 +181,21 @@ public final class VisualizerPrimaryHudRenderer {
             if (i + 1 < rows.size()) contentHeight += ROW_GAP;
         }
 
+        float tabBlockHeight = tabbed ? TAB_HEIGHT + TAB_GAP : 0f;
         float panelWidth = fitWidth(contentWidth + PAD_X * 2f);
-        float panelHeight = contentHeight + PAD_Y * 2f;
+        float panelHeight = contentHeight + tabBlockHeight + PAD_Y * 2f;
         lastSelectionPanelHeight = panelHeight;
         float x = Math.max(MARGIN, width - MARGIN - panelWidth);
         float y = Math.max(MARGIN, height - MARGIN - panelHeight);
         panel(x, y, panelWidth, panelHeight);
-        drawMeterBars(rows, x, y, panelWidth, panelHeight);
+        if (tabbed) drawTabBackgrounds(x, y, panelWidth, panelHeight);
+        else clearTabBounds();
+        drawMeterBars(rows, x, y, panelWidth, panelHeight, tabBlockHeight);
 
         batch.setProjectionMatrix(projection);
         batch.begin();
-        float baseline = y + panelHeight - PAD_Y;
+        if (tabbed) drawTabLabels(selected);
+        float baseline = y + panelHeight - PAD_Y - tabBlockHeight;
         for (Row row : rows) {
             BitmapFont font = row.title() ? titleFont : bodyFont;
             font.setColor(row.color());
@@ -174,12 +205,52 @@ public final class VisualizerPrimaryHudRenderer {
         batch.end();
     }
 
+    private void drawTabBackgrounds(float x, float y, float panelWidth, float panelHeight) {
+        float contentWidth = Math.max(1f, panelWidth - PAD_X * 2f);
+        float tabWidth = contentWidth / 2f;
+        float tabY = y + panelHeight - PAD_Y - TAB_HEIGHT;
+        objectTabBounds = new TabBounds(x + PAD_X, tabY, tabWidth, TAB_HEIGHT);
+        terrainTabBounds = new TabBounds(x + PAD_X + tabWidth, tabY, tabWidth, TAB_HEIGHT);
+
+        shapes.setProjectionMatrix(projection);
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(state.inspectorTab() == VisualizerState.InspectorTab.OBJECT
+                ? TAB_ACTIVE : TAB_INACTIVE);
+        shapes.rect(objectTabBounds.x(), objectTabBounds.y(), objectTabBounds.width(), objectTabBounds.height());
+        shapes.setColor(state.inspectorTab() == VisualizerState.InspectorTab.TERRAIN
+                ? TAB_ACTIVE : TAB_INACTIVE);
+        shapes.rect(terrainTabBounds.x(), terrainTabBounds.y(), terrainTabBounds.width(), terrainTabBounds.height());
+        shapes.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.setColor(BORDER);
+        shapes.rect(objectTabBounds.x(), objectTabBounds.y(), objectTabBounds.width(), objectTabBounds.height());
+        shapes.rect(terrainTabBounds.x(), terrainTabBounds.y(), terrainTabBounds.width(), terrainTabBounds.height());
+        shapes.end();
+    }
+
+    private void drawTabLabels(ObjectId selected) {
+        String objectLabel = selectedObjectName(selected);
+        bodyFont.setColor(state.inspectorTab() == VisualizerState.InspectorTab.OBJECT ? TITLE : MUTED);
+        drawCentered(bodyFont, objectLabel, objectTabBounds);
+        bodyFont.setColor(state.inspectorTab() == VisualizerState.InspectorTab.TERRAIN ? TITLE : MUTED);
+        drawCentered(bodyFont, "Terrain", terrainTabBounds);
+    }
+
+    private void drawCentered(BitmapFont font, String text, TabBounds bounds) {
+        layout.setText(font, text == null ? "" : text);
+        float textX = bounds.x() + Math.max(0f, (bounds.width() - layout.width) * 0.5f);
+        float baseline = bounds.y() + (bounds.height() + font.getLineHeight()) * 0.5f - 2f;
+        font.draw(batch, text, textX, baseline);
+    }
+
     private void drawMeterBars(
             List<Row> rows,
             float x,
             float y,
             float panelWidth,
-            float panelHeight) {
+            float panelHeight,
+            float topInset) {
         boolean hasMeter = false;
         for (Row row : rows) {
             if (row.meter()) {
@@ -191,7 +262,7 @@ public final class VisualizerPrimaryHudRenderer {
 
         shapes.setProjectionMatrix(projection);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        float baseline = y + panelHeight - PAD_Y;
+        float baseline = y + panelHeight - PAD_Y - topInset;
         float barWidth = Math.max(1f, panelWidth - PAD_X * 2f);
         for (Row row : rows) {
             BitmapFont font = row.title() ? titleFont : bodyFont;
@@ -216,22 +287,123 @@ public final class VisualizerPrimaryHudRenderer {
                 + (row.meter() ? BAR_GAP + BAR_HEIGHT : 0f);
     }
 
-    private List<Row> selectionRows(VisualizerState.CellSelection cell) {
-        List<Row> rows = new ArrayList<>(15);
-        ObjectId selected = state.selectedObject();
-        if (selected != null && view.objects().isAlive(selected) && view.transforms().has(selected)) {
-            WorldObject object = view.objects().get(selected);
-            ObjectPresentation presentation = object == null ? null : presentations.get(object.definitionId());
-            String name = presentation == null ? "Object" : presentation.displayName();
-            rows.add(new Row(name, true, TITLE));
-            rows.add(new Row("Position   " + view.transforms().x(selected) + ", "
-                    + view.transforms().y(selected) + ", " + view.transforms().z(selected), false, TEXT));
-            boolean moving = view.moveTo().isActive(selected);
-            rows.add(new Row("Movement   " + (moving ? "Moving" : "Idle"), false, moving ? MOVE : MUTED));
-        } else {
-            rows.add(new Row("Cell " + cell.x() + ", " + cell.y() + ", " + cell.z(), true, TITLE));
+    private List<Row> selectionRows(
+            VisualizerState.CellSelection cell,
+            ObjectId selected) {
+        if (selected != null && state.inspectorTab() == VisualizerState.InspectorTab.OBJECT) {
+            return objectRows(selected);
+        }
+        return terrainRows(cell, selected);
+    }
+
+    private List<Row> objectRows(ObjectId selected) {
+        List<Row> rows = new ArrayList<>(18);
+        WorldObject object = view.objects().get(selected);
+        if (object == null || !view.transforms().has(selected)) return rows;
+
+        rows.add(new Row(selectedObjectName(selected), true, TITLE));
+        rows.add(new Row("Position   " + view.transforms().x(selected) + ", "
+                + view.transforms().y(selected) + ", " + view.transforms().z(selected), false, TEXT));
+        boolean moving = view.moveTo().isActive(selected);
+        rows.add(new Row("Movement   " + (moving ? "Moving" : "Idle"), false, moving ? MOVE : MUTED));
+
+        appendAgentRows(rows, selected);
+        appendNeedRows(rows, selected);
+        appendResourceRows(rows, selected);
+
+        if (state.showTechnicalDetails()) {
+            rows.add(new Row("Object id   " + selected, false, MUTED));
+            rows.add(new Row("Definition   " + object.definitionId(), false, MUTED));
+            String facing = view.orientations().has(selected)
+                    ? view.orientations().facing(selected).toString()
+                    : "n/a";
+            rows.add(new Row("Facing   " + facing, false, MUTED));
+            AgentDecisionTrace decision = view.agents().lastDecision(selected);
+            if (decision != null) {
+                rows.add(new Row("Candidates   " + decision.candidates().size()
+                        + " at t" + decision.tick(), false, MUTED));
+            }
+        }
+        return rows;
+    }
+
+    private void appendAgentRows(List<Row> rows, ObjectId selected) {
+        AgentIntentTrace intent = view.agents().currentIntent(selected);
+        AgentSearchTrace search = view.searches().currentSearch(selected);
+        AgentDecisionTrace decision = view.agents().lastDecision(selected);
+        if (intent == null && search == null && decision == null) return;
+
+        if (intent != null) {
+            rows.add(new Row("Activity   " + activityLabel(intent.phase()), false, TEXT));
+            String target = targetLabel(intent.targetKey());
+            if (target != null) rows.add(new Row("Target   " + target, false, MUTED));
+            if (intent.phase() == AgentIntentPhase.USING_OPPORTUNITY
+                    && intent.expectedCompletionTick() > intent.startedTick()) {
+                rows.add(new Row(
+                        "Current action   " + percentText(intent.startedTick(), intent.expectedCompletionTick()),
+                        false,
+                        TEXT,
+                        progressFraction(intent.startedTick(), intent.expectedCompletionTick()),
+                        ACTION_FILL));
+            }
+            return;
         }
 
+        if (search != null) {
+            rows.add(new Row("Activity   Searching for " + humanize(search.motivation()), false, TEXT));
+            rows.add(new Row("Search   " + search.status() + " | headings " + search.headingsObserved(), false, MUTED));
+            return;
+        }
+
+        if (decision != null && decision.selected() != null) {
+            rows.add(new Row("Activity   Deciding / ready", false, TEXT));
+            rows.add(new Row("Last choice   " + humanize(decision.selected().motivation())
+                    + " | utility " + decision.selected().utility(), false, MUTED));
+        } else {
+            rows.add(new Row("Activity   Idle / no current opportunity", false, MUTED));
+        }
+    }
+
+    private void appendNeedRows(List<Row> rows, ObjectId selected) {
+        int count = view.needs().needCount(selected);
+        for (int index = 0; index < count; index++) {
+            NeedId needId = view.needs().needAt(selected, index);
+            long level = view.needs().level(selected, needId);
+            long max = view.needs().maxLevel(selected, needId);
+            rows.add(new Row(
+                    humanize(needId.value()) + "   " + level + " / " + max,
+                    false,
+                    TEXT,
+                    fraction(level, max),
+                    NEED_FILL));
+        }
+    }
+
+    private void appendResourceRows(List<Row> rows, ObjectId selected) {
+        if (!view.consumableStocks().has(selected)) return;
+        long quantity = view.consumableStocks().quantity(selected);
+        long capacity = view.consumableStocks().capacity(selected);
+        rows.add(new Row(
+                "Biomass   " + quantity + " / " + capacity,
+                false,
+                TEXT,
+                fraction(quantity, capacity),
+                RESOURCE_FILL));
+        if (!view.growth().has(selected)) return;
+        GrowthStatus status = view.growth().status(selected);
+        if (status == GrowthStatus.DORMANT_FULL) {
+            rows.add(new Row("Growth   Full grown", false, MUTED));
+        } else {
+            long remaining = Math.max(0L, view.growth().nextEvaluationTick(selected) - simulationTime.tick());
+            rows.add(new Row("Growth   Regrowing | next in " + remaining + " ticks", false, MUTED));
+        }
+    }
+
+    private List<Row> terrainRows(
+            VisualizerState.CellSelection cell,
+            ObjectId selected) {
+        List<Row> rows = new ArrayList<>(14);
+        rows.add(new Row("Terrain / Cell", true, TITLE));
         appendCellRows(rows, cell);
         if (state.showTechnicalDetails()) appendTechnicalRows(rows, cell, selected);
         return rows;
@@ -361,7 +533,58 @@ public final class VisualizerPrimaryHudRenderer {
         rows.add(new Row("Occupancy   " + view.occupancy().state(x, y, z), false, MUTED));
         rows.add(new Row("Transitions   "
                 + Integer.bitCount(view.navigation().transitions(x, y, z)), false, MUTED));
-        if (selected != null) rows.add(new Row("Object id   " + selected, false, MUTED));
+        if (selected != null) rows.add(new Row("Selected object   " + selected, false, MUTED));
+    }
+
+    private ObjectId validSelectedObject() {
+        ObjectId selected = state.selectedObject();
+        return selected != null && view.objects().isAlive(selected) && view.transforms().has(selected)
+                ? selected
+                : null;
+    }
+
+    private String selectedObjectName(ObjectId selected) {
+        WorldObject object = selected == null ? null : view.objects().get(selected);
+        ObjectPresentation presentation = object == null ? null : presentations.get(object.definitionId());
+        return presentation == null ? "Object" : presentation.displayName();
+    }
+
+    private String targetLabel(String targetKey) {
+        if (targetKey == null || targetKey.isBlank()) return null;
+        if (targetKey.startsWith("liquid:")) {
+            int at = targetKey.indexOf('@');
+            int hash = targetKey.lastIndexOf('#');
+            if (at >= 0 && hash > at) return "Water @ " + targetKey.substring(at + 1, hash);
+            return "Water";
+        }
+        if (targetKey.startsWith("object:")) return "Object " + targetKey.substring("object:".length());
+        return targetKey;
+    }
+
+    private static String activityLabel(AgentIntentPhase phase) {
+        return switch (phase) {
+            case MOVING_TO_OPPORTUNITY -> "Moving to opportunity";
+            case USING_OPPORTUNITY -> "Using opportunity";
+            case SEARCH_RELOCATION -> "Exploring / searching";
+        };
+    }
+
+    private String percentText(long startedTick, long completionTick) {
+        return Math.round(progressFraction(startedTick, completionTick) * 100f) + "%";
+    }
+
+    private float progressFraction(long startedTick, long completionTick) {
+        if (completionTick <= startedTick) return 1f;
+        return clamp01((simulationTime.tick() - startedTick) / (float) (completionTick - startedTick));
+    }
+
+    private static String humanize(String value) {
+        if (value == null || value.isBlank()) return "Unknown";
+        int colon = value.lastIndexOf(':');
+        String local = colon >= 0 && colon + 1 < value.length() ? value.substring(colon + 1) : value;
+        local = local.replace('_', ' ').replace('-', ' ');
+        if (local.isEmpty()) return value;
+        return Character.toUpperCase(local.charAt(0)) + local.substring(1);
     }
 
     private float fitWidth(float requested) {
@@ -385,7 +608,12 @@ public final class VisualizerPrimaryHudRenderer {
         shapes.end();
     }
 
-    private static float fraction(int amount, int capacity) {
+    private void clearTabBounds() {
+        objectTabBounds = TabBounds.NONE;
+        terrainTabBounds = TabBounds.NONE;
+    }
+
+    private static float fraction(long amount, long capacity) {
         if (amount <= 0 || capacity <= 0) return 0f;
         return clamp01(amount / (float) capacity);
     }
@@ -407,6 +635,16 @@ public final class VisualizerPrimaryHudRenderer {
 
         private boolean meter() {
             return fillColor != null && fraction >= 0f;
+        }
+    }
+
+    private record TabBounds(float x, float y, float width, float height) {
+        private static final TabBounds NONE = new TabBounds(0f, 0f, 0f, 0f);
+
+        private boolean contains(float px, float py) {
+            return width > 0f && height > 0f
+                    && px >= x && px <= x + width
+                    && py >= y && py <= y + height;
         }
     }
 }
