@@ -21,6 +21,8 @@ public final class InteractionAccessResolver {
             int targetZ,
             InteractionReachProfile profile) {
         if (profile == null) throw new IllegalArgumentException("profile must not be null");
+        if (CellSpace.capacity(geometry.find(siteX, siteY, siteZ)) == 0) return false;
+
         int dx = targetX - siteX;
         int dy = targetY - siteY;
         int dz = targetZ - siteZ;
