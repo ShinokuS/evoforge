@@ -29,6 +29,7 @@ public final class VisualizerInteractionController extends InputAdapter {
     private final VisualizerContextMenu menu = new VisualizerContextMenu();
     private ViewPortalLookup portals = ViewPortalLookup.EMPTY;
     private VisualizerCommandSink commands = VisualizerCommandSink.NONE;
+    private boolean manualMovementEnabled = true;
 
     private ObjectId menuObject;
     private ViewPortal menuPortal;
@@ -62,12 +63,21 @@ public final class VisualizerInteractionController extends InputAdapter {
         closeMenu();
     }
 
+    public void setManualMovementEnabled(boolean enabled) {
+        manualMovementEnabled = enabled;
+        if (enabled) return;
+        closeMenu();
+        if (state.moveTargeting()) state.cancelMoveTargeting();
+        clearPreviewSearch();
+        state.clearMoveTargetPreview();
+    }
+
     public VisualizerContextMenu menu() { return menu; }
     public ViewPortalLookup portals() { return portals; }
 
     /** Advances bounded mover-aware advisory planning only while Move targeting is active. */
     public void update() {
-        if (!state.moveTargeting()) {
+        if (!manualMovementEnabled || !state.moveTargeting()) {
             clearPreviewSearch();
             state.clearMoveTargetPreview();
             return;
@@ -182,7 +192,7 @@ public final class VisualizerInteractionController extends InputAdapter {
         inspectCell(cell, object);
 
         if (portal != null) {
-            if (object != null) {
+            if (object != null && manualMovementEnabled) {
                 openCombinedMenu(object, portal, screenX, screenY);
             } else {
                 openPortalMenu(portal, screenX, screenY);
@@ -190,7 +200,7 @@ public final class VisualizerInteractionController extends InputAdapter {
             return true;
         }
 
-        if (state.moveTargeting()) {
+        if (manualMovementEnabled && state.moveTargeting()) {
             Target target = visibleTargetAt(cell.x(), cell.y());
             if (target == null) {
                 state.setInteractionMessage("Destination is not walkable");
@@ -200,7 +210,7 @@ public final class VisualizerInteractionController extends InputAdapter {
             return true;
         }
 
-        if (object != null) {
+        if (object != null && manualMovementEnabled) {
             openObjectMenu(object, screenX, screenY);
         }
         return true;
@@ -280,6 +290,7 @@ public final class VisualizerInteractionController extends InputAdapter {
     }
 
     private void openObjectMenu(ObjectId objectId, int screenX, int screenY) {
+        if (!manualMovementEnabled) return;
         menuObject = objectId;
         menuPortal = null;
         if (view.moveTo().isActive(objectId)) {
@@ -297,7 +308,7 @@ public final class VisualizerInteractionController extends InputAdapter {
     private void openPortalMenu(ViewPortal portal, int screenX, int screenY) {
         menuPortal = portal;
         menuObject = null;
-        if (state.moveTargeting() && state.viewMode() == VisualizerViewMode.INTERIOR) {
+        if (manualMovementEnabled && state.moveTargeting() && state.viewMode() == VisualizerViewMode.INTERIOR) {
             menu.open(
                     screenX,
                     screenY,
@@ -324,6 +335,10 @@ public final class VisualizerInteractionController extends InputAdapter {
             ViewPortal portal,
             int screenX,
             int screenY) {
+        if (!manualMovementEnabled) {
+            openPortalMenu(portal, screenX, screenY);
+            return;
+        }
         menuObject = object;
         menuPortal = portal;
         boolean active = view.moveTo().isActive(object);
@@ -373,14 +388,14 @@ public final class VisualizerInteractionController extends InputAdapter {
             case MOVE -> {
                 ObjectId object = menuObject;
                 closeMenu();
-                if (object != null && view.objects().isAlive(object)) {
+                if (manualMovementEnabled && object != null && view.objects().isAlive(object)) {
                     state.beginMoveTargeting(object);
                 }
             }
             case MOVE_HERE -> {
                 ViewPortal portal = menuPortal;
                 closeMenu();
-                if (portal != null && state.viewMode() == VisualizerViewMode.INTERIOR) {
+                if (manualMovementEnabled && portal != null && state.viewMode() == VisualizerViewMode.INTERIOR) {
                     Target target = visibleTargetAt(portal.interiorX(), portal.interiorY());
                     if (target == null) {
                         state.setInteractionMessage("Destination is not walkable");
@@ -392,7 +407,7 @@ public final class VisualizerInteractionController extends InputAdapter {
             case CANCEL_MOVE -> {
                 ObjectId object = menuObject;
                 closeMenu();
-                if (object != null) {
+                if (manualMovementEnabled && object != null) {
                     VisualizerCommandSink.CommandFeedback feedback = commands.cancelMove(object);
                     state.setInteractionMessage(feedback.accepted() ? "" : feedback.message());
                 }
