@@ -42,6 +42,8 @@ public final class LivingCowScenario implements VisualizerScenario {
     private static final int EVAPORATION_PER_EVENT = 60;
     private static final int INITIAL_LAKE_DEPTH = 80_000;
     private static final int COW_MAX_WADING_DEPTH = 10_000;
+    private static final int COW_VISION_RANGE = 8;
+    private static final int COW_HORIZONTAL_FOV_DEGREES = 330;
 
     static final NeedId HUNGER = NeedId.of("core:hunger");
     static final NeedId THIRST = NeedId.of("core:thirst");
@@ -96,7 +98,9 @@ public final class LivingCowScenario implements VisualizerScenario {
         assembly.waterWading(cow, COW_MAX_WADING_DEPTH);
         assembly.exclusiveOccupancy(cow);
         assembly.agent(cow, GRAZE);
-        assembly.vision(cow, 8, 140);
+        // Cow content uses broad panoramic vision. This keeps the generic Vision/Agent
+        // contract directional while avoiding a human-like narrow forward cone for cattle.
+        assembly.vision(cow, COW_VISION_RANGE, COW_HORIZONTAL_FOV_DEGREES);
         assembly.need(cow, HUNGER, 100, 0);
         assembly.needMotivation(cow, HUNGER, 36);
         assembly.needProgression(cow, HUNGER, 4, 8);
