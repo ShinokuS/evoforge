@@ -93,6 +93,57 @@ final class CowLiquidDrinkingIntegrationTest {
         assertEquals(80L, runtime.view().needs().level(cow, THIRST));
     }
 
+    @Test
+    void panoramicCowAtNorthShoreUsesCurrentNearestSiteBeforeFartherVisibleShore() {
+        SimulationAssembly assembly = SimulationAssembly.create()
+                .worldBounds(-4, 2, -2, 3, -2, 3);
+        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:shore_ground");
+        assembly.surfaceRetention(ground, 100_000);
+        ObjectDefinitionId cowDefinition = assembly.objectDefinition("test:shore_cow");
+        assembly.movementRate(cowDefinition, 1_000);
+        assembly.exclusiveOccupancy(cowDefinition);
+        assembly.agent(cowDefinition);
+        assembly.vision(cowDefinition, 5, 330);
+        assembly.need(cowDefinition, THIRST, 100, 80);
+        assembly.needMotivation(cowDefinition, THIRST, 10);
+        assembly.knowsNeedSolution(cowDefinition, THIRST);
+        assembly.physicalCellVolumeMilliliters(1_000_000L);
+        assembly.drinksLiquid(
+                cowDefinition,
+                THIRST,
+                WaterSystem.TYPE,
+                10_000L,
+                50L,
+                1L,
+                InteractionReachProfiles.cardinalSameOrOneBelow());
+
+        // The Cow stands directly north of one lower Water cell but faces west.
+        // A second Water source is also visible farther to the west. With broad
+        // Cow vision both are epistemically available, so the current standing
+        // site must beat the longer alternative through ordinary Utility travel.
+        for (int x = -2; x <= 0; x++) assembly.placeTerrain(x, 1, 0, ground);
+        assembly.placeTerrain(0, 0, -1, ground);
+        assembly.placeTerrain(-2, 0, -1, ground);
+        assembly.initialWater(0, 0, 0, 20_000);
+        assembly.initialWater(-2, 0, 0, 20_000);
+        ObjectId cow = assembly.createObject(cowDefinition);
+        assembly.placeObject(cow, 0, 1, 1);
+        assembly.initialFacing(cow, -1, 0);
+
+        SimulationRuntime runtime = assembly.start();
+        for (int tick = 0; tick < 12
+                && runtime.view().water().amount(0, 0, 0) == 20_000; tick++) {
+            runtime.stepper().advance();
+        }
+
+        assertTrue(runtime.view().water().amount(0, 0, 0) < 20_000,
+                "the adjacent north-shore source must be used before a farther visible shore");
+        assertEquals(20_000, runtime.view().water().amount(-2, 0, 0));
+        assertEquals(0, runtime.view().transforms().x(cow));
+        assertEquals(1, runtime.view().transforms().y(cow));
+        assertEquals(1, runtime.view().transforms().z(cow));
+    }
+
     private static void advanceUntilSatisfied(
             SimulationRuntime runtime,
             ObjectId cow,
