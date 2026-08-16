@@ -41,6 +41,7 @@ public final class LivingCowScenario implements VisualizerScenario {
     private static final int RAIN_PULSE_VOLUME = 20;
     private static final int EVAPORATION_PER_EVENT = 60;
     private static final int INITIAL_LAKE_DEPTH = 80_000;
+    private static final int COW_MAX_WADING_DEPTH = 10_000;
 
     static final NeedId HUNGER = NeedId.of("core:hunger");
     static final NeedId THIRST = NeedId.of("core:thirst");
@@ -90,6 +91,9 @@ public final class LivingCowScenario implements VisualizerScenario {
         assembly.periodicEvaporation(EVAPORATION_PER_EVENT, 4L);
 
         assembly.movementRate(cow, 650);
+        // Locomotion capability data, not Agent policy: this terrestrial Cow may cross
+        // shallow rainwater but does not enter the substantially deeper lake.
+        assembly.waterWading(cow, COW_MAX_WADING_DEPTH);
         assembly.exclusiveOccupancy(cow);
         assembly.agent(cow, GRAZE);
         assembly.vision(cow, 8, 140);
