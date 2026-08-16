@@ -3,14 +3,15 @@ package io.github.evoforge.simulation.world.terrain.generation;
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
+import io.github.evoforge.simulation.world.geology.GeologyField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
  * First causal material-strata model.
  *
- * <p>Compiled profiles select reusable process capabilities and semantic material roles only.
- * Numeric slope/deposition policy is generated complexity owned by this versioned algorithm,
- * never a required content-author knob.</p>
+ * <p>Compiled profiles select reusable process capabilities and semantic surface material roles.
+ * Generated Geology owns the deeper rock identity when present. Numeric slope/deposition policy is
+ * generated complexity owned by this versioned algorithm, never a required content-author knob.</p>
  */
 public final class TerrainMaterialGenerationStage implements TerrainMaterialGenerator {
     private static final int MAX_GROUND_DEPTH_CELLS = 4;
@@ -27,7 +28,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
             ElevationField elevation,
             DrainageField drainage,
             CompiledTerrainProfile profile) {
-        return generateInternal(elevation, drainage, null, profile);
+        return generateInternal(elevation, null, drainage, null, profile);
     }
 
     @Override
@@ -39,11 +40,25 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         if (surfaceHydrology == null) {
             throw new IllegalArgumentException("surfaceHydrology must not be null");
         }
-        return generateInternal(elevation, drainage, surfaceHydrology, profile);
+        return generateInternal(elevation, null, drainage, surfaceHydrology, profile);
+    }
+
+    @Override
+    public TerrainMaterialField generate(
+            ElevationField elevation,
+            GeologyField geology,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
+        if (geology == null || surfaceHydrology == null) {
+            throw new IllegalArgumentException("geology and surfaceHydrology must not be null");
+        }
+        return generateInternal(elevation, geology, drainage, surfaceHydrology, profile);
     }
 
     private TerrainMaterialField generateInternal(
             ElevationField elevation,
+            GeologyField geology,
             DrainageField drainage,
             SurfaceHydrologyField surfaceHydrology,
             CompiledTerrainProfile profile) {
@@ -54,6 +69,9 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         WorldBounds bounds = elevation.bounds();
         if (!bounds.equals(drainage.bounds())) {
             throw new IllegalArgumentException("elevation and drainage bounds must match");
+        }
+        if (geology != null && !bounds.equals(geology.bounds())) {
+            throw new IllegalArgumentException("geology bounds must match terrain generation bounds");
         }
         if (surfaceHydrology != null && !bounds.equals(surfaceHydrology.bounds())) {
             throw new IllegalArgumentException(
@@ -99,9 +117,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 groundDepth[index] = (byte) (groundProfile
                         ? groundDepthFor(context.maximumSlope())
                         : 0);
-                int deposition = surfaceDeposition
-                        ? depositionDepthFor(context)
-                        : 0;
+                int deposition = surfaceDeposition ? depositionDepthFor(context) : 0;
                 if (surfaceDeposition
                         && surfaceHydrology != null
                         && surfaceHydrology.isShoreline(worldX, worldY)) {
@@ -118,6 +134,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 surfaceZ,
                 groundDepth,
                 depositionDepth,
+                geology,
                 profile.materials());
     }
 
@@ -192,6 +209,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         private final int[] surfaceZ;
         private final byte[] groundDepth;
         private final byte[] depositionDepth;
+        private final GeologyField geology;
         private final TerrainMaterialSet materials;
 
         private LayeredTerrainMaterialField(
@@ -200,12 +218,14 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 int[] surfaceZ,
                 byte[] groundDepth,
                 byte[] depositionDepth,
+                GeologyField geology,
                 TerrainMaterialSet materials) {
             this.bounds = bounds;
             this.width = width;
             this.surfaceZ = surfaceZ;
             this.groundDepth = groundDepth;
             this.depositionDepth = depositionDepth;
+            this.geology = geology;
             this.materials = materials;
         }
 
@@ -243,6 +263,9 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 if (depth < ground) {
                     return materials.require(TerrainMaterialRole.SUBSURFACE);
                 }
+            }
+            if (geology != null) {
+                return TerrainMaterialKey.of(geology.materialAt(x, y, z).value());
             }
             return materials.require(TerrainMaterialRole.BEDROCK);
         }
