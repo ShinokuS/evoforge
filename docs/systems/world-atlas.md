@@ -4,11 +4,12 @@ World Atlas owns durable generated facts that are authored from `WorldGenesis` b
 
 ## Current composition
 
-The first Atlas contains:
+The current Atlas contains:
 
 ```text
 WorldGenesis
 ElevationField
+DrainageField
 ```
 
 `WorldAtlas` validates that every layer describes the same `WorldBounds` as its genesis.
@@ -24,7 +25,7 @@ elevationAt(x, y)         -> discrete surface-cell z
 
 One world Z cell equals `1_000_000` elevation subunits. The precise value is the durable Atlas fact used by macro algorithms that need gradients, especially drainage. `elevationAt` is the floor-derived cell coordinate intended for later terrain materialization. Negative values therefore use mathematical floor semantics rather than truncation toward zero.
 
-This distinction prevents discrete terrain representation from destroying information needed by world-scale causality. Two neighbouring columns may materialize at the same integer Z while still having a real ordered elevation gradient in Atlas. Drainage must use the precise value rather than treating such columns as an artificial flat.
+This distinction prevents discrete terrain representation from destroying information needed by world-scale causality. Two neighbouring columns may materialize at the same integer Z while still have an ordered elevation gradient in Atlas. Drainage uses the precise value rather than treating such columns as an artificial flat.
 
 Coordinates outside the field bounds are invalid queries. Elevation remains inside a reserved central vertical band of the world's Z bounds, leaving representational room below and above for later geology/materialization, Water and open space.
 
@@ -37,7 +38,7 @@ The current package-private implementation stores a dense bounded `long[]` of el
 - `evoforge:worldgen-v1` is the accepted legacy elevation semantics. It preserves the original integer surface height exactly and exposes precise elevation as that whole-cell value multiplied by the subunit scale.
 - `evoforge:worldgen-v2` is the current semantics. It preserves the same discrete V1 surface height for identical inputs but retains the deterministic fractional remainder that V1 discarded when mapping normalized noise into world Z.
 
-V2 therefore changes the durable generated fact without rewriting the already-accepted discrete terrain shape. The revision change is intentional: regenerating a historical V1 recipe remains capable of producing its cell-quantized fact rather than silently adopting newer precision.
+V2 therefore changes the durable generated elevation fact without rewriting the already-accepted discrete terrain shape. The revision change is intentional: regenerating a historical V1 recipe remains capable of producing its cell-quantized elevation semantics rather than silently adopting newer precision.
 
 Both revisions use the same three deterministic value-noise bands:
 
@@ -51,28 +52,56 @@ The lattice is anchored in global coordinates rather than rebased to `WorldBound
 
 Headless tests freeze the accepted V1 discrete samples, prove that current V2 keeps those same discrete samples, prove V1 remains exactly cell-quantized, and prove V2 distinguishes neighbouring columns that are equal only after integer materialization.
 
+## Drainage
+
+`DrainageField` is the immutable macro topology derived from `ElevationField`. For each world column it exposes:
+
+```text
+optional in-bounds downstream column
+contributing area in source columns
+terminal basin representative
+```
+
+`DrainageGenerator` is deliberately narrower than the elevation algorithm contract:
+
+```text
+generate(ElevationField) -> DrainageField
+```
+
+The current `DrainageGenerationStage` first chooses a steepest strictly lower D8 neighbour using precise elevation. Exact-elevation flat components are then resolved deterministically. A flat that touches one or more lower outlets routes internally toward those outlets; a flat with no lower outlet receives one deterministic internal terminal representative. Ordinary local minima are terminal directly.
+
+No neighbour outside `WorldBounds` is ever considered. World edges are therefore closed hydrologic boundaries, not external sinks. Enclosed depressions survive as real internal basins instead of being filled or forced to drain off-map.
+
+Contributing area is accumulated over the resulting acyclic topology. It is a first-order channel/river-potential fact, not Water quantity. Terminal coordinates provide stable basin membership without inventing region or chunk identity.
+
+Unlike elevation sampling, drainage topology is legitimately boundary-dependent: cropping to different `WorldBounds` creates a different closed hydrologic world and may change paths near or upstream of the new boundary.
+
 ## Algorithm composition
 
-`WorldAtlasGenerator` is deliberately thin. It depends on `ElevationGenerator`, not on the concrete elevation implementation, and assembles the immutable output into `WorldAtlas`. Its default constructor selects `ElevationGenerationStage`; callers that own composition may inject another implementation through the same typed seam.
+`WorldAtlasGenerator` is deliberately thin. It composes typed algorithms in causal order:
 
-The precision extension does not invalidate substitute algorithms. `ElevationField.elevationSubunitsAt(...)` has a compatibility default derived from `elevationAt(...)`, so a substitute that only authors discrete heights remains valid and explicitly has cell-level precision until it chooses to provide more.
+```text
+ElevationGenerator -> ElevationField
+                         ↓
+DrainageGenerator  -> DrainageField
+```
 
-Substitution does not remove validation. `WorldAtlasGenerator` rejects missing/broken algorithm output and `WorldAtlas` still validates layer bounds against `WorldGenesis`.
+Its default constructor selects `ElevationGenerationStage` and `DrainageGenerationStage`. Callers may inject either typed algorithm. The existing elevation-only constructor remains valid and pairs the supplied elevation algorithm with the default drainage stage.
+
+The precision extension does not invalidate substitute elevation algorithms. `ElevationField.elevationSubunitsAt(...)` has a compatibility default derived from `elevationAt(...)`, so a substitute that only authors discrete heights remains valid and explicitly has cell-level precision until it chooses to provide more.
+
+Substitution does not remove validation. `WorldAtlasGenerator` rejects missing/broken algorithm output and `WorldAtlas` validates every generated layer against `WorldGenesis` bounds.
 
 Future stages use their own narrow semantic contracts when their real dependencies are known. They do not share one universal mutable generation context. Likewise, future world evaluators receive typed contracts for the concrete question they evaluate rather than one universal evaluator API.
 
-A concrete algorithm may be replaced without changing downstream consumers because consumers read generated fact contracts such as `ElevationField`. If a replacement intentionally changes authored world facts for otherwise identical declared inputs, generation-version compatibility must change explicitly rather than silently reusing the old `GenerationRevision`.
-
-Future causal order grows from actual dependencies. The next direct consumer of precise elevation is drainage; geology, climate and other fields will be added when their own semantic inputs are concrete rather than because of a fixed type hierarchy.
-
 ## Materialization boundary
 
-Atlas elevation is a world fact, not a placed Landscape cell. A later materialization slice will translate the discrete surface view plus other Atlas facts into detailed Terrain/Soil/Liquid/Object state through the existing domain-owned mutation boundaries. Runtime systems then continue to evolve that materialized state under their normal laws.
+Atlas elevation and drainage are world facts, not placed Landscape cells or free Water. A later materialization slice translates Atlas facts into detailed Terrain/Soil/Liquid/Object state through the existing domain-owned mutation boundaries. Runtime systems then continue to evolve that materialized state under their normal laws.
 
-World Atlas therefore does not own Water flow, soil retained liquid, objects, agents or dynamic weather.
+Drainage can guide initial channels, basins and finite Water placement, but it never becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
 
 ## Deferred representation decisions
 
 No chunk dimensions, region semantics, streaming lifecycle or simulation LOD are introduced here. The Atlas proves generated-fact causality and determinism on a bounded world before those optimizations are considered.
 
-See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md) and [World Genesis](world-genesis.md).
+See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md) and [World Genesis](world-genesis.md).
