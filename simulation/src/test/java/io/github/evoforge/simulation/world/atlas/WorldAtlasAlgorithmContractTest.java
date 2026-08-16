@@ -29,6 +29,9 @@ final class WorldAtlasAlgorithmContractTest {
         assertSame(substitute, atlas.elevation());
         assertEquals(1, calls.get());
         assertEquals(3, atlas.elevation().elevationAt(0, 0));
+        assertEquals(
+                3L * ElevationField.SUBUNITS_PER_CELL,
+                atlas.elevation().elevationSubunitsAt(0, 0));
     }
 
     @Test
