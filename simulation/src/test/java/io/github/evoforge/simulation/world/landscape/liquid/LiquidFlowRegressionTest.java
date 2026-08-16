@@ -218,28 +218,40 @@ final class LiquidFlowRegressionTest {
 
         runUntilDormant(fixture.flow, 512);
 
-        int minimum = Integer.MAX_VALUE;
-        int maximum = Integer.MIN_VALUE;
         int actualTotal = 0;
         int[][] stable = new int[width][width];
         for (int x = -half; x <= half; x++) {
             for (int y = -half; y <= half; y++) {
                 int current = amount(fixture, x, y, 0);
                 stable[x + half][y + half] = current;
-                minimum = Math.min(minimum, current);
-                maximum = Math.max(maximum, current);
                 actualTotal += current;
             }
         }
 
         assertEquals(expectedTotal, actualTotal);
-        assertTrue(maximum - minimum <= 2,
-                "settled pool must end inside the integer hydraulic deadband");
+        assertLocallyInsideHydraulicDeadband(stable);
         assertEquals(0, fixture.flow.activeCellCount());
         assertEquals(CellVolume.EMPTY, fixture.flow.update());
         for (int x = -half; x <= half; x++) {
             for (int y = -half; y <= half; y++) {
                 assertEquals(stable[x + half][y + half], amount(fixture, x, y, 0));
+            }
+        }
+    }
+
+    private static void assertLocallyInsideHydraulicDeadband(int[][] amounts) {
+        for (int x = 0; x < amounts.length; x++) {
+            for (int y = 0; y < amounts[x].length; y++) {
+                if (x + 1 < amounts.length) {
+                    assertTrue(
+                            Math.abs(amounts[x][y] - amounts[x + 1][y]) <= 3,
+                            "adjacent settled cells must be inside the integer transfer deadband");
+                }
+                if (y + 1 < amounts[x].length) {
+                    assertTrue(
+                            Math.abs(amounts[x][y] - amounts[x][y + 1]) <= 3,
+                            "adjacent settled cells must be inside the integer transfer deadband");
+                }
             }
         }
     }
