@@ -70,11 +70,21 @@ public final class GeneratedWorldDiagnosticsProbe {
         long retainedWaterVolume = 0L;
         long wetWaterCells = 0L;
         long wetSoilCells = 0L;
+        int wetWaterColumns = 0;
+        int wetSoilColumns = 0;
+        long maximumFreeWaterColumnVolume = 0L;
+        long maximumRetainedWaterColumnVolume = 0L;
+        int maximumWetWaterCellsPerColumn = 0;
 
         for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
             int worldX = (int) x;
             for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
                 int worldY = (int) y;
+                long columnFreeWater = 0L;
+                long columnRetainedWater = 0L;
+                int columnWetWaterCells = 0;
+                int columnWetSoilCells = 0;
+
                 for (long z = bounds.minZ(); z <= (long) bounds.maxZ(); z++) {
                     int worldZ = (int) z;
                     if (view.terrain().contains(worldX, worldY, worldZ)) {
@@ -90,13 +100,33 @@ public final class GeneratedWorldDiagnosticsProbe {
 
                     freeWaterVolume = Math.addExact(freeWaterVolume, freeWater);
                     retainedWaterVolume = Math.addExact(retainedWaterVolume, retainedWater);
+                    columnFreeWater = Math.addExact(columnFreeWater, freeWater);
+                    columnRetainedWater = Math.addExact(columnRetainedWater, retainedWater);
                     if (freeWater > 0) {
                         wetWaterCells = Math.addExact(wetWaterCells, 1L);
+                        columnWetWaterCells++;
                     }
                     if (retainedWater > 0) {
                         wetSoilCells = Math.addExact(wetSoilCells, 1L);
+                        columnWetSoilCells++;
                     }
                 }
+
+                if (columnWetWaterCells > 0) {
+                    wetWaterColumns++;
+                }
+                if (columnWetSoilCells > 0) {
+                    wetSoilColumns++;
+                }
+                maximumFreeWaterColumnVolume = Math.max(
+                        maximumFreeWaterColumnVolume,
+                        columnFreeWater);
+                maximumRetainedWaterColumnVolume = Math.max(
+                        maximumRetainedWaterColumnVolume,
+                        columnRetainedWater);
+                maximumWetWaterCellsPerColumn = Math.max(
+                        maximumWetWaterCellsPerColumn,
+                        columnWetWaterCells);
             }
         }
 
@@ -116,7 +146,12 @@ public final class GeneratedWorldDiagnosticsProbe {
                 freeWaterVolume,
                 retainedWaterVolume,
                 wetWaterCells,
-                wetSoilCells);
+                wetSoilCells,
+                wetWaterColumns,
+                wetSoilColumns,
+                maximumFreeWaterColumnVolume,
+                maximumRetainedWaterColumnVolume,
+                maximumWetWaterCellsPerColumn);
     }
 
     private static long pack(int x, int y) {
