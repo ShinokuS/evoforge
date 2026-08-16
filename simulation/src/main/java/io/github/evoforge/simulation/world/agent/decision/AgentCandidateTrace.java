@@ -39,7 +39,8 @@ public record AgentCandidateTrace(
     @Deprecated(forRemoval = true)
     public ObjectId sourceId() {
         if (!targetKey.startsWith("object:")) return null;
-        return new ObjectId(Long.parseLong(targetKey.substring("object:".length())));
+        long value = Long.parseLong(targetKey.substring("object:".length()));
+        return ObjectId.of((int) (value & 0xFFFF_FFFFL), (int) (value >>> 32));
     }
 
     /** Temporary presentation bridge; final score is the common Utility value. */
