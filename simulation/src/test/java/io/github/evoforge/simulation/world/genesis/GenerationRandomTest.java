@@ -39,6 +39,12 @@ final class GenerationRandomTest {
                 "world:strata",
                 100, 200, -30, 999,
                 -2_880_408_368_160_197_730L);
+        assertSample(
+                42L,
+                "world:elevation",
+                "world:lattice",
+                Long.MAX_VALUE, Long.MIN_VALUE, 4_294_967_296L, 7,
+                8_215_840_143_547_694_717L);
     }
 
     @Test
@@ -109,9 +115,9 @@ final class GenerationRandomTest {
             long seed,
             String stage,
             String purpose,
-            int x,
-            int y,
-            int z,
+            long x,
+            long y,
+            long z,
             long ordinal,
             long expected) {
         GenerationRandom random = GenerationRandom.from(WorldGenesis.current(SPEC, seed));
