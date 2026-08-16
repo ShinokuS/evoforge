@@ -13,7 +13,7 @@ dependencies {
 
 test {
     useJUnitPlatform {
-        excludeTags 'scale-profile'
+        excludeTags 'scale-profile', 'generated-world-audit'
     }
 
     testLogging {
@@ -34,6 +34,28 @@ tasks.register('scaleProfile', Test) {
 
     systemProperty 'evoforge.scale.profile',
             System.getProperty('evoforge.scale.profile', 'medium')
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+        showStandardStreams = true
+    }
+
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('generatedWorldAudit', Test) {
+    description = 'Runs deterministic generated-world warmup audits and prints checkpoint snapshots.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'generated-world-audit'
+    }
+
+    systemProperty 'evoforge.generated.audit.ticks',
+            System.getProperty('evoforge.generated.audit.ticks', '100')
 
     testLogging {
         events "passed", "skipped", "failed"
