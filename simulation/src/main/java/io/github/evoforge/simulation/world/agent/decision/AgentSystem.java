@@ -193,7 +193,16 @@ public final class AgentSystem implements AgentDecisionLookup {
         candidates.sort(CANDIDATE_ORDER);
         List<AgentCandidateTrace> traces = new ArrayList<>(candidates.size());
         for (Candidate candidate : candidates) traces.add(candidate.trace);
-        Candidate selected = candidates.isEmpty() ? null : candidates.get(0);
+
+        Candidate selected = null;
+        RejectedOpportunity rejected = active.rejectedOpportunity;
+        for (Candidate candidate : candidates) {
+            if (rejected == null || !rejected.matches(candidate)) {
+                selected = candidate;
+                break;
+            }
+        }
+        active.rejectedOpportunity = null;
         lastDecisionByObject.put(
                 active.objectId,
                 new AgentDecisionTrace(time.tick(), active.objectId, traces, selected == null ? null : selected.trace));
@@ -329,6 +338,9 @@ public final class AgentSystem implements AgentDecisionLookup {
                     return;
                 }
             }
+            if (!completion.result().accepted()) {
+                active.rejectedOpportunity = RejectedOpportunity.from(intent);
+            }
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -343,6 +355,7 @@ public final class AgentSystem implements AgentDecisionLookup {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
         }
         if (!completion.reachedGoal()) {
+            active.rejectedOpportunity = RejectedOpportunity.from(intent);
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -354,6 +367,7 @@ public final class AgentSystem implements AgentDecisionLookup {
                 intent.site);
         if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
         if (!use.accepted()) {
+            active.rejectedOpportunity = RejectedOpportunity.from(intent);
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -417,11 +431,27 @@ public final class AgentSystem implements AgentDecisionLookup {
 
     private record SearchCandidate(int providerIndex, OpportunitySearchDemand demand) { }
 
+    private record RejectedOpportunity(
+            int providerIndex,
+            OpportunityTarget target,
+            InteractionSite site) {
+        private static RejectedOpportunity from(ActiveOpportunityIntent intent) {
+            return new RejectedOpportunity(intent.providerIndex, intent.target, intent.site);
+        }
+
+        private boolean matches(Candidate candidate) {
+            return providerIndex == candidate.providerIndex
+                    && target.equals(candidate.opportunity.target())
+                    && site.equals(candidate.opportunity.site());
+        }
+    }
+
     private static final class ActiveAgent {
         private final long processId;
         private final ObjectId objectId;
         private ActiveOpportunityIntent opportunityIntent;
         private ActiveSearchRelocation searchRelocation;
+        private RejectedOpportunity rejectedOpportunity;
 
         private ActiveAgent(long processId, ObjectId objectId) {
             this.processId = processId;
