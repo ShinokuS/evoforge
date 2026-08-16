@@ -27,7 +27,12 @@ public record GeneratedWorldDiagnostics(
         long freeWaterVolume,
         long retainedWaterVolume,
         long wetWaterCells,
-        long wetSoilCells) {
+        long wetSoilCells,
+        int wetWaterColumns,
+        int wetSoilColumns,
+        long maximumFreeWaterColumnVolume,
+        long maximumRetainedWaterColumnVolume,
+        int maximumWetWaterCellsPerColumn) {
 
     public GeneratedWorldDiagnostics {
         if (tick < 0L) {
@@ -45,13 +50,37 @@ public record GeneratedWorldDiagnostics(
                 || freeWaterVolume < 0L
                 || retainedWaterVolume < 0L
                 || wetWaterCells < 0L
-                || wetSoilCells < 0L) {
+                || wetSoilCells < 0L
+                || wetWaterColumns < 0
+                || wetSoilColumns < 0
+                || maximumFreeWaterColumnVolume < 0L
+                || maximumRetainedWaterColumnVolume < 0L
+                || maximumWetWaterCellsPerColumn < 0) {
             throw new IllegalArgumentException(
                     "generated world diagnostic values must not be negative");
         }
         if (minimumSurfaceZ > maximumSurfaceZ) {
             throw new IllegalArgumentException(
                     "minimum surface must not exceed maximum surface");
+        }
+        if (wetWaterColumns > terrainColumns || wetSoilColumns > terrainColumns) {
+            throw new IllegalArgumentException(
+                    "wet column counts must not exceed terrain column count");
+        }
+        if (wetWaterColumns == 0
+                && (freeWaterVolume != 0L
+                        || wetWaterCells != 0L
+                        || maximumFreeWaterColumnVolume != 0L
+                        || maximumWetWaterCellsPerColumn != 0)) {
+            throw new IllegalArgumentException(
+                    "free Water distribution must be empty when no Water column is wet");
+        }
+        if (wetSoilColumns == 0
+                && (retainedWaterVolume != 0L
+                        || wetSoilCells != 0L
+                        || maximumRetainedWaterColumnVolume != 0L)) {
+            throw new IllegalArgumentException(
+                    "retained Water distribution must be empty when no Soil column is wet");
         }
     }
 
