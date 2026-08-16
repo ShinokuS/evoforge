@@ -63,10 +63,6 @@ public record GeneratedWorldDiagnostics(
             throw new IllegalArgumentException(
                     "minimum surface must not exceed maximum surface");
         }
-        if (wetWaterColumns > terrainColumns || wetSoilColumns > terrainColumns) {
-            throw new IllegalArgumentException(
-                    "wet column counts must not exceed terrain column count");
-        }
         if (wetWaterColumns == 0
                 && (freeWaterVolume != 0L
                         || wetWaterCells != 0L
