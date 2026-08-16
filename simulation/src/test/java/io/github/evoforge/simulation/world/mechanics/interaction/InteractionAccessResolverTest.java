@@ -21,6 +21,19 @@ final class InteractionAccessResolverTest {
     }
 
     @Test
+    void occupiedStandingSiteIsNeverAnInteractionSite() {
+        GeometryLookup occupiedSite = (x, y, z) -> x == 0 && y == 0 && z == 1
+                ? FullShape.INSTANCE
+                : null;
+        InteractionAccessResolver resolver = new InteractionAccessResolver(occupiedSite);
+
+        assertFalse(resolver.allows(
+                0, 0, 1,
+                1, 0, 1,
+                InteractionReachProfiles.cardinalSameOrOneBelow()));
+    }
+
+    @Test
     void lowerTargetRequiresOpenSpaceAboveIt() {
         GeometryLookup blocked = (x, y, z) -> x == 1 && y == 0 && z == 1
                 ? FullShape.INSTANCE
