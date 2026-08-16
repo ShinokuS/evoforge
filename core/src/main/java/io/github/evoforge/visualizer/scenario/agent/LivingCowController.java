@@ -14,7 +14,7 @@ final class LivingCowController implements ScenarioController {
     private final SimulationRuntime runtime;
     private final ObjectId cowId;
     private final NeedId hunger;
-    private final Map<ObjectId, String> names;
+    private final Map<String, String> names;
     private ScenarioDiagnostics diagnostics = ScenarioDiagnostics.NONE;
 
     LivingCowController(
@@ -25,7 +25,9 @@ final class LivingCowController implements ScenarioController {
         this.runtime = runtime;
         this.cowId = cowId;
         this.hunger = hunger;
-        this.names = Map.copyOf(names);
+        this.names = names.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                entry -> objectTargetKey(entry.getKey()),
+                Map.Entry::getValue));
         update(runtime.time().tick());
     }
 
@@ -35,9 +37,8 @@ final class LivingCowController implements ScenarioController {
         long hungerMax = runtime.view().needs().maxLevel(cowId, hunger);
         AgentIntentTrace intent = runtime.view().agents().currentIntent(cowId);
         String activity = intent == null ? "thinking / idle" : intent.phase().name();
-        String target = intent == null || intent.targetId() == null
-                ? "none"
-                : names.getOrDefault(intent.targetId(), intent.targetId().toString());
+        String targetKey = intent == null ? null : intent.targetKey();
+        String target = targetKey == null ? "none" : names.getOrDefault(targetKey, targetKey);
         diagnostics = new ScenarioDiagnostics(
                 new ScenarioCellMarker[0],
                 "Hunger " + hungerLevel + "/" + hungerMax
@@ -49,5 +50,9 @@ final class LivingCowController implements ScenarioController {
     @Override
     public ScenarioDiagnostics diagnostics() {
         return diagnostics;
+    }
+
+    private static String objectTargetKey(ObjectId objectId) {
+        return "object:" + objectId.asLong();
     }
 }
