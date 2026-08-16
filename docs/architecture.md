@@ -40,6 +40,7 @@ assets/       definition and presentation source data
 17. **Measure hot paths before changing representation.** Once a path is proven hot, avoid unnecessary scans, allocations, boxing and temporary collections.
 18. **Fundamental mechanics are observable and testable.** New systems arrive with headless correctness tests and a diagnostic strategy.
 19. **World containment is shared geometry, not per-domain edge policy.** When a runtime configures finite `WorldBounds`, the common Geometry view presents coordinates outside that box as physically closed. Water, Navigation, Movement and other geometry consumers must not each invent a different map-edge rule. A runtime with no configured bounds may deliberately retain unbounded semantics.
+20. **World-generation algorithms are replaceable behind typed semantic seams.** Atlas orchestration, materialization and future evaluators depend on narrow layer-specific contracts and generated facts rather than concrete algorithm classes, universal mutable generation contexts or central type switches. Intentional changes to authored world facts require explicit generation-version compatibility handling.
 
 ## Extension discipline
 

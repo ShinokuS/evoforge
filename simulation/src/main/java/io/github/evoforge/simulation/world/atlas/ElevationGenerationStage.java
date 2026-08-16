@@ -7,8 +7,8 @@ import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** First causal World Atlas stage: deterministic smooth surface elevation. */
-public final class ElevationGenerationStage {
+/** Current v1 elevation algorithm: deterministic smooth surface elevation. */
+public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
 
     private static final GenerationPurposeId COARSE = GenerationPurposeId.of("world:coarse");
@@ -16,6 +16,7 @@ public final class ElevationGenerationStage {
     private static final GenerationPurposeId DETAIL = GenerationPurposeId.of("world:detail");
     private static final int SAMPLE_MAX = 65_535;
 
+    @Override
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) {
             throw new IllegalArgumentException("genesis must not be null");
