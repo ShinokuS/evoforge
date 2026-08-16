@@ -1,44 +1,41 @@
 package io.github.evoforge.simulation.world.materialization;
 
+import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialRole;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainPalette;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainPaletteMaterials;
-
-/** Explicit content-composition bridge from semantic generated material keys to runtime ids. */
+/** Explicit content-composition bridge from generated material keys to runtime landscape ids. */
 public final class TerrainMaterialBindings {
-
     private final Map<TerrainMaterialKey, LandscapeDefinitionId> ids;
 
-    private TerrainMaterialBindings(
-            Map<TerrainMaterialKey, LandscapeDefinitionId> ids) {
+    private TerrainMaterialBindings(Map<TerrainMaterialKey, LandscapeDefinitionId> ids) {
         this.ids = Map.copyOf(ids);
     }
 
-    public static TerrainMaterialBindings forPalette(
-            TerrainPalette palette,
-            LandscapeDefinitionId topsoil,
-            LandscapeDefinitionId soil,
-            LandscapeDefinitionId sand,
-            LandscapeDefinitionId rock) {
-        if (palette == null
-                || topsoil == null
-                || soil == null
-                || sand == null
-                || rock == null) {
-            throw new IllegalArgumentException(
-                    "terrain material bindings must not be null");
+    /**
+     * Binds every material present in one compiled material set through its semantic role.
+     * Extra role ids are harmless; every authored material binding must have one runtime id.
+     */
+    public static TerrainMaterialBindings forProfile(
+            CompiledTerrainProfile profile,
+            Map<TerrainMaterialRole, LandscapeDefinitionId> idsByRole) {
+        if (profile == null || idsByRole == null) {
+            throw new IllegalArgumentException("terrain material bindings must not be null");
         }
-        TerrainPaletteMaterials materials = palette.materials();
-        Map<TerrainMaterialKey, LandscapeDefinitionId> ids =
-                new LinkedHashMap<>();
-        bind(ids, materials.topsoil(), topsoil);
-        bind(ids, materials.soil(), soil);
-        bind(ids, materials.sand(), sand);
-        bind(ids, materials.rock(), rock);
+        Map<TerrainMaterialKey, LandscapeDefinitionId> ids = new LinkedHashMap<>();
+        for (Map.Entry<TerrainMaterialRole, TerrainMaterialKey> entry
+                : profile.materials().asMap().entrySet()) {
+            LandscapeDefinitionId id = idsByRole.get(entry.getKey());
+            if (id == null) {
+                throw new IllegalArgumentException(
+                        "missing runtime landscape id for terrain material role: "
+                                + entry.getKey().authoredName());
+            }
+            bind(ids, entry.getValue(), id);
+        }
         return new TerrainMaterialBindings(ids);
     }
 
