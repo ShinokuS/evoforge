@@ -17,6 +17,29 @@ public interface TerrainMaterialResolver {
 
     LandscapeDefinitionId materialAt(int x, int y, int z);
 
+    /** Resolves generated material keys through explicit content-composition bindings. */
+    static TerrainMaterialResolver resolved(
+            TerrainMaterialField field,
+            TerrainMaterialBindings bindings) {
+        if (field == null || bindings == null) {
+            throw new IllegalArgumentException(
+                    "terrain material field/bindings must not be null");
+        }
+        return (x, y, z) -> {
+            TerrainMaterialKey key = field.materialAt(x, y, z);
+            if (key == null) {
+                return null;
+            }
+            LandscapeDefinitionId id = bindings.resolve(key);
+            if (id == null) {
+                throw new IllegalStateException(
+                        "generated terrain material is not bound at ("
+                                + x + ", " + y + ", " + z + "): " + key.value());
+            }
+            return id;
+        };
+    }
+
     /**
      * Resolves stable generated material keys into runtime Landscape ids at the
      * materialization boundary. Generated fields therefore never depend on registry ids.
