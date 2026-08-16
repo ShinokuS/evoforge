@@ -51,7 +51,7 @@ public final class HydroClimateForcingSystem {
 
         EvaporationBatchResult evaporationResult = evaporation.applyByColumn(
                 (x, y) -> due(
-                        climate.potentialEvaporationAt(x, y),
+                        climate.evaporativeDemandAt(x, y),
                         tick,
                         dueByRate));
 
