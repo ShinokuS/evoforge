@@ -71,8 +71,8 @@ final class LiquidFlowPropertyTest {
                         first.flow.activeCellCount(),
                         second.flow.activeCellCount(),
                         context(sample, update) + " active frontier");
-                int firstTransferred = first.flow.update();
-                int secondTransferred = second.flow.update();
+                long firstTransferred = first.flow.update();
+                long secondTransferred = second.flow.update();
                 assertEquals(firstTransferred, secondTransferred, context(sample, update) + " transfer");
                 assertSameState(first, second, sample, update);
                 if (first.flow.activeCellCount() == 0 && second.flow.activeCellCount() == 0) break;
