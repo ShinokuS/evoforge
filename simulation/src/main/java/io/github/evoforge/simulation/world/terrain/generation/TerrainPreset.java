@@ -13,10 +13,12 @@ public record TerrainPreset(
             throw new IllegalArgumentException(
                     "terrain preset fields must not be null or blank");
         }
-        requiredRoles = Set.copyOf(requiredRoles);
-        if (requiredRoles.contains(null)) {
-            throw new IllegalArgumentException("terrain preset material role must not be null");
+        for (TerrainMaterialRole role : requiredRoles) {
+            if (role == null) {
+                throw new IllegalArgumentException("terrain preset material role must not be null");
+            }
         }
+        requiredRoles = Set.copyOf(requiredRoles);
     }
 
     public TerrainPreset(
