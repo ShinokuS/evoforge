@@ -41,7 +41,13 @@ public final class HydroClimateForcingSystem {
         this.precipitation = precipitation;
     }
 
-    /** Realizes exactly one positive absolute simulation tick of baseline forcing. */
+    /**
+     * Realizes exactly one positive absolute simulation tick of baseline forcing.
+     *
+     * <p>This is an imperative mutation boundary, not an idempotent query. The runtime composition
+     * must invoke it exactly once for each simulation tick that is advanced; replay/rollback needs
+     * its own authoritative state restoration rather than repeated application of the same tick.
+     */
     public HydroClimateForcingResult update(long tick) {
         if (tick <= 0L) {
             throw new IllegalArgumentException("tick must be positive");
