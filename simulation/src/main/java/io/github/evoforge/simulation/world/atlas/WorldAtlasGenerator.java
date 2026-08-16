@@ -104,7 +104,7 @@ public final class WorldAtlasGenerator {
         ElevationField elevation = elevationGenerator.generate(genesis);
         if (elevation == null) throw new IllegalStateException("elevationGenerator returned null");
 
-        GeologyField geology = geologyGenerator.generate(genesis, elevation);
+        GeologyField geology = geologyGenerator.generate(genesis);
         if (geology == null) throw new IllegalStateException("geologyGenerator returned null");
 
         DrainageField drainage = drainageGenerator.generate(elevation);
