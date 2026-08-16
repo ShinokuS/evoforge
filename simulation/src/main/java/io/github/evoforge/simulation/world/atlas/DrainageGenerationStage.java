@@ -92,6 +92,10 @@ public final class DrainageGenerationStage implements DrainageGenerator {
             if (visited[start]) {
                 continue;
             }
+            if (!hasEqualNeighbor(start, width, height, elevations)) {
+                visited[start] = true;
+                continue;
+            }
 
             List<Integer> component = collectFlat(
                     start, width, height, elevations, visited);
@@ -107,7 +111,10 @@ public final class DrainageGenerationStage implements DrainageGenerator {
             }
 
             if (!hasOutlet) {
-                int terminal = component.stream().mapToInt(Integer::intValue).min().orElseThrow();
+                int terminal = component.get(0);
+                for (int cell : component) {
+                    terminal = Math.min(terminal, cell);
+                }
                 distance[terminal] = 0;
                 frontier.addLast(terminal);
             }
@@ -141,6 +148,26 @@ public final class DrainageGenerationStage implements DrainageGenerator {
                 distance[cell] = -1;
             }
         }
+    }
+
+    private static boolean hasEqualNeighbor(
+            int cell,
+            int width,
+            int height,
+            long[] elevations) {
+        int x = cell % width;
+        int y = cell / width;
+        for (int neighbor = 0; neighbor < DX.length; neighbor++) {
+            int nx = x + DX[neighbor];
+            int ny = y + DY[neighbor];
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                continue;
+            }
+            if (elevations[ny * width + nx] == elevations[cell]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<Integer> collectFlat(
