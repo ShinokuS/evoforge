@@ -1,15 +1,23 @@
 package io.github.evoforge.simulation.world.warmup;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
+import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldBootstrap;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
+import io.github.evoforge.simulation.world.geology.CompiledGeologyProfile;
+import io.github.evoforge.simulation.world.geology.GeologyGenerationStage;
+import io.github.evoforge.simulation.world.geology.GeologyMaterialKey;
+import io.github.evoforge.simulation.world.geology.GeologyProfileCompiler;
+import io.github.evoforge.simulation.world.geology.GeologyProfileDefinition;
+import io.github.evoforge.simulation.world.geology.GeologyProfileLoader;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialRole;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialSetDefinition;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialSetLoader;
@@ -18,6 +26,7 @@ import io.github.evoforge.simulation.world.terrain.generation.TerrainProfileDefi
 import io.github.evoforge.simulation.world.terrain.generation.TerrainProfileLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 final class GeneratedWorldWarmupFixture {
@@ -33,36 +42,49 @@ final class GeneratedWorldWarmupFixture {
             WorldBounds bounds) {
         if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds, climate), seed);
-        CompiledTerrainProfile profile = terrainProfile();
+        CompiledTerrainProfile terrainProfile = terrainProfile();
+        CompiledGeologyProfile geologyProfile = geologyProfile();
 
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId topsoil = assembly.landscapeDefinition(
-                profile.materials().require(TerrainMaterialRole.SURFACE).value(),
+                terrainProfile.materials().require(TerrainMaterialRole.SURFACE).value(),
                 1_050L);
         assembly.soilProperties(topsoil, 550_000, 100_000);
 
         LandscapeDefinitionId soil = assembly.landscapeDefinition(
-                profile.materials().require(TerrainMaterialRole.SUBSURFACE).value(),
+                terrainProfile.materials().require(TerrainMaterialRole.SUBSURFACE).value(),
                 1_100L);
         assembly.soilProperties(soil, 450_000, 60_000);
 
         LandscapeDefinitionId sand = assembly.landscapeDefinition(
-                profile.materials().require(TerrainMaterialRole.SEDIMENT).value(),
+                terrainProfile.materials().require(TerrainMaterialRole.SEDIMENT).value(),
                 1_300L);
         assembly.soilProperties(sand, 350_000, 250_000);
 
-        LandscapeDefinitionId rock = assembly.landscapeDefinition(
-                profile.materials().require(TerrainMaterialRole.BEDROCK).value());
+        TerrainMaterialKey legacyBedrock = terrainProfile.materials().require(TerrainMaterialRole.BEDROCK);
+        LandscapeDefinitionId rock = assembly.landscapeDefinition(legacyBedrock.value());
 
         TerrainMaterialBindings bindings = TerrainMaterialBindings.forProfile(
-                profile,
+                terrainProfile,
                 Map.of(
                         TerrainMaterialRole.SURFACE, topsoil,
                         TerrainMaterialRole.SUBSURFACE, soil,
                         TerrainMaterialRole.SEDIMENT, sand,
                         TerrainMaterialRole.BEDROCK, rock));
 
-        return new GeneratedWorldBootstrap().create(genesis, assembly, profile, bindings);
+        Map<TerrainMaterialKey, LandscapeDefinitionId> geologyBindings = new LinkedHashMap<>();
+        for (GeologyMaterialKey geologyMaterial : geologyProfile.materials().values()) {
+            TerrainMaterialKey material = TerrainMaterialKey.of(geologyMaterial.value());
+            LandscapeDefinitionId id = material.equals(legacyBedrock)
+                    ? rock
+                    : assembly.landscapeDefinition(material.value());
+            geologyBindings.put(material, id);
+        }
+        bindings = bindings.withMaterials(geologyBindings);
+
+        return new GeneratedWorldBootstrap(
+                new WorldAtlasGenerator(new GeologyGenerationStage(geologyProfile)))
+                .create(genesis, assembly, terrainProfile, bindings);
     }
 
     static CompiledTerrainProfile terrainProfile() {
@@ -71,6 +93,12 @@ final class GeneratedWorldWarmupFixture {
         TerrainMaterialSetDefinition materials = new TerrainMaterialSetLoader().load(
                 asset("assets/definitions/worldgen/terrain/material-sets/temperate-ground.json"));
         return new TerrainProfileCompiler().compile(profile, materials);
+    }
+
+    static CompiledGeologyProfile geologyProfile() {
+        GeologyProfileDefinition profile = new GeologyProfileLoader().load(
+                asset("assets/definitions/worldgen/geology/temperate-crust.json"));
+        return new GeologyProfileCompiler().compile(profile);
     }
 
     static WorldBounds bounds() {
@@ -84,6 +112,6 @@ final class GeneratedWorldWarmupFixture {
             if (Files.isRegularFile(candidate)) return candidate;
             current = current.getParent();
         }
-        throw new IllegalStateException("canonical terrain asset not found: " + relative);
+        throw new IllegalStateException("canonical generated-world asset not found: " + relative);
     }
 }
