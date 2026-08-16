@@ -22,12 +22,14 @@ World-generation randomness is a pure scoped function. `GenerationRandom` v1 sam
 master seed
 + generation stage id
 + random purpose id
-+ global XYZ coordinate
++ three stable signed 64-bit scope coordinates
 + non-negative ordinal
 → deterministic long
 ```
 
-Stage and purpose identifiers are stable namespaced semantic keys. Sampling order is not state: asking for another unrelated sample cannot shift an existing sample. `evoforge:rng-v1` is frozen by golden-vector tests. An unsupported RNG revision is rejected rather than silently interpreted with the current algorithm.
+Direct cell-scoped generation uses global XYZ values. Macro stages may instead use their own stable lattice coordinates; those sampling coordinates are random-scope identity, not a second authoritative world position. Stage and purpose identifiers are stable namespaced semantic keys.
+
+Sampling order is not state: asking for another unrelated sample cannot shift an existing sample. `evoforge:rng-v1` is frozen by golden-vector tests. Widening the scope-coordinate API from `int` to `long` preserves every existing int-scoped v1 sample bit-for-bit. An unsupported RNG revision is rejected rather than silently interpreted with the current algorithm.
 
 The seed and provenance reproduce generation inputs; they do not replace already-authored world facts in persistence. Once generation creates authoritative facts/state, later runtime mutation belongs to the relevant domain owner.
 
@@ -36,8 +38,9 @@ The seed and provenance reproduce generation inputs; they do not replace already
 - adding an unrelated generation stage does not globally reshuffle random results;
 - exact RNG behavior is versioned independently from higher-level generator algorithms;
 - generation can be reproduced and debugged from stable semantic scopes;
+- macro lattices do not require inventing region/chunk identities merely to address randomness;
 - future saves can retain the provenance that authored their canonical world state;
-- global XYZ remains the address space used by generation without making chunk identity gameplay semantics;
+- global XYZ remains authoritative world addressing without making chunk identity gameplay semantics;
 - generator revisions must advance when the same declared inputs would intentionally author different facts.
 
 ## Rejected directions
