@@ -2,9 +2,7 @@ package io.github.evoforge.simulation.world.diagnostics;
 
 /** Canonical compact text representation of generated terrain material composition. */
 public final class GeneratedTerrainMaterialDiagnosticsFormat {
-
-    private GeneratedTerrainMaterialDiagnosticsFormat() {
-    }
+    private GeneratedTerrainMaterialDiagnosticsFormat() { }
 
     public static String line(GeneratedTerrainMaterialDiagnostics diagnostics) {
         if (diagnostics == null) {
@@ -14,7 +12,7 @@ public final class GeneratedTerrainMaterialDiagnosticsFormat {
                 + " seed=" + diagnostics.masterSeed()
                 + " generationRevision=" + diagnostics.generationRevision().value()
                 + " rngRevision=" + diagnostics.rngRevision().value()
-                + " palette=" + diagnostics.paletteKey()
+                + " profile=" + diagnostics.profileKey()
                 + " bounds=" + diagnostics.bounds()
                 + " terrainCells=" + diagnostics.terrainCells()
                 + " terrainColumns=" + diagnostics.terrainColumns()
