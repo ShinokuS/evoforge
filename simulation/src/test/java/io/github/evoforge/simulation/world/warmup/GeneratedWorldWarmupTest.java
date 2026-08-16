@@ -29,8 +29,13 @@ final class GeneratedWorldWarmupTest {
         assertEquals(7L, world.runtime().time().tick());
         assertTrue(snapshots.stream()
                 .allMatch(GeneratedWorldDiagnostics::surfaceMatchesAtlas));
+
+        GeneratedWorldDiagnostics initial = snapshots.get(0);
+        assertTrue(initial.generatedInitialWaterVolume() > 0L);
+        assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
         assertTrue(snapshots.stream()
-                .allMatch(snapshot -> snapshot.totalWaterVolume() == 0L));
+                .allMatch(snapshot -> snapshot.totalWaterVolume()
+                        == initial.totalWaterVolume()));
     }
 
     @Test
