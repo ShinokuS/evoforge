@@ -141,6 +141,10 @@ Decision consumes sensor-neutral `PerceptionLookup`, not Vision-specific APIs. A
 
 Movement changes physical facing after successful edge commit; presentation reads the same Orientation.
 
+Vision shape is definition/content data, not Agent policy. The living-Cow scenarios use a broad `330°` horizontal FOV to model cattle as panoramic observers rather than giving them a human-like narrow forward cone. Generic Vision remains directional and other species/content can declare narrower or wider fields independently.
+
+This distinction matters at shorelines. A Cow facing along the bank may physically stand next to drinkable Water behind its heading. With a narrow FOV that Water is correctly unknown and a farther visible shoreline can win; with the Cow's panoramic content profile the nearby Water enters Perception and ordinary Utility prefers its nearer interaction site. No lake- or Cow-specific branch exists in `AgentSystem`.
+
 ## Source-neutral opportunities
 
 `AgentOpportunityProvider` is the narrow bridge from a mechanic into autonomous choice. Opportunities no longer assume that the source is an `ObjectId` or that the source coordinate is also the movement goal.
@@ -234,9 +238,11 @@ motivation
 
 `AgentSystem` converts that evidence through the shared fixed-point `UtilityMath` and performs one deterministic ordering across all providers. Hard execution eligibility is applied before commitment: an opportunity whose standing site is already known unusable in the current local context, or whose site has no mover-permitted incoming edge, cannot win merely because its Utility is high.
 
+Current travel evidence uses perceived distance to the candidate `InteractionSite`; it is intentionally not an A* route-cost query for every candidate. Within the same benefit/pressure conditions, a nearby currently usable site therefore wins over a farther perceived site. This keeps normal decision passes cheap and leaves authoritative global route proof to MoveTo.
+
 Current tie-breaking is stable: Utility first, then distance, source-neutral target key, interaction-site coordinates and provider order. Hunger and Thirst therefore compete in one decision surface rather than in separate provider-specific priority systems.
 
-This is intentionally a small Utility foundation, not a claim that the final long-term utility model is complete. New terms should be added only when a real cross-motivation case proves that the current evidence is insufficient.
+This is intentionally a small Utility foundation, not a claim that the final long-term utility model is complete. If representative scenarios later show systematic cases where geometric distance misranks obstacles/detours, the existing disposable `MoveToPlanner` can support bounded route refinement for a small shortlisted candidate set. Running full Pathfinding for every perceived Water cell is deliberately not part of the current decision loop.
 
 ## Continuing intents and failure recovery
 
@@ -278,7 +284,7 @@ The Surface inspector reads those authoritative projections. For autonomous obje
 
 Failed autonomous opportunities emit sparse structured DEBUG `agent.opportunity_failed` events with the actor, provider, target, interaction site, failure stage and result code. Movement failures are coalesced by physical standing site within the local context, while provider-use failures retain exact opportunity scope.
 
-The integrated **Agents -> Living Cow Meadow** scenario combines:
+The compact **Agents -> Living Cow Meadow** scenario combines:
 
 ```text
 Hunger + Thirst progression
@@ -295,7 +301,9 @@ multiple exclusive Cows
 
 The lake is deliberately on the map edge. Meadow terrain is mostly absorbent, while a small deterministic set of shallow low-infiltration micro-basins produces temporary puddles during the rain window. Those puddles are consequences of the same Hydrology systems, not pre-seeded visual props.
 
-The scenario Cow also declares a shallow-water `WaterWadingProfile` as locomotion capability data. That content aspect lets it traverse small rainwater depths while rejecting the deeper lake as a movement destination; drinking from shore is still provided by the independent interaction-reach mechanic. This is definition/scenario composition, not a generic Agent branch.
+The scenario Cow declares a shallow-water `WaterWadingProfile` as locomotion capability data. That content aspect lets it traverse small rainwater depths while rejecting the deeper lake as a movement destination; drinking from shore is still provided by the independent interaction-reach mechanic. This is definition/scenario composition, not a generic Agent branch.
+
+A separate **Agents -> Living Cow Herd** scenario is the larger representative observation scene. It uses six Cows, substantially more regrowing forage, several rain basins and a broad interior elliptical lake. One Cow begins just north of the lake while facing along the shoreline so the scene explicitly exercises panoramic perception and nearest-shore interaction choice. The same Agent, Vision, Utility, Movement, Occupancy, Water and plant systems run unchanged; the scenario contributes only world/content composition.
 
 ## Current proofs
 
@@ -318,6 +326,7 @@ Headless/scenario coverage proves, among other invariants:
 - unperceived Water never becomes a liquid opportunity;
 - a Cow at `z=1` can drink cardinal Water at `z=0` from a valid standing site;
 - a Cow at `z=1` can drink a cardinal same-level puddle at `z=1`;
+- a panoramic Cow already standing at the nearest valid north-shore site uses that Water before a farther simultaneously visible shore;
 - diagonal and physically blocked interaction sites are rejected;
 - partial puddle consumption preserves exact Water accounting and proportional Thirst relief;
 - a locally mover-ineligible higher-ranked opportunity cannot win commitment over a usable fallback;
@@ -325,7 +334,8 @@ Headless/scenario coverage proves, among other invariants:
 - several higher-ranked unusable opportunities cannot form a retry loop that starves a reachable fallback;
 - movement-site failure scope is independent of which target references that standing site;
 - multiple exclusive Cows remain non-overlapping while contending for a finite source;
-- Living Cow Meadow produces sparse rain puddles, uses both puddle and lower edge-lake Water, continues grazing and returns to rain on the next climate cycle.
+- Living Cow Meadow produces sparse rain puddles, uses both puddle and lower edge-lake Water, continues grazing and returns to rain on the next climate cycle;
+- Living Cow Herd keeps six exclusive Cows non-overlapping while several independently graze and drink from a larger shared world, including the interior lake.
 
 No test defines an arbitrary maximum time that an Agent is allowed to remain stationary. Scenario acceptance is expressed through semantic world interactions and invariant outcomes instead.
 
@@ -339,6 +349,7 @@ Still deferred:
 - separate activation/release thresholds if true hysteresis is required;
 - persistent beliefs/episodic or landmark memory;
 - map/compass/tool-assisted navigation;
+- bounded route-cost refinement for a shortlisted set of candidates if representative scenes prove geometric travel evidence insufficient;
 - hearing/smell;
 - richer provider interactions and additional competing motivations;
 - AI-specific scheduling/index/memory-layout optimization before representative profiling.
