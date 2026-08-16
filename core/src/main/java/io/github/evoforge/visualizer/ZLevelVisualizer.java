@@ -14,6 +14,7 @@ import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.visualizer.interaction.VisualizerDebugPanel;
 import io.github.evoforge.visualizer.interaction.VisualizerDebugPanelController;
 import io.github.evoforge.visualizer.interaction.VisualizerInteractionController;
+import io.github.evoforge.visualizer.interaction.VisualizerPrimaryHudController;
 import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
@@ -105,7 +106,6 @@ public final class ZLevelVisualizer {
         interaction = new VisualizerInteractionController(
                 view, state, camera, surfaceResolver, sliceResolver);
         debugPanelInput = new VisualizerDebugPanelController(state, debugPanel);
-        inputProcessor = new InputMultiplexer(debugPanelInput, interaction, input);
 
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
@@ -135,6 +135,8 @@ public final class ZLevelVisualizer {
                 surfaceResolver,
                 uiAssets);
         worldViewHud = new WorldViewHudRenderer(view, state, uiAssets);
+        VisualizerPrimaryHudController primaryHudInput = new VisualizerPrimaryHudController(state, primaryHud);
+        inputProcessor = new InputMultiplexer(debugPanelInput, primaryHudInput, interaction, input);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         updateLandscapeSampling();
     }
@@ -151,6 +153,11 @@ public final class ZLevelVisualizer {
         }
         interaction.configure(portals, commands);
         interactionOverlay.setPortals(portals);
+    }
+
+    /** Scenario presentation policy: autonomous acceptance scenes can remain inspection-only. */
+    public void setManualMovementEnabled(boolean enabled) {
+        interaction.setManualMovementEnabled(enabled);
     }
 
     public void setWeatherPresentation(WeatherPresentationLookup weather) {
