@@ -50,6 +50,11 @@ import io.github.evoforge.simulation.world.agent.perception.vision.VisionSystem;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
 import io.github.evoforge.simulation.world.agent.search.CorrelatedRandomWalkExplorationPolicy;
 import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion;
+import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingProcess;
+import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingResult;
+import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingSystem;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
 import io.github.evoforge.simulation.world.environment.evaporation.PeriodicEvaporationSystem;
@@ -83,6 +88,9 @@ import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiqu
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
+import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
+import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
+import io.github.evoforge.simulation.world.materialization.WorldTerrainMaterializer;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockReductionRelay;
@@ -182,7 +190,9 @@ public final class SimulationAssembly {
     private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
     private PrecipitationSchedule precipitationSchedule;
     private EvaporationSchedule evaporationSchedule;
+    private HydroClimateField generatedHydroClimate;
     private PhysicalCellVolume physicalCellVolume;
+    private WorldBounds worldBounds;
     private boolean started;
 
     private SimulationAssembly() {
@@ -242,8 +252,10 @@ public final class SimulationAssembly {
             int minZ,
             int maxZ) {
         requireNotStarted();
-        worldGeometry.configureBounds(
-                new WorldBounds(minX, maxX, minY, maxY, minZ, maxZ));
+        WorldBounds configured = new WorldBounds(
+                minX, maxX, minY, maxY, minZ, maxZ);
+        worldGeometry.configureBounds(configured);
+        worldBounds = configured;
         return this;
     }
 
@@ -309,6 +321,7 @@ public final class SimulationAssembly {
             throw new IllegalArgumentException(
                     "precipitation schedule must not be null");
         }
+        requireNoGeneratedHydroClimate();
         precipitationSchedule = schedule;
         return this;
     }
@@ -337,10 +350,71 @@ public final class SimulationAssembly {
             int amountPerColumn,
             long intervalTicks) {
         requireNotStarted();
+        requireNoGeneratedHydroClimate();
         evaporationSchedule = new EvaporationSchedule(
                 amountPerColumn,
                 intervalTicks);
         return this;
+    }
+
+    /**
+     * Selects one immutable Atlas hydrologic-climate field as the runtime atmospheric baseline.
+     * Legacy periodic precipitation/evaporation schedules are mutually exclusive with this mode.
+     */
+    public SimulationAssembly generatedHydroClimate(
+            HydroClimateField climate) {
+        requireNotStarted();
+        if (climate == null) {
+            throw new IllegalArgumentException("climate must not be null");
+        }
+        if (worldBounds == null) {
+            throw new IllegalStateException(
+                    "world bounds must be configured before generated hydro-climate");
+        }
+        if (!worldBounds.equals(climate.bounds())) {
+            throw new IllegalArgumentException(
+                    "generated hydro-climate bounds must match runtime world bounds");
+        }
+        if (precipitationSchedule != null || evaporationSchedule != null) {
+            throw new IllegalStateException(
+                    "generated hydro-climate cannot be combined with periodic atmospheric schedules");
+        }
+        if (generatedHydroClimate != null) {
+            throw new IllegalStateException(
+                    "generated hydro-climate is already configured");
+        }
+        generatedHydroClimate = climate;
+        return this;
+    }
+
+    /**
+     * Materializes generated elevation into the still-unstarted Landscape through the canonical
+     * one-way materialization boundary.
+     */
+    public TerrainMaterializationResult materializeGeneratedTerrain(
+            ElevationField elevation,
+            TerrainMaterialResolver materials) {
+        requireNotStarted();
+        if (elevation == null || materials == null) {
+            throw new IllegalArgumentException(
+                    "generated terrain materialization inputs must not be null");
+        }
+        if (worldBounds == null) {
+            throw new IllegalStateException(
+                    "world bounds must be configured before generated terrain materialization");
+        }
+        if (!worldBounds.equals(elevation.bounds())) {
+            throw new IllegalArgumentException(
+                    "generated elevation bounds must match runtime world bounds");
+        }
+
+        return new WorldTerrainMaterializer(
+                elevation,
+                materials,
+                landscapeDefinitions,
+                landscape.terrainExtents(),
+                landscape)
+                .materialize();
     }
 
     /** Defines the physical volume represented by one completely open simulation cell. */
@@ -697,6 +771,42 @@ public final class SimulationAssembly {
             periodicEvaporation.start();
         }
 
+        if (generatedHydroClimate != null) {
+            PrecipitationSystem generatedPrecipitation = new PrecipitationSystem(
+                    landscape.terrain(),
+                    worldGeometry,
+                    soilLiquids,
+                    water);
+            SkyPrecipitationSystem generatedSkyPrecipitation = new SkyPrecipitationSystem(
+                    skySurfaces,
+                    generatedPrecipitation);
+            EvaporationSystem generatedEvaporation = new EvaporationSystem(
+                    skySurfaces,
+                    water.surfaces(),
+                    soilLiquids.cells(),
+                    worldGeometry,
+                    water,
+                    soilLiquids);
+            HydroClimateForcingSystem generatedForcing = new HydroClimateForcingSystem(
+                    generatedHydroClimate,
+                    generatedEvaporation,
+                    generatedSkyPrecipitation);
+            HydroClimateForcingProcess generatedForcingProcess =
+                    new HydroClimateForcingProcess(generatedForcing, clock);
+            HandlerId generatedForcingHandlerId = scheduledHandlers.register(processId -> {
+                generatedForcingProcess.resume(processId);
+                HydroClimateForcingResult result = generatedForcingProcess.lastResult();
+                if (result.precipitation().surfaceWater() > 0L
+                        || result.evaporation().surfaceWaterRemoved() > 0L) {
+                    liquidFlowProcess.activate();
+                }
+            });
+            ProcessScheduler generatedForcingScheduler =
+                    new BoundProcessScheduler(clock, scheduler, generatedForcingHandlerId);
+            generatedForcingProcess.bindScheduler(generatedForcingScheduler);
+            generatedForcingProcess.start();
+        }
+
         WaterWadingConstraint waterWading = new WaterWadingConstraint(
                 objects,
                 waterWadingDefinitions,
@@ -928,6 +1038,13 @@ public final class SimulationAssembly {
             throw new IllegalArgumentException(
                     "coordinate is outside configured world bounds: ("
                             + x + ", " + y + ", " + z + ")");
+        }
+    }
+
+    private void requireNoGeneratedHydroClimate() {
+        if (generatedHydroClimate != null) {
+            throw new IllegalStateException(
+                    "periodic atmospheric schedules cannot be combined with generated hydro-climate");
         }
     }
 

@@ -11,11 +11,11 @@ Diagnostics observe existing generated facts and runtime state. They do not alte
 ```text
 WorldGenesis
     ↓
-WorldAtlasGenerator
+GeneratedWorldBootstrap
     ↓
 WorldAtlas ──────────────┐
                         │
-production runtime ─────┼─> GeneratedWorldDiagnosticsProbe
+SimulationRuntime ──────┼─> GeneratedWorldDiagnosticsProbe
                         │             ↓
 SimulationView ─────────┘     immutable audit snapshot
                                       ↓
@@ -90,26 +90,30 @@ This keeps logs observational: enabling, disabling or redirecting logging cannot
 
 ## CI baseline
 
-The first headless integration checks intentionally use small bounded worlds and the production runtime path.
+Headless generated-world integration uses the same `GeneratedWorldBootstrap` and ordinary `SimulationRuntime` path intended for future desktop generation.
 
 Current scenarios prove:
 
-1. a generated world with no configured water source does not spontaneously create free or retained Water while the production scheduler runs;
-2. existing precipitation, infiltration and Water mechanics operate on generated Terrain;
-3. replaying the same seed, setup and tick count produces the same complete diagnostic snapshot;
-4. generated Atlas surfaces and runtime Terrain surfaces remain identical when no terrain-changing runtime mechanic is active.
+1. a generated world with no configured Water source does not spontaneously create free or retained Water while the production scheduler runs;
+2. Atlas-driven HydroClimate precipitation, infiltration and Water mechanics operate on generated Terrain through the production scheduler;
+3. replaying the same seed, content setup and tick count produces the same complete diagnostic snapshot;
+4. generated Atlas surfaces and runtime Terrain surfaces remain identical when no terrain-changing runtime mechanic is active;
+5. generated HydroClimate cannot accidentally stack with legacy periodic atmospheric forcing.
 
 These are correctness gates, not performance thresholds.
 
-## Next use
+## Checkpoints
 
-As generated-world bootstrap composition becomes a first-class runtime entry point, the same probe and log event should be invoked at deliberate checkpoints such as:
+The same probe and log event are intended for deliberate generated-world checkpoints such as:
 
-- immediately after materialization;
-- after deterministic warmup;
+- immediately after bootstrap/materialization (`tick=0`);
+- during deterministic warmup;
+- at warmup completion;
 - after a user-requested diagnostic capture;
 - before/after calibration candidates in development tooling.
 
+Warmup policy is separate from diagnostics. A snapshot reports facts at the requested tick; it does not decide how long a world should warm up or whether the result is viable.
+
 New metrics should be added only when they represent an existing semantic fact or a concrete invariant we need to diagnose. The diagnostic object must not become a second world model.
 
-See [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Surface Hydrology](hydrology.md), and [Decision 017](../decisions/017-generated-world-diagnostic-audits.md).
+See [Generated World Runtime](generated-world-runtime.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Surface Hydrology](hydrology.md), and [Decision 017](../decisions/017-generated-world-diagnostic-audits.md).
