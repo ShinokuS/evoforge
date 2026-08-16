@@ -1,0 +1,13 @@
+{
+    "key": "core:temperate_terrain",
+    "presets": [
+        "core:natural_ground",
+        "core:depositional_sand"
+    ],
+    "materials": {
+        "topsoil": "core:topsoil",
+        "soil": "core:soil",
+        "sand": "core:sand",
+        "rock": "core:granite"
+    }
+}

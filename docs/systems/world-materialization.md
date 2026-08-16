@@ -4,7 +4,7 @@
 
 Convert durable generated world facts into authoritative runtime domain state without transferring ownership to the generator.
 
-The current first materialization slice covers generated elevation -> Landscape Terrain only.
+The current materialization boundary covers generated elevation plus a generated semantic material field -> Landscape Terrain.
 
 ## Current pipeline
 
@@ -12,18 +12,25 @@ The current first materialization slice covers generated elevation -> Landscape 
 WorldGenesis
     ↓
 WorldAtlasGenerator
-    ↓
-ElevationField
-    ↓
+    ├─ ElevationField
+    └─ DrainageField
+            ↓
+TerrainMaterialGenerator + TerrainPalette
+            ↓
+TerrainMaterialField (stable semantic keys)
+            ↓
+TerrainMaterialBindings (content composition)
+            ↓
+TerrainMaterialResolver (runtime ids)
+            ↓
 WorldTerrainMaterializer
-    ├─ TerrainMaterialResolver
     ├─ DefinitionCatalog<LandscapeDefinitionId>
     └─ LandscapeMutations
             ↓
       LandscapeSystem Terrain
 ```
 
-`WorldTerrainMaterializer` consumes `ElevationField`, not the whole `WorldAtlas`. Drainage and hydrologic climate remain separate facts with separate future/runtime consumers.
+`WorldTerrainMaterializer` still consumes `ElevationField` plus a pure `TerrainMaterialResolver`; it does not know how slope, drainage, soil depth or deposition were generated.
 
 ## Terrain volume
 
@@ -43,15 +50,25 @@ The high-resolution `elevationSubunitsAt` value remains an Atlas macro fact. Mat
 
 ## Material resolution
 
-Material identity is injected through the pure read contract:
+The materializer contains no built-in knowledge of soil, stone, sand or geology.
+
+The normal generated-world path now derives materials as stable semantic keys first:
+
+```java
+TerrainMaterialKey materialAt(int x, int y, int z)
+```
+
+Content composition then provides explicit `TerrainMaterialBindings` from those keys to its already registered runtime `LandscapeDefinitionId` values. `TerrainMaterialResolver.resolved(...)` performs that conversion only at the materialization boundary.
+
+This keeps generated facts independent from runtime registry ordering and keeps material physics in ordinary Landscape definitions.
+
+The lower-level resolver contract remains:
 
 ```java
 LandscapeDefinitionId materialAt(int x, int y, int z)
 ```
 
-The materializer contains no built-in knowledge of soil, stone, sand or geology.
-
-For the first generated-world vertical slice, composition may deliberately use:
+and specialized compositions may still use:
 
 ```java
 TerrainMaterialResolver.uniform(baseMaterialId)
@@ -59,9 +76,7 @@ TerrainMaterialResolver.uniform(baseMaterialId)
 
 That helper means only “use this already registered Landscape definition for every generated solid cell in this composition.” It is not a balance rule and does not create a canonical EvoForge ground material.
 
-A later geology stage can provide a resolver backed by generated geological facts and vary material by XYZ/depth without changing the Terrain materialization algorithm.
-
-Resolvers are required to be deterministic and invocation-order independent because materialization may query coordinates during both validation and placement.
+Resolvers are deterministic and invocation-order independent because materialization may query coordinates during both validation and placement.
 
 ## Initialization boundary
 
@@ -80,7 +95,7 @@ Before any cell is written, preflight validates:
 
 - every discrete surface lies inside the source `WorldBounds` vertical range;
 - every resolved material is non-null;
-- every resolved material exists in the supplied Landscape definition catalog.
+- every resolved runtime material exists in the supplied Landscape definition catalog.
 
 After preflight, all writes go through `LandscapeMutations.placeTerrain`. Direct `TerrainStorage` access is intentionally absent, so Terrain surfaces, Geometry behavior and traversal revisions remain owned by Landscape.
 
@@ -89,38 +104,36 @@ After preflight, all writes go through `LandscapeMutations.placeTerrain`. Direct
 Before materialization:
 
 ```text
-Atlas       owns generated elevation fact
-Landscape   owns empty runtime Terrain
+Atlas / terrain generation    own immutable generated facts
+Landscape                     owns empty runtime Terrain
 ```
 
 After materialization:
 
 ```text
-Atlas       still owns immutable generated/provenance facts
-Landscape   owns every concrete mutable runtime Terrain cell
+generated facts   remain immutable provenance/initialization facts
+Landscape         owns every concrete mutable runtime Terrain cell
 ```
 
-Later runtime Terrain changes do not rewrite the original Atlas fact automatically. Atlas is not a shadow copy of lived Terrain.
+Later runtime Terrain changes do not rewrite the original generated facts automatically. Generated data is not a shadow copy of lived Terrain.
 
 ## Performance boundary
 
-The current implementation performs a deterministic preflight and then a placement pass over generated solid cells. No chunking, parallel writes, packed column storage or direct bulk-storage bypass is introduced before representative generated-world profiling demonstrates a need.
+The materializer still performs deterministic preflight and placement passes over generated solid cells. The current terrain-material generator stores only compact per-column profile depths instead of a full 3D material array.
 
-If this becomes a bottleneck, optimization must preserve the same public ownership and materialization semantics.
+No chunking, parallel writes, packed bulk mutation or direct storage bypass is introduced before profiling demonstrates a need. Optimization must preserve the same ownership and materialization semantics.
 
 ## Deferred
 
-This slice intentionally does not materialize:
+This boundary still does not materialize:
 
 - initial Water;
 - drainage channels as carved Terrain;
 - Soil retained-liquid state;
-- geology/material strata as generated facts;
+- caves/open underground volume;
 - plants, actors or objects;
-- climate/weather runtime scheduling;
-- warmup or viability calibration;
 - save/load reconstruction.
 
-Those are later consumers/stages rather than reasons to broaden this bridge prematurely.
+Multiple geological rock families and shoreline-specific sediment are generation follow-ups, not reasons to broaden runtime ownership.
 
-See [World Atlas](world-atlas.md), [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), and [Decision 016](../decisions/016-atlas-terrain-materialization.md).
+See [Terrain Generation](terrain-generation.md), [World Atlas](world-atlas.md), [Geometry and Shape](geometry.md), [Surface Hydrology](hydrology.md), [Decision 016](../decisions/016-atlas-terrain-materialization.md), and [Decision 020](../decisions/020-terrain-palettes-hide-generated-complexity.md).
