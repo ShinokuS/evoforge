@@ -69,15 +69,21 @@ final class GeneratedWorldWarmupMatrixTest {
             assertTrue(snapshot.maximumContributingArea() >= 1L);
         }
 
-        assertEquals(0L, firstTrace.get(0).totalWaterVolume());
+        GeneratedWorldDiagnostics initial = firstTrace.get(0);
+        assertTrue(initial.generatedInitialWaterVolume() > 0L);
+        assertTrue(initial.generatedInitialWaterColumns() > 0);
+        assertTrue(initial.generatedShorelineColumns() > 0);
+        assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
+
         GeneratedWorldDiagnostics finalSnapshot = firstTrace.get(firstTrace.size() - 1);
-        if (profile.expectWater()) {
-            assertTrue(finalSnapshot.totalWaterVolume() > 0L);
+        if (profile.hasAtmosphericSupply()) {
+            assertTrue(finalSnapshot.totalWaterVolume() > initial.totalWaterVolume());
             assertTrue(finalSnapshot.retainedWaterVolume() > 0L);
             assertTrue(finalSnapshot.wetSoilCells() > 0L);
         } else {
             assertTrue(firstTrace.stream()
-                    .allMatch(snapshot -> snapshot.totalWaterVolume() == 0L));
+                    .allMatch(snapshot -> snapshot.totalWaterVolume()
+                            == initial.totalWaterVolume()));
         }
     }
 
@@ -99,6 +105,6 @@ final class GeneratedWorldWarmupMatrixTest {
     private record MatrixProfile(
             String name,
             HydroClimateSpec climate,
-            boolean expectWater) {
+            boolean hasAtmosphericSupply) {
     }
 }
