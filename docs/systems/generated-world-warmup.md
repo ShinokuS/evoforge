@@ -89,9 +89,19 @@ The final tick can be changed for development experiments:
 
 This task is deliberately excluded from normal unit tests so console output and longer exploratory runs do not make standard CI noisy. It has no wall-clock pass/fail threshold.
 
+## GitHub Actions audit
+
+`.github/workflows/generated-world-audit.yml` exposes the same developer audit in GitHub Actions.
+
+- pull requests that touch generated-world/runtime code run a short audit to tick `100` and leave the canonical trace in the job log;
+- manual workflow dispatch accepts a final `ticks` input (default `500`) for longer evidence runs;
+- the workflow only invokes `:simulation:generatedWorldAudit`; it has no extra simulation implementation or balance rules.
+
+This gives CI and local development the same generated-world evidence format. The regular `CI` workflow remains the correctness gate; the audit workflow exists to make checkpoint values visible and comparable while relevant world code changes.
+
 ## Logging relationship
 
-`GeneratedWorldDiagnosticsFormat` owns the compact textual representation of one structured snapshot. Both `GeneratedWorldDiagnosticsLog` and the developer audit task use that vocabulary.
+`GeneratedWorldDiagnosticsFormat` owns the compact textual representation of one structured snapshot. `GeneratedWorldDiagnosticsLog`, the local developer audit task, and the GitHub Actions audit use that vocabulary.
 
 The structured `GeneratedWorldDiagnostics` record remains the correctness input. Log strings are for inspection and support, never simulation authority or a test database.
 
