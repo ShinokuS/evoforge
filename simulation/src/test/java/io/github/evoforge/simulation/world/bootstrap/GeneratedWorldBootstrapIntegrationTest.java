@@ -7,11 +7,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
+import io.github.evoforge.simulation.world.atlas.DrainageGenerationStage;
+import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.HydroClimateGenerationStage;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsProbe;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
+import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
@@ -22,21 +28,49 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 final class GeneratedWorldBootstrapIntegrationTest {
 
     @Test
-    void unforcedGeneratedWorldStartsThroughOneProductionPathWithoutInventingWater() {
-        GeneratedWorldRuntime world = create(71L, HydroClimateSpec.UNFORCED);
-
-        assertEquals(0L, world.runtime().time().tick());
-        assertEquals(16L, world.materialization().columns());
-        assertTrue(world.materialization().terrainCells() >= 16L);
+    void legacyV2UnforcedGeneratedWorldStillStartsWithoutGeneratedWater() {
+        WorldBounds bounds = bounds();
+        WorldGenesis legacy = new WorldGenesis(
+                new WorldSpec(bounds, HydroClimateSpec.UNFORCED),
+                71L,
+                GenerationRevision.V2,
+                RngRevision.V1);
+        GeneratedWorldRuntime world = create(legacy, new WorldAtlasGenerator());
 
         advance(world, 24L);
         GeneratedWorldDiagnostics diagnostics = audit(world);
 
         assertEquals(24L, diagnostics.tick());
         assertTrue(diagnostics.surfaceMatchesAtlas());
+        assertEquals(0L, diagnostics.generatedInitialWaterVolume());
+        assertEquals(0, diagnostics.generatedInitialWaterColumns());
         assertEquals(0L, diagnostics.totalWaterVolume());
-        assertEquals(0L, diagnostics.wetWaterCells());
-        assertEquals(0L, diagnostics.wetSoilCells());
+    }
+
+    @Test
+    void currentGeneratedSurfaceWaterMaterializesBeforeRuntimeAndRemainsFinite() {
+        WorldBounds bounds = bounds();
+        WorldGenesis genesis = WorldGenesis.current(
+                new WorldSpec(bounds, HydroClimateSpec.UNFORCED),
+                71L);
+        WorldAtlasGenerator atlasGenerator = new WorldAtlasGenerator(
+                ignored -> constantElevation(bounds, 0),
+                new DrainageGenerationStage(),
+                (requestedGenesis, elevation, drainage) -> oneWetColumn(bounds),
+                new HydroClimateGenerationStage());
+        GeneratedWorldRuntime world = create(genesis, atlasGenerator);
+
+        GeneratedWorldDiagnostics initial = audit(world);
+        assertEquals(0L, initial.tick());
+        assertEquals(500_000L, initial.generatedInitialWaterVolume());
+        assertEquals(1, initial.generatedInitialWaterColumns());
+        assertEquals(8, initial.generatedShorelineColumns());
+        assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
+
+        advance(world, 24L);
+        GeneratedWorldDiagnostics after = audit(world);
+        assertTrue(after.surfaceMatchesAtlas());
+        assertEquals(initial.totalWaterVolume(), after.totalWaterVolume());
     }
 
     @Test
@@ -45,8 +79,12 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 CellVolumeRate.of(80_000L, 1L),
                 CellVolumeRate.ZERO);
 
-        GeneratedWorldRuntime first = create(991L, climate);
-        GeneratedWorldRuntime replay = create(991L, climate);
+        GeneratedWorldRuntime first = create(
+                WorldGenesis.current(new WorldSpec(bounds(), climate), 991L),
+                new WorldAtlasGenerator());
+        GeneratedWorldRuntime replay = create(
+                WorldGenesis.current(new WorldSpec(bounds(), climate), 991L),
+                new WorldAtlasGenerator());
 
         advance(first, 12L);
         advance(replay, 12L);
@@ -98,37 +136,70 @@ final class GeneratedWorldBootstrapIntegrationTest {
     }
 
     private static GeneratedWorldRuntime create(
-            long seed,
-            HydroClimateSpec climate) {
-        WorldBounds bounds = bounds();
-        WorldGenesis genesis = WorldGenesis.current(
-                new WorldSpec(bounds, climate),
-                seed);
-
+            WorldGenesis genesis,
+            WorldAtlasGenerator atlasGenerator) {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground = assembly.landscapeDefinition(
                 "test:generated-porous-ground");
         assembly.soilProperties(ground, 550_000, 100_000);
 
-        return new GeneratedWorldBootstrap().create(
+        return new GeneratedWorldBootstrap(atlasGenerator).create(
                 genesis,
                 assembly,
                 TerrainMaterialResolver.uniform(ground));
     }
 
-    private static GeneratedWorldDiagnostics audit(
-            GeneratedWorldRuntime world) {
+    private static GeneratedWorldDiagnostics audit(GeneratedWorldRuntime world) {
         return new GeneratedWorldDiagnosticsProbe().snapshot(
                 world.atlas(),
                 world.runtime());
     }
 
-    private static void advance(
-            GeneratedWorldRuntime world,
-            long ticks) {
+    private static void advance(GeneratedWorldRuntime world, long ticks) {
         for (long tick = 0L; tick < ticks; tick++) {
             world.runtime().stepper().advance();
         }
+    }
+
+    private static ElevationField constantElevation(WorldBounds bounds, int value) {
+        return new ElevationField() {
+            @Override
+            public WorldBounds bounds() {
+                return bounds;
+            }
+
+            @Override
+            public int elevationAt(int x, int y) {
+                if (!contains(x, y)) throw new IllegalArgumentException("outside test elevation");
+                return value;
+            }
+        };
+    }
+
+    private static SurfaceHydrologyField oneWetColumn(WorldBounds bounds) {
+        return new SurfaceHydrologyField() {
+            @Override
+            public WorldBounds bounds() {
+                return bounds;
+            }
+
+            @Override
+            public int initialWaterVolumeAt(int x, int y) {
+                requireContains(x, y);
+                return x == 1 && y == 1 ? 500_000 : 0;
+            }
+
+            @Override
+            public boolean isShoreline(int x, int y) {
+                requireContains(x, y);
+                if (x == 1 && y == 1) return false;
+                return Math.abs(x - 1) <= 1 && Math.abs(y - 1) <= 1;
+            }
+
+            private void requireContains(int x, int y) {
+                if (!contains(x, y)) throw new IllegalArgumentException("outside test hydrology");
+            }
+        };
     }
 
     private static WorldBounds bounds() {
