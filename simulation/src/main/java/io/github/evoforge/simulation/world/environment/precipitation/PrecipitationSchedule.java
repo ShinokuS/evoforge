@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.environment.precipitation;
 
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 
 /** Deterministic uniform precipitation cadence configured at runtime composition. */
 public record PrecipitationSchedule(
@@ -63,6 +64,18 @@ public record PrecipitationSchedule(
 
     public boolean cyclic() {
         return cycleTicks > 0L;
+    }
+
+    /** Exact long-run Water supply represented by this operational pulse schedule. */
+    public CellVolumeRate meanRatePerColumn() {
+        if (!cyclic()) {
+            return CellVolumeRate.of(amountPerColumn, intervalTicks);
+        }
+        long pulsesPerCycle = activeTicks / intervalTicks;
+        return CellVolumeRate.ofEvents(
+                amountPerColumn,
+                pulsesPerCycle,
+                cycleTicks);
     }
 
     /** Atmospheric forcing window, independent of individual solver pulse ticks. */
