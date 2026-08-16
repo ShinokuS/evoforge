@@ -1,19 +1,18 @@
 package io.github.evoforge.simulation.world.diagnostics;
 
-import java.util.Map;
-import java.util.TreeMap;
-
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
+import java.util.Map;
+import java.util.TreeMap;
 
 /** Immutable generated-material distribution snapshot before runtime mutation. */
 public record GeneratedTerrainMaterialDiagnostics(
         long masterSeed,
         GenerationRevision generationRevision,
         RngRevision rngRevision,
-        String paletteKey,
+        String profileKey,
         WorldBounds bounds,
         long terrainCells,
         int terrainColumns,
@@ -23,8 +22,8 @@ public record GeneratedTerrainMaterialDiagnostics(
     public GeneratedTerrainMaterialDiagnostics {
         if (generationRevision == null
                 || rngRevision == null
-                || paletteKey == null
-                || paletteKey.isBlank()
+                || profileKey == null
+                || profileKey.isBlank()
                 || bounds == null
                 || surfaceCounts == null
                 || volumeCounts == null) {
