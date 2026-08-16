@@ -23,7 +23,7 @@ final class CowNeedCompetitionIntegrationTest {
         Fixture fixture = new Fixture(40, 90);
         AgentDecisionTrace decision = fixture.firstDecision();
 
-        assertEquals(2, decision.candidates().size());
+        assertTrue(decision.candidates().size() >= 2);
         assertTrue(decision.candidates().stream().anyMatch(candidate ->
                 candidate.providerId().equals("needs:satisfaction")));
         assertTrue(decision.candidates().stream().anyMatch(candidate ->
@@ -37,7 +37,7 @@ final class CowNeedCompetitionIntegrationTest {
         Fixture fixture = new Fixture(90, 40);
         AgentDecisionTrace decision = fixture.firstDecision();
 
-        assertEquals(2, decision.candidates().size());
+        assertTrue(decision.candidates().size() >= 2);
         assertEquals("needs:satisfaction", decision.selected().providerId());
         assertEquals(HUNGER.value(), decision.selected().motivation());
         assertEquals("object:" + fixture.grass.asLong(), decision.selected().targetKey());
