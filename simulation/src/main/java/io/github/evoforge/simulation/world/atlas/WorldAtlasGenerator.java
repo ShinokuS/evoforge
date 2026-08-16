@@ -31,6 +31,15 @@ public final class WorldAtlasGenerator {
                 new HydroClimateGenerationStage());
     }
 
+    public WorldAtlasGenerator(GeologyGenerator geologyGenerator) {
+        this(
+                new ElevationGenerationStage(),
+                geologyGenerator,
+                new DrainageGenerationStage(),
+                new SurfaceHydrologyGenerationStage(),
+                new HydroClimateGenerationStage());
+    }
+
     public WorldAtlasGenerator(
             ElevationGenerator elevationGenerator,
             DrainageGenerator drainageGenerator) {
