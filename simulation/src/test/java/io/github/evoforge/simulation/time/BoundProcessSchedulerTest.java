@@ -35,17 +35,52 @@ final class BoundProcessSchedulerTest {
     }
 
     @Test
-    void rejectsNegativeDelay() {
+    void schedulesAtDeclaredAbsoluteTick() {
+        List<Long> handled = new ArrayList<>();
+        HandlerRegistry handlers = new HandlerRegistry();
+        HandlerId handlerId = handlers.register(handled::add);
+        Scheduler scheduler = new Scheduler(handlers);
+        SimulationClock clock = new SimulationClock();
+        BoundProcessScheduler bound = new BoundProcessScheduler(
+                clock,
+                scheduler,
+                handlerId);
+
+        clock.advance();
+        clock.advance();
+        bound.scheduleAt(7, 11);
+
+        scheduler.dispatchDue(6);
+        assertEquals(List.of(), handled);
+        scheduler.dispatchDue(7);
+        assertEquals(List.of(11L), handled);
+    }
+
+    @Test
+    void rejectsNegativeDelayAndPastAbsoluteTick() {
         HandlerRegistry handlers = new HandlerRegistry();
         HandlerId handlerId = handlers.register(processId -> { });
         Scheduler scheduler = new Scheduler(handlers);
+        SimulationClock clock = new SimulationClock();
         BoundProcessScheduler bound = new BoundProcessScheduler(
-                new SimulationClock(),
+                clock,
                 scheduler,
                 handlerId);
 
         assertThrows(
                 IllegalArgumentException.class,
                 () -> bound.scheduleAfter(-1, 0));
+        clock.advance();
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bound.scheduleAt(0, 0));
+    }
+
+    @Test
+    void relativeOnlySchedulerDoublesRemainFunctionalInterfaces() {
+        ProcessScheduler relativeOnly = (delayTicks, processId) -> { };
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> relativeOnly.scheduleAt(1, 1));
     }
 }
