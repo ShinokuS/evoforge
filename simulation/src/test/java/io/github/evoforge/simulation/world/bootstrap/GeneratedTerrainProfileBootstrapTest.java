@@ -4,8 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
+import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
+import io.github.evoforge.simulation.world.geology.CompiledGeologyProfile;
+import io.github.evoforge.simulation.world.geology.GeologyGenerationStage;
+import io.github.evoforge.simulation.world.geology.GeologyMaterialKey;
+import io.github.evoforge.simulation.world.geology.GeologyProfileCompiler;
+import io.github.evoforge.simulation.world.geology.GeologyProfileDefinition;
+import io.github.evoforge.simulation.world.geology.GeologyUnitKey;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -19,6 +26,7 @@ import io.github.evoforge.simulation.world.terrain.generation.TerrainPresetCatal
 import io.github.evoforge.simulation.world.terrain.generation.TerrainProfileCompiler;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainProfileDefinition;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,10 +34,11 @@ import org.junit.jupiter.api.Test;
 
 final class GeneratedTerrainProfileBootstrapTest {
     @Test
-    void productionBootstrapMaterializesGeneratedSemanticMaterials() {
-        WorldBounds bounds = new WorldBounds(-4, 3, -4, 3, -8, 8);
+    void productionBootstrapMaterializesGeneratedSurfaceAndGeologyMaterials() {
+        WorldBounds bounds = new WorldBounds(-12, 11, -12, 11, -12, 12);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 42L);
-        CompiledTerrainProfile profile = profile();
+        CompiledTerrainProfile terrainProfile = terrainProfile();
+        CompiledGeologyProfile geologyProfile = geologyProfile();
 
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId topsoil = assembly.landscapeDefinition("test:topsoil", 1_050);
@@ -38,42 +47,55 @@ final class GeneratedTerrainProfileBootstrapTest {
         assembly.soilProperties(soil, 450_000, 60_000);
         LandscapeDefinitionId sand = assembly.landscapeDefinition("test:sand", 1_300);
         assembly.soilProperties(sand, 350_000, 250_000);
-        LandscapeDefinitionId rock = assembly.landscapeDefinition("test:granite");
+        LandscapeDefinitionId legacyRock = assembly.landscapeDefinition("test:granite");
 
         TerrainMaterialBindings bindings = TerrainMaterialBindings.forProfile(
-                profile,
+                terrainProfile,
                 Map.of(
                         TerrainMaterialRole.SURFACE, topsoil,
                         TerrainMaterialRole.SUBSURFACE, soil,
                         TerrainMaterialRole.SEDIMENT, sand,
-                        TerrainMaterialRole.BEDROCK, rock));
-        GeneratedWorldRuntime world = new GeneratedWorldBootstrap().create(
-                genesis,
-                assembly,
-                profile,
-                bindings);
+                        TerrainMaterialRole.BEDROCK, legacyRock));
+
+        Map<TerrainMaterialKey, LandscapeDefinitionId> geologyBindings = new LinkedHashMap<>();
+        Set<LandscapeDefinitionId> geologyIds = new HashSet<>();
+        for (GeologyMaterialKey material : geologyProfile.materials().values()) {
+            TerrainMaterialKey key = TerrainMaterialKey.of(material.value());
+            LandscapeDefinitionId id = key.value().equals("test:granite")
+                    ? legacyRock
+                    : assembly.landscapeDefinition(key.value());
+            geologyBindings.put(key, id);
+            geologyIds.add(id);
+        }
+        bindings = bindings.withMaterials(geologyBindings);
+
+        GeneratedWorldRuntime world = new GeneratedWorldBootstrap(
+                new WorldAtlasGenerator(new GeologyGenerationStage(geologyProfile)))
+                .create(genesis, assembly, terrainProfile, bindings);
 
         TerrainMaterialField expected = new TerrainMaterialGenerationStage().generate(
                 world.atlas().elevation(),
+                world.atlas().geology(),
                 world.atlas().drainage(),
                 world.atlas().surfaceHydrology(),
-                profile);
+                terrainProfile);
         Set<LandscapeDefinitionId> observed = new HashSet<>();
+        Set<LandscapeDefinitionId> observedGeology = new HashSet<>();
 
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 int surface = world.atlas().elevation().elevationAt(x, y);
                 for (int z = bounds.minZ(); z <= surface; z++) {
-                    LandscapeDefinitionId expectedId = bindings.resolve(
-                            expected.materialAt(x, y, z));
+                    LandscapeDefinitionId expectedId = bindings.resolve(expected.materialAt(x, y, z));
                     LandscapeDefinitionId actual = world.runtime().view().terrain().find(x, y, z);
                     assertEquals(expectedId, actual);
                     observed.add(actual);
+                    if (geologyIds.contains(actual)) observedGeology.add(actual);
                 }
             }
         }
 
-        assertTrue(observed.contains(rock));
+        assertTrue(observedGeology.size() > 1, "materialized terrain exposes only one geology unit");
         assertTrue(observed.contains(topsoil) || observed.contains(sand));
         assertEquals(world.materialization().terrainCells(), observedCellCount(world, bounds));
     }
@@ -90,7 +112,7 @@ final class GeneratedTerrainProfileBootstrapTest {
         return count;
     }
 
-    private static CompiledTerrainProfile profile() {
+    private static CompiledTerrainProfile terrainProfile() {
         return new TerrainProfileCompiler().compile(
                 new TerrainProfileDefinition(
                         "test:temperate",
@@ -101,13 +123,25 @@ final class GeneratedTerrainProfileBootstrapTest {
                 new TerrainMaterialSetDefinition(
                         "test:materials",
                         Map.of(
-                                TerrainMaterialRole.SURFACE,
-                                TerrainMaterialKey.of("test:topsoil"),
-                                TerrainMaterialRole.SUBSURFACE,
-                                TerrainMaterialKey.of("test:soil"),
-                                TerrainMaterialRole.SEDIMENT,
-                                TerrainMaterialKey.of("test:sand"),
-                                TerrainMaterialRole.BEDROCK,
-                                TerrainMaterialKey.of("test:granite"))));
+                                TerrainMaterialRole.SURFACE, TerrainMaterialKey.of("test:topsoil"),
+                                TerrainMaterialRole.SUBSURFACE, TerrainMaterialKey.of("test:soil"),
+                                TerrainMaterialRole.SEDIMENT, TerrainMaterialKey.of("test:sand"),
+                                TerrainMaterialRole.BEDROCK, TerrainMaterialKey.of("test:granite"))));
+    }
+
+    private static CompiledGeologyProfile geologyProfile() {
+        return new GeologyProfileCompiler().compile(new GeologyProfileDefinition(
+                "test:crust",
+                List.of(
+                        unit("test:granite"),
+                        unit("test:basalt"),
+                        unit("test:limestone"),
+                        unit("test:shale"))));
+    }
+
+    private static GeologyProfileDefinition.UnitDefinition unit(String key) {
+        return new GeologyProfileDefinition.UnitDefinition(
+                GeologyUnitKey.of(key),
+                GeologyMaterialKey.of(key));
     }
 }
