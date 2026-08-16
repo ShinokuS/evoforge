@@ -145,7 +145,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
         }
     }
 
-    /** Wakes only the autonomous process that is actually waiting on this MoveTo. */
+    /** Continues only the autonomous process that owns this terminal MoveTo. */
     @Override
     public void completed(MoveToCompletion completion) {
         if (completion == null) throw new IllegalArgumentException("completion must not be null");
@@ -159,8 +159,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
                 && active.searchRelocation.actionId.equals(completion.actionId());
         if (!waitingForOpportunity && !waitingForSearch) return;
 
-        requireScheduler();
-        scheduler.scheduleAfter(0L, active.processId);
+        resume(active.processId);
     }
 
     @Override
