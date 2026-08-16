@@ -1,9 +1,8 @@
 {
-  "kind": "landscape",
-  "key": "core:shale",
-  "aspects": {
-    "core:traversal-cost": {
-      "cost": 1300000
+    "key": "core:shale",
+    "aspects": {
+        "traversal": {
+            "cost": 1000
+        }
     }
-  }
 }
