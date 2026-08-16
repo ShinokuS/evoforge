@@ -39,3 +39,12 @@ jobs:
 
       - name: Run tests
         run: ./gradlew test --no-daemon --console=plain
+
+      - name: Sample small scale profile suite
+        run: ./gradlew :simulation:scaleProfile -Devoforge.scale.profile=small --no-daemon --console=plain
+
+      - name: Sample medium scale profile suite
+        run: ./gradlew :simulation:scaleProfile -Devoforge.scale.profile=medium --no-daemon --console=plain
+
+      - name: Sample large scale profile suite
+        run: ./gradlew :simulation:scaleProfile -Devoforge.scale.profile=large --no-daemon --console=plain
