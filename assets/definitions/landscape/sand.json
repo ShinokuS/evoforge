@@ -1,0 +1,12 @@
+{
+    "key": "core:sand",
+    "aspects": {
+        "traversal": {
+            "cost": 1300
+        },
+        "soil": {
+            "capacity": 350000,
+            "permeability": 250000
+        }
+    }
+}

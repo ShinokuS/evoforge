@@ -1,0 +1,12 @@
+{
+    "key": "core:soil",
+    "aspects": {
+        "traversal": {
+            "cost": 1100
+        },
+        "soil": {
+            "capacity": 450000,
+            "permeability": 60000
+        }
+    }
+}
