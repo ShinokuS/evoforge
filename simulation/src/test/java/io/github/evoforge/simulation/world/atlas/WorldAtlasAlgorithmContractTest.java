@@ -13,36 +13,50 @@ import org.junit.jupiter.api.Test;
 final class WorldAtlasAlgorithmContractTest {
 
     @Test
-    void atlasOrchestrationDependsOnElevationContractNotConcreteAlgorithm() {
+    void atlasOrchestrationComposesTypedElevationThenDrainageContracts() {
         WorldBounds bounds = new WorldBounds(-2, 2, -2, 2, -10, 10);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 77L);
-        AtomicInteger calls = new AtomicInteger();
+        AtomicInteger elevationCalls = new AtomicInteger();
+        AtomicInteger drainageCalls = new AtomicInteger();
         ElevationField substitute = constantElevation(bounds, 3);
-        ElevationGenerator algorithm = requestedGenesis -> {
+        ElevationGenerator elevationAlgorithm = requestedGenesis -> {
             assertSame(genesis, requestedGenesis);
-            calls.incrementAndGet();
+            elevationCalls.incrementAndGet();
             return substitute;
         };
+        DrainageGenerator drainageAlgorithm = requestedElevation -> {
+            assertSame(substitute, requestedElevation);
+            drainageCalls.incrementAndGet();
+            return new DrainageGenerationStage().generate(requestedElevation);
+        };
 
-        WorldAtlas atlas = new WorldAtlasGenerator(algorithm).generate(genesis);
+        WorldAtlas atlas = new WorldAtlasGenerator(
+                elevationAlgorithm, drainageAlgorithm).generate(genesis);
 
         assertSame(substitute, atlas.elevation());
-        assertEquals(1, calls.get());
+        assertEquals(1, elevationCalls.get());
+        assertEquals(1, drainageCalls.get());
         assertEquals(3, atlas.elevation().elevationAt(0, 0));
         assertEquals(
                 3L * ElevationField.SUBUNITS_PER_CELL,
                 atlas.elevation().elevationSubunitsAt(0, 0));
+        assertSame(bounds, atlas.drainage().bounds());
     }
 
     @Test
-    void orchestrationRejectsMissingAlgorithmAndBrokenAlgorithmOutput() {
+    void orchestrationRejectsMissingAlgorithmsAndBrokenAlgorithmOutput() {
         WorldBounds bounds = new WorldBounds(0, 1, 0, 1, -2, 2);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 1L);
+        ElevationGenerator elevation = ignored -> constantElevation(bounds, 0);
 
         assertThrows(IllegalArgumentException.class,
-                () -> new WorldAtlasGenerator(null));
+                () -> new WorldAtlasGenerator((ElevationGenerator) null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new WorldAtlasGenerator(elevation, null));
         assertThrows(IllegalStateException.class,
                 () -> new WorldAtlasGenerator(ignored -> null).generate(genesis));
+        assertThrows(IllegalStateException.class,
+                () -> new WorldAtlasGenerator(elevation, ignored -> null).generate(genesis));
     }
 
     @Test
