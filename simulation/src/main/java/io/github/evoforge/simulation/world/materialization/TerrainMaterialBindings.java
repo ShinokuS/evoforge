@@ -15,10 +15,7 @@ public final class TerrainMaterialBindings {
         this.ids = Map.copyOf(ids);
     }
 
-    /**
-     * Binds every material present in one compiled material set through its semantic role.
-     * Extra role ids are harmless; every authored material binding must have one runtime id.
-     */
+    /** Binds exactly the semantic material roles that this compiled profile can generate. */
     public static TerrainMaterialBindings forProfile(
             CompiledTerrainProfile profile,
             Map<TerrainMaterialRole, LandscapeDefinitionId> idsByRole) {
@@ -26,15 +23,14 @@ public final class TerrainMaterialBindings {
             throw new IllegalArgumentException("terrain material bindings must not be null");
         }
         Map<TerrainMaterialKey, LandscapeDefinitionId> ids = new LinkedHashMap<>();
-        for (Map.Entry<TerrainMaterialRole, TerrainMaterialKey> entry
-                : profile.materials().asMap().entrySet()) {
-            LandscapeDefinitionId id = idsByRole.get(entry.getKey());
+        for (TerrainMaterialRole role : profile.requiredRoles()) {
+            LandscapeDefinitionId id = idsByRole.get(role);
             if (id == null) {
                 throw new IllegalArgumentException(
                         "missing runtime landscape id for terrain material role: "
-                                + entry.getKey().authoredName());
+                                + role.authoredName());
             }
-            bind(ids, entry.getValue(), id);
+            bind(ids, profile.materials().require(role), id);
         }
         return new TerrainMaterialBindings(ids);
     }
