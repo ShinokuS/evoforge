@@ -19,6 +19,7 @@ import io.github.evoforge.simulation.world.agent.search.RelativeSearchLocomotion
 import io.github.evoforge.simulation.world.agent.search.SearchAdvanceResult;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToActionId;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
+import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletionSink;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToLookup;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToStartAttempt;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
@@ -38,9 +39,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Generic autonomous decision owner over current perceived mechanic opportunities. */
-public final class AgentSystem implements AgentDecisionLookup {
+public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionSink {
     private static final Logger LOGGER = LoggerFactory.getLogger("io.github.evoforge.agent.decision");
-    private static final long ACTIVE_POLL_TICKS = 1L;
+    private static final long CONTINUE_SOON_TICKS = 1L;
     private static final long IDLE_RECHECK_TICKS = 10L;
     private static final Comparator<Candidate> CANDIDATE_ORDER =
             Comparator.<Candidate>comparingLong(candidate -> candidate.trace.utility()).reversed()
@@ -100,6 +101,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         this.search = search;
         this.searchLocomotion = searchLocomotion;
         this.time = time;
+        moveTo.bindCompletionSink(this);
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -123,7 +125,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         ActiveAgent active = new ActiveAgent(nextProcessId++, objectId);
         byProcessId.put(active.processId, active);
         byObjectId.put(objectId, active);
-        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+        scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
     }
 
     public void resume(long processId) {
@@ -141,6 +143,23 @@ public final class AgentSystem implements AgentDecisionLookup {
         } else {
             decide(active);
         }
+    }
+
+    /** Continues only the autonomous process that owns this terminal MoveTo. */
+    @Override
+    public void completed(MoveToCompletion completion) {
+        if (completion == null) throw new IllegalArgumentException("completion must not be null");
+        ActiveAgent active = byObjectId.get(completion.objectId());
+        if (active == null) return;
+
+        boolean waitingForOpportunity = active.opportunityIntent != null
+                && active.opportunityIntent.useActionId == null
+                && active.opportunityIntent.moveToActionId.equals(completion.actionId());
+        boolean waitingForSearch = active.searchRelocation != null
+                && active.searchRelocation.actionId.equals(completion.actionId());
+        if (!waitingForOpportunity && !waitingForSearch) return;
+
+        resume(active.processId);
     }
 
     @Override
@@ -222,7 +241,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         InteractionSite site = selected.opportunity.site();
         MoveToStartAttempt attempt = moveTo.start(active.objectId, site.x(), site.y(), site.z());
         if (!attempt.accepted()) {
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
             return;
         }
 
@@ -240,7 +259,7 @@ public final class AgentSystem implements AgentDecisionLookup {
                         site,
                         "move_to",
                         completion.code().value());
-                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
                 return;
             }
         }
@@ -252,7 +271,10 @@ public final class AgentSystem implements AgentDecisionLookup {
                 site,
                 attempt.actionId(),
                 time.tick());
-        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+
+        if (!moveToLookup.isActive(active.objectId)) {
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
+        }
     }
 
     private boolean isLocallyEnterable(ObjectId objectId, InteractionSite site) {
@@ -299,14 +321,16 @@ public final class AgentSystem implements AgentDecisionLookup {
             if (!attempt.accepted()) {
                 search.relocationFinished(active.objectId, false);
                 clearRejectedOpportunities(active);
-                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
                 return;
             }
             active.searchRelocation = new ActiveSearchRelocation(attempt.actionId(), time.tick());
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            if (!moveToLookup.isActive(active.objectId)) {
+                scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
+            }
             return;
         }
-        scheduler.scheduleAfter(result.continueSoon() ? ACTIVE_POLL_TICKS : IDLE_RECHECK_TICKS, active.processId);
+        scheduler.scheduleAfter(result.continueSoon() ? CONTINUE_SOON_TICKS : IDLE_RECHECK_TICKS, active.processId);
     }
 
     private List<Candidate> perceiveCandidates(ObjectId agentId) {
@@ -350,10 +374,8 @@ public final class AgentSystem implements AgentDecisionLookup {
         AgentOpportunityProvider provider = providers.get(intent.providerIndex);
 
         if (intent.useActionId != null) {
-            if (provider.isUseActive(active.objectId)) {
-                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
-                return;
-            }
+            if (provider.isUseActive(active.objectId)) return;
+
             OpportunityUseCompletion completion = provider.lastUseCompletion(active.objectId);
             if (completion == null
                     || !intent.useActionId.equals(completion.actionId())
@@ -372,7 +394,7 @@ public final class AgentSystem implements AgentDecisionLookup {
                 }
                 if (nextUse.accepted()) {
                     setUse(intent, nextUse);
-                    scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                    scheduleUseCompletion(active, provider, nextUse);
                     return;
                 }
             }
@@ -386,14 +408,12 @@ public final class AgentSystem implements AgentDecisionLookup {
                 clearRejectedOpportunities(active);
             }
             active.opportunityIntent = null;
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
             return;
         }
 
-        if (moveToLookup.isActive(active.objectId)) {
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
-            return;
-        }
+        if (moveToLookup.isActive(active.objectId)) return;
+
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
         if (completion == null || !intent.moveToActionId.equals(completion.actionId())) {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
@@ -407,14 +427,11 @@ public final class AgentSystem implements AgentDecisionLookup {
                     "move_to",
                     completion.code().value());
             active.opportunityIntent = null;
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
             return;
         }
 
-        OpportunityUseStartAttempt use = provider.startUse(
-                active.objectId,
-                intent.target,
-                intent.site);
+        OpportunityUseStartAttempt use = provider.startUse(active.objectId, intent.target, intent.site);
         if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
         if (!use.accepted()) {
             rememberRejected(
@@ -423,11 +440,26 @@ public final class AgentSystem implements AgentDecisionLookup {
                     "use_start",
                     use.code().value());
             active.opportunityIntent = null;
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
             return;
         }
         setUse(intent, use);
-        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+        scheduleUseCompletion(active, provider, use);
+    }
+
+    private void scheduleUseCompletion(
+            ActiveAgent active,
+            AgentOpportunityProvider provider,
+            OpportunityUseStartAttempt use) {
+        if (!provider.isUseActive(active.objectId)) {
+            scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
+            return;
+        }
+        if (use.expectedCompletionTick() < time.tick()) {
+            throw new IllegalStateException("active opportunity use completion is already in the past: "
+                    + active.objectId);
+        }
+        scheduler.scheduleAt(use.expectedCompletionTick(), active.processId);
     }
 
     private static void setUse(ActiveOpportunityIntent intent, OpportunityUseStartAttempt use) {
@@ -437,10 +469,8 @@ public final class AgentSystem implements AgentDecisionLookup {
     }
 
     private void continueSearchRelocation(ActiveAgent active) {
-        if (moveToLookup.isActive(active.objectId)) {
-            scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
-            return;
-        }
+        if (moveToLookup.isActive(active.objectId)) return;
+
         ActiveSearchRelocation relocation = active.searchRelocation;
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
         active.searchRelocation = null;
@@ -449,7 +479,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         }
         search.relocationFinished(active.objectId, completion.reachedGoal());
         clearRejectedOpportunities(active);
-        scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+        scheduler.scheduleAfter(CONTINUE_SOON_TICKS, active.processId);
     }
 
     private void rememberMovementFailure(
