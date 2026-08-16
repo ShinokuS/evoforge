@@ -18,13 +18,20 @@ This page tracks milestone state and deliberately deferred work. Detailed curren
 - Deterministic 3D Pathfinding foundation: exact resumable A*, traversal revisions and derived hierarchy/reachability preflight.
 - Long-range `MoveTo` lifecycle over the existing one-edge Movement primitive, including route-level cancellation that stops after at most the currently scheduled atomic edge.
 - Movement visualizer scenarios and authoritative route diagnostics.
-- Generic autonomous-agent foundation: open Needs/capabilities, directed Vision, physical orientation, deterministic decision traces and mechanic-owned opportunities.
+- Generic autonomous-agent foundation: open Needs/capabilities, physical orientation, deterministic traces and mechanic-owned opportunities.
+- 3D Vision feeding sensor-neutral Perception with visible objects and visible cells rather than source-specific sensing APIs.
+- Source-neutral opportunity targets with explicit `InteractionSite`s, so source identity and the place an actor must stand are independent.
+- Declarative physical interaction reach with same-level cardinal access and one-level-lower cardinal access subject to free-space/clearance rules.
 - Coordinate-free unknown-source Search with local visual sweep, relative exploration and production MoveTo execution.
 - Finite authoritative Consumable Stock separated from physiological benefit.
 - Definition-driven scheduled Growth with narrow stock replenishment and an external effective-rate resolver.
 - Generic scheduled Need progression for open `NeedId`s with narrow deficit mutation and an external effective-rate resolver.
 - Provider-owned timed opportunity-use lifecycle with authoritative completion/revalidation.
-- Integrated Living Cow visual slice: Hunger progression, search/decision, MoveTo, finite plant depletion/regrowth and timed grazing.
+- Finite liquid drinking as an autonomous opportunity over perceived cells, with exact authoritative liquid removal and proportional Need relief for partial drinks.
+- One common fixed-point Utility scale for cross-provider/cross-motivation comparison, now exercised by Hunger + Thirst.
+- Continuing autonomous intents that remain stable while executing and recover deterministically from failed/blocked opportunity sites.
+- Multi-agent acceptance coverage proving exclusive Cows do not overlap while contending for finite opportunities.
+- Integrated Living Cow Meadow slice: Hunger + Thirst competition, search/decision, MoveTo, finite plants/regrowth, finite Water, edge-lake drinking and rain-created puddle drinking.
 - Finite authoritative Water quantity with sparse storage and Shape-derived cell capacity.
 - Deterministic local Water redistribution with hydraulic head, exact conservation, bounded relaxation and dormant active-frontier processing.
 - Material `SurfaceWaterStorage`: shallow free Water can remain conserved without becoming perpetual horizontal thin-film runoff; vertical falling remains independent of that horizontal reserve.
@@ -63,21 +70,25 @@ The repository now treats accepted `main` states as release/milestone baselines 
 
 ## Current living-world sequence
 
-The next direct living-world consumers remain:
+The first real multi-motivation vertical slice is now implemented on the integration branch:
 
 ```text
-Thirst + Drink
+Hunger + Thirst
     ↓
-real Utility competition between motivations
+object-source + liquid-source opportunities
     ↓
-Intent persistence / interruption
+common deterministic Utility
     ↓
-representative scale profiling
+committed intent + failure recovery
+    ↓
+plants / edge lake / rain-created puddles
 ```
 
-Thirst/Drink should consume the existing finite Water and generic opportunity/use boundaries rather than adding a Water-specific AI path. Real Hunger + Thirst competition is the first reason to replace the provisional single-motivation scoring with a richer utility model.
+Thirst/Drink consumes the existing finite Water and generic opportunity/use boundaries rather than adding a Water-specific AI path. A Cow can use adjacent Water on the same standing level or one level below through the shared interaction-access model; perception remains ordinary 3D Vision rather than privileged liquid discovery.
 
-Representative scale profiling remains mandatory before AI/world hot-path optimization. Scheduling, perception indexes, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
+The next mandatory engineering step is **representative scale profiling**. Scheduling frequency, perception indexes, candidate allocation, source lookup, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
+
+A richer interruption/preemption policy is deliberately not automatic next work. The current committed intent remains stable while valid; if representative gameplay demonstrates that a newly urgent motivation must interrupt a still-valid action, that concrete case will define the interruption contract.
 
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
 
