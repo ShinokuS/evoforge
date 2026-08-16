@@ -24,6 +24,9 @@ public record GeneratedWorldDiagnostics(
         int maximumSurfaceZ,
         long terminalBasins,
         long maximumContributingArea,
+        long generatedInitialWaterVolume,
+        int generatedInitialWaterColumns,
+        int generatedShorelineColumns,
         long freeWaterVolume,
         long retainedWaterVolume,
         long wetWaterCells,
@@ -47,6 +50,9 @@ public record GeneratedWorldDiagnostics(
                 || surfaceMismatches < 0L
                 || terminalBasins < 0L
                 || maximumContributingArea < 0L
+                || generatedInitialWaterVolume < 0L
+                || generatedInitialWaterColumns < 0
+                || generatedShorelineColumns < 0
                 || freeWaterVolume < 0L
                 || retainedWaterVolume < 0L
                 || wetWaterCells < 0L
@@ -62,6 +68,10 @@ public record GeneratedWorldDiagnostics(
         if (minimumSurfaceZ > maximumSurfaceZ) {
             throw new IllegalArgumentException(
                     "minimum surface must not exceed maximum surface");
+        }
+        if (generatedInitialWaterColumns == 0 && generatedInitialWaterVolume != 0L) {
+            throw new IllegalArgumentException(
+                    "generated initial Water must be empty when no generated column is wet");
         }
         if (wetWaterColumns == 0
                 && (freeWaterVolume != 0L
