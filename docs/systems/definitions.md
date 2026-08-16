@@ -116,6 +116,36 @@ Shape is Geometry state/override associated with a terrain anchor lifetime, not 
 
 A missing required traversal cost on terrain participating in an otherwise valid priced edge is broken content/bootstrap configuration rather than an invitation to silently substitute a fallback.
 
+## Canonical landscape material baseline
+
+The first generated-world landscape baseline uses four stable content identities from `assets/definitions/landscape`:
+
+| key | traversal cost | Soil capacity | Soil permeability |
+| --- | ---: | ---: | ---: |
+| `core:granite` | 1000 | — | — |
+| `core:topsoil` | 1050 | 550000 | 100000 |
+| `core:soil` | 1100 | 450000 | 60000 |
+| `core:sand` | 1300 | 350000 | 250000 |
+
+These numbers are canonical **model-v1 intrinsic values**, not a claim that one normalized cell or one simulation tick directly equals a particular real-world soil sample or laboratory measurement. `capacity` uses the normalized `CellVolume` scale and therefore represents available pore volume. `permeability` is the material conductance used for the reference-viscosity liquid; liquid viscosity is combined separately by the existing infiltration model. Traversal cost is relative to the neutral cost of `1000`.
+
+The baseline encodes only first-order relationships required by existing mechanics:
+
+- Granite is the neutral hard, non-porous baseline under the current Soil mechanic, so it intentionally has no `soil` aspect.
+- Topsoil has the largest pore capacity of the three porous materials and moderate permeability.
+- Soil has lower pore capacity and lower permeability than Topsoil.
+- Sand has lower pore capacity but substantially higher permeability, and its loose surface is more costly to traverse.
+
+This baseline does **not** add granular Sand simulation, erosion, compaction, saturation-dependent traversal, material-specific runoff rules, or a hidden content switch. Those require real future mechanics and must not be inferred from the material name.
+
+### Ordinary material authoring contract
+
+When a new material is fully expressible through existing aspects, authoring it is a data-only operation: add one definition file under the landscape definition directory containing its stable key and the aspects it actually supports. Directory loading discovers that file deterministically; existing aspect compilers consume it generically.
+
+Ordinary material addition must not require editing a central material list, adding Java branches for the material key, changing world-generation algorithms, or modifying unrelated evaluators/calibration code. A Java change is justified only when the content introduces a genuinely new semantic mechanic that existing aspects cannot express.
+
+The canonical-material test loads the shipped directory through the normal `LandscapeDefinitionBootstrap` with generic traversal and Soil compilers. This makes the authoring contract executable and prevents the four baseline materials from becoming a parallel hard-coded registry.
+
 ## Liquid transport definitions
 
 `LiquidTypeId` is an open domain-owned identity. A liquid that participates in free transport or Soil infiltration must have `LiquidTransportProperties` registered during composition.
