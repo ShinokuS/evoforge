@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.bootstrap;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
@@ -61,6 +62,7 @@ public final class GeneratedWorldBootstrap {
         TerrainMaterialField materials = terrainMaterialGenerator.generate(
                 atlas.elevation(),
                 atlas.drainage(),
+                atlas.surfaceHydrology(),
                 profile);
         return start(
                 atlas,
@@ -68,7 +70,7 @@ public final class GeneratedWorldBootstrap {
                 TerrainMaterialResolver.resolved(materials, bindings));
     }
 
-    /** Compatibility/custom path for callers that intentionally own material resolution. */
+    /** Compatibility/custom path for callers that intentionally own terrain material resolution. */
     public GeneratedWorldRuntime create(
             WorldGenesis genesis,
             SimulationAssembly assembly,
@@ -94,9 +96,34 @@ public final class GeneratedWorldBootstrap {
         TerrainMaterializationResult materialization = assembly.materializeGeneratedTerrain(
                 atlas.elevation(),
                 materials);
+        materializeInitialSurfaceWater(atlas, assembly);
         assembly.generatedHydroClimate(atlas.hydroClimate());
 
         SimulationRuntime runtime = assembly.start();
         return new GeneratedWorldRuntime(atlas, materialization, runtime);
+    }
+
+    private static void materializeInitialSurfaceWater(
+            WorldAtlas atlas,
+            SimulationAssembly assembly) {
+        SurfaceHydrologyField hydrology = atlas.surfaceHydrology();
+        WorldBounds bounds = hydrology.bounds();
+        for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
+            int worldY = (int) y;
+            for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
+                int worldX = (int) x;
+                int amount = hydrology.initialWaterVolumeAt(worldX, worldY);
+                if (amount == 0) continue;
+                int waterZ = Math.addExact(
+                        atlas.elevation().elevationAt(worldX, worldY),
+                        1);
+                if (waterZ > bounds.maxZ()) {
+                    throw new IllegalStateException(
+                            "generated surface Water has no open cell above terrain at ("
+                                    + worldX + ", " + worldY + ")");
+                }
+                assembly.initialWater(worldX, worldY, waterZ, amount);
+            }
+        }
     }
 }
