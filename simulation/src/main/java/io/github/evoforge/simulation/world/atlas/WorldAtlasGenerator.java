@@ -6,26 +6,36 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 public final class WorldAtlasGenerator {
     private final ElevationGenerator elevationGenerator;
     private final DrainageGenerator drainageGenerator;
+    private final HydroClimateGenerator hydroClimateGenerator;
 
     public WorldAtlasGenerator() {
-        this(new ElevationGenerationStage(), new DrainageGenerationStage());
+        this(new ElevationGenerationStage(), new DrainageGenerationStage(), new HydroClimateGenerationStage());
     }
 
     public WorldAtlasGenerator(ElevationGenerator elevationGenerator) {
-        this(elevationGenerator, new DrainageGenerationStage());
+        this(elevationGenerator, new DrainageGenerationStage(), new HydroClimateGenerationStage());
+    }
+
+    public WorldAtlasGenerator(ElevationGenerator elevationGenerator, DrainageGenerator drainageGenerator) {
+        this(elevationGenerator, drainageGenerator, new HydroClimateGenerationStage());
     }
 
     public WorldAtlasGenerator(
             ElevationGenerator elevationGenerator,
-            DrainageGenerator drainageGenerator) {
+            DrainageGenerator drainageGenerator,
+            HydroClimateGenerator hydroClimateGenerator) {
         if (elevationGenerator == null) {
             throw new IllegalArgumentException("elevationGenerator must not be null");
         }
         if (drainageGenerator == null) {
             throw new IllegalArgumentException("drainageGenerator must not be null");
         }
+        if (hydroClimateGenerator == null) {
+            throw new IllegalArgumentException("hydroClimateGenerator must not be null");
+        }
         this.elevationGenerator = elevationGenerator;
         this.drainageGenerator = drainageGenerator;
+        this.hydroClimateGenerator = hydroClimateGenerator;
     }
 
     public WorldAtlas generate(WorldGenesis genesis) {
@@ -40,6 +50,10 @@ public final class WorldAtlasGenerator {
         if (drainage == null) {
             throw new IllegalStateException("drainageGenerator returned null");
         }
-        return new WorldAtlas(genesis, elevation, drainage);
+        HydroClimateField hydroClimate = hydroClimateGenerator.generate(genesis.spec());
+        if (hydroClimate == null) {
+            throw new IllegalStateException("hydroClimateGenerator returned null");
+        }
+        return new WorldAtlas(genesis, elevation, drainage, hydroClimate);
     }
 }

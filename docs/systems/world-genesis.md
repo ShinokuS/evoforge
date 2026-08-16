@@ -1,10 +1,19 @@
 # World Genesis
 
-World Genesis owns immutable provenance for a generated world and the deterministic random contract used while authoring its initial facts. It does not own terrain, liquids, climate, objects or later runtime mutation.
+World Genesis owns immutable provenance for a generated world and the deterministic random contract used while authoring its initial facts. It does not own terrain, liquids, runtime weather, objects or later runtime mutation.
 
 ## Current contract
 
-`WorldSpec` is the requested pre-generation specification. The current foundation intentionally contains only finite inclusive `WorldBounds`.
+`WorldSpec` is the requested pre-generation specification. It currently contains:
+
+```text
+finite inclusive WorldBounds
+HydroClimateSpec
+    precipitation supply
+    potential evaporative demand
+```
+
+Both hydrologic-climate values are exact `CellVolumeRate`s measured in cell-volume units per simulation tick. The compatibility constructor `WorldSpec(WorldBounds)` selects `HydroClimateSpec.UNFORCED`, so older callers receive zero atmospheric supply and zero evaporative demand rather than an invented hidden baseline climate.
 
 `WorldGenesis` combines:
 
@@ -40,14 +49,15 @@ Stage and purpose identifiers use stable namespaced keys such as `world:elevatio
 
 ## Ownership boundary
 
-Genesis metadata is immutable provenance. Generated output belongs to the domain that owns the resulting fact:
+Genesis metadata is immutable provenance and requested generation input. Generated output belongs to the domain that owns the resulting fact:
 
-- elevation/geology/climate normals belong to world-fact/atlas owners;
+- elevation, drainage and hydrologic climate normals belong to World Atlas;
 - materialized terrain belongs to Landscape;
 - Water and retained liquid belong to their existing authoritative systems;
+- runtime precipitation/evaporation events remain environment-system behavior;
 - objects and agents remain owned by their existing domains.
 
-A generator therefore must not become a permanent second owner of generated state.
+A generator therefore must not become a permanent second owner of generated state. `HydroClimateSpec` requests long-term forcing; it is not mutable weather state and does not itself schedule rain or evaporation.
 
 ## Persistence rule
 
@@ -57,6 +67,6 @@ The physical save schema is not part of this foundation.
 
 ## Deliberately deferred
 
-Genesis does not define region semantics, chunk dimensions, materialization lifecycle, streaming, packed storage, climate parameters or world-calendar semantics. Those contracts arrive only with the slices that need them.
+Genesis does not define region semantics, chunk dimensions, materialization lifecycle, streaming, packed storage, temperature, wind, season/calendar semantics or weather anomalies. Those contracts arrive only with slices that have real consumers.
 
-See [Decision 009 — World genesis provenance and deterministic randomness](../decisions/009-world-genesis-provenance-and-randomness.md) and [World Atlas](world-atlas.md).
+See [Decision 009 — World genesis provenance and deterministic randomness](../decisions/009-world-genesis-provenance-and-randomness.md), [Decision 013 — Long-term environmental rates use exact simulation dimensions](../decisions/013-simulation-rate-units.md), [Decision 014 — Hydrologic climate normals are generated facts, not runtime weather](../decisions/014-hydrologic-climate-normals.md) and [World Atlas](world-atlas.md).
