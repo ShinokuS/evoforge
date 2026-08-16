@@ -77,9 +77,11 @@ It is a pairing/result object, not a new mutable world owner. Runtime stepping s
 
 ## Diagnostics and warmup
 
-Immediately after bootstrap, `GeneratedWorldDiagnosticsProbe` can capture a `tick=0` audit. Future deterministic warmup tooling will advance this same production runtime and capture later checkpoints; it will not create a separate simulation loop with alternate physical rules.
+Immediately after bootstrap, `GeneratedWorldDiagnosticsProbe` can capture a `tick=0` audit. `GeneratedWorldWarmup` advances this same production runtime to explicitly requested absolute checkpoint ticks and captures further diagnostics through the same probe.
 
-No warmup duration or balance verdict is defined here. Those policies require representative generated-world runs first.
+Warmup has no implicit equilibrium condition and no universal duration. The regular CI matrix currently uses small verification checkpoints to exercise determinism across several seeds; longer developer audits are opt-in through `:simulation:generatedWorldAudit`.
+
+Balance/viability interpretation remains separate from runtime and warmup. The checkpoint trace is evidence for a future evaluator, not a hidden verdict.
 
 ## Current acceptance
 
@@ -88,7 +90,8 @@ Headless integration verifies that:
 - an unforced generated world starts through this single path and creates no Water from nothing;
 - Atlas-driven HydroClimate precipitation is executed by the production scheduler;
 - generated Terrain remains aligned with Atlas surface facts when no terrain-changing runtime mechanic exists;
-- same seed + same content setup + same ticks produces an identical complete diagnostic snapshot;
-- generated climate cannot be combined with legacy periodic atmospheric schedules.
+- same seed + same content setup + same ticks yields identical diagnostics across replay;
+- generated climate cannot be combined with legacy periodic atmospheric schedules;
+- deterministic warmup checkpoints can be reproduced across a representative seed/climate matrix.
 
-See [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Diagnostics](generated-world-diagnostics.md), [Surface Hydrology](hydrology.md), and [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md).
+See [Generated World Warmup](generated-world-warmup.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Diagnostics](generated-world-diagnostics.md), [Surface Hydrology](hydrology.md), [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md), and [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md).
