@@ -101,6 +101,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
         this.search = search;
         this.searchLocomotion = searchLocomotion;
         this.time = time;
+        moveTo.bindCompletionSink(this);
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
@@ -374,9 +375,8 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
         AgentOpportunityProvider provider = providers.get(intent.providerIndex);
 
         if (intent.useActionId != null) {
-            if (provider.isUseActive(active.objectId)) {
-                return;
-            }
+            if (provider.isUseActive(active.objectId)) return;
+
             OpportunityUseCompletion completion = provider.lastUseCompletion(active.objectId);
             if (completion == null
                     || !intent.useActionId.equals(completion.actionId())
@@ -413,9 +413,8 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
             return;
         }
 
-        if (moveToLookup.isActive(active.objectId)) {
-            return;
-        }
+        if (moveToLookup.isActive(active.objectId)) return;
+
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
         if (completion == null || !intent.moveToActionId.equals(completion.actionId())) {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
@@ -433,10 +432,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
             return;
         }
 
-        OpportunityUseStartAttempt use = provider.startUse(
-                active.objectId,
-                intent.target,
-                intent.site);
+        OpportunityUseStartAttempt use = provider.startUse(active.objectId, intent.target, intent.site);
         if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
         if (!use.accepted()) {
             rememberRejected(
@@ -474,9 +470,8 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
     }
 
     private void continueSearchRelocation(ActiveAgent active) {
-        if (moveToLookup.isActive(active.objectId)) {
-            return;
-        }
+        if (moveToLookup.isActive(active.objectId)) return;
+
         ActiveSearchRelocation relocation = active.searchRelocation;
         MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
         active.searchRelocation = null;
