@@ -18,13 +18,13 @@ final class ScenarioCatalogTest {
                         "movement-patrol", "movement-click-to-move",
                         "occupancy-contention",
                         "rain-hydrology", "water-z-flow", "water-geometry-stress",
-                        "agent-living-cow", "agent-cow-foraging",
-                        "agent-cow-visual-search", "pathfinding-straight",
-                        "pathfinding-structural-detour", "pathfinding-weighted-detour",
-                        "pathfinding-ramp-3d", "pathfinding-multi-level-climb",
-                        "pathfinding-z-switchback", "pathfinding-vertical-overpass",
-                        "pathfinding-unreachable", "pathfinding-hierarchy",
-                        "pathfinding-invalidation"),
+                        "agent-living-cow", "agent-living-cow-herd",
+                        "agent-cow-foraging", "agent-cow-visual-search",
+                        "pathfinding-straight", "pathfinding-structural-detour",
+                        "pathfinding-weighted-detour", "pathfinding-ramp-3d",
+                        "pathfinding-multi-level-climb", "pathfinding-z-switchback",
+                        "pathfinding-vertical-overpass", "pathfinding-unreachable",
+                        "pathfinding-hierarchy", "pathfinding-invalidation"),
                 catalog.scenarios().stream().map(VisualizerScenario::id).toList());
     }
 

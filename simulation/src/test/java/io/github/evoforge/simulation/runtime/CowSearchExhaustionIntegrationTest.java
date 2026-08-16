@@ -39,7 +39,7 @@ final class CowSearchExhaustionIntegrationTest {
         }
 
         assertTrue(chebyshevDistanceFromOrigin(runtime, cowId) >= 2);
-        assertNull(runtime.view().agents().currentTarget(cowId));
+        assertNull(runtime.view().agents().currentTargetKey(cowId));
         assertNotNull(runtime.view().searches().currentSearch(cowId));
         assertEquals("core:hunger", runtime.view().searches().currentSearch(cowId).motivation());
         assertEquals(80, runtime.view().needs().level(cowId, HUNGER));

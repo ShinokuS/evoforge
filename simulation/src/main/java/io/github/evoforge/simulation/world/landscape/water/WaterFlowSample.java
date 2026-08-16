@@ -4,8 +4,9 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
 /**
- * Read-only sample of the dominant actual Water transfer through one cell during
- * the latest solver step that performed work.
+ * Read-only Water projection of the dominant axis of aggregate coherent net
+ * transfer through one cell during the latest solver step. Opposing actual edge
+ * transfers cancel before this diagnostic sample is published.
  */
 public record WaterFlowSample(
         int dx,

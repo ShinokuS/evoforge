@@ -134,6 +134,27 @@ final class LiquidFlowSystemTest {
     }
 
     @Test
+    void symmetricSplitPublishesNoArtificialDirectionAtTheSource() {
+        TestGeometry geometry = new TestGeometry()
+                .open(-1, 0, 0)
+                .open(0, 0, 0)
+                .open(1, 0, 0);
+        LiquidSystem liquids = liquids(geometry);
+        LiquidFlowSystem flow = flow(liquids, geometry, referenceTransport());
+        liquids.addAtMost(WINE, 0, 0, 0, 400_000);
+
+        assertTrue(flow.update() > 0L);
+
+        assertNull(flow.flowLookup().find(0, 0, 0),
+                "equal opposite transfers must cancel instead of choosing one presentation direction");
+        LiquidFlowSample west = flow.flowLookup().find(-1, 0, 0);
+        LiquidFlowSample east = flow.flowLookup().find(1, 0, 0);
+        assertEquals(-1, west.dx());
+        assertEquals(1, east.dx());
+        assertEquals(west.amount(), east.amount());
+    }
+
+    @Test
     void materialSurfaceRetentionBlocksHorizontalRunoffBelowItsCapacity() {
         TestGeometry geometry = new TestGeometry()
                 .open(0, 0, 0)

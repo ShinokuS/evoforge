@@ -3,7 +3,11 @@ package io.github.evoforge.simulation.world.landscape.liquid;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 
-/** Dominant actual transfer through one cell during the latest solver step. */
+/**
+ * Dominant axis of the aggregate coherent net transfer through one cell during
+ * the latest solver step. Opposing actual edge transfers cancel before this
+ * diagnostic projection is published.
+ */
 public record LiquidFlowSample(
         LiquidTypeId type,
         int dx,

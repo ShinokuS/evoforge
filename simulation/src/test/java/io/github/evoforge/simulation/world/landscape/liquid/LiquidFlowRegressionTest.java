@@ -197,6 +197,65 @@ final class LiquidFlowRegressionTest {
                 cell(1, 0, 0)));
     }
 
+    @Test
+    void localizedDrawFromNineByNinePoolConvergesConservativelyAndSleeps() {
+        TestGeometry geometry = new TestGeometry();
+        Fixture fixture = fixture(geometry);
+        int initialPerCell = 80_000;
+        int width = 9;
+        int half = width / 2;
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                geometry.open(x, y, 0);
+                fixture.liquids.addAtMost(LIQUID, x, y, 0, initialPerCell);
+            }
+        }
+        runUntilDormant(fixture.flow);
+
+        int removed = fixture.liquids.removeAtMost(LIQUID, 0, 0, 0, 2_000);
+        assertEquals(2_000, removed);
+        int expectedTotal = width * width * initialPerCell - removed;
+
+        runUntilDormant(fixture.flow, 512);
+
+        int actualTotal = 0;
+        int[][] stable = new int[width][width];
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                int current = amount(fixture, x, y, 0);
+                stable[x + half][y + half] = current;
+                actualTotal += current;
+            }
+        }
+
+        assertEquals(expectedTotal, actualTotal);
+        assertLocallyInsideHydraulicDeadband(stable);
+        assertEquals(0, fixture.flow.activeCellCount());
+        assertEquals(CellVolume.EMPTY, fixture.flow.update());
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                assertEquals(stable[x + half][y + half], amount(fixture, x, y, 0));
+            }
+        }
+    }
+
+    private static void assertLocallyInsideHydraulicDeadband(int[][] amounts) {
+        for (int x = 0; x < amounts.length; x++) {
+            for (int y = 0; y < amounts[x].length; y++) {
+                if (x + 1 < amounts.length) {
+                    assertTrue(
+                            Math.abs(amounts[x][y] - amounts[x + 1][y]) <= 3,
+                            "adjacent settled cells must be inside the integer transfer deadband");
+                }
+                if (y + 1 < amounts[x].length) {
+                    assertTrue(
+                            Math.abs(amounts[x][y] - amounts[x][y + 1]) <= 3,
+                            "adjacent settled cells must be inside the integer transfer deadband");
+                }
+            }
+        }
+    }
+
     private static Fixture fixture(GeometryLookup geometry) {
         LiquidSystem liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
         return new Fixture(
@@ -212,8 +271,14 @@ final class LiquidFlowRegressionTest {
     }
 
     private static void runUntilDormant(LiquidFlowSystem flow) {
+        runUntilDormant(flow, 64);
+    }
+
+    private static void runUntilDormant(
+            LiquidFlowSystem flow,
+            int updateBudget) {
         for (int update = 0;
-                update < 64 && flow.activeCellCount() > 0;
+                update < updateBudget && flow.activeCellCount() > 0;
                 update++) {
             flow.update();
         }

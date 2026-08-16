@@ -22,6 +22,7 @@ public final class CowVisualSearchScenario implements VisualizerScenario {
     @Override public String description() {
         return "Grass starts well outside the cow's Vision. The hungry cow explores by relative visible legs, discovers it through Vision, then consumes one unit from its finite stock.";
     }
+    @Override public boolean manualMovementEnabled() { return false; }
 
     @Override
     public ScenarioSession create() {

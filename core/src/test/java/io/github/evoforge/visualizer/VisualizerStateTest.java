@@ -14,6 +14,32 @@ import io.github.evoforge.visualizer.presentation.portal.InteriorView;
 final class VisualizerStateTest {
 
     @Test
+    void objectAndTerrainInspectionTabsFollowSelectionAndCanBeSwitchedExplicitly() {
+        VisualizerState state = new VisualizerState();
+        ObjectId object = ObjectId.of(2, 0);
+
+        assertEquals(VisualizerState.InspectorTab.TERRAIN, state.inspectorTab());
+
+        state.selectCell(3, 4, 1, object);
+        assertEquals(VisualizerState.InspectorTab.OBJECT, state.inspectorTab());
+
+        state.setInspectorTab(VisualizerState.InspectorTab.TERRAIN);
+        assertEquals(VisualizerState.InspectorTab.TERRAIN, state.inspectorTab());
+        assertSame(object, state.selectedObject(), "switching tabs must not discard object selection");
+
+        state.setInspectorTab(VisualizerState.InspectorTab.OBJECT);
+        assertEquals(VisualizerState.InspectorTab.OBJECT, state.inspectorTab());
+
+        state.selectCell(5, 4, 1, null);
+        assertEquals(VisualizerState.InspectorTab.TERRAIN, state.inspectorTab());
+        assertNull(state.selectedObject());
+
+        state.setInspectorTab(VisualizerState.InspectorTab.OBJECT);
+        assertEquals(VisualizerState.InspectorTab.TERRAIN, state.inspectorTab(),
+                "an empty cell cannot expose an object-only tab");
+    }
+
+    @Test
     void selectionAndMoveDraftSurviveViewTransitions() {
         VisualizerState state = new VisualizerState();
         ObjectId object = ObjectId.of(3, 1);
@@ -56,11 +82,13 @@ final class VisualizerStateTest {
         assertEquals(new VisualizerState.CellSelection(4, 3, 0), state.selectedCell());
         assertSame(mover, state.selectedObject());
         assertSame(mover, state.moveTargetingObject());
+        assertEquals(VisualizerState.InspectorTab.OBJECT, state.inspectorTab());
 
         state.finishMoveTargeting("");
         state.selectCell(5, 3, 0, null);
         assertNull(state.selectedObject(),
                 "ordinary empty-cell selection should clear the object after targeting ends");
+        assertEquals(VisualizerState.InspectorTab.TERRAIN, state.inspectorTab());
     }
 
     @Test

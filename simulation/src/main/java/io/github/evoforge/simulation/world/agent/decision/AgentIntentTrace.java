@@ -1,12 +1,13 @@
 package io.github.evoforge.simulation.world.agent.decision;
 
-import io.github.evoforge.simulation.world.object.ObjectId;
+import io.github.evoforge.simulation.world.agent.opportunity.InteractionSite;
 
 /** Read-only developer snapshot of the agent's currently committed continuing intent. */
 public record AgentIntentTrace(
         AgentIntentPhase phase,
         String providerId,
-        ObjectId targetId,
+        String targetKey,
+        InteractionSite site,
         long startedTick,
         long expectedCompletionTick) {
 

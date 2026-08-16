@@ -1,15 +1,24 @@
 package io.github.evoforge.simulation.world.agent.opportunity;
 
+import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import java.util.List;
 
-/** One mechanic-owned bridge from perceived world objects into autonomous opportunities. */
+/** One mechanic-owned bridge from current perception into autonomous opportunities. */
 public interface AgentOpportunityProvider {
     String id();
-    OpportunityEvaluation evaluate(ObjectId agentId, ObjectId sourceId, int distance);
 
-    /** Starts one provider-owned use lifecycle after the agent reached the source. */
-    OpportunityUseStartAttempt startUse(ObjectId agentId, ObjectId sourceId);
+    /** Concrete opportunities currently discoverable from the supplied sensory snapshot. */
+    List<AgentOpportunity> opportunities(ObjectId agentId, PerceptionSnapshot perception);
+
+    /** Re-evaluates one already-known target/site without rediscovering it omnisciently. */
+    OpportunityEvaluation evaluate(ObjectId agentId, OpportunityTarget target, InteractionSite site);
+
+    /** Starts one provider-owned use lifecycle after the agent reached the interaction site. */
+    OpportunityUseStartAttempt startUse(
+            ObjectId agentId,
+            OpportunityTarget target,
+            InteractionSite site);
 
     /** Whether this provider still owns an active use for the agent. */
     boolean isUseActive(ObjectId agentId);

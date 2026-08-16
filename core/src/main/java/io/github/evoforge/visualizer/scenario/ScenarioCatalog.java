@@ -2,6 +2,7 @@ package io.github.evoforge.visualizer.scenario;
 
 import io.github.evoforge.visualizer.scenario.agent.CowForagingScenario;
 import io.github.evoforge.visualizer.scenario.agent.CowVisualSearchScenario;
+import io.github.evoforge.visualizer.scenario.agent.LivingCowHerdScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowScenario;
 import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 import io.github.evoforge.visualizer.scenario.geometry.CutawayScenario;
@@ -72,7 +73,8 @@ public final class ScenarioCatalog {
                         new WaterZStackScenario(),
                         new WaterRampGatesScenario()),
                 ScenarioGroup.of("agents", "Agents",
-                        new LivingCowScenario(), new CowForagingScenario(), new CowVisualSearchScenario()),
+                        new LivingCowScenario(), new LivingCowHerdScenario(),
+                        new CowForagingScenario(), new CowVisualSearchScenario()),
                 ScenarioGroup.of("pathfinding", "Pathfinding",
                         new PathfindingStraightScenario(), new PathfindingStructuralDetourScenario(),
                         new PathfindingWeightedDetourScenario(), new PathfindingRampScenario(),

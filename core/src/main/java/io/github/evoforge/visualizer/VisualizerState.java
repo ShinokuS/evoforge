@@ -21,6 +21,7 @@ public final class VisualizerState {
     private boolean debugPanelVisible = true;
 
     private VisualizerViewMode viewMode = VisualizerViewMode.SURFACE;
+    private InspectorTab inspectorTab = InspectorTab.TERRAIN;
     private InteriorView interior;
     private CellSelection selectedCell;
     private ObjectId selectedObject;
@@ -41,6 +42,7 @@ public final class VisualizerState {
     public boolean showTechnicalDetails() { return showTechnicalDetails; }
     public boolean debugPanelVisible() { return debugPanelVisible; }
     public VisualizerViewMode viewMode() { return viewMode; }
+    public InspectorTab inspectorTab() { return inspectorTab; }
     public InteriorView interior() { return interior; }
     public CellSelection selectedCell() { return selectedCell; }
     public ObjectId selectedObject() { return selectedObject; }
@@ -110,6 +112,7 @@ public final class VisualizerState {
         // clears ordinary object selection as expected.
         if (objectId != null || moveTargetingObject == null) {
             selectedObject = objectId;
+            inspectorTab = objectId == null ? InspectorTab.TERRAIN : InspectorTab.OBJECT;
         }
     }
 
@@ -121,11 +124,20 @@ public final class VisualizerState {
     public void selectObject(ObjectId objectId) {
         if (objectId == null) throw new IllegalArgumentException("objectId must not be null");
         selectedObject = objectId;
+        inspectorTab = InspectorTab.OBJECT;
+    }
+
+    public void setInspectorTab(InspectorTab inspectorTab) {
+        if (inspectorTab == null) throw new IllegalArgumentException("inspectorTab must not be null");
+        this.inspectorTab = inspectorTab == InspectorTab.OBJECT && selectedObject == null
+                ? InspectorTab.TERRAIN
+                : inspectorTab;
     }
 
     public void beginMoveTargeting(ObjectId objectId) {
         if (objectId == null) throw new IllegalArgumentException("objectId must not be null");
         selectedObject = objectId;
+        inspectorTab = InspectorTab.OBJECT;
         moveTargetingObject = objectId;
         moveTargetPreview = null;
         interactionMessage = "";
@@ -159,6 +171,7 @@ public final class VisualizerState {
     public void clearSelection() {
         selectedCell = null;
         selectedObject = null;
+        inspectorTab = InspectorTab.TERRAIN;
         moveTargetingObject = null;
         moveTargetPreview = null;
     }
@@ -168,6 +181,7 @@ public final class VisualizerState {
         return Math.max(interior.minZ(), Math.min(interior.maxZ(), z));
     }
 
+    public enum InspectorTab { OBJECT, TERRAIN }
     public enum MoveTargetStatus { CHECKING, REACHABLE, BLOCKED }
     public record MoveTargetPreview(int x, int y, int z, MoveTargetStatus status) { }
     public record CellSelection(int x, int y, int z) { }

@@ -198,6 +198,10 @@ Production MoveTo composes query-local mover constraints (currently Water wading
 
 The route is still disposable. Every real edge is revalidated by Movement at start and completion; later cells are not reservations or promises.
 
+`MoverDestinationAccessResolver` exposes a cheaper local necessary-condition query for consumers that own candidate destinations. A non-current destination is locally enterable only when at least one structural incoming Navigation edge also passes the current mover traversal policy. This can discard obviously impossible destination cells before starting an expensive path search.
+
+That helper is deliberately not a second pathfinder: it does not prove connectivity from the actor's current position, inspect a whole route, reserve Occupancy, or authorize movement. A locally enterable destination may still produce `NO_PATH`; MoveTo remains the global route authority.
+
 ### Computational search versus simulation time
 
 The first production consumer advances a `PathSearch` in deterministic expansion chunks until terminal without advancing simulation time between chunks. Pathfinder CPU cost is not actor travel time.
@@ -230,7 +234,7 @@ Mid-edge cancellation that would revoke/rewrite already scheduled atomic work is
 
 ## Diagnostics and tests
 
-Headless coverage includes deterministic edge timing/carry, Occupancy reservation lifecycle, topology and traversal revalidation, MoveTo ownership and chaining, `NO_PATH`/source-equals-goal terminals, stale/blocked later route edges, multi-Z Ramp execution, Water-aware planning/commit checks, open result propagation and safe route-level cancellation.
+Headless coverage includes deterministic edge timing/carry, Occupancy reservation lifecycle, topology and traversal revalidation, MoveTo ownership and chaining, `NO_PATH`/source-equals-goal terminals, stale/blocked later route edges, multi-Z Ramp execution, Water-aware planning/commit checks, local mover-destination eligibility, open result propagation and safe route-level cancellation.
 
 The visualizer exposes Move/Cancel Move through cell-centric object interaction and reads active MoveTo routes through the authoritative read projection rather than invoking its own execution logic.
 

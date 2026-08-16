@@ -7,7 +7,7 @@ public interface AgentDecisionLookup {
 
     AgentDecisionTrace lastDecision(ObjectId agentId);
 
-    ObjectId currentTarget(ObjectId agentId);
+    String currentTargetKey(ObjectId agentId);
 
     AgentIntentTrace currentIntent(ObjectId agentId);
 }

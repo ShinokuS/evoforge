@@ -36,7 +36,7 @@ final class FiniteConsumableStockIntegrationTest {
         assertEquals(50, runtime.view().needs().level(cowId, HUNGER));
         assertEquals(0, runtime.view().consumableStocks().quantity(grassId));
         assertEquals(1, runtime.view().consumableStocks().capacity(grassId));
-        assertNull(runtime.view().agents().currentTarget(cowId));
+        assertNull(runtime.view().agents().currentTargetKey(cowId));
     }
 
     @Test

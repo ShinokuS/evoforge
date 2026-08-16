@@ -39,7 +39,7 @@ final class CowAutonomyIntegrationTest {
         AgentDecisionTrace trace = runtime.view().agents().lastDecision(cowId);
         assertNotNull(trace);
         assertEquals(1, trace.tick());
-        assertEquals(grassId, trace.selected().sourceId());
+        assertEquals(objectTargetKey(grassId), trace.selected().targetKey());
         assertEquals("needs:satisfaction", trace.selected().providerId());
         assertEquals("core:hunger", trace.selected().motivation());
     }
@@ -59,7 +59,9 @@ final class CowAutonomyIntegrationTest {
         assembly.placeObject(hayId, 2, 0, 0);
         SimulationRuntime runtime = assembly.start();
         advance(runtime, 3);
-        assertEquals(hayId, runtime.view().agents().lastDecision(cowId).selected().sourceId());
+        assertEquals(
+                objectTargetKey(hayId),
+                runtime.view().agents().lastDecision(cowId).selected().targetKey());
         assertEquals(30, runtime.view().needs().level(cowId, HUNGER));
     }
 
@@ -85,8 +87,8 @@ final class CowAutonomyIntegrationTest {
         AgentDecisionTrace trace = runtime.view().agents().lastDecision(cowId);
         assertNotNull(trace);
         assertEquals(2, trace.candidates().size());
-        assertEquals(hayId, trace.selected().sourceId());
-        assertEquals(hayId, runtime.view().agents().currentTarget(cowId));
+        assertEquals(objectTargetKey(hayId), trace.selected().targetKey());
+        assertEquals(objectTargetKey(hayId), runtime.view().agents().currentTargetKey(cowId));
         assertEquals(60, trace.selected().expectedBenefit());
     }
 
@@ -109,7 +111,7 @@ final class CowAutonomyIntegrationTest {
         assertNotNull(trace);
         assertEquals(0, trace.candidates().size());
         assertNull(trace.selected());
-        assertNull(runtime.view().agents().currentTarget(cowId));
+        assertNull(runtime.view().agents().currentTargetKey(cowId));
         assertEquals(0, runtime.view().transforms().x(cowId));
         assertEquals(80, runtime.view().needs().level(cowId, HUNGER));
     }
@@ -133,7 +135,7 @@ final class CowAutonomyIntegrationTest {
         runtime.stepper().advance();
         AgentDecisionTrace trace = runtime.view().agents().lastDecision(cowId);
         assertEquals(1, trace.candidates().size());
-        assertEquals(front, trace.selected().sourceId());
+        assertEquals(objectTargetKey(front), trace.selected().targetKey());
         assertFalse(runtime.view().vision().snapshot(cowId).isObjectVisible(behind));
     }
 
@@ -193,8 +195,8 @@ final class CowAutonomyIntegrationTest {
         runtime.stepper().advance();
         AgentDecisionTrace found = runtime.view().agents().lastDecision(cowId);
         assertNotNull(found.selected());
-        assertEquals(grassId, found.selected().sourceId());
-        assertEquals(grassId, runtime.view().agents().currentTarget(cowId));
+        assertEquals(objectTargetKey(grassId), found.selected().targetKey());
+        assertEquals(objectTargetKey(grassId), runtime.view().agents().currentTargetKey(cowId));
         assertNull(runtime.view().searches().currentSearch(cowId));
     }
 
@@ -240,7 +242,7 @@ final class CowAutonomyIntegrationTest {
         SimulationRuntime runtime = assembly.start();
         runtime.stepper().advance();
         AgentDecisionTrace trace = runtime.view().agents().lastDecision(cowId);
-        assertEquals(first, trace.selected().sourceId());
+        assertEquals(objectTargetKey(first), trace.selected().targetKey());
         assertEquals(2, trace.candidates().size());
     }
 
@@ -266,5 +268,9 @@ final class CowAutonomyIntegrationTest {
 
     private static void advance(SimulationRuntime runtime, int ticks) {
         for (int tick = 0; tick < ticks; tick++) runtime.stepper().advance();
+    }
+
+    private static String objectTargetKey(ObjectId objectId) {
+        return "object:" + objectId.asLong();
     }
 }

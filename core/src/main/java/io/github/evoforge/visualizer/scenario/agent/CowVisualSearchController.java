@@ -33,7 +33,7 @@ final class CowVisualSearchController implements ScenarioController {
     public ScenarioDiagnostics diagnostics() {
         long level = runtime.view().needs().level(cow, hunger);
         boolean visible = runtime.view().vision().snapshot(cow).isObjectVisible(grass);
-        ObjectId target = runtime.view().agents().currentTarget(cow);
+        String target = runtime.view().agents().currentTargetKey(cow);
         AgentSearchTrace current = runtime.view().searches().currentSearch(cow);
         AgentSearchTrace last = runtime.view().searches().lastSearch(cow);
         AgentSearchTrace display = current != null ? current : last;
@@ -41,12 +41,13 @@ final class CowVisualSearchController implements ScenarioController {
         String search = display == null
                 ? "none"
                 : display.status() + ":" + display.motivation() + ":views=" + display.headingsObserved();
+        boolean targetingGrass = objectTargetKey(grass).equals(target);
         String summary = "hunger=" + level
                 + " | facing=" + facing.x() + "," + facing.y()
                 + " | grassVisible=" + visible
                 + " | search=" + search
-                + " | target=" + (target == null ? "none" : "grass");
-        ScenarioCellMarker[] markers = target != null && target.equals(grass)
+                + " | target=" + (targetingGrass ? "grass" : target == null ? "none" : target);
+        ScenarioCellMarker[] markers = targetingGrass
                 ? new ScenarioCellMarker[] { new ScenarioCellMarker(
                         runtime.view().transforms().x(grass),
                         runtime.view().transforms().y(grass),
@@ -54,5 +55,9 @@ final class CowVisualSearchController implements ScenarioController {
                         ScenarioCellMarkerStyle.GOAL) }
                 : new ScenarioCellMarker[0];
         return new ScenarioDiagnostics(markers, summary);
+    }
+
+    private static String objectTargetKey(ObjectId objectId) {
+        return "object:" + objectId.asLong();
     }
 }
