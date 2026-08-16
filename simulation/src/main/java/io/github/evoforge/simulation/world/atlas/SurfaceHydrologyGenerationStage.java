@@ -9,8 +9,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Deterministic first surface-hydrology model derived from drainage accumulation.
  *
  * <p>V1/V2 predate generated surface Water and therefore intentionally produce an empty field.
- * V3 introduces finite initial channel Water plus a derived one-cell shoreline relation. The
- * runtime Liquid system remains the sole owner of subsequent Water redistribution.</p>
+ * V3+ retain the same finite initial channel-Water algorithm plus a derived one-cell shoreline
+ * relation. The runtime Liquid system remains the sole owner of subsequent redistribution.</p>
  */
 public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGenerator {
     private static final int[] DX = {-1, 0, 1, -1, 1, -1, 0, 1};
@@ -43,7 +43,7 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
             return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
         }
-        if (!GenerationRevision.V3.equals(revision)) {
+        if (!GenerationRevision.V3.equals(revision) && !GenerationRevision.V4.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
@@ -66,8 +66,7 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
             for (int localX = 0; localX < width; localX++) {
                 int index = localY * width + localX;
                 if (initialWater[index] > CellVolume.EMPTY) continue;
-                shoreline[index] = hasWetNeighbor(
-                        localX, localY, width, height, initialWater);
+                shoreline[index] = hasWetNeighbor(localX, localY, width, height, initialWater);
             }
         }
 
