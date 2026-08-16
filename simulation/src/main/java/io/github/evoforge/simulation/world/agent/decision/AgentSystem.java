@@ -33,9 +33,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Generic autonomous decision owner over current perceived mechanic opportunities. */
 public final class AgentSystem implements AgentDecisionLookup {
+    private static final Logger LOGGER = LoggerFactory.getLogger("io.github.evoforge.agent.decision");
     private static final long ACTIVE_POLL_TICKS = 1L;
     private static final long IDLE_RECHECK_TICKS = 10L;
     private static final Comparator<Candidate> CANDIDATE_ORDER =
@@ -189,20 +192,19 @@ public final class AgentSystem implements AgentDecisionLookup {
             deactivate(active);
             return;
         }
+        refreshRejectedContext(active);
         List<Candidate> candidates = perceiveCandidates(active.objectId);
         candidates.sort(CANDIDATE_ORDER);
         List<AgentCandidateTrace> traces = new ArrayList<>(candidates.size());
         for (Candidate candidate : candidates) traces.add(candidate.trace);
 
         Candidate selected = null;
-        RejectedOpportunity rejected = active.rejectedOpportunity;
         for (Candidate candidate : candidates) {
-            if (rejected == null || !rejected.matches(candidate)) {
+            if (!active.rejectedOpportunities.contains(RejectedOpportunity.from(candidate))) {
                 selected = candidate;
                 break;
             }
         }
-        active.rejectedOpportunity = null;
         lastDecisionByObject.put(
                 active.objectId,
                 new AgentDecisionTrace(time.tick(), active.objectId, traces, selected == null ? null : selected.trace));
@@ -212,13 +214,31 @@ public final class AgentSystem implements AgentDecisionLookup {
             return;
         }
 
-        search.cancel(active.objectId);
         InteractionSite site = selected.opportunity.site();
         MoveToStartAttempt attempt = moveTo.start(active.objectId, site.x(), site.y(), site.z());
         if (!attempt.accepted()) {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
+
+        if (!moveToLookup.isActive(active.objectId)) {
+            MoveToCompletion completion = moveToLookup.lastCompletion(active.objectId);
+            if (completion == null || !attempt.actionId().equals(completion.actionId())) {
+                throw new IllegalStateException("accepted autonomous MoveTo lost its terminal outcome: "
+                        + active.objectId);
+            }
+            if (!completion.reachedGoal()) {
+                rememberRejected(
+                        active,
+                        RejectedOpportunity.from(selected),
+                        "move_to",
+                        completion.code().value());
+                scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+                return;
+            }
+        }
+
+        search.cancel(active.objectId);
         active.opportunityIntent = new ActiveOpportunityIntent(
                 selected.providerIndex,
                 selected.opportunity.target(),
@@ -246,6 +266,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         demands.sort(SEARCH_ORDER);
         if (demands.isEmpty() || !search.supports(active.objectId)) {
             search.cancel(active.objectId);
+            clearRejectedOpportunities(active);
             scheduler.scheduleAfter(IDLE_RECHECK_TICKS, active.processId);
             return;
         }
@@ -261,6 +282,7 @@ public final class AgentSystem implements AgentDecisionLookup {
                     result.relocation());
             if (!attempt.accepted()) {
                 search.relocationFinished(active.objectId, false);
+                clearRejectedOpportunities(active);
                 scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
                 return;
             }
@@ -339,7 +361,13 @@ public final class AgentSystem implements AgentDecisionLookup {
                 }
             }
             if (!completion.result().accepted()) {
-                active.rejectedOpportunity = RejectedOpportunity.from(intent);
+                rememberRejected(
+                        active,
+                        RejectedOpportunity.from(intent),
+                        "use",
+                        completion.result().code().value());
+            } else {
+                clearRejectedOpportunities(active);
             }
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
@@ -355,7 +383,11 @@ public final class AgentSystem implements AgentDecisionLookup {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
         }
         if (!completion.reachedGoal()) {
-            active.rejectedOpportunity = RejectedOpportunity.from(intent);
+            rememberRejected(
+                    active,
+                    RejectedOpportunity.from(intent),
+                    "move_to",
+                    completion.code().value());
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -367,7 +399,11 @@ public final class AgentSystem implements AgentDecisionLookup {
                 intent.site);
         if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
         if (!use.accepted()) {
-            active.rejectedOpportunity = RejectedOpportunity.from(intent);
+            rememberRejected(
+                    active,
+                    RejectedOpportunity.from(intent),
+                    "use_start",
+                    use.code().value());
             active.opportunityIntent = null;
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
@@ -394,7 +430,44 @@ public final class AgentSystem implements AgentDecisionLookup {
             throw new IllegalStateException("search relocation completion was lost: " + active.objectId);
         }
         search.relocationFinished(active.objectId, completion.reachedGoal());
+        clearRejectedOpportunities(active);
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+    }
+
+    private void rememberRejected(
+            ActiveAgent active,
+            RejectedOpportunity rejected,
+            String stage,
+            String code) {
+        refreshRejectedContext(active);
+        if (!active.rejectedOpportunities.add(rejected)) return;
+        LOGGER.atDebug()
+                .addKeyValue("event", "agent.opportunity_failed")
+                .addKeyValue("tick", time.tick())
+                .addKeyValue("objectId", active.objectId.asLong())
+                .addKeyValue("provider", providers.get(rejected.providerIndex).id())
+                .addKeyValue("target", rejected.target.debugKey())
+                .addKeyValue("siteX", rejected.site.x())
+                .addKeyValue("siteY", rejected.site.y())
+                .addKeyValue("siteZ", rejected.site.z())
+                .addKeyValue("stage", stage)
+                .addKeyValue("code", code)
+                .log("Autonomous opportunity failed and was quarantined for the current local context");
+    }
+
+    private void refreshRejectedContext(ActiveAgent active) {
+        RejectionContext current = new RejectionContext(
+                transforms.x(active.objectId),
+                transforms.y(active.objectId),
+                transforms.z(active.objectId));
+        if (current.equals(active.rejectionContext)) return;
+        active.rejectedOpportunities.clear();
+        active.rejectionContext = current;
+    }
+
+    private static void clearRejectedOpportunities(ActiveAgent active) {
+        active.rejectedOpportunities.clear();
+        active.rejectionContext = null;
     }
 
     private void deactivate(ActiveAgent active) {
@@ -439,19 +512,23 @@ public final class AgentSystem implements AgentDecisionLookup {
             return new RejectedOpportunity(intent.providerIndex, intent.target, intent.site);
         }
 
-        private boolean matches(Candidate candidate) {
-            return providerIndex == candidate.providerIndex
-                    && target.equals(candidate.opportunity.target())
-                    && site.equals(candidate.opportunity.site());
+        private static RejectedOpportunity from(Candidate candidate) {
+            return new RejectedOpportunity(
+                    candidate.providerIndex,
+                    candidate.opportunity.target(),
+                    candidate.opportunity.site());
         }
     }
+
+    private record RejectionContext(int x, int y, int z) { }
 
     private static final class ActiveAgent {
         private final long processId;
         private final ObjectId objectId;
+        private final Set<RejectedOpportunity> rejectedOpportunities = new HashSet<>();
         private ActiveOpportunityIntent opportunityIntent;
         private ActiveSearchRelocation searchRelocation;
-        private RejectedOpportunity rejectedOpportunity;
+        private RejectionContext rejectionContext;
 
         private ActiveAgent(long processId, ObjectId objectId) {
             this.processId = processId;
