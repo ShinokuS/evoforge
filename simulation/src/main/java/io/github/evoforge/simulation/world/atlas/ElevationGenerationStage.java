@@ -1,0 +1,100 @@
+package io.github.evoforge.simulation.world.atlas;
+
+import io.github.evoforge.simulation.world.genesis.GenerationPurposeId;
+import io.github.evoforge.simulation.world.genesis.GenerationRandom;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
+import io.github.evoforge.simulation.world.genesis.GenerationStageId;
+import io.github.evoforge.simulation.world.genesis.WorldGenesis;
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
+
+/** First causal World Atlas stage: deterministic smooth surface elevation. */
+public final class ElevationGenerationStage {
+    public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
+
+    private static final GenerationPurposeId COARSE = GenerationPurposeId.of("world:coarse");
+    private static final GenerationPurposeId MEDIUM = GenerationPurposeId.of("world:medium");
+    private static final GenerationPurposeId DETAIL = GenerationPurposeId.of("world:detail");
+    private static final int SAMPLE_MAX = 65_535;
+
+    public ElevationField generate(WorldGenesis genesis) {
+        if (genesis == null) {
+            throw new IllegalArgumentException("genesis must not be null");
+        }
+        if (!GenerationRevision.V1.equals(genesis.generationRevision())) {
+            throw new IllegalArgumentException(
+                    "unsupported generation revision: " + genesis.generationRevision().value());
+        }
+
+        WorldBounds bounds = genesis.spec().bounds();
+        int[] elevations = new int[DenseElevationField.cellCount(bounds)];
+        GenerationRandom random = GenerationRandom.from(genesis);
+        long width = (long) bounds.maxX() - bounds.minX() + 1L;
+        long height = (long) bounds.maxY() - bounds.minY() + 1L;
+
+        int index = 0;
+        for (long localY = 0; localY < height; localY++) {
+            int y = (int) ((long) bounds.minY() + localY);
+            for (long localX = 0; localX < width; localX++) {
+                int x = (int) ((long) bounds.minX() + localX);
+                elevations[index++] = elevationAt(random, bounds, x, y);
+            }
+        }
+        return new DenseElevationField(bounds, elevations);
+    }
+
+    private static int elevationAt(
+            GenerationRandom random,
+            WorldBounds bounds,
+            int x,
+            int y) {
+        int coarse = valueNoise(random, COARSE, x, y, 32);
+        int medium = valueNoise(random, MEDIUM, x, y, 16);
+        int detail = valueNoise(random, DETAIL, x, y, 8);
+        int normalized = (coarse * 4 + medium * 2 + detail) / 7;
+
+        long verticalSpan = (long) bounds.maxZ() - bounds.minZ();
+        long surfaceMin = (long) bounds.minZ() + verticalSpan / 4L;
+        long surfaceMax = (long) bounds.minZ() + (verticalSpan * 3L) / 4L;
+        long surfaceSpan = surfaceMax - surfaceMin;
+        return (int) (surfaceMin + ((long) normalized * surfaceSpan) / SAMPLE_MAX);
+    }
+
+    private static int valueNoise(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            int x,
+            int y,
+            int scale) {
+        long latticeX = Math.floorDiv((long) x, scale);
+        long latticeY = Math.floorDiv((long) y, scale);
+        int offsetX = (int) Math.floorMod((long) x, scale);
+        int offsetY = (int) Math.floorMod((long) y, scale);
+
+        int lowerLeft = sample(random, purpose, latticeX, latticeY);
+        int lowerRight = sample(random, purpose, latticeX + 1L, latticeY);
+        int upperLeft = sample(random, purpose, latticeX, latticeY + 1L);
+        int upperRight = sample(random, purpose, latticeX + 1L, latticeY + 1L);
+
+        int lower = interpolate(lowerLeft, lowerRight, offsetX, scale);
+        int upper = interpolate(upperLeft, upperRight, offsetX, scale);
+        return interpolate(lower, upper, offsetY, scale);
+    }
+
+    private static int sample(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            long latticeX,
+            long latticeY) {
+        return (int) ((random.sampleLong(
+                STAGE_ID,
+                purpose,
+                latticeX,
+                latticeY,
+                0L,
+                0L) >>> 48) & SAMPLE_MAX);
+    }
+
+    private static int interpolate(int from, int to, int offset, int scale) {
+        return (int) (((long) from * (scale - offset) + (long) to * offset) / scale);
+    }
+}
