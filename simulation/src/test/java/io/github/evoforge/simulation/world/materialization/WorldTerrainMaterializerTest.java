@@ -128,10 +128,8 @@ final class WorldTerrainMaterializerTest {
             }
 
             @Override
-            public long elevationSubunitsAt(int x, int y) {
-                return Math.multiplyExact(
-                        (long) surfaceZ.applyAsInt(x, y),
-                        SUBUNITS_PER_CELL);
+            public int elevationAt(int x, int y) {
+                return surfaceZ.applyAsInt(x, y);
             }
         };
     }
