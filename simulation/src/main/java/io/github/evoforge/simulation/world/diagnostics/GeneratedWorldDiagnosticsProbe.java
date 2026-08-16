@@ -1,0 +1,125 @@
+package io.github.evoforge.simulation.world.diagnostics;
+
+import java.util.HashSet;
+import java.util.Set;
+
+import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.simulation.world.atlas.DrainageField;
+import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.WorldAtlas;
+import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
+
+/**
+ * Performs an explicit deterministic audit of a generated world and its runtime state.
+ *
+ * <p>This is intentionally an on-demand diagnostic pass, not a per-tick hot-path
+ * observer. It may scan the full finite world volume in order to produce exact totals.</p>
+ */
+public final class GeneratedWorldDiagnosticsProbe {
+
+    public GeneratedWorldDiagnostics snapshot(
+            WorldAtlas atlas,
+            SimulationRuntime runtime) {
+        if (atlas == null || runtime == null) {
+            throw new IllegalArgumentException(
+                    "generated world diagnostic dependencies must not be null");
+        }
+
+        WorldBounds bounds = atlas.genesis().spec().bounds();
+        ElevationField elevation = atlas.elevation();
+        DrainageField drainage = atlas.drainage();
+        SimulationView view = runtime.view();
+
+        if (!bounds.equals(elevation.bounds()) || !bounds.equals(drainage.bounds())) {
+            throw new IllegalStateException(
+                    "Atlas diagnostic layers must share world bounds");
+        }
+
+        int minimumSurfaceZ = Integer.MAX_VALUE;
+        int maximumSurfaceZ = Integer.MIN_VALUE;
+        long surfaceMismatches = 0L;
+        long maximumContributingArea = 0L;
+        Set<Long> terminalBasins = new HashSet<>();
+
+        for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
+            int worldX = (int) x;
+            for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
+                int worldY = (int) y;
+                int surfaceZ = elevation.elevationAt(worldX, worldY);
+                minimumSurfaceZ = Math.min(minimumSurfaceZ, surfaceZ);
+                maximumSurfaceZ = Math.max(maximumSurfaceZ, surfaceZ);
+
+                if (!view.terrainSurfaces().hasColumn(worldX, worldY)
+                        || view.terrainSurfaces().topZ(worldX, worldY) != surfaceZ) {
+                    surfaceMismatches = Math.addExact(surfaceMismatches, 1L);
+                }
+
+                terminalBasins.add(pack(
+                        drainage.terminalXAt(worldX, worldY),
+                        drainage.terminalYAt(worldX, worldY)));
+                maximumContributingArea = Math.max(
+                        maximumContributingArea,
+                        drainage.contributingAreaAt(worldX, worldY));
+            }
+        }
+
+        long terrainCells = 0L;
+        long freeWaterVolume = 0L;
+        long retainedWaterVolume = 0L;
+        long wetWaterCells = 0L;
+        long wetSoilCells = 0L;
+
+        for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
+            int worldX = (int) x;
+            for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
+                int worldY = (int) y;
+                for (long z = bounds.minZ(); z <= (long) bounds.maxZ(); z++) {
+                    int worldZ = (int) z;
+                    if (view.terrain().contains(worldX, worldY, worldZ)) {
+                        terrainCells = Math.addExact(terrainCells, 1L);
+                    }
+
+                    int freeWater = view.water().amount(worldX, worldY, worldZ);
+                    int retainedWater = view.soilLiquids().amountOf(
+                            WaterSystem.TYPE,
+                            worldX,
+                            worldY,
+                            worldZ);
+
+                    freeWaterVolume = Math.addExact(freeWaterVolume, freeWater);
+                    retainedWaterVolume = Math.addExact(retainedWaterVolume, retainedWater);
+                    if (freeWater > 0) {
+                        wetWaterCells = Math.addExact(wetWaterCells, 1L);
+                    }
+                    if (retainedWater > 0) {
+                        wetSoilCells = Math.addExact(wetSoilCells, 1L);
+                    }
+                }
+            }
+        }
+
+        return new GeneratedWorldDiagnostics(
+                runtime.time().tick(),
+                atlas.genesis().masterSeed(),
+                atlas.genesis().generationRevision(),
+                atlas.genesis().rngRevision(),
+                bounds,
+                terrainCells,
+                view.terrainSurfaces().columnCount(),
+                surfaceMismatches,
+                minimumSurfaceZ,
+                maximumSurfaceZ,
+                terminalBasins.size(),
+                maximumContributingArea,
+                freeWaterVolume,
+                retainedWaterVolume,
+                wetWaterCells,
+                wetSoilCells);
+    }
+
+    private static long pack(int x, int y) {
+        return ((long) x << 32) ^ (y & 0xffff_ffffL);
+    }
+}
