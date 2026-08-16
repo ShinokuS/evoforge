@@ -29,20 +29,34 @@ final class GeneratedWorldDiagnosticsIntegrationTest {
         assertEquals(0L, diagnostics.totalWaterVolume());
         assertEquals(0L, diagnostics.wetWaterCells());
         assertEquals(0L, diagnostics.wetSoilCells());
+        assertEquals(0, diagnostics.wetWaterColumns());
+        assertEquals(0, diagnostics.wetSoilColumns());
+        assertEquals(0L, diagnostics.maximumFreeWaterColumnVolume());
+        assertEquals(0L, diagnostics.maximumRetainedWaterColumnVolume());
+        assertEquals(0, diagnostics.maximumWetWaterCellsPerColumn());
 
         GeneratedWorldDiagnosticsLog.info(diagnostics);
     }
 
     @Test
-    void existingHydrologyRunsOnGeneratedTerrainAndRemainsDeterministic() {
+    void existingHydrologyRunsOnGeneratedTerrainAndReportsDistributionDeterministically() {
         GeneratedWorldDiagnostics first = run(991L, true, 12);
         GeneratedWorldDiagnostics replay = run(991L, true, 12);
 
         assertEquals(first, replay);
         assertTrue(first.surfaceMatchesAtlas());
         assertTrue(first.totalWaterVolume() > 0L);
+        assertTrue(first.freeWaterVolume() > 0L);
         assertTrue(first.retainedWaterVolume() > 0L);
+        assertTrue(first.wetWaterCells() > 0L);
         assertTrue(first.wetSoilCells() > 0L);
+        assertTrue(first.wetWaterColumns() > 0);
+        assertEquals(16, first.wetSoilColumns());
+        assertTrue(first.maximumFreeWaterColumnVolume() > 0L);
+        assertTrue(first.maximumRetainedWaterColumnVolume() > 0L);
+        assertTrue(first.maximumWetWaterCellsPerColumn() > 0);
+        assertTrue(first.wetWaterColumns() <= first.terrainColumns());
+        assertTrue(first.wetSoilColumns() <= first.terrainColumns());
     }
 
     private static GeneratedWorldDiagnostics run(

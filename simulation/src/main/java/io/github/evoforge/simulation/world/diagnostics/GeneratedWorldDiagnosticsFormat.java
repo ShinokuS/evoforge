@@ -28,6 +28,11 @@ public final class GeneratedWorldDiagnosticsFormat {
                 + " retainedWater=" + diagnostics.retainedWaterVolume()
                 + " totalWater=" + diagnostics.totalWaterVolume()
                 + " wetWaterCells=" + diagnostics.wetWaterCells()
-                + " wetSoilCells=" + diagnostics.wetSoilCells();
+                + " wetSoilCells=" + diagnostics.wetSoilCells()
+                + " wetWaterColumns=" + diagnostics.wetWaterColumns()
+                + " wetSoilColumns=" + diagnostics.wetSoilColumns()
+                + " maxFreeWaterColumn=" + diagnostics.maximumFreeWaterColumnVolume()
+                + " maxRetainedWaterColumn=" + diagnostics.maximumRetainedWaterColumnVolume()
+                + " maxWetWaterCellsPerColumn=" + diagnostics.maximumWetWaterCellsPerColumn();
     }
 }

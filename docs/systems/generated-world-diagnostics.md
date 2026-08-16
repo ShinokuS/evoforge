@@ -41,7 +41,12 @@ Each snapshot records:
 - total free Water volume;
 - total retained Water volume in Soil;
 - number of cells containing free Water;
-- number of cells containing retained Water.
+- number of cells containing retained Water;
+- number of XY columns containing free Water;
+- number of XY columns containing retained Water;
+- maximum free-Water volume accumulated in one XY column;
+- maximum retained-Water volume accumulated in one XY column;
+- maximum number of Z cells containing free Water in one XY column.
 
 The snapshot deliberately excludes wall-clock duration, renderer/camera state and logging configuration. Two deterministic runs can therefore compare the record directly.
 
@@ -74,7 +79,21 @@ SimulationView.soilLiquids()
 
 Free and retained volumes remain separate and are also exposed as `totalWaterVolume()` for convenient conservation checks.
 
-No Water storage representation is exposed. The diagnostic scans semantic world coordinates only.
+The audit also accumulates each XY column before discarding local detail. This distinguishes **spread** from **vertical concentration** without exposing Water storage:
+
+```text
+wetWaterColumns
+wetSoilColumns
+maximumFreeWaterColumnVolume
+maximumRetainedWaterColumnVolume
+maximumWetWaterCellsPerColumn
+```
+
+`maximumWetWaterCellsPerColumn` is intentionally a representation-independent count of occupied world cells, not a claim about meters of physical depth. Exact column volume is reported separately. A later physical measurement layer may derive human units when its scale contract exists.
+
+These distribution facts were added after the representative `32×32` audit showed that worlds with identical total Water mass could differ strongly in `wetWaterCells`. Cell count alone could not distinguish broad shallow spreading from concentration in deeper columns.
+
+No Water storage representation is exposed. The diagnostic scans semantic world coordinates only and computes all current Water totals/distribution facts in the same deliberate full-world audit pass.
 
 ## Logging
 
@@ -98,9 +117,16 @@ Current scenarios prove:
 2. Atlas-driven HydroClimate precipitation, infiltration and Water mechanics operate on generated Terrain through the production scheduler;
 3. replaying the same seed, content setup and tick count produces the same complete diagnostic snapshot;
 4. generated Atlas surfaces and runtime Terrain surfaces remain identical when no terrain-changing runtime mechanic is active;
-5. generated HydroClimate cannot accidentally stack with legacy periodic atmospheric forcing.
+5. generated HydroClimate cannot accidentally stack with legacy periodic atmospheric forcing;
+6. Water spread/concentration diagnostics are themselves deterministic across replay.
 
 These are correctness gates, not performance thresholds.
+
+## Representative evidence
+
+The first `32×32` audit showed non-trivial seed-dependent terrain/drainage diversity while preserving exact Water mass under the same closed-world uniform forcing. At tick `100`, for example, the same total Water volume was distributed across substantially different counts of wet cells between seeds.
+
+That observation justifies measuring Water distribution. It does **not** by itself justify declaring any one distribution healthy, flooded or preferable. Diagnostics report facts; future evaluators own interpretation.
 
 ## Checkpoints
 
@@ -116,4 +142,4 @@ Warmup policy is separate from diagnostics. A snapshot reports facts at the requ
 
 New metrics should be added only when they represent an existing semantic fact or a concrete invariant we need to diagnose. The diagnostic object must not become a second world model.
 
-See [Generated World Runtime](generated-world-runtime.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Surface Hydrology](hydrology.md), and [Decision 017](../decisions/017-generated-world-diagnostic-audits.md).
+See [Generated World Runtime](generated-world-runtime.md), [Generated World Warmup](generated-world-warmup.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Surface Hydrology](hydrology.md), and [Decision 017](../decisions/017-generated-world-diagnostic-audits.md).
