@@ -42,6 +42,8 @@ floor(p * t / q) - floor(p * (t - 1) / q)
 
 This makes cumulative forcing over ticks `1..T` exactly `floor(p*T/q)` without mutable fractional carry. The phase is part of world time rather than adapter state, so there is no extra persistence contract.
 
+`update(t)` is an imperative mutation boundary, not an idempotent query. Generated-world runtime composition must apply it exactly once for each simulation tick that advances. Replaying the same tick requires authoritative rollback/state restoration; the bridge deliberately does not remember `lastAppliedTick`, because such a guard would itself become hidden mutable persistence state.
+
 Potential evaporation is evaluated against state present at the start of the interval. Precipitation supply is then added at the interval boundary. Freshly supplied rain is therefore not immediately removed by the same baseline-climate tick. This is an explicit deterministic discretization convention, not a claim about sub-tick meteorology.
 
 Precipitation and evaporation remain separate forcings. They are not reduced to a synthetic `precipitation - evaporation` number because their physical mutation paths and unfulfilled accounting differ.
