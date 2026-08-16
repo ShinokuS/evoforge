@@ -2,7 +2,13 @@ package io.github.evoforge.simulation.world.materialization;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 
-/** Resolves the Landscape material authored for one generated solid terrain cell. */
+/**
+ * Pure deterministic lookup for the Landscape material authored at one generated
+ * solid terrain cell.
+ *
+ * <p>Implementations must not depend on invocation order or mutate world state.
+ * Materialization may query the same coordinate during validation and placement.</p>
+ */
 @FunctionalInterface
 public interface TerrainMaterialResolver {
 
