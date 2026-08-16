@@ -197,6 +197,53 @@ final class LiquidFlowRegressionTest {
                 cell(1, 0, 0)));
     }
 
+    @Test
+    void localizedDrawFromNineByNinePoolConvergesConservativelyAndSleeps() {
+        TestGeometry geometry = new TestGeometry();
+        Fixture fixture = fixture(geometry);
+        int initialPerCell = 80_000;
+        int width = 9;
+        int half = width / 2;
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                geometry.open(x, y, 0);
+                fixture.liquids.addAtMost(LIQUID, x, y, 0, initialPerCell);
+            }
+        }
+        runUntilDormant(fixture.flow);
+
+        int removed = fixture.liquids.removeAtMost(LIQUID, 0, 0, 0, 2_000);
+        assertEquals(2_000, removed);
+        int expectedTotal = width * width * initialPerCell - removed;
+
+        runUntilDormant(fixture.flow, 512);
+
+        int minimum = Integer.MAX_VALUE;
+        int maximum = Integer.MIN_VALUE;
+        int actualTotal = 0;
+        int[][] stable = new int[width][width];
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                int current = amount(fixture, x, y, 0);
+                stable[x + half][y + half] = current;
+                minimum = Math.min(minimum, current);
+                maximum = Math.max(maximum, current);
+                actualTotal += current;
+            }
+        }
+
+        assertEquals(expectedTotal, actualTotal);
+        assertTrue(maximum - minimum <= 2,
+                "settled pool must end inside the integer hydraulic deadband");
+        assertEquals(0, fixture.flow.activeCellCount());
+        assertEquals(CellVolume.EMPTY, fixture.flow.update());
+        for (int x = -half; x <= half; x++) {
+            for (int y = -half; y <= half; y++) {
+                assertEquals(stable[x + half][y + half], amount(fixture, x, y, 0));
+            }
+        }
+    }
+
     private static Fixture fixture(GeometryLookup geometry) {
         LiquidSystem liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
         return new Fixture(
@@ -212,8 +259,14 @@ final class LiquidFlowRegressionTest {
     }
 
     private static void runUntilDormant(LiquidFlowSystem flow) {
+        runUntilDormant(flow, 64);
+    }
+
+    private static void runUntilDormant(
+            LiquidFlowSystem flow,
+            int updateBudget) {
         for (int update = 0;
-                update < 64 && flow.activeCellCount() > 0;
+                update < updateBudget && flow.activeCellCount() > 0;
                 update++) {
             flow.update();
         }
