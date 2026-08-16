@@ -24,7 +24,7 @@ elevationSubunitsAt(x, y) -> precise macro elevation
 elevationAt(x, y)         -> discrete surface-cell z
 ```
 
-One world Z cell equals `1_000_000` elevation subunits. The precise value is the durable Atlas fact used by macro algorithms that need gradients, especially drainage. `elevationAt` is the floor-derived cell coordinate intended for later terrain materialization. Negative values therefore use mathematical floor semantics rather than truncation toward zero.
+One world Z cell equals `1_000_000` elevation subunits. The precise value is the durable Atlas fact used by macro algorithms that need gradients, especially drainage. `elevationAt` is the floor-derived cell coordinate intended for terrain materialization. Negative values therefore use mathematical floor semantics rather than truncation toward zero.
 
 This distinction prevents discrete terrain representation from destroying information needed by world-scale causality. Two neighbouring columns may materialize at the same integer Z while still have an ordered elevation gradient in Atlas. Drainage uses the precise value rather than treating such columns as an artificial flat.
 
@@ -116,12 +116,18 @@ Future stages use their own narrow semantic contracts when their real dependenci
 
 ## Materialization boundary
 
-Atlas elevation, drainage and hydrologic climate normals are world facts, not placed Landscape cells, free Water or weather events. A later materialization/runtime-forcing slice translates the relevant Atlas facts through existing domain-owned mutation and environment boundaries. Runtime systems then continue to evolve that state under their normal laws.
+Atlas facts remain authored/generated facts rather than mutable runtime state. The first concrete materialization consumer is now `WorldTerrainMaterializer`, which consumes only `ElevationField` and creates runtime Terrain through `LandscapeMutations`.
 
-Drainage can guide channels/basins, while climate supplies long-term atmospheric forcing. Neither becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
+For each XY column, Terrain is placed from `WorldBounds.minZ` through discrete `elevationAt(x,y)`, inclusive. Material identity comes from an injected `TerrainMaterialResolver`; Atlas elevation itself does not invent soil/stone/geology identity. The materializer requires an empty Terrain and is initial construction, not continuous Atlas/Landscape synchronization.
+
+Once cells are placed, `LandscapeSystem` owns their runtime state and maintains its normal Terrain surfaces, Geometry behavior and traversal revisions. Atlas remains immutable provenance/world-scale authored facts even if the lived Terrain later changes.
+
+Drainage can later guide initial hydrology/channels and climate supplies long-term atmospheric forcing. Neither becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
+
+See [World Materialization](world-materialization.md) and [Decision 016](../decisions/016-atlas-terrain-materialization.md) for the ownership transfer boundary.
 
 ## Deferred representation decisions
 
 No chunk dimensions, region semantics, streaming lifecycle or simulation LOD are introduced here. Temperature, wind, seasons and weather anomalies are also deferred until they have concrete consumers and causal models.
 
-See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md), [Decision 013 — Long-term environmental rates use exact simulation dimensions](../decisions/013-simulation-rate-units.md), [Decision 014 — Hydrologic climate normals are generated facts, not runtime weather](../decisions/014-hydrologic-climate-normals.md) and [World Genesis](world-genesis.md).
+See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md), [Decision 013 — Long-term environmental rates use exact simulation dimensions](../decisions/013-simulation-rate-units.md), [Decision 014 — Hydrologic climate normals are generated facts, not runtime weather](../decisions/014-hydrologic-climate-normals.md), [Decision 016 — Atlas elevation materializes through a one-way Terrain ownership boundary](../decisions/016-atlas-terrain-materialization.md), and [World Genesis](world-genesis.md).
