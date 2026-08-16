@@ -29,6 +29,10 @@ public final class LiquidDrinkDefinitions {
         values.add(definition);
     }
 
+    public boolean isEmpty() {
+        return byDefinition.isEmpty();
+    }
+
     public boolean has(ObjectDefinitionId definitionId) {
         List<LiquidDrinkDefinition> values = byDefinition.get(definitionId);
         return values != null && !values.isEmpty();
