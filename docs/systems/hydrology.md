@@ -178,6 +178,40 @@ If precipitation occurs on the same simulation tick, periodic evaporation is sup
 
 Other retained constituents are neither candidates nor sinks of this Water-specific process.
 
+## Generated hydro-climate forcing
+
+Generated worlds have a separate adapter from immutable Atlas climate normals into the same atmosphere mechanics:
+
+```text
+human generation intent
+        ↓ future balancer / calibration
+HydroClimateSpec
+        ↓ generation
+HydroClimateField
+        ↓ HydroClimateForcingSystem
+EvaporationSystem + SkyPrecipitationSystem
+        ↓
+existing SoilLiquidSystem / WaterSystem
+```
+
+`HydroClimateForcingSystem` reads `HydroClimateField`, never the normalized Genesis spec or future user controls. It owns no Water, Soil, weather state or fractional accumulator.
+
+For one exact `CellVolumeRate p/q`, forcing assigned to positive absolute tick `t` is derived analytically as:
+
+```text
+floor(p*t/q) - floor(p*(t-1)/q)
+```
+
+The cumulative amount over ticks `1..T` is therefore exactly `floor(p*T/q)` without persistent carry or an arbitrary pulse interval.
+
+Generated baseline forcing evaluates potential evaporation against state that existed at the start of the interval, then adds precipitation at the interval boundary. Fresh generated rain is not immediately removed by that same baseline tick. This convention is separate from the periodic scenario rule that suppresses periodic evaporation on a precipitation-event tick.
+
+The atmosphere systems expose narrow column-specific amount capabilities so a future causal climate field can vary across XY without giving Atlas access to Water/Soil mutation. Requests larger than one cell volume are adapted through bounded `CellVolume.FULL` physics calls; precipitation re-resolves the exposed surface between chunks as Water rises.
+
+This bridge is a generated-world composition capability, not yet an automatic replacement for the existing periodic/cyclic scenario systems. Eventful weather, storms and dry spells remain future runtime semantics that may redistribute a long-term climate normal without redefining it.
+
+Raw climate rates are internal normalized facts. Player-facing world creation should use a small set of semantic controls; balancing/calibration translates those intentions into the technical rates used here.
+
 ## Flow cadence and diagnostics
 
 Successful free-liquid mutation wakes the shared `LiquidFlowSystem` activity frontier. `LiquidFlowProcess` schedules one local solve per tick while work remains and stops at dormancy.
@@ -224,6 +258,8 @@ Kinematic viscosity **is implemented** as a generic liquid transport property an
 ## Tests and acceptance
 
 Headless Water coverage includes finite precipitation/evaporation accounting, shared sky targeting, exposed/covered behavior, deterministic local Soil-capacity variation, run-on infiltration, saturated Soil, surface-retention invariants, vertical falling, cyclic rain cadence, dormancy, Water wading and finite-world containment.
+
+Generated hydro-climate coverage additionally locks exact fractional rate realization, spatially distinct rates, large-volume chunking, baseline evaporation/precipitation ordering and zero-forcing behavior without creating hydrology state.
 
 Generic liquid/Soil coverage proves that non-Water identities reuse the shared solver, preserve identity, use the same Soil-retention mechanism, compete for one pore capacity, respond to viscosity, and leave excess free when uptake is bounded.
 
