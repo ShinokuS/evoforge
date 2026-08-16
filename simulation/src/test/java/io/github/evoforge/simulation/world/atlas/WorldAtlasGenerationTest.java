@@ -15,12 +15,12 @@ import org.junit.jupiter.api.Test;
 final class WorldAtlasGenerationTest {
 
     @Test
-    void currentV3PreservesFrozenDiscreteElevationSamples() {
+    void currentV4PreservesFrozenDiscreteElevationSamples() {
         WorldGenesis genesis = WorldGenesis.current(
                 new WorldSpec(new WorldBounds(-32, 31, -32, 31, -32, 32)),
                 123_456_789L);
 
-        assertEquals(GenerationRevision.V3, genesis.generationRevision());
+        assertEquals(GenerationRevision.V4, genesis.generationRevision());
         ElevationField elevation = new WorldAtlasGenerator().generate(genesis).elevation();
 
         assertFrozenDiscreteSamples(elevation);
@@ -47,7 +47,7 @@ final class WorldAtlasGenerationTest {
     }
 
     @Test
-    void currentV3PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
+    void currentV4PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
         WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -40, 40);
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(new WorldSpec(bounds), 991L))
@@ -90,9 +90,7 @@ final class WorldAtlasGenerationTest {
         for (int y = -9; y <= 14; y++) {
             for (int x = -12; x <= 13; x++) {
                 assertEquals(first.elevationAt(x, y), second.elevationAt(x, y));
-                assertEquals(
-                        first.elevationSubunitsAt(x, y),
-                        second.elevationSubunitsAt(x, y));
+                assertEquals(first.elevationSubunitsAt(x, y), second.elevationSubunitsAt(x, y));
             }
         }
     }
@@ -112,9 +110,7 @@ final class WorldAtlasGenerationTest {
         for (int y = -10; y <= 10; y++) {
             for (int x = 0; x <= 10; x++) {
                 assertEquals(left.elevationAt(x, y), right.elevationAt(x, y));
-                assertEquals(
-                        left.elevationSubunitsAt(x, y),
-                        right.elevationSubunitsAt(x, y));
+                assertEquals(left.elevationSubunitsAt(x, y), right.elevationSubunitsAt(x, y));
             }
         }
     }
@@ -163,9 +159,7 @@ final class WorldAtlasGenerationTest {
         ElevationField second = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(spec, 2L)).elevation();
 
-        assertNotEquals(
-                first.elevationSubunitsAt(0, 0),
-                second.elevationSubunitsAt(0, 0));
+        assertNotEquals(first.elevationSubunitsAt(0, 0), second.elevationSubunitsAt(0, 0));
     }
 
     @Test
@@ -174,7 +168,7 @@ final class WorldAtlasGenerationTest {
         WorldGenesis unsupported = new WorldGenesis(
                 spec,
                 1L,
-                GenerationRevision.of("test:worldgen-v4"),
+                GenerationRevision.of("test:worldgen-v5"),
                 RngRevision.V1);
 
         assertThrows(IllegalArgumentException.class,
@@ -182,10 +176,8 @@ final class WorldAtlasGenerationTest {
 
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(spec, 1L)).elevation();
-        assertThrows(IllegalArgumentException.class,
-                () -> elevation.elevationAt(4, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> elevation.elevationSubunitsAt(4, 0));
+        assertThrows(IllegalArgumentException.class, () -> elevation.elevationAt(4, 0));
+        assertThrows(IllegalArgumentException.class, () -> elevation.elevationSubunitsAt(4, 0));
     }
 
     private static void assertFrozenDiscreteSamples(ElevationField elevation) {
