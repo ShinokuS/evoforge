@@ -7,12 +7,14 @@ public final class WorldAtlas {
     private final WorldGenesis genesis;
     private final ElevationField elevation;
     private final DrainageField drainage;
+    private final SurfaceHydrologyField surfaceHydrology;
     private final HydroClimateField hydroClimate;
 
     WorldAtlas(
             WorldGenesis genesis,
             ElevationField elevation,
             DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
             HydroClimateField hydroClimate) {
         if (genesis == null) {
             throw new IllegalArgumentException("genesis must not be null");
@@ -22,6 +24,9 @@ public final class WorldAtlas {
         }
         if (drainage == null) {
             throw new IllegalArgumentException("drainage must not be null");
+        }
+        if (surfaceHydrology == null) {
+            throw new IllegalArgumentException("surfaceHydrology must not be null");
         }
         if (hydroClimate == null) {
             throw new IllegalArgumentException("hydroClimate must not be null");
@@ -34,6 +39,10 @@ public final class WorldAtlas {
             throw new IllegalArgumentException(
                     "drainage bounds must match world genesis bounds");
         }
+        if (!genesis.spec().bounds().equals(surfaceHydrology.bounds())) {
+            throw new IllegalArgumentException(
+                    "surface hydrology bounds must match world genesis bounds");
+        }
         if (!genesis.spec().bounds().equals(hydroClimate.bounds())) {
             throw new IllegalArgumentException(
                     "hydroClimate bounds must match world genesis bounds");
@@ -41,6 +50,7 @@ public final class WorldAtlas {
         this.genesis = genesis;
         this.elevation = elevation;
         this.drainage = drainage;
+        this.surfaceHydrology = surfaceHydrology;
         this.hydroClimate = hydroClimate;
     }
 
@@ -54,6 +64,10 @@ public final class WorldAtlas {
 
     public DrainageField drainage() {
         return drainage;
+    }
+
+    public SurfaceHydrologyField surfaceHydrology() {
+        return surfaceHydrology;
     }
 
     public HydroClimateField hydroClimate() {
