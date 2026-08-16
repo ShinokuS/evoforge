@@ -7,6 +7,7 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -30,9 +31,12 @@ public final class GeneratedWorldDiagnosticsProbe {
         WorldBounds bounds = atlas.genesis().spec().bounds();
         ElevationField elevation = atlas.elevation();
         DrainageField drainage = atlas.drainage();
+        SurfaceHydrologyField surfaceHydrology = atlas.surfaceHydrology();
         SimulationView view = runtime.view();
 
-        if (!bounds.equals(elevation.bounds()) || !bounds.equals(drainage.bounds())) {
+        if (!bounds.equals(elevation.bounds())
+                || !bounds.equals(drainage.bounds())
+                || !bounds.equals(surfaceHydrology.bounds())) {
             throw new IllegalStateException(
                     "Atlas diagnostic layers must share world bounds");
         }
@@ -41,6 +45,9 @@ public final class GeneratedWorldDiagnosticsProbe {
         int maximumSurfaceZ = Integer.MIN_VALUE;
         long surfaceMismatches = 0L;
         long maximumContributingArea = 0L;
+        long generatedInitialWaterVolume = 0L;
+        int generatedInitialWaterColumns = 0;
+        int generatedShorelineColumns = 0;
         Set<Long> terminalBasins = new HashSet<>();
 
         for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
@@ -62,6 +69,15 @@ public final class GeneratedWorldDiagnosticsProbe {
                 maximumContributingArea = Math.max(
                         maximumContributingArea,
                         drainage.contributingAreaAt(worldX, worldY));
+
+                int generatedWater = surfaceHydrology.initialWaterVolumeAt(worldX, worldY);
+                generatedInitialWaterVolume = Math.addExact(
+                        generatedInitialWaterVolume,
+                        generatedWater);
+                if (generatedWater > 0) generatedInitialWaterColumns++;
+                if (surfaceHydrology.isShoreline(worldX, worldY)) {
+                    generatedShorelineColumns++;
+                }
             }
         }
 
@@ -112,12 +128,8 @@ public final class GeneratedWorldDiagnosticsProbe {
                     }
                 }
 
-                if (columnWetWaterCells > 0) {
-                    wetWaterColumns++;
-                }
-                if (columnWetSoilCells > 0) {
-                    wetSoilColumns++;
-                }
+                if (columnWetWaterCells > 0) wetWaterColumns++;
+                if (columnWetSoilCells > 0) wetSoilColumns++;
                 maximumFreeWaterColumnVolume = Math.max(
                         maximumFreeWaterColumnVolume,
                         columnFreeWater);
@@ -143,6 +155,9 @@ public final class GeneratedWorldDiagnosticsProbe {
                 maximumSurfaceZ,
                 terminalBasins.size(),
                 maximumContributingArea,
+                generatedInitialWaterVolume,
+                generatedInitialWaterColumns,
+                generatedShorelineColumns,
                 freeWaterVolume,
                 retainedWaterVolume,
                 wetWaterCells,
