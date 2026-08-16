@@ -15,7 +15,7 @@ public final class TerrainMaterialBindings {
         this.ids = Map.copyOf(ids);
     }
 
-    /** Binds exactly the semantic material roles that this compiled profile can generate. */
+    /** Binds exactly the semantic terrain-profile roles that this compiled profile can generate. */
     public static TerrainMaterialBindings forProfile(
             CompiledTerrainProfile profile,
             Map<TerrainMaterialRole, LandscapeDefinitionId> idsByRole) {
@@ -33,6 +33,22 @@ public final class TerrainMaterialBindings {
             bind(ids, profile.materials().require(role), id);
         }
         return new TerrainMaterialBindings(ids);
+    }
+
+    /** Adds stable generated material identities supplied by another causal layer such as Geology. */
+    public TerrainMaterialBindings withMaterials(
+            Map<TerrainMaterialKey, LandscapeDefinitionId> additional) {
+        if (additional == null) {
+            throw new IllegalArgumentException("additional material bindings must not be null");
+        }
+        Map<TerrainMaterialKey, LandscapeDefinitionId> combined = new LinkedHashMap<>(ids);
+        for (Map.Entry<TerrainMaterialKey, LandscapeDefinitionId> entry : additional.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                throw new IllegalArgumentException("additional material bindings must not contain nulls");
+            }
+            bind(combined, entry.getKey(), entry.getValue());
+        }
+        return new TerrainMaterialBindings(combined);
     }
 
     public LandscapeDefinitionId resolve(TerrainMaterialKey key) {
