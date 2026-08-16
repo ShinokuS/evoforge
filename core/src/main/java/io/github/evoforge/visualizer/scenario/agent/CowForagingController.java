@@ -63,7 +63,7 @@ final class CowForagingController implements ScenarioController {
 
         long level = runtime.view().needs().level(cow, hunger);
         long max = runtime.view().needs().maxLevel(cow, hunger);
-        ObjectId target = runtime.view().agents().currentTarget(cow);
+        String target = runtime.view().agents().currentTargetKey(cow);
         String summary = "hunger=" + level + "/" + max
                 + " | target=" + label(target)
                 + decisionSummary(display);
@@ -79,17 +79,21 @@ final class CowForagingController implements ScenarioController {
         AgentCandidateTrace selected = trace.selected();
         return " | decisionTick=" + trace.tick()
                 + " | candidates=" + trace.candidates().size()
-                + " | winner=" + label(selected.sourceId())
+                + " | winner=" + label(selected.targetKey())
                 + " | benefit=" + selected.expectedBenefit()
                 + " | distance=" + selected.distance()
-                + " | score=" + selected.score();
+                + " | utility=" + selected.utility();
     }
 
-    private String label(ObjectId objectId) {
-        if (objectId == null) return "none";
-        if (objectId.equals(grass)) return "grass";
-        if (objectId.equals(hay)) return "hay";
-        if (objectId.equals(cow)) return "cow";
-        return objectId.toString();
+    private String label(String targetKey) {
+        if (targetKey == null) return "none";
+        if (targetKey.equals(objectTargetKey(grass))) return "grass";
+        if (targetKey.equals(objectTargetKey(hay))) return "hay";
+        if (targetKey.equals(objectTargetKey(cow))) return "cow";
+        return targetKey;
+    }
+
+    private static String objectTargetKey(ObjectId objectId) {
+        return "object:" + objectId.asLong();
     }
 }
