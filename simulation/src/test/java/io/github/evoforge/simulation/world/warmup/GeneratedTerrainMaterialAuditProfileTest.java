@@ -48,7 +48,8 @@ final class GeneratedTerrainMaterialAuditProfileTest {
         Set<String> observedGeology = new HashSet<>();
 
         for (long seed : SEEDS) {
-            WorldAtlas atlas = new WorldAtlasGenerator(new GeologyGenerationStage(geologyProfile))
+            WorldAtlas atlas = WorldAtlasGenerator.withGeology(
+                            new GeologyGenerationStage(geologyProfile))
                     .generate(WorldGenesis.current(new WorldSpec(bounds), seed));
             TerrainMaterialField materials = new TerrainMaterialGenerationStage().generate(
                     atlas.elevation(),
