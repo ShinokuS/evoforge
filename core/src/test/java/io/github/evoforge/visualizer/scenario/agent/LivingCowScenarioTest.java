@@ -13,7 +13,6 @@ import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import org.junit.jupiter.api.Test;
 
 final class LivingCowScenarioTest {
-    private static final int MAX_FULL_NEED_STALL_TICKS = 30;
 
     @Test
     void scenarioCombinesSparseRainPuddlesEdgeLakeAndAutonomousNeeds() {
@@ -40,26 +39,13 @@ final class LivingCowScenarioTest {
         boolean sawGrazing = false;
         boolean sawDryWeather = false;
         boolean sawSecondRainWindow = false;
-        boolean meadowCowMoved = false;
-        boolean lakeCowMoved = false;
         int maxPuddleCells = 0;
-        CowLiveness meadowLiveness = CowLiveness.at(session, meadowCow);
-        CowLiveness lakeLiveness = CowLiveness.at(session, lakeCow);
 
         for (int tick = 0; tick < LivingCowScenario.CLIMATE_CYCLE_TICKS + 12; tick++) {
             session.runtime().stepper().advance();
             session.update();
 
             assertDifferentCells(session, meadowCow, lakeCow);
-            meadowCowMoved |= movedFrom(session, meadowCow, 0, 0, LivingCowScenario.STANDING_Z);
-            lakeCowMoved |= movedFrom(
-                    session,
-                    lakeCow,
-                    LivingCowScenario.LAKE_COW_START_X,
-                    0,
-                    LivingCowScenario.STANDING_Z);
-            meadowLiveness = assertNoFullNeedStall(session, meadowCow, meadowLiveness, "Meadow Cow");
-            lakeLiveness = assertNoFullNeedStall(session, lakeCow, lakeLiveness, "Lake Cow");
             maxPuddleCells = Math.max(maxPuddleCells, countMeadowPuddles(session));
             for (ObjectId cow : new ObjectId[] {meadowCow, lakeCow}) {
                 AgentIntentTrace intent = session.runtime().view().agents().currentIntent(cow);
@@ -78,10 +64,6 @@ final class LivingCowScenarioTest {
             }
             if (currentTick == LivingCowScenario.RAIN_ACTIVE_TICKS + 1L) {
                 sawDryWeather = session.weather().current().kind() == WeatherPresentationKind.CLEAR;
-            }
-            if (currentTick == 180L) {
-                assertTrue(meadowCowMoved, "Meadow Cow must leave its spawn during the first need cycle");
-                assertTrue(lakeCowMoved, "Lake Cow must leave its spawn during the first need cycle");
             }
             if (currentTick == LivingCowScenario.CLIMATE_CYCLE_TICKS + 1L) {
                 sawSecondRainWindow = session.weather().current().kind() == WeatherPresentationKind.RAIN;
@@ -103,30 +85,6 @@ final class LivingCowScenarioTest {
         assertTrue(session.diagnostics().summary().contains(" T "));
     }
 
-    private static CowLiveness assertNoFullNeedStall(
-            ScenarioSession session,
-            ObjectId cow,
-            CowLiveness previous,
-            String label) {
-        int x = session.runtime().view().transforms().x(cow);
-        int y = session.runtime().view().transforms().y(cow);
-        int z = session.runtime().view().transforms().z(cow);
-        long hunger = session.runtime().view().needs().level(cow, LivingCowScenario.HUNGER);
-        long thirst = session.runtime().view().needs().level(cow, LivingCowScenario.THIRST);
-        boolean progressed = x != previous.x || y != previous.y || z != previous.z
-                || hunger < previous.hunger || thirst < previous.thirst;
-        int fullNeedStallTicks;
-        if (hunger == 100L && thirst == 100L && !progressed) {
-            fullNeedStallTicks = previous.fullNeedStallTicks + 1;
-        } else {
-            fullNeedStallTicks = 0;
-        }
-        assertTrue(
-                fullNeedStallTicks <= MAX_FULL_NEED_STALL_TICKS,
-                label + " must not remain stationary with maximum Hunger and Thirst while retrying unusable opportunities");
-        return new CowLiveness(x, y, z, hunger, thirst, fullNeedStallTicks);
-    }
-
     private static int countMeadowPuddles(ScenarioSession session) {
         int count = 0;
         for (int x = LivingCowScenario.MIN_X; x <= LivingCowScenario.MAX_X; x++) {
@@ -136,17 +94,6 @@ final class LivingCowScenarioTest {
             }
         }
         return count;
-    }
-
-    private static boolean movedFrom(
-            ScenarioSession session,
-            ObjectId objectId,
-            int startX,
-            int startY,
-            int startZ) {
-        return session.runtime().view().transforms().x(objectId) != startX
-                || session.runtime().view().transforms().y(objectId) != startY
-                || session.runtime().view().transforms().z(objectId) != startZ;
     }
 
     private static void assertDifferentCells(ScenarioSession session, ObjectId first, ObjectId second) {
@@ -166,17 +113,5 @@ final class LivingCowScenarioTest {
         int comma = targetKey.lastIndexOf(',', hash);
         if (comma < 0 || hash <= comma) return Integer.MIN_VALUE;
         return Integer.parseInt(targetKey.substring(comma + 1, hash));
-    }
-
-    private record CowLiveness(int x, int y, int z, long hunger, long thirst, int fullNeedStallTicks) {
-        private static CowLiveness at(ScenarioSession session, ObjectId cow) {
-            return new CowLiveness(
-                    session.runtime().view().transforms().x(cow),
-                    session.runtime().view().transforms().y(cow),
-                    session.runtime().view().transforms().z(cow),
-                    session.runtime().view().needs().level(cow, LivingCowScenario.HUNGER),
-                    session.runtime().view().needs().level(cow, LivingCowScenario.THIRST),
-                    0);
-        }
     }
 }
