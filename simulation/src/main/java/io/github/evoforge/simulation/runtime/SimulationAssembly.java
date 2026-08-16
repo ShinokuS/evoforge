@@ -27,6 +27,9 @@ import io.github.evoforge.simulation.world.agent.CapabilityId;
 import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfaction;
 import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfactionDefinitions;
 import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfactionOpportunityProvider;
+import io.github.evoforge.simulation.world.agent.affordance.liquid.LiquidDrinkDefinition;
+import io.github.evoforge.simulation.world.agent.affordance.liquid.LiquidDrinkDefinitions;
+import io.github.evoforge.simulation.world.agent.affordance.liquid.LiquidDrinkOpportunityProvider;
 import io.github.evoforge.simulation.world.agent.decision.AgentSystem;
 import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
@@ -90,6 +93,9 @@ import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinitions;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthSystem;
 import io.github.evoforge.simulation.world.mechanics.growth.IntrinsicGrowthRateResolver;
+import io.github.evoforge.simulation.world.mechanics.interaction.InteractionAccessResolver;
+import io.github.evoforge.simulation.world.mechanics.interaction.InteractionReachProfile;
+import io.github.evoforge.simulation.world.mechanics.measurement.PhysicalCellVolume;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
 import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
@@ -152,6 +158,7 @@ public final class SimulationAssembly {
     private final NeedProgressionDefinitions needProgressionDefinitions;
     private final NeedSatisfactionDefinitions needSatisfactionDefinitions;
     private final NeedSolutionKnowledgeDefinitions needSolutionKnowledgeDefinitions;
+    private final LiquidDrinkDefinitions liquidDrinkDefinitions;
     private final ConsumableStockDefinitions consumableStockDefinitions;
     private final GrowthDefinitions growthDefinitions;
     private final LandscapeSystem landscape;
@@ -174,6 +181,7 @@ public final class SimulationAssembly {
     private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
     private PrecipitationSchedule precipitationSchedule;
     private EvaporationSchedule evaporationSchedule;
+    private PhysicalCellVolume physicalCellVolume;
     private boolean started;
 
     private SimulationAssembly() {
@@ -197,6 +205,7 @@ public final class SimulationAssembly {
         needProgressionDefinitions = new NeedProgressionDefinitions();
         needSatisfactionDefinitions = new NeedSatisfactionDefinitions();
         needSolutionKnowledgeDefinitions = new NeedSolutionKnowledgeDefinitions();
+        liquidDrinkDefinitions = new LiquidDrinkDefinitions();
         consumableStockDefinitions = new ConsumableStockDefinitions();
         growthDefinitions = new GrowthDefinitions();
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), landscapeDefinitions);
@@ -333,6 +342,13 @@ public final class SimulationAssembly {
         return this;
     }
 
+    /** Defines the physical volume represented by one completely open simulation cell. */
+    public SimulationAssembly physicalCellVolumeMilliliters(long millilitersPerFullCell) {
+        requireNotStarted();
+        physicalCellVolume = new PhysicalCellVolume(millilitersPerFullCell);
+        return this;
+    }
+
     public ObjectDefinitionId objectDefinition(String key) {
         requireNotStarted();
         return objectDefinitions.register(key);
@@ -420,6 +436,32 @@ public final class SimulationAssembly {
     public SimulationAssembly knowsNeedSolution(ObjectDefinitionId definitionId, NeedId needId) {
         requireNotStarted(); requireObjectDefinition(definitionId);
         needSolutionKnowledgeDefinitions.add(definitionId, needId);
+        return this;
+    }
+
+    public SimulationAssembly drinksLiquid(
+            ObjectDefinitionId definitionId,
+            NeedId needId,
+            LiquidTypeId liquidType,
+            long requestedMillilitersPerUse,
+            long needReliefPerFullUse,
+            long useDurationTicks,
+            InteractionReachProfile reach) {
+        requireNotStarted();
+        requireObjectDefinition(definitionId);
+        if (liquidType == null || !liquidTransportDefinitions.has(liquidType)) {
+            throw new IllegalArgumentException(
+                    "drinkable liquid must have transport properties: " + liquidType);
+        }
+        liquidDrinkDefinitions.add(
+                definitionId,
+                new LiquidDrinkDefinition(
+                        needId,
+                        liquidType,
+                        requestedMillilitersPerUse,
+                        needReliefPerFullUse,
+                        useDurationTicks,
+                        reach));
         return this;
     }
 
@@ -538,6 +580,10 @@ public final class SimulationAssembly {
 
     public SimulationRuntime start() {
         requireNotStarted();
+        if (!liquidDrinkDefinitions.isEmpty() && physicalCellVolume == null) {
+            throw new IllegalStateException(
+                    "physical cell volume must be configured before liquid drinking is enabled");
+        }
         started = true;
         landscapeDefinitions.freeze();
         landscapeTraversalDefinitions.freeze();
@@ -556,6 +602,7 @@ public final class SimulationAssembly {
         needProgressionDefinitions.freeze();
         needSatisfactionDefinitions.freeze();
         needSolutionKnowledgeDefinitions.freeze();
+        liquidDrinkDefinitions.freeze();
         consumableStockDefinitions.freeze();
         growthDefinitions.freeze();
 
@@ -778,13 +825,34 @@ public final class SimulationAssembly {
         ProcessScheduler needSatisfactionScheduler =
                 new BoundProcessScheduler(clock, scheduler, needSatisfactionHandlerId);
         needSatisfaction.bindScheduler(needSatisfactionScheduler);
-        AgentOpportunityProvider needSatisfactionProvider = needSatisfaction;
+
+        List<AgentOpportunityProvider> opportunityProviders = new ArrayList<>();
+        opportunityProviders.add(needSatisfaction);
+        if (!liquidDrinkDefinitions.isEmpty()) {
+            LiquidDrinkOpportunityProvider liquidDrinking = new LiquidDrinkOpportunityProvider(
+                    objects,
+                    spatial.transforms(),
+                    liquidDrinkDefinitions,
+                    needSolutionKnowledgeDefinitions,
+                    needMotivationDefinitions,
+                    needs,
+                    liquids,
+                    physicalCellVolume,
+                    new InteractionAccessResolver(worldGeometry),
+                    liquidFlowProcess::activate,
+                    clock);
+            HandlerId liquidDrinkingHandlerId = scheduledHandlers.register(liquidDrinking::resume);
+            ProcessScheduler liquidDrinkingScheduler =
+                    new BoundProcessScheduler(clock, scheduler, liquidDrinkingHandlerId);
+            liquidDrinking.bindScheduler(liquidDrinkingScheduler);
+            opportunityProviders.add(liquidDrinking);
+        }
 
         AgentSystem agents = new AgentSystem(
                 objects,
                 spatial.transforms(),
                 agentDefinitions,
-                List.of(needSatisfactionProvider),
+                List.copyOf(opportunityProviders),
                 moveTo,
                 moveTo,
                 vision,
