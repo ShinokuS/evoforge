@@ -16,7 +16,7 @@ final class WorldGenesisTest {
 
         assertEquals(spec, genesis.spec());
         assertEquals(Long.MIN_VALUE, genesis.masterSeed());
-        assertEquals(GenerationRevision.V3, genesis.generationRevision());
+        assertEquals(GenerationRevision.V4, genesis.generationRevision());
         assertEquals(RngRevision.V1, genesis.rngRevision());
     }
 
@@ -53,6 +53,7 @@ final class WorldGenesisTest {
         assertEquals("evoforge:worldgen-v1", GenerationRevision.V1.value());
         assertEquals("evoforge:worldgen-v2", GenerationRevision.V2.value());
         assertEquals("evoforge:worldgen-v3", GenerationRevision.V3.value());
+        assertEquals("evoforge:worldgen-v4", GenerationRevision.V4.value());
 
         assertThrows(IllegalArgumentException.class, () -> GenerationStageId.of("Elevation"));
         assertThrows(IllegalArgumentException.class, () -> GenerationPurposeId.of("world base"));
