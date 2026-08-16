@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.agent.decision;
 
 import io.github.evoforge.simulation.world.agent.opportunity.InteractionSite;
+import io.github.evoforge.simulation.world.object.ObjectId;
 
 /** Read-only developer snapshot of the agent's currently committed continuing intent. */
 public record AgentIntentTrace(
@@ -20,5 +21,13 @@ public record AgentIntentTrace(
         if (expectedCompletionTick >= 0L && expectedCompletionTick < startedTick) {
             throw new IllegalArgumentException("expectedCompletionTick must be >= startedTick");
         }
+    }
+
+    /** Temporary presentation bridge; remove once the HUD uses source-neutral targetKey directly. */
+    @Deprecated(forRemoval = true)
+    public ObjectId targetId() {
+        if (targetKey == null || !targetKey.startsWith("object:")) return null;
+        long value = Long.parseLong(targetKey.substring("object:".length()));
+        return ObjectId.of((int) (value & 0xFFFF_FFFFL), (int) (value >>> 32));
     }
 }
