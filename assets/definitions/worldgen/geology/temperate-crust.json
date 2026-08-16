@@ -1,0 +1,21 @@
+{
+  "key": "core:temperate_crust",
+  "units": [
+    {
+      "key": "core:granite",
+      "material": "core:granite"
+    },
+    {
+      "key": "core:basalt",
+      "material": "core:basalt"
+    },
+    {
+      "key": "core:limestone",
+      "material": "core:limestone"
+    },
+    {
+      "key": "core:shale",
+      "material": "core:shale"
+    }
+  ]
+}
