@@ -10,6 +10,7 @@ The current Atlas contains:
 WorldGenesis
 ElevationField
 DrainageField
+HydroClimateField
 ```
 
 `WorldAtlas` validates that every layer describes the same `WorldBounds` as its genesis.
@@ -76,32 +77,51 @@ Contributing area is accumulated over the resulting acyclic topology. It is a fi
 
 Unlike elevation sampling, drainage topology is legitimately boundary-dependent: cropping to different `WorldBounds` creates a different closed hydrologic world and may change paths near or upstream of the new boundary.
 
-## Algorithm composition
+## Hydrologic climate normals
 
-`WorldAtlasGenerator` is deliberately thin. It composes typed algorithms in causal order:
+`HydroClimateField` is the immutable long-term atmospheric forcing fact for each XY column. It exposes:
 
 ```text
-ElevationGenerator -> ElevationField
-                         ↓
-DrainageGenerator  -> DrainageField
+precipitation supply       CellVolumeRate
+evaporative demand         CellVolumeRate
 ```
 
-Its default constructor selects `ElevationGenerationStage` and `DrainageGenerationStage`. Callers may inject either typed algorithm. The existing elevation-only constructor remains valid and pairs the supplied elevation algorithm with the default drainage stage.
+These are normals, not weather events. They do not schedule rain, remove Water or mutate Soil. Runtime precipitation and evaporation remain owned by their existing environment systems.
+
+`HydroClimateSpec` belongs to `WorldSpec`, so the requested forcing is part of generation input/provenance rather than an ambient balance constant. The compatibility `WorldSpec(bounds)` constructor is explicitly `UNFORCED`: zero precipitation supply and zero evaporative demand.
+
+The first `HydroClimateGenerationStage` is deliberately uniform and simply authors the requested rates at every in-bounds XY column. EvoForge does not add random climate texture before there is a causal spatial model for latitude, atmospheric circulation, wind, temperature or rain shadow. A later climate algorithm may introduce spatial variation behind the same fact contract when those inputs are real.
+
+## Algorithm composition
+
+`WorldAtlasGenerator` remains deliberately thin. It composes narrow typed algorithms:
+
+```text
+ElevationGenerator    -> ElevationField
+                            ↓
+DrainageGenerator     -> DrainageField
+
+WorldSpec
+    ↓
+HydroClimateGenerator -> HydroClimateField
+```
+
+The default constructor selects `ElevationGenerationStage`, `DrainageGenerationStage` and `HydroClimateGenerationStage`. Existing elevation-only and elevation+drainage constructors remain valid and pair supplied algorithms with the default missing stages.
 
 The precision extension does not invalidate substitute elevation algorithms. `ElevationField.elevationSubunitsAt(...)` has a compatibility default derived from `elevationAt(...)`, so a substitute that only authors discrete heights remains valid and explicitly has cell-level precision until it chooses to provide more.
 
 Substitution does not remove validation. `WorldAtlasGenerator` rejects missing/broken algorithm output and `WorldAtlas` validates every generated layer against `WorldGenesis` bounds.
 
-Future stages use their own narrow semantic contracts when their real dependencies are known. They do not share one universal mutable generation context. Likewise, future world evaluators receive typed contracts for the concrete question they evaluate rather than one universal evaluator API.
+Future stages use their own narrow semantic contracts when their real dependencies are known. They do not share one universal mutable generation context.
 
 ## Materialization boundary
 
-Atlas elevation and drainage are world facts, not placed Landscape cells or free Water. A later materialization slice translates Atlas facts into detailed Terrain/Soil/Liquid/Object state through the existing domain-owned mutation boundaries. Runtime systems then continue to evolve that materialized state under their normal laws.
+Atlas elevation, drainage and hydrologic climate normals are world facts, not placed Landscape cells, free Water or weather events. A later materialization/runtime-forcing slice translates the relevant Atlas facts through existing domain-owned mutation and environment boundaries. Runtime systems then continue to evolve that state under their normal laws.
 
-Drainage can guide initial channels, basins and finite Water placement, but it never becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
+Drainage can guide channels/basins, while climate supplies long-term atmospheric forcing. Neither becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
 
 ## Deferred representation decisions
 
-No chunk dimensions, region semantics, streaming lifecycle or simulation LOD are introduced here. The Atlas proves generated-fact causality and determinism on a bounded world before those optimizations are considered.
+No chunk dimensions, region semantics, streaming lifecycle or simulation LOD are introduced here. Temperature, wind, seasons and weather anomalies are also deferred until they have concrete consumers and causal models.
 
-See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md) and [World Genesis](world-genesis.md).
+See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md), [Decision 013 — Long-term environmental rates use exact simulation dimensions](../decisions/013-simulation-rate-units.md), [Decision 014 — Hydrologic climate normals are generated facts, not runtime weather](../decisions/014-hydrologic-climate-normals.md) and [World Genesis](world-genesis.md).
