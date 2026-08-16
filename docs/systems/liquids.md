@@ -95,11 +95,28 @@ The solver uses:
 - fixed-point relaxation;
 - explicit liquid transport properties;
 - sparse active frontier and dormancy;
-- actual latest-step flow diagnostics.
+- aggregate coherent latest-step flow diagnostics.
 
 Hydraulic Geometry does not switch on concrete identities such as Water, blood or wine.
 
 `LiquidFlowProcess` owns scheduled cadence. It runs while the shared activity frontier contains work and stops at dormancy. A narrow `LiquidFlowPreparation` hook allows deterministic work immediately before transport; current hydrology uses it for Soil infiltration.
+
+### Flow diagnostics and visible motion
+
+The hydraulic solver may execute several simultaneous edge transfers through one cell in the same deterministic step. Diagnostics do not expose whichever individual edge happened to have the largest amount. They first sum the signed transfer vectors for that cell and publish the dominant axis of the resulting **coherent net transfer**.
+
+This matters for a settling pool. Equal or nearly equal flows arriving from opposite sides are real hydraulic work, but they do not imply a strong surface current in either direction:
+
+```text
+400 east + 400 west -> no coherent net direction
+500 east + 480 west -> small eastward net direction
+```
+
+`LiquidFlowSample` is therefore a read-side diagnostic projection, not a second velocity state and not part of conservation math.
+
+Water presentation adds one further read-side distinction: a horizontal coherent flux is animated only when it is significant relative to the Water currently occupying that cell. The same small absolute flux can remain visible in a shallow puddle while being visually calm in a deep lake. Downward falling remains visible whenever an actual downward net transfer exists.
+
+This visual significance rule never stops or modifies authoritative hydraulic work. The solver continues until its fixed-point transfer deadband produces no more work and the sparse activity frontier becomes dormant. Multi-cell regression coverage removes a localized volume from a 9×9 pool and proves exact mass accounting, local integer hydraulic equilibrium, dormancy and state stability after dormancy.
 
 ## Generic Soil retention
 
@@ -218,7 +235,7 @@ shared mechanics
           `-- Water presentation/diagnostics
 ```
 
-`WaterSystem` owns only the Water identity and typed read/mutation facade. `WaterFlowLookup.from(...)` filters generic flow diagnostics for Water; there is no second Water transport solver.
+`WaterSystem` owns only the Water identity and typed read/mutation facade. `WaterFlowLookup.from(...)` filters generic coherent-flow diagnostics for Water; there is no second Water transport solver.
 
 Current precipitation and evaporation remain Water-specific because atmosphere semantics are not automatically shared by every liquid. Reusing generic transport or Soil retention does not imply that another constituent satisfies Thirst, evaporates on Water's schedule, uses Water wading rules or shares Water presentation.
 
@@ -255,6 +272,8 @@ Kinematic viscosity is **not** deferred: it is already an explicit transport pro
 11. Retained multi-constituent state must not be mistaken for implemented chemistry.
 12. Free-liquid flow and free-to-retained transfer remain deterministic and exactly volume-accounted.
 13. Scheduling stops at hydraulic dormancy.
-14. Presentation and typed facades are observers/adapters, never alternative liquid authorities.
+14. Flow diagnostics aggregate coherent net transfer and never become an alternative hydraulic state.
+15. Presentation may suppress insignificant coherent motion but must never suppress authoritative flow work.
+16. Presentation and typed facades are observers/adapters, never alternative liquid authorities.
 
 See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md) for the architectural boundary.
