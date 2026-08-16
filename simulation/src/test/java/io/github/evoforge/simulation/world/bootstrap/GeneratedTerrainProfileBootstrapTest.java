@@ -70,7 +70,7 @@ final class GeneratedTerrainProfileBootstrapTest {
         bindings = bindings.withMaterials(geologyBindings);
 
         GeneratedWorldRuntime world = new GeneratedWorldBootstrap(
-                new WorldAtlasGenerator(new GeologyGenerationStage(geologyProfile)))
+                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)))
                 .create(genesis, assembly, terrainProfile, bindings);
 
         TerrainMaterialField expected = new TerrainMaterialGenerationStage().generate(
