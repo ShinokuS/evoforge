@@ -23,14 +23,18 @@ MoveTo reaches terminal completion
         ↓
 neutral MoveToCompletionSink
         ↓
-waiting Agent process is scheduled
+owning Agent continuation runs at that terminal boundary
         ↓
 Agent consumes the terminal outcome
 ```
 
 `MoveToSystem` publishes terminal `MoveToCompletion` through a neutral sink contract. The default MoveTo composition contains a bind-once relay; `AgentSystem`, which already owns autonomous MoveTo intents, binds itself as the autonomous completion consumer. `MoveToSystem` has no dependency on `AgentSystem`.
 
-A completion only wakes an Agent when the action id matches the MoveTo currently owned by that Agent's opportunity intent or search relocation. Unrelated/manual MoveTo completions are ignored by autonomous decision state.
+A completion only continues an Agent when the action id matches the MoveTo currently owned by that Agent's opportunity intent or search relocation. Unrelated/manual MoveTo completions are ignored by autonomous decision state.
+
+The matching autonomous continuation runs synchronously from the terminal completion callback. This is deliberate: `Scheduler` snapshots the current due batch before dispatch, so scheduling a new same-tick task during dispatch would defer it until the next simulation step and add an artificial orchestration tick. The completion callback is already a terminal lifecycle boundary: MoveTo has removed its active state and released its movement claim before publishing the completion. Continuing the owner there preserves existing same-tick semantics without recursive scheduler dispatch.
+
+Synchronous terminal outcomes produced inside `MoveTo.start(...)` are still handled by the caller after `start(...)` returns. At that point the autonomous intent has not yet been published, so the completion sink correctly ignores them rather than re-entering an unfinished decision pass.
 
 ## Timed provider use
 
@@ -40,11 +44,11 @@ Agent schedules its own continuation directly at that declared completion tick. 
 
 Zero-duration/synchronously terminal use does not create an active wait. It retains a bounded one-shot continuation instead of recursively executing unlimited uses in one simulation tick.
 
-`ProcessScheduler.scheduleAt(...)` is added as a generic absolute-time primitive for this contract; `scheduleAfter(...)` remains the relative-time primitive.
+`ProcessScheduler.scheduleAt(...)` is available as an absolute-time capability on the production bound scheduler while `scheduleAfter(...)` remains the single abstract relative-time contract. This preserves `ProcessScheduler` as a functional interface for simple subsystem/test schedulers that never need absolute wake scheduling.
 
 ## Search relocation
 
-Search relocation uses production MoveTo, so it receives the same completion-driven wakeup behavior. There is no separate search polling loop.
+Search relocation uses production MoveTo, so it receives the same completion-driven continuation behavior. There is no separate search polling loop.
 
 ## What remains periodic
 
@@ -59,8 +63,9 @@ A fully reactive idle model would require real stimulus contracts such as Need t
 - active MoveTo no longer causes one Agent scheduler wake per tick;
 - active provider use no longer causes one Agent scheduler wake per tick;
 - search relocation no longer causes one Agent scheduler wake per tick;
+- successful MoveTo-to-use handoff preserves its existing simulation-tick timing;
 - committed-intent semantics and Utility selection remain unchanged;
-- autonomous wakeups are tied to owned terminal outcomes rather than elapsed polling intervals;
+- autonomous continuations are tied to owned terminal outcomes rather than elapsed polling intervals;
 - MoveTo remains a generic movement mechanic and does not know about Cow, Agent, Hunger or Thirst;
 - the same pattern can later support other long-running mechanics when they expose explicit terminal lifecycle contracts.
 
