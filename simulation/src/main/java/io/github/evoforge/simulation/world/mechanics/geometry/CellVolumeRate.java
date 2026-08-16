@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.mechanics.geometry;
 
+import java.math.BigInteger;
+
 /**
  * Exact non-negative rational rate measured in {@link CellVolume} units per simulation tick.
  *
@@ -73,6 +75,54 @@ public record CellVolumeRate(
         return new CellVolumeRate(
                 Math.multiplyExact(reducedUnits, reducedEvents),
                 reducedTicks);
+    }
+
+    /**
+     * Returns the exact discrete volume assigned to one positive absolute simulation tick.
+     *
+     * <p>The progression is analytically anchored at tick zero:
+     *
+     * <pre>
+     * due(t) = floor(rate * t) - floor(rate * (t - 1))
+     * </pre>
+     *
+     * Therefore summing ticks {@code 1..T} always yields
+     * {@code floor(volumeUnitsNumerator * T / tickDenominator)} without storing fractional carry.
+     */
+    public long volumeDueAtTick(long tick) {
+        if (tick <= 0L) {
+            throw new IllegalArgumentException("tick must be positive");
+        }
+
+        long wholeUnits = volumeUnitsNumerator / tickDenominator;
+        long fractionalUnits = volumeUnitsNumerator % tickDenominator;
+        if (fractionalUnits == 0L) {
+            return wholeUnits;
+        }
+
+        long phase = Math.floorMod(tick - 1L, tickDenominator);
+        long residue = productModulo(
+                phase,
+                fractionalUnits,
+                tickDenominator);
+        long carryThreshold = tickDenominator - fractionalUnits;
+        return residue >= carryThreshold
+                ? Math.addExact(wholeUnits, 1L)
+                : wholeUnits;
+    }
+
+    private static long productModulo(
+            long first,
+            long second,
+            long modulus) {
+        try {
+            return Math.multiplyExact(first, second) % modulus;
+        } catch (ArithmeticException overflow) {
+            return BigInteger.valueOf(first)
+                    .multiply(BigInteger.valueOf(second))
+                    .mod(BigInteger.valueOf(modulus))
+                    .longValueExact();
+        }
     }
 
     private static long greatestCommonDivisor(long first, long second) {
