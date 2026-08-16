@@ -31,22 +31,6 @@ public final class BoundProcessScheduler
     }
 
     @Override
-    public void scheduleAt(
-            long tick,
-            long processId) {
-
-        if (tick < time.tick()) {
-            throw new IllegalArgumentException(
-                    "tick must not be before current simulation time");
-        }
-
-        scheduler.schedule(
-                tick,
-                handlerId,
-                processId);
-    }
-
-    @Override
     public void scheduleAfter(
             long delayTicks,
             long processId) {
@@ -68,8 +52,9 @@ public final class BoundProcessScheduler
                     exception);
         }
 
-        scheduleAt(
+        scheduler.schedule(
                 when,
+                handlerId,
                 processId);
     }
 }
