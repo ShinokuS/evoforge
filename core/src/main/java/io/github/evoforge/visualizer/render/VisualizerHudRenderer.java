@@ -426,7 +426,7 @@ public final class VisualizerHudRenderer {
 
         String motivation = currentMotivation(search, decision);
         if (intent != null) {
-            String target = intent.targetId() == null ? null : objectLabel(intent.targetId());
+            String target = targetLabel(intent.targetKey());
             rows.add(text("Activity", readableActivity(intent, search, motivation, target)));
             if (target != null) rows.add(text("Target", target));
             if (intent.phase() == AgentIntentPhase.USING_OPPORTUNITY
@@ -511,7 +511,8 @@ public final class VisualizerHudRenderer {
         if (vision != null) {
             rows.add(text("Vision", "range " + vision.range()
                     + " - FOV " + vision.horizontalFovDegrees()
-                    + " deg - objects " + vision.objects().size()));
+                    + " deg - cells " + vision.cells().size()
+                    + " - objects " + vision.objects().size()));
         }
 
         AgentSearchTrace search = view.searches().currentSearch(objectId);
@@ -524,8 +525,8 @@ public final class VisualizerHudRenderer {
             rows.add(text("Decision", "t" + decision.tick() + " - candidates " + decision.candidates().size()));
             AgentCandidateTrace selected = decision.selected();
             if (selected != null) {
-                rows.add(text("Winner", objectLabel(selected.sourceId())
-                        + " - score " + selected.score()
+                rows.add(text("Winner", targetLabel(selected.targetKey())
+                        + " - utility " + selected.utility()
                         + " - benefit " + selected.expectedBenefit()));
             }
         }
@@ -573,6 +574,30 @@ public final class VisualizerHudRenderer {
             return decision.selected().motivation();
         }
         return null;
+    }
+
+    private String targetLabel(String targetKey) {
+        if (targetKey == null || targetKey.isBlank()) return null;
+        if (targetKey.startsWith("object:")) {
+            try {
+                long value = Long.parseLong(targetKey.substring("object:".length()));
+                ObjectId objectId = ObjectId.of(
+                        (int) (value & 0xFFFF_FFFFL),
+                        (int) (value >>> 32));
+                return objectLabel(objectId);
+            } catch (IllegalArgumentException ignored) {
+                return targetKey;
+            }
+        }
+        if (targetKey.startsWith("liquid:")) {
+            int at = targetKey.indexOf('@');
+            int hash = targetKey.lastIndexOf('#');
+            if (at >= 0 && hash > at) {
+                return "Water " + targetKey.substring(at + 1, hash);
+            }
+            return "Water";
+        }
+        return targetKey;
     }
 
     private String objectLabel(ObjectId objectId) {
