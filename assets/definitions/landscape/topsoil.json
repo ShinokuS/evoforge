@@ -1,0 +1,12 @@
+{
+    "key": "core:topsoil",
+    "aspects": {
+        "traversal": {
+            "cost": 1050
+        },
+        "soil": {
+            "capacity": 550000,
+            "permeability": 100000
+        }
+    }
+}
