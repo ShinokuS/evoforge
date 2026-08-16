@@ -27,11 +27,12 @@ final class LivingCowScenarioTest {
                         session.runtime().view().objects().get(meadowCow).definitionId()).family());
         assertEquals(0, session.runtime().view().needs().level(meadowCow, LivingCowScenario.HUNGER));
         assertEquals(0, session.runtime().view().needs().level(meadowCow, LivingCowScenario.THIRST));
-        assertEquals(WeatherPresentationKind.RAIN, session.weather().current().kind());
+        assertEquals(WeatherPresentationKind.CLEAR, session.weather().current().kind());
         int initialLakeWater = session.runtime().view().water().amount(
                 LivingCowScenario.LAKE_MIN_X, 0, LivingCowScenario.LAKE_WATER_Z);
         assertTrue(initialLakeWater > 0);
 
+        boolean sawFirstRainWindow = false;
         boolean sawSameLevelPuddleDrink = false;
         boolean sawLowerLakeDrink = false;
         boolean sawGrazing = false;
@@ -57,10 +58,13 @@ final class LivingCowScenarioTest {
             }
 
             long currentTick = session.runtime().time().tick();
-            if (currentTick == LivingCowScenario.RAIN_ACTIVE_TICKS) {
+            if (currentTick == 1L) {
+                sawFirstRainWindow = session.weather().current().kind() == WeatherPresentationKind.RAIN;
+            }
+            if (currentTick == LivingCowScenario.RAIN_ACTIVE_TICKS + 1L) {
                 sawDryWeather = session.weather().current().kind() == WeatherPresentationKind.CLEAR;
             }
-            if (currentTick == LivingCowScenario.CLIMATE_CYCLE_TICKS) {
+            if (currentTick == LivingCowScenario.CLIMATE_CYCLE_TICKS + 1L) {
                 sawSecondRainWindow = session.weather().current().kind() == WeatherPresentationKind.RAIN;
             }
         }
@@ -70,6 +74,7 @@ final class LivingCowScenarioTest {
         assertTrue(sawSameLevelPuddleDrink, "a Cow must use a rain-created same-level puddle");
         assertTrue(sawLowerLakeDrink, "a Cow must drink the lower edge lake from shoreline level");
         assertTrue(sawGrazing, "the same autonomous layer must also keep using plant opportunities");
+        assertTrue(sawFirstRainWindow, "the first climate window must visibly rain");
         assertTrue(sawDryWeather, "rain must end after the active window");
         assertTrue(sawSecondRainWindow, "the climate must return to rain on the next cycle");
         assertTrue(session.runtime().view().water().amount(
