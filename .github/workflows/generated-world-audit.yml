@@ -8,6 +8,11 @@ on:
         required: true
         default: '500'
         type: string
+      side:
+        description: 'Square audit world side length (8..128)'
+        required: true
+        default: '32'
+        type: string
   pull_request:
     paths:
       - '.github/workflows/generated-world-audit.yml'
@@ -44,24 +49,35 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Resolve audit horizon
-        id: horizon
+      - name: Resolve audit workload
+        id: workload
         env:
           REQUESTED_TICKS: ${{ inputs.ticks }}
+          REQUESTED_SIDE: ${{ inputs.side }}
         run: |
           ticks="$REQUESTED_TICKS"
+          side="$REQUESTED_SIDE"
           if [ -z "$ticks" ]; then
             ticks=100
+          fi
+          if [ -z "$side" ]; then
+            side=32
           fi
           if ! [[ "$ticks" =~ ^[0-9]+$ ]] || [ "$ticks" -lt 4 ]; then
             echo "ticks must be an integer >= 4, got: $ticks" >&2
             exit 1
           fi
+          if ! [[ "$side" =~ ^[0-9]+$ ]] || [ "$side" -lt 8 ] || [ "$side" -gt 128 ]; then
+            echo "side must be an integer between 8 and 128, got: $side" >&2
+            exit 1
+          fi
           echo "ticks=$ticks" >> "$GITHUB_OUTPUT"
+          echo "side=$side" >> "$GITHUB_OUTPUT"
 
       - name: Run generated world audit
         run: >-
           ./gradlew :simulation:generatedWorldAudit
           --no-daemon
           --console=plain
-          -Devoforge.generated.audit.ticks=${{ steps.horizon.outputs.ticks }}
+          -Devoforge.generated.audit.ticks=${{ steps.workload.outputs.ticks }}
+          -Devoforge.generated.audit.side=${{ steps.workload.outputs.side }}

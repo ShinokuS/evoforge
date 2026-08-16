@@ -18,7 +18,16 @@ final class GeneratedWorldWarmupFixture {
     static GeneratedWorldRuntime create(
             long seed,
             HydroClimateSpec climate) {
-        WorldBounds bounds = bounds();
+        return create(seed, climate, bounds());
+    }
+
+    static GeneratedWorldRuntime create(
+            long seed,
+            HydroClimateSpec climate,
+            WorldBounds bounds) {
+        if (bounds == null) {
+            throw new IllegalArgumentException("bounds must not be null");
+        }
         WorldGenesis genesis = WorldGenesis.current(
                 new WorldSpec(bounds, climate),
                 seed);

@@ -56,6 +56,8 @@ tasks.register('generatedWorldAudit', Test) {
 
     systemProperty 'evoforge.generated.audit.ticks',
             System.getProperty('evoforge.generated.audit.ticks', '100')
+    systemProperty 'evoforge.generated.audit.side',
+            System.getProperty('evoforge.generated.audit.side', '32')
 
     testLogging {
         events "passed", "skipped", "failed"
