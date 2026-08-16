@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.materialization;
 
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.landscape.LandscapeMutations;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
@@ -18,17 +19,20 @@ public final class WorldTerrainMaterializer {
 
     private final ElevationField elevation;
     private final TerrainMaterialResolver materials;
+    private final DefinitionCatalog<LandscapeDefinitionId> definitions;
     private final TerrainExtentLookup terrainExtents;
     private final LandscapeMutations landscape;
 
     public WorldTerrainMaterializer(
             ElevationField elevation,
             TerrainMaterialResolver materials,
+            DefinitionCatalog<LandscapeDefinitionId> definitions,
             TerrainExtentLookup terrainExtents,
             LandscapeMutations landscape) {
 
         if (elevation == null
                 || materials == null
+                || definitions == null
                 || terrainExtents == null
                 || landscape == null) {
             throw new IllegalArgumentException(
@@ -37,6 +41,7 @@ public final class WorldTerrainMaterializer {
 
         this.elevation = elevation;
         this.materials = materials;
+        this.definitions = definitions;
         this.terrainExtents = terrainExtents;
         this.landscape = landscape;
     }
@@ -52,7 +57,7 @@ public final class WorldTerrainMaterializer {
         }
 
         WorldBounds bounds = elevation.bounds();
-        validateSurfaceHeights(bounds);
+        preflight(bounds);
 
         long columns = 0L;
         long terrainCells = 0L;
@@ -67,11 +72,6 @@ public final class WorldTerrainMaterializer {
                     int worldZ = (int) z;
                     LandscapeDefinitionId material =
                             materials.materialAt(worldX, worldY, worldZ);
-                    if (material == null) {
-                        throw new IllegalStateException(
-                                "terrain material resolver returned null at "
-                                        + coordinate(worldX, worldY, worldZ));
-                    }
 
                     TerrainPlacementResult result = landscape.placeTerrain(
                             worldX,
@@ -94,7 +94,7 @@ public final class WorldTerrainMaterializer {
         return new TerrainMaterializationResult(columns, terrainCells);
     }
 
-    private void validateSurfaceHeights(WorldBounds bounds) {
+    private void preflight(WorldBounds bounds) {
         for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
             int worldX = (int) x;
             for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
@@ -104,6 +104,23 @@ public final class WorldTerrainMaterializer {
                     throw new IllegalStateException(
                             "elevation surface outside world bounds at "
                                     + coordinate(worldX, worldY, surfaceZ));
+                }
+
+                for (long z = bounds.minZ(); z <= (long) surfaceZ; z++) {
+                    int worldZ = (int) z;
+                    LandscapeDefinitionId material =
+                            materials.materialAt(worldX, worldY, worldZ);
+                    if (material == null) {
+                        throw new IllegalStateException(
+                                "terrain material resolver returned null at "
+                                        + coordinate(worldX, worldY, worldZ));
+                    }
+                    if (!definitions.contains(material)) {
+                        throw new IllegalStateException(
+                                "terrain material resolver returned unknown definition at "
+                                        + coordinate(worldX, worldY, worldZ)
+                                        + ": " + material);
+                    }
                 }
             }
         }
