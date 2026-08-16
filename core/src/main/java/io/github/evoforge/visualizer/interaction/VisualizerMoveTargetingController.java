@@ -65,7 +65,6 @@ final class VisualizerMoveTargetingController {
         if (!state.moveTargeting()) return false;
         state.cancelMoveTargeting();
         clearPreviewSearch();
-        state.clearMoveTargetPreview();
         return true;
     }
 
