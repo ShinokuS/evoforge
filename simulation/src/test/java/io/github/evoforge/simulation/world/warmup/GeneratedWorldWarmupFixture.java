@@ -83,7 +83,7 @@ final class GeneratedWorldWarmupFixture {
         bindings = bindings.withMaterials(geologyBindings);
 
         return new GeneratedWorldBootstrap(
-                new WorldAtlasGenerator(new GeologyGenerationStage(geologyProfile)))
+                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)))
                 .create(genesis, assembly, terrainProfile, bindings);
     }
 
