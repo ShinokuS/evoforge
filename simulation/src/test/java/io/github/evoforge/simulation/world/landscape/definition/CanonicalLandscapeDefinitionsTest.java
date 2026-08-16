@@ -22,8 +22,7 @@ final class CanonicalLandscapeDefinitionsTest {
     @Test
     void canonicalMaterialsLoadThroughGenericDefinitionPipeline() {
         SoilPropertiesDefinitions soil = new SoilPropertiesDefinitions();
-        LandscapeTraversalDefinitions traversal =
-                new LandscapeTraversalDefinitions();
+        LandscapeTraversalDefinitions traversal = new LandscapeTraversalDefinitions();
 
         DefinitionRegistry<LandscapeDefinitionId> definitions =
                 new LandscapeDefinitionBootstrap(
@@ -53,9 +52,10 @@ final class CanonicalLandscapeDefinitionsTest {
                 1_300,
                 new SoilProperties(350_000, 250_000));
 
-        LandscapeDefinitionId granite = definitions.resolve("core:granite");
-        assertEquals(SurfaceTraversalCost.neutral(), traversal.cost(granite));
-        assertFalse(soil.has(granite));
+        assertBedrock(definitions, soil, traversal, "core:granite");
+        assertBedrock(definitions, soil, traversal, "core:basalt");
+        assertBedrock(definitions, soil, traversal, "core:limestone");
+        assertBedrock(definitions, soil, traversal, "core:shale");
 
         assertTrue(definitions.isFrozen());
         assertTrue(soil.isFrozen());
@@ -69,28 +69,28 @@ final class CanonicalLandscapeDefinitionsTest {
             String key,
             long traversalCost,
             SoilProperties expectedSoil) {
-
         LandscapeDefinitionId id = definitions.resolve(key);
-
-        assertEquals(
-                SurfaceTraversalCost.of(traversalCost),
-                traversal.cost(id));
+        assertEquals(SurfaceTraversalCost.of(traversalCost), traversal.cost(id));
         assertEquals(expectedSoil, soil.get(id));
+    }
+
+    private static void assertBedrock(
+            DefinitionRegistry<LandscapeDefinitionId> definitions,
+            SoilPropertiesDefinitions soil,
+            LandscapeTraversalDefinitions traversal,
+            String key) {
+        LandscapeDefinitionId id = definitions.resolve(key);
+        assertEquals(SurfaceTraversalCost.neutral(), traversal.cost(id));
+        assertFalse(soil.has(id));
     }
 
     private static Path canonicalLandscapeDirectory() {
         Path current = Path.of("").toAbsolutePath();
-
         while (current != null) {
-            Path candidate = current.resolve(
-                    "assets/definitions/landscape");
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
+            Path candidate = current.resolve("assets/definitions/landscape");
+            if (Files.isDirectory(candidate)) return candidate;
             current = current.getParent();
         }
-
-        throw new IllegalStateException(
-                "canonical landscape definition directory not found");
+        throw new IllegalStateException("canonical landscape definition directory not found");
     }
 }
