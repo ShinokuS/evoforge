@@ -18,6 +18,7 @@ import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDe
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityTarget;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseActionId;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseCompletion;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseLifecycle;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseResult;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseStartAttempt;
 import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
@@ -28,9 +29,7 @@ import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Object-backed need opportunities plus knowledge-gated search and provider-owned use timing. */
 public final class NeedSatisfactionOpportunityProvider implements AgentOpportunityProvider {
@@ -47,11 +46,8 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     private final NeedSystem needs;
     private final ConsumableStockSystem stocks;
     private final SimulationTime time;
-    private final Map<ObjectId, ActiveUse> activeByAgent = new HashMap<>();
-    private final Map<Long, ActiveUse> activeByProcess = new HashMap<>();
-    private final Map<ObjectId, OpportunityUseCompletion> lastCompletionByAgent = new HashMap<>();
-    private ProcessScheduler scheduler;
-    private long nextUseId;
+    private final OpportunityUseLifecycle<ActiveUse> useLifecycle =
+            new OpportunityUseLifecycle<>("need-satisfaction", "opportunity use id space exhausted");
 
     public NeedSatisfactionOpportunityProvider(
             ObjectLookup objects,
@@ -79,17 +75,12 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
-        if (scheduler == null) throw new IllegalArgumentException("scheduler must not be null");
-        if (this.scheduler != null) throw new IllegalStateException("need-satisfaction scheduler is already bound");
-        this.scheduler = scheduler;
+        useLifecycle.bindScheduler(scheduler);
     }
 
     /** Completes one previously scheduled use lifecycle. */
     public void resume(long processId) {
-        ActiveUse active = activeByProcess.remove(processId);
-        if (active == null) throw new IllegalStateException("unknown need-satisfaction use process: " + processId);
-        activeByAgent.remove(active.agentId, active);
-        complete(active);
+        complete(useLifecycle.resume(processId));
     }
 
     @Override
@@ -152,12 +143,11 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         if (!(target instanceof ObjectTarget objectTarget) || site == null) {
             return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
         }
-        if (activeByAgent.containsKey(agentId) || !atSite(agentId, site)) {
+        if (useLifecycle.isActive(agentId) || !atSite(agentId, site)) {
             return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
         }
         Selection selection = select(agentId, objectTarget.sourceId, true);
         if (selection == null) return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
-        if (nextUseId == Long.MAX_VALUE) throw new IllegalStateException("opportunity use id space exhausted");
 
         long startedTick = time.tick();
         long expectedCompletionTick;
@@ -166,7 +156,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         } catch (ArithmeticException exception) {
             throw new IllegalStateException("opportunity use completion tick overflow", exception);
         }
-        OpportunityUseActionId actionId = new OpportunityUseActionId(nextUseId++);
+        OpportunityUseActionId actionId = useLifecycle.nextActionId();
         ActiveUse active = new ActiveUse(
                 actionId,
                 agentId,
@@ -180,10 +170,11 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         if (selection.satisfaction.useDurationTicks() == 0L) {
             complete(active);
         } else {
-            requireScheduler();
-            activeByAgent.put(agentId, active);
-            activeByProcess.put(actionId.value(), active);
-            scheduler.scheduleAfter(selection.satisfaction.useDurationTicks(), actionId.value());
+            useLifecycle.schedule(
+                    agentId,
+                    actionId,
+                    selection.satisfaction.useDurationTicks(),
+                    active);
         }
         return new OpportunityUseStartAttempt(
                 true,
@@ -195,17 +186,17 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
 
     @Override
     public boolean isUseActive(ObjectId agentId) {
-        return agentId != null && activeByAgent.containsKey(agentId);
+        return useLifecycle.isActive(agentId);
     }
 
     @Override
     public OpportunityUseCompletion lastUseCompletion(ObjectId agentId) {
-        return agentId == null ? null : lastCompletionByAgent.get(agentId);
+        return useLifecycle.lastCompletion(agentId);
     }
 
     private void complete(ActiveUse active) {
         OpportunityUseResult result = apply(active.agentId, active.sourceId, active.satisfaction, active.site);
-        lastCompletionByAgent.put(
+        useLifecycle.recordCompletion(
                 active.agentId,
                 new OpportunityUseCompletion(
                         active.actionId,
@@ -313,10 +304,6 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
                     "need satisfaction consumes stock but source has no consumable stock: " + sourceId);
         }
         return stocks.quantity(sourceId) >= satisfaction.consumedQuantity();
-    }
-
-    private void requireScheduler() {
-        if (scheduler == null) throw new IllegalStateException("need-satisfaction scheduler is not bound");
     }
 
     private record Selection(
