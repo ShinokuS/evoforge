@@ -51,7 +51,7 @@ public final class WaterRenderer {
                 view.water(),
                 view.geometry());
         opticalDepth = new WaterOpticalDepthResolver(view);
-        motionResolver = new WaterMotionResolver(view.waterFlow());
+        motionResolver = new WaterMotionResolver(view.waterFlow(), view.water());
     }
 
     /** Draws Water visible from the open-world surface projection. */
