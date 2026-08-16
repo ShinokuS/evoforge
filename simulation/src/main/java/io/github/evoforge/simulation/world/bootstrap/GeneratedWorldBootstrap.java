@@ -9,21 +9,21 @@ import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindin
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainPalette;
 
 /**
  * One-shot production composition path from immutable genesis provenance into a started runtime.
  *
  * <p>Content composition stays explicit: callers prepare the {@link SimulationAssembly} with the
- * definitions/mechanics their content pack supplies. A palette path provides semantic generated
- * material keys plus explicit runtime bindings; specialized callers may still provide a raw
- * resolver. This bootstrap owns neither content selection nor runtime world state.</p>
+ * definitions/mechanics their content pack supplies. A compiled terrain profile provides validated
+ * reusable process composition and semantic material identities; explicit runtime bindings map
+ * those identities into Landscape ids at materialization. Specialized callers may still provide a
+ * raw resolver. This bootstrap owns neither authored-data parsing nor runtime world state.</p>
  */
 public final class GeneratedWorldBootstrap {
-
     private final WorldAtlasGenerator atlasGenerator;
     private final TerrainMaterialGenerator terrainMaterialGenerator;
 
@@ -46,19 +46,13 @@ public final class GeneratedWorldBootstrap {
         this.terrainMaterialGenerator = terrainMaterialGenerator;
     }
 
-    /**
-     * Production palette path: causal Atlas facts derive semantic material strata, then explicit
-     * content bindings resolve those keys into runtime Landscape ids at materialization.
-     */
+    /** Production path from compiled terrain semantics into authoritative runtime Landscape. */
     public GeneratedWorldRuntime create(
             WorldGenesis genesis,
             SimulationAssembly assembly,
-            TerrainPalette palette,
+            CompiledTerrainProfile profile,
             TerrainMaterialBindings bindings) {
-        if (genesis == null
-                || assembly == null
-                || palette == null
-                || bindings == null) {
+        if (genesis == null || assembly == null || profile == null || bindings == null) {
             throw new IllegalArgumentException(
                     "generated world bootstrap dependencies must not be null");
         }
@@ -67,7 +61,7 @@ public final class GeneratedWorldBootstrap {
         TerrainMaterialField materials = terrainMaterialGenerator.generate(
                 atlas.elevation(),
                 atlas.drainage(),
-                palette);
+                profile);
         return start(
                 atlas,
                 assembly,
@@ -84,10 +78,7 @@ public final class GeneratedWorldBootstrap {
                     "generated world bootstrap dependencies must not be null");
         }
 
-        return start(
-                atlasGenerator.generate(genesis),
-                assembly,
-                materials);
+        return start(atlasGenerator.generate(genesis), assembly, materials);
     }
 
     private GeneratedWorldRuntime start(
@@ -100,16 +91,12 @@ public final class GeneratedWorldBootstrap {
                 bounds.minY(), bounds.maxY(),
                 bounds.minZ(), bounds.maxZ());
 
-        TerrainMaterializationResult materialization =
-                assembly.materializeGeneratedTerrain(
-                        atlas.elevation(),
-                        materials);
+        TerrainMaterializationResult materialization = assembly.materializeGeneratedTerrain(
+                atlas.elevation(),
+                materials);
         assembly.generatedHydroClimate(atlas.hydroClimate());
 
         SimulationRuntime runtime = assembly.start();
-        return new GeneratedWorldRuntime(
-                atlas,
-                materialization,
-                runtime);
+        return new GeneratedWorldRuntime(atlas, materialization, runtime);
     }
 }
