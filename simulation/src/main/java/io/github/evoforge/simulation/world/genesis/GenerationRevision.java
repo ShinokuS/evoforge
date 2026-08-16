@@ -4,6 +4,7 @@ package io.github.evoforge.simulation.world.genesis;
 public record GenerationRevision(String value) {
     public static final GenerationRevision V1 = new GenerationRevision("evoforge:worldgen-v1");
     public static final GenerationRevision V2 = new GenerationRevision("evoforge:worldgen-v2");
+    public static final GenerationRevision V3 = new GenerationRevision("evoforge:worldgen-v3");
 
     public GenerationRevision {
         value = GenesisKeyFormat.requireKey(value, "generation revision");
