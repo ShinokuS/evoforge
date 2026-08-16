@@ -56,6 +56,7 @@ final class GeneratedTerrainProfileBootstrapTest {
         TerrainMaterialField expected = new TerrainMaterialGenerationStage().generate(
                 world.atlas().elevation(),
                 world.atlas().drainage(),
+                world.atlas().surfaceHydrology(),
                 profile);
         Set<LandscapeDefinitionId> observed = new HashSet<>();
 
