@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.warmup;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -27,12 +28,8 @@ final class GeneratedWorldAuditProfileTest {
 
     @Test
     void printsRepresentativeGeneratedWorldCheckpoints() {
-        long endTick = Long.getLong(
-                "evoforge.generated.audit.ticks",
-                100L);
-        int side = Integer.getInteger(
-                "evoforge.generated.audit.side",
-                32);
+        long endTick = Long.getLong("evoforge.generated.audit.ticks", 100L);
+        int side = Integer.getInteger("evoforge.generated.audit.side", 32);
         if (endTick < 4L) {
             throw new IllegalArgumentException(
                     "evoforge.generated.audit.ticks must be >= 4");
@@ -42,12 +39,7 @@ final class GeneratedWorldAuditProfileTest {
                     "evoforge.generated.audit.side must be between 8 and 128");
         }
 
-        long[] checkpoints = {
-                0L,
-                endTick / 4L,
-                endTick / 2L,
-                endTick
-        };
+        long[] checkpoints = {0L, endTick / 4L, endTick / 2L, endTick};
         WorldBounds bounds = representativeBounds(side);
 
         for (long seed : SEEDS) {
@@ -59,13 +51,40 @@ final class GeneratedWorldAuditProfileTest {
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
+                GeneratedWorldDiagnostics initial = trace.get(0);
+                assertTrue(initial.generatedInitialWaterVolume() > 0L);
+                assertTrue(initial.generatedInitialWaterColumns() > 0);
+                assertTrue(initial.generatedShorelineColumns() > 0);
+                assertEquals(
+                        initial.generatedInitialWaterVolume(),
+                        initial.totalWaterVolume());
+
                 for (GeneratedWorldDiagnostics snapshot : trace) {
                     assertTrue(snapshot.surfaceMatchesAtlas());
+                    assertEquals(
+                            initial.generatedInitialWaterVolume(),
+                            snapshot.generatedInitialWaterVolume());
+                    assertEquals(
+                            initial.generatedInitialWaterColumns(),
+                            snapshot.generatedInitialWaterColumns());
+                    assertEquals(
+                            initial.generatedShorelineColumns(),
+                            snapshot.generatedShorelineColumns());
                     System.out.println(
                             "scenario=" + profile.name()
                                     + " side=" + side
                                     + " "
                                     + GeneratedWorldDiagnosticsFormat.line(snapshot));
+                }
+
+                GeneratedWorldDiagnostics end = trace.get(trace.size() - 1);
+                if (profile.hasAtmosphericSupply()) {
+                    assertTrue(end.totalWaterVolume() > initial.totalWaterVolume());
+                    assertTrue(end.retainedWaterVolume() > 0L);
+                } else {
+                    assertTrue(trace.stream().allMatch(snapshot ->
+                            snapshot.totalWaterVolume() == initial.totalWaterVolume()));
+                    assertTrue(end.retainedWaterVolume() > 0L);
                 }
             }
         }
@@ -81,17 +100,20 @@ final class GeneratedWorldAuditProfileTest {
         return List.of(
                 new AuditProfile(
                         "unforced",
-                        HydroClimateSpec.UNFORCED),
+                        HydroClimateSpec.UNFORCED,
+                        false),
                 new AuditProfile(
                         "fractional-net-supply",
                         HydroClimateSpec.of(
                                 CellVolumeRate.of(100_001L, 3L),
-                                CellVolumeRate.of(20_003L, 4L))));
+                                CellVolumeRate.of(20_003L, 4L)),
+                        true));
     }
 
     /** Developer audit inputs, not a user-facing climate preset contract. */
     private record AuditProfile(
             String name,
-            HydroClimateSpec climate) {
+            HydroClimateSpec climate,
+            boolean hasAtmosphericSupply) {
     }
 }
