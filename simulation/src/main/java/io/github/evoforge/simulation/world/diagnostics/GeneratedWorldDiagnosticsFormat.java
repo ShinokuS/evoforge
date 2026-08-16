@@ -3,8 +3,7 @@ package io.github.evoforge.simulation.world.diagnostics;
 /** Canonical compact text representation for explicit generated-world audit checkpoints. */
 public final class GeneratedWorldDiagnosticsFormat {
 
-    private GeneratedWorldDiagnosticsFormat() {
-    }
+    private GeneratedWorldDiagnosticsFormat() { }
 
     public static String line(GeneratedWorldDiagnostics diagnostics) {
         if (diagnostics == null) {
@@ -22,6 +21,8 @@ public final class GeneratedWorldDiagnosticsFormat {
                 + " surfaceMismatches=" + diagnostics.surfaceMismatches()
                 + " surfaceZMin=" + diagnostics.minimumSurfaceZ()
                 + " surfaceZMax=" + diagnostics.maximumSurfaceZ()
+                + " geologyProvinces=" + diagnostics.geologyProvinces()
+                + " geologyUnits=" + diagnostics.geologyUnits()
                 + " terminalBasins=" + diagnostics.terminalBasins()
                 + " maxContributingArea=" + diagnostics.maximumContributingArea()
                 + " generatedInitialWater=" + diagnostics.generatedInitialWaterVolume()
