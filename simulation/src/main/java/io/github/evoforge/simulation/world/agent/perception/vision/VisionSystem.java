@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.agent.perception.vision;
 
+import io.github.evoforge.simulation.world.agent.perception.PerceivedCell;
 import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionLookup;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
@@ -43,11 +44,19 @@ public final class VisionSystem implements VisionLookup, PerceptionLookup {
     public PerceptionSnapshot perceive(ObjectId observerId) {
         VisionSnapshot vision = snapshot(observerId);
         if (vision == null) return PerceptionSnapshot.empty(observerId);
-        List<PerceivedObject> perceived = new ArrayList<>(vision.objects().size());
-        for (VisibleObject object : vision.objects()) {
-            perceived.add(new PerceivedObject(object.objectId(), object.x(), object.y(), object.z(), object.distance()));
+        List<PerceivedCell> perceivedCells = new ArrayList<>(vision.cells().size());
+        for (VisibleCell cell : vision.cells()) {
+            int distance = Math.max(
+                    Math.max(Math.abs(cell.x() - vision.originX()), Math.abs(cell.y() - vision.originY())),
+                    Math.abs(cell.z() - vision.originZ()));
+            perceivedCells.add(new PerceivedCell(cell.x(), cell.y(), cell.z(), distance));
         }
-        return new PerceptionSnapshot(observerId, perceived);
+        List<PerceivedObject> perceivedObjects = new ArrayList<>(vision.objects().size());
+        for (VisibleObject object : vision.objects()) {
+            perceivedObjects.add(new PerceivedObject(
+                    object.objectId(), object.x(), object.y(), object.z(), object.distance()));
+        }
+        return new PerceptionSnapshot(observerId, perceivedCells, perceivedObjects);
     }
 
     @Override
