@@ -106,6 +106,7 @@ import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
 import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.mechanics.traversal.MoverDestinationAccessResolver;
 import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalQueryConstraintProvider;
 import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
@@ -746,6 +747,9 @@ public final class SimulationAssembly {
                 movement,
                 new MoverTraversalQueryConstraintProvider(waterWading));
         movementCompletions.bind(moveTo);
+        MoverDestinationAccessResolver destinationAccess = new MoverDestinationAccessResolver(
+                navigation.lookup(),
+                waterWading);
 
         NeedSystem needs = new NeedSystem(objects, needDefinitions);
         ConsumableStockReductionRelay stockReductions = new ConsumableStockReductionRelay();
@@ -855,6 +859,7 @@ public final class SimulationAssembly {
                 List.copyOf(opportunityProviders),
                 moveTo,
                 moveTo,
+                destinationAccess,
                 vision,
                 searches,
                 searchLocomotion,
