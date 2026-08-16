@@ -31,8 +31,9 @@ public final class WorldAtlasGenerator {
                 new HydroClimateGenerationStage());
     }
 
-    public WorldAtlasGenerator(GeologyGenerator geologyGenerator) {
-        this(
+    /** Named injection seam avoids ambiguity with the legacy single-lambda elevation constructor. */
+    public static WorldAtlasGenerator withGeology(GeologyGenerator geologyGenerator) {
+        return new WorldAtlasGenerator(
                 new ElevationGenerationStage(),
                 geologyGenerator,
                 new DrainageGenerationStage(),
