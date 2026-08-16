@@ -3,8 +3,6 @@ package io.github.evoforge.simulation.world.geology;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.atlas.ElevationGenerationStage;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
@@ -20,8 +18,7 @@ final class GeologyGenerationStageTest {
     void v4GeneratesMultipleCoherentProvincesAndUnits() {
         WorldBounds bounds = new WorldBounds(-24, 24, -24, 24, -12, 12);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 42L);
-        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
-        GeologyField geology = new GeologyGenerationStage().generate(genesis, elevation);
+        GeologyField geology = new GeologyGenerationStage().generate(genesis);
         Set<Long> provinces = new HashSet<>();
         Set<GeologyUnitKey> units = new HashSet<>();
 
@@ -43,10 +40,9 @@ final class GeologyGenerationStageTest {
     void identicalGenesisReplaysEveryGeologyFactExactly() {
         WorldBounds bounds = new WorldBounds(-10, 10, -9, 11, -8, 8);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 991L);
-        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
         GeologyGenerationStage stage = new GeologyGenerationStage();
-        GeologyField first = stage.generate(genesis, elevation);
-        GeologyField replay = stage.generate(genesis, elevation);
+        GeologyField first = stage.generate(genesis);
+        GeologyField replay = stage.generate(genesis);
 
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -65,12 +61,8 @@ final class GeologyGenerationStageTest {
         WorldGenesis leftGenesis = WorldGenesis.current(new WorldSpec(leftBounds), 55L);
         WorldGenesis rightGenesis = WorldGenesis.current(new WorldSpec(rightBounds), 55L);
         GeologyGenerationStage stage = new GeologyGenerationStage();
-        GeologyField left = stage.generate(
-                leftGenesis,
-                new ElevationGenerationStage().generate(leftGenesis));
-        GeologyField right = stage.generate(
-                rightGenesis,
-                new ElevationGenerationStage().generate(rightGenesis));
+        GeologyField left = stage.generate(leftGenesis);
+        GeologyField right = stage.generate(rightGenesis);
 
         for (int y = -10; y <= 10; y++) {
             for (int x = 0; x <= 10; x++) {
@@ -90,9 +82,7 @@ final class GeologyGenerationStageTest {
                 7L,
                 GenerationRevision.V3,
                 RngRevision.V1);
-        GeologyField geology = new GeologyGenerationStage().generate(
-                genesis,
-                new ElevationGenerationStage().generate(genesis));
+        GeologyField geology = new GeologyGenerationStage().generate(genesis);
 
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -116,9 +106,8 @@ final class GeologyGenerationStageTest {
                                 unit(GeologyProfiles.BASALT))));
         WorldBounds bounds = new WorldBounds(-8, 8, -8, 8, -8, 8);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 123L);
-        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
-        GeologyField first = new GeologyGenerationStage(firstProfile).generate(genesis, elevation);
-        GeologyField second = new GeologyGenerationStage(secondProfile).generate(genesis, elevation);
+        GeologyField first = new GeologyGenerationStage(firstProfile).generate(genesis);
+        GeologyField second = new GeologyGenerationStage(secondProfile).generate(genesis);
 
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
