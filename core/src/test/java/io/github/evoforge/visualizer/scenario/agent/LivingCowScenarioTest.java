@@ -18,7 +18,8 @@ final class LivingCowScenarioTest {
     void scenarioCombinesSparseRainPuddlesEdgeLakeAndAutonomousNeeds() {
         ScenarioSession session = new LivingCowScenario().create();
         ObjectId meadowCow = session.runtime().view().cells().objectAt(0, 0, LivingCowScenario.STANDING_Z, 0);
-        ObjectId lakeCow = session.runtime().view().cells().objectAt(12, 0, LivingCowScenario.STANDING_Z, 0);
+        ObjectId lakeCow = session.runtime().view().cells().objectAt(
+                LivingCowScenario.LAKE_COW_START_X, 0, LivingCowScenario.STANDING_Z, 0);
         assertNotNull(meadowCow);
         assertNotNull(lakeCow);
         assertEquals(
