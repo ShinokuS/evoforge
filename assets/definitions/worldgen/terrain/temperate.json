@@ -4,10 +4,5 @@
         "core:natural_ground",
         "core:depositional_sand"
     ],
-    "materials": {
-        "topsoil": "core:topsoil",
-        "soil": "core:soil",
-        "sand": "core:sand",
-        "rock": "core:granite"
-    }
+    "materialSet": "core:temperate_ground"
 }
