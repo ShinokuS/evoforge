@@ -7,7 +7,7 @@ import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Current v1 elevation algorithm: deterministic smooth surface elevation. */
+/** Deterministic smooth elevation with legacy v1 and precise v2 output semantics. */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
 
@@ -21,33 +21,42 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         if (genesis == null) {
             throw new IllegalArgumentException("genesis must not be null");
         }
-        if (!GenerationRevision.V1.equals(genesis.generationRevision())) {
+        GenerationRevision revision = genesis.generationRevision();
+        if (!GenerationRevision.V1.equals(revision)
+                && !GenerationRevision.V2.equals(revision)) {
             throw new IllegalArgumentException(
-                    "unsupported generation revision: " + genesis.generationRevision().value());
+                    "unsupported generation revision: " + revision.value());
         }
 
         WorldBounds bounds = genesis.spec().bounds();
-        int[] elevations = new int[DenseElevationField.cellCount(bounds)];
+        long[] elevations = new long[DenseElevationField.cellCount(bounds)];
         GenerationRandom random = GenerationRandom.from(genesis);
         long width = (long) bounds.maxX() - bounds.minX() + 1L;
         long height = (long) bounds.maxY() - bounds.minY() + 1L;
+        boolean precise = GenerationRevision.V2.equals(revision);
 
         int index = 0;
         for (long localY = 0; localY < height; localY++) {
             int y = (int) ((long) bounds.minY() + localY);
             for (long localX = 0; localX < width; localX++) {
                 int x = (int) ((long) bounds.minX() + localX);
-                elevations[index++] = elevationAt(random, bounds, x, y);
+                elevations[index++] = elevationSubunitsAt(
+                        random,
+                        bounds,
+                        x,
+                        y,
+                        precise);
             }
         }
         return new DenseElevationField(bounds, elevations);
     }
 
-    private static int elevationAt(
+    private static long elevationSubunitsAt(
             GenerationRandom random,
             WorldBounds bounds,
             int x,
-            int y) {
+            int y,
+            boolean precise) {
         int coarse = valueNoise(random, COARSE, x, y, 32);
         int medium = valueNoise(random, MEDIUM, x, y, 16);
         int detail = valueNoise(random, DETAIL, x, y, 8);
@@ -57,7 +66,21 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         long surfaceMin = (long) bounds.minZ() + verticalSpan / 4L;
         long surfaceMax = (long) bounds.minZ() + (verticalSpan * 3L) / 4L;
         long surfaceSpan = surfaceMax - surfaceMin;
-        return (int) (surfaceMin + ((long) normalized * surfaceSpan) / SAMPLE_MAX);
+        long numerator = (long) normalized * surfaceSpan;
+        long wholeCells = numerator / SAMPLE_MAX;
+        long discreteElevation = surfaceMin + wholeCells;
+        long discreteSubunits = Math.multiplyExact(
+                discreteElevation,
+                ElevationField.SUBUNITS_PER_CELL);
+
+        if (!precise) {
+            return discreteSubunits;
+        }
+
+        long remainder = numerator % SAMPLE_MAX;
+        long fractionalSubunits = (remainder * ElevationField.SUBUNITS_PER_CELL)
+                / SAMPLE_MAX;
+        return Math.addExact(discreteSubunits, fractionalSubunits);
     }
 
     private static int valueNoise(

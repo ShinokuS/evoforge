@@ -19,7 +19,7 @@ ElevationGenerator
     generate(WorldGenesis) -> ElevationField
 ```
 
-`ElevationGenerationStage` is the current v1 implementation. `WorldAtlasGenerator` composes an `ElevationGenerator`; its default composition selects the current implementation, while alternate implementations may be injected without changing Atlas consumers.
+`ElevationGenerationStage` is the default implementation and interprets the supported `GenerationRevision` carried by `WorldGenesis`. `WorldAtlasGenerator` composes an `ElevationGenerator`; its default composition selects that implementation, while alternate implementations may be injected without changing Atlas consumers.
 
 Future layers follow the same rule when their real dependencies are known. A drainage algorithm, for example, should consume the exact upstream facts it requires and return a `DrainageField`; it should not receive a universal mutable `WorldGeneratorContext` merely for convenience.
 
@@ -34,6 +34,7 @@ Generated fact contracts remain independent from algorithm contracts. Downstream
 - generation algorithms can be replaced, decorated, compared or tested in isolation;
 - orchestration remains small as the pipeline grows;
 - downstream stages depend on semantic facts instead of concrete generators;
+- one implementation may preserve several historical generation revisions when their compatibility behavior remains executable;
 - new algorithms do not require central `instanceof`, enum switches or edits to unrelated stages;
 - validators can remain outside algorithms and continue protecting layer invariants;
 - plugin registries or discovery mechanisms are added only if real runtime/configuration selection requires them;
