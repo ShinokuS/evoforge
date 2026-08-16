@@ -524,7 +524,7 @@ public final class SimulationAssembly {
             InteractionReachProfile reach) {
         requireNotStarted();
         requireObjectDefinition(definitionId);
-        if (liquidType == null || !liquidTransportDefinitions.has(type)) {
+        if (liquidType == null || !liquidTransportDefinitions.has(liquidType)) {
             throw new IllegalArgumentException(
                     "drinkable liquid must have transport properties: " + liquidType);
         }
