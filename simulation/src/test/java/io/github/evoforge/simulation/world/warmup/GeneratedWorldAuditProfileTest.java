@@ -18,21 +18,14 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 @Tag("generated-world-audit")
 final class GeneratedWorldAuditProfileTest {
 
-    private static final long[] SEEDS = {
-            0L,
-            1L,
-            42L,
-            991L,
-            123_456_789L
-    };
+    private static final long[] SEEDS = {0L, 1L, 42L, 991L, 123_456_789L};
 
     @Test
     void printsRepresentativeGeneratedWorldCheckpoints() {
         long endTick = Long.getLong("evoforge.generated.audit.ticks", 100L);
         int side = Integer.getInteger("evoforge.generated.audit.side", 32);
         if (endTick < 4L) {
-            throw new IllegalArgumentException(
-                    "evoforge.generated.audit.ticks must be >= 4");
+            throw new IllegalArgumentException("evoforge.generated.audit.ticks must be >= 4");
         }
         if (side < 8 || side > 128) {
             throw new IllegalArgumentException(
@@ -52,15 +45,17 @@ final class GeneratedWorldAuditProfileTest {
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
                 GeneratedWorldDiagnostics initial = trace.get(0);
+                assertTrue(initial.geologyProvinces() >= 1);
+                assertTrue(initial.geologyUnits() > 1, "V4 geology collapsed to one unit");
                 assertTrue(initial.generatedInitialWaterVolume() > 0L);
                 assertTrue(initial.generatedInitialWaterColumns() > 0);
                 assertTrue(initial.generatedShorelineColumns() > 0);
-                assertEquals(
-                        initial.generatedInitialWaterVolume(),
-                        initial.totalWaterVolume());
+                assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
 
                 for (GeneratedWorldDiagnostics snapshot : trace) {
                     assertTrue(snapshot.surfaceMatchesAtlas());
+                    assertEquals(initial.geologyProvinces(), snapshot.geologyProvinces());
+                    assertEquals(initial.geologyUnits(), snapshot.geologyUnits());
                     assertEquals(
                             initial.generatedInitialWaterVolume(),
                             snapshot.generatedInitialWaterVolume());
@@ -98,10 +93,7 @@ final class GeneratedWorldAuditProfileTest {
 
     private static List<AuditProfile> profiles() {
         return List.of(
-                new AuditProfile(
-                        "unforced",
-                        HydroClimateSpec.UNFORCED,
-                        false),
+                new AuditProfile("unforced", HydroClimateSpec.UNFORCED, false),
                 new AuditProfile(
                         "fractional-net-supply",
                         HydroClimateSpec.of(
@@ -114,6 +106,5 @@ final class GeneratedWorldAuditProfileTest {
     private record AuditProfile(
             String name,
             HydroClimateSpec climate,
-            boolean hasAtmosphericSupply) {
-    }
+            boolean hasAtmosphericSupply) { }
 }
