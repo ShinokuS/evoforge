@@ -22,6 +22,7 @@ import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToLookup;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToStartAttempt;
 import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
+import io.github.evoforge.simulation.world.mechanics.traversal.MoverDestinationAccessResolver;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
@@ -60,6 +61,7 @@ public final class AgentSystem implements AgentDecisionLookup {
     private final List<AgentOpportunityProvider> providers;
     private final MoveToSystem moveTo;
     private final MoveToLookup moveToLookup;
+    private final MoverDestinationAccessResolver destinationAccess;
     private final PerceptionLookup perception;
     private final AgentSearchSystem search;
     private final RelativeSearchLocomotion searchLocomotion;
@@ -77,13 +79,14 @@ public final class AgentSystem implements AgentDecisionLookup {
             List<AgentOpportunityProvider> providers,
             MoveToSystem moveTo,
             MoveToLookup moveToLookup,
+            MoverDestinationAccessResolver destinationAccess,
             PerceptionLookup perception,
             AgentSearchSystem search,
             RelativeSearchLocomotion searchLocomotion,
             SimulationTime time) {
         if (objects == null || transforms == null || definitions == null || providers == null
-                || moveTo == null || moveToLookup == null || perception == null || search == null
-                || searchLocomotion == null || time == null) {
+                || moveTo == null || moveToLookup == null || destinationAccess == null
+                || perception == null || search == null || searchLocomotion == null || time == null) {
             throw new IllegalArgumentException("agent system dependencies must not be null");
         }
         this.objects = objects;
@@ -92,6 +95,7 @@ public final class AgentSystem implements AgentDecisionLookup {
         this.providers = validateProviders(providers);
         this.moveTo = moveTo;
         this.moveToLookup = moveToLookup;
+        this.destinationAccess = destinationAccess;
         this.perception = perception;
         this.search = search;
         this.searchLocomotion = searchLocomotion;
@@ -200,10 +204,11 @@ public final class AgentSystem implements AgentDecisionLookup {
 
         Candidate selected = null;
         for (Candidate candidate : candidates) {
-            if (!active.rejectedOpportunities.contains(RejectedOpportunity.from(candidate))) {
-                selected = candidate;
-                break;
-            }
+            if (active.rejectedMovementSites.contains(MovementSite.from(candidate))) continue;
+            if (active.rejectedOpportunities.contains(RejectedOpportunity.from(candidate))) continue;
+            if (!isLocallyEnterable(active.objectId, candidate.opportunity.site())) continue;
+            selected = candidate;
+            break;
         }
         lastDecisionByObject.put(
                 active.objectId,
@@ -228,9 +233,11 @@ public final class AgentSystem implements AgentDecisionLookup {
                         + active.objectId);
             }
             if (!completion.reachedGoal()) {
-                rememberRejected(
+                rememberMovementFailure(
                         active,
-                        RejectedOpportunity.from(selected),
+                        selected.providerIndex,
+                        selected.opportunity.target(),
+                        site,
                         "move_to",
                         completion.code().value());
                 scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
@@ -246,6 +253,15 @@ public final class AgentSystem implements AgentDecisionLookup {
                 attempt.actionId(),
                 time.tick());
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
+    }
+
+    private boolean isLocallyEnterable(ObjectId objectId, InteractionSite site) {
+        if (transforms.x(objectId) == site.x()
+                && transforms.y(objectId) == site.y()
+                && transforms.z(objectId) == site.z()) {
+            return true;
+        }
+        return destinationAccess.canEnter(objectId, site.x(), site.y(), site.z());
     }
 
     private void continueSearchOrIdle(ActiveAgent active) {
@@ -383,9 +399,11 @@ public final class AgentSystem implements AgentDecisionLookup {
             throw new IllegalStateException("autonomous MoveTo completion was lost: " + active.objectId);
         }
         if (!completion.reachedGoal()) {
-            rememberRejected(
+            rememberMovementFailure(
                     active,
-                    RejectedOpportunity.from(intent),
+                    intent.providerIndex,
+                    intent.target,
+                    intent.site,
                     "move_to",
                     completion.code().value());
             active.opportunityIntent = null;
@@ -434,6 +452,19 @@ public final class AgentSystem implements AgentDecisionLookup {
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
     }
 
+    private void rememberMovementFailure(
+            ActiveAgent active,
+            int providerIndex,
+            OpportunityTarget target,
+            InteractionSite site,
+            String stage,
+            String code) {
+        refreshRejectedContext(active);
+        if (!active.rejectedMovementSites.add(MovementSite.from(site))) return;
+        logFailure(active, providerIndex, target, site, stage, code,
+                "Autonomous movement site failed and was quarantined for the current local context");
+    }
+
     private void rememberRejected(
             ActiveAgent active,
             RejectedOpportunity rejected,
@@ -441,18 +472,36 @@ public final class AgentSystem implements AgentDecisionLookup {
             String code) {
         refreshRejectedContext(active);
         if (!active.rejectedOpportunities.add(rejected)) return;
+        logFailure(
+                active,
+                rejected.providerIndex,
+                rejected.target,
+                rejected.site,
+                stage,
+                code,
+                "Autonomous opportunity failed and was quarantined for the current local context");
+    }
+
+    private void logFailure(
+            ActiveAgent active,
+            int providerIndex,
+            OpportunityTarget target,
+            InteractionSite site,
+            String stage,
+            String code,
+            String message) {
         LOGGER.atDebug()
                 .addKeyValue("event", "agent.opportunity_failed")
                 .addKeyValue("tick", time.tick())
                 .addKeyValue("objectId", active.objectId.asLong())
-                .addKeyValue("provider", providers.get(rejected.providerIndex).id())
-                .addKeyValue("target", rejected.target.debugKey())
-                .addKeyValue("siteX", rejected.site.x())
-                .addKeyValue("siteY", rejected.site.y())
-                .addKeyValue("siteZ", rejected.site.z())
+                .addKeyValue("provider", providers.get(providerIndex).id())
+                .addKeyValue("target", target.debugKey())
+                .addKeyValue("siteX", site.x())
+                .addKeyValue("siteY", site.y())
+                .addKeyValue("siteZ", site.z())
                 .addKeyValue("stage", stage)
                 .addKeyValue("code", code)
-                .log("Autonomous opportunity failed and was quarantined for the current local context");
+                .log(message);
     }
 
     private void refreshRejectedContext(ActiveAgent active) {
@@ -461,11 +510,13 @@ public final class AgentSystem implements AgentDecisionLookup {
                 transforms.y(active.objectId),
                 transforms.z(active.objectId));
         if (current.equals(active.rejectionContext)) return;
+        active.rejectedMovementSites.clear();
         active.rejectedOpportunities.clear();
         active.rejectionContext = current;
     }
 
     private static void clearRejectedOpportunities(ActiveAgent active) {
+        active.rejectedMovementSites.clear();
         active.rejectedOpportunities.clear();
         active.rejectionContext = null;
     }
@@ -504,6 +555,16 @@ public final class AgentSystem implements AgentDecisionLookup {
 
     private record SearchCandidate(int providerIndex, OpportunitySearchDemand demand) { }
 
+    private record MovementSite(int x, int y, int z) {
+        private static MovementSite from(Candidate candidate) {
+            return from(candidate.opportunity.site());
+        }
+
+        private static MovementSite from(InteractionSite site) {
+            return new MovementSite(site.x(), site.y(), site.z());
+        }
+    }
+
     private record RejectedOpportunity(
             int providerIndex,
             OpportunityTarget target,
@@ -525,6 +586,7 @@ public final class AgentSystem implements AgentDecisionLookup {
     private static final class ActiveAgent {
         private final long processId;
         private final ObjectId objectId;
+        private final Set<MovementSite> rejectedMovementSites = new HashSet<>();
         private final Set<RejectedOpportunity> rejectedOpportunities = new HashSet<>();
         private ActiveOpportunityIntent opportunityIntent;
         private ActiveSearchRelocation searchRelocation;
