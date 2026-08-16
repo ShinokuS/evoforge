@@ -5,17 +5,23 @@ import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.agent.AgentDefinition;
 import io.github.evoforge.simulation.world.agent.AgentDefinitions;
+import io.github.evoforge.simulation.world.agent.decision.UtilityMath;
 import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitions;
 import io.github.evoforge.simulation.world.agent.need.NeedId;
 import io.github.evoforge.simulation.world.agent.need.NeedSystem;
 import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
+import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunity;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
+import io.github.evoforge.simulation.world.agent.opportunity.InteractionSite;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityEvaluation;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDemand;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityTarget;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseActionId;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseCompletion;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseResult;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseStartAttempt;
+import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
+import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
@@ -26,9 +32,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Mechanic-owned need opportunities plus knowledge-gated search and provider-owned use timing. */
+/** Object-backed need opportunities plus knowledge-gated search and provider-owned use timing. */
 public final class NeedSatisfactionOpportunityProvider implements AgentOpportunityProvider {
-    private static final long DISTANCE_SCALE = 1024L;
     private static final ResultCode STARTED = ResultCode.of("needs", "satisfaction_started");
     private static final ResultCode USED = ResultCode.of("needs", "satisfied");
     private static final ResultCode UNAVAILABLE = ResultCode.of("needs", "opportunity_unavailable");
@@ -91,6 +96,22 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     public String id() { return "needs:satisfaction"; }
 
     @Override
+    public List<AgentOpportunity> opportunities(ObjectId agentId, PerceptionSnapshot perception) {
+        if (perception == null || !agentId.equals(perception.observerId())) {
+            throw new IllegalArgumentException("perception must belong to the evaluated agent");
+        }
+        List<AgentOpportunity> result = new ArrayList<>();
+        for (PerceivedObject perceived : perception.objects()) {
+            ObjectTarget target = new ObjectTarget(perceived.objectId());
+            InteractionSite site = new InteractionSite(
+                    perceived.x(), perceived.y(), perceived.z(), perceived.distance());
+            OpportunityEvaluation evaluation = evaluate(agentId, target, site);
+            if (evaluation != null) result.add(new AgentOpportunity(target, site, evaluation));
+        }
+        return List.copyOf(result);
+    }
+
+    @Override
     public List<OpportunitySearchDemand> searchDemands(ObjectId agentId) {
         WorldObject agentObject = objects.get(agentId);
         if (agentObject == null || !agents.has(agentObject.definitionId())) return List.of();
@@ -101,36 +122,40 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
             if (!motivated(agentObject, needId, level)
                     || !knowledge.knows(agentObject.definitionId(), needId)) continue;
             long max = needs.maxLevel(agentId, needId);
-            long urgency;
-            try {
-                urgency = Math.max(1L, Math.multiplyExact(level, 1024L) / Math.max(1L, max));
-            } catch (ArithmeticException exception) {
-                throw new IllegalStateException("search urgency overflow", exception);
-            }
+            long urgency = UtilityMath.ratio(level, Math.max(1L, max));
             result.add(new OpportunitySearchDemand(needId.value(), urgency));
         }
         return List.copyOf(result);
     }
 
     @Override
-    public OpportunityEvaluation evaluate(ObjectId agentId, ObjectId sourceId, int distance) {
-        if (distance < 0) throw new IllegalArgumentException("distance must be >= 0");
-        Selection selection = select(agentId, sourceId, false);
+    public OpportunityEvaluation evaluate(
+            ObjectId agentId,
+            OpportunityTarget target,
+            InteractionSite site) {
+        if (!(target instanceof ObjectTarget objectTarget) || site == null) return null;
+        Selection selection = select(agentId, objectTarget.sourceId, false);
         if (selection == null) return null;
-        long scaled;
-        try {
-            scaled = Math.multiplyExact(selection.benefit, DISTANCE_SCALE);
-        } catch (ArithmeticException exception) {
-            throw new IllegalStateException("opportunity score overflow", exception);
-        }
-        long score = Math.max(1L, scaled / ((long) distance + 1L));
-        return new OpportunityEvaluation(score, selection.benefit, selection.satisfaction.needId().value());
+        return new OpportunityEvaluation(
+                selection.benefit,
+                UtilityMath.ratio(selection.level, selection.maxLevel),
+                UtilityMath.ratio(selection.benefit, selection.level),
+                UtilityMath.travelFromDistance(site.distance()),
+                selection.satisfaction.needId().value());
     }
 
     @Override
-    public OpportunityUseStartAttempt startUse(ObjectId agentId, ObjectId sourceId) {
-        if (activeByAgent.containsKey(agentId)) return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
-        Selection selection = select(agentId, sourceId, true);
+    public OpportunityUseStartAttempt startUse(
+            ObjectId agentId,
+            OpportunityTarget target,
+            InteractionSite site) {
+        if (!(target instanceof ObjectTarget objectTarget) || site == null) {
+            return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
+        }
+        if (activeByAgent.containsKey(agentId) || !atSite(agentId, site)) {
+            return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
+        }
+        Selection selection = select(agentId, objectTarget.sourceId, true);
         if (selection == null) return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
         if (nextUseId == Long.MAX_VALUE) throw new IllegalStateException("opportunity use id space exhausted");
 
@@ -145,7 +170,9 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         ActiveUse active = new ActiveUse(
                 actionId,
                 agentId,
-                sourceId,
+                target,
+                site,
+                objectTarget.sourceId,
                 selection.satisfaction,
                 startedTick,
                 expectedCompletionTick);
@@ -177,20 +204,25 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     }
 
     private void complete(ActiveUse active) {
-        OpportunityUseResult result = apply(active.agentId, active.sourceId, active.satisfaction);
+        OpportunityUseResult result = apply(active.agentId, active.sourceId, active.satisfaction, active.site);
         lastCompletionByAgent.put(
                 active.agentId,
                 new OpportunityUseCompletion(
                         active.actionId,
                         active.agentId,
-                        active.sourceId,
+                        active.target,
+                        active.site,
                         active.startedTick,
                         time.tick(),
                         result));
     }
 
-    private OpportunityUseResult apply(ObjectId agentId, ObjectId sourceId, NeedSatisfaction satisfaction) {
-        if (!eligible(agentId, sourceId, satisfaction, true)) {
+    private OpportunityUseResult apply(
+            ObjectId agentId,
+            ObjectId sourceId,
+            NeedSatisfaction satisfaction,
+            InteractionSite site) {
+        if (!atSite(agentId, site) || !eligible(agentId, sourceId, satisfaction, true)) {
             return new OpportunityUseResult(false, UNAVAILABLE);
         }
         if (satisfaction.consumesStock() && !stocks.consume(sourceId, satisfaction.consumedQuantity())) {
@@ -213,6 +245,8 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         AgentDefinition agent = agents.get(agentObject.definitionId());
         NeedSatisfaction best = null;
         long bestBenefit = 0L;
+        long bestLevel = 0L;
+        long bestMax = 0L;
         for (int index = 0; index < definitions.count(sourceObject.definitionId()); index++) {
             NeedSatisfaction satisfaction = definitions.satisfactionAt(sourceObject.definitionId(), index);
             if (satisfaction.requiredCapability() != null
@@ -226,9 +260,13 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
                     && satisfaction.needId().compareTo(best.needId()) < 0)) {
                 best = satisfaction;
                 bestBenefit = benefit;
+                bestLevel = level;
+                bestMax = needs.maxLevel(agentId, satisfaction.needId());
             }
         }
-        return best == null || bestBenefit <= 0L ? null : new Selection(best, bestBenefit);
+        return best == null || bestBenefit <= 0L
+                ? null
+                : new Selection(best, bestBenefit, bestLevel, bestMax);
     }
 
     private boolean motivated(WorldObject agentObject, NeedId needId, long level) {
@@ -254,6 +292,13 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         return stockAvailable(sourceId, satisfaction);
     }
 
+    private boolean atSite(ObjectId agentId, InteractionSite site) {
+        return transforms.has(agentId)
+                && transforms.x(agentId) == site.x()
+                && transforms.y(agentId) == site.y()
+                && transforms.z(agentId) == site.z();
+    }
+
     private boolean coLocated(ObjectId agentId, ObjectId sourceId) {
         return transforms.has(agentId) && transforms.has(sourceId)
                 && transforms.x(agentId) == transforms.x(sourceId)
@@ -274,11 +319,28 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         if (scheduler == null) throw new IllegalStateException("need-satisfaction scheduler is not bound");
     }
 
-    private record Selection(NeedSatisfaction satisfaction, long benefit) { }
+    private record Selection(
+            NeedSatisfaction satisfaction,
+            long benefit,
+            long level,
+            long maxLevel) { }
+
+    private record ObjectTarget(ObjectId sourceId) implements OpportunityTarget {
+        private ObjectTarget {
+            if (sourceId == null) throw new IllegalArgumentException("sourceId must not be null");
+        }
+
+        @Override
+        public String debugKey() {
+            return "object:" + sourceId.asLong();
+        }
+    }
 
     private static final class ActiveUse {
         private final OpportunityUseActionId actionId;
         private final ObjectId agentId;
+        private final OpportunityTarget target;
+        private final InteractionSite site;
         private final ObjectId sourceId;
         private final NeedSatisfaction satisfaction;
         private final long startedTick;
@@ -288,12 +350,16 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
         private ActiveUse(
                 OpportunityUseActionId actionId,
                 ObjectId agentId,
+                OpportunityTarget target,
+                InteractionSite site,
                 ObjectId sourceId,
                 NeedSatisfaction satisfaction,
                 long startedTick,
                 long expectedCompletionTick) {
             this.actionId = actionId;
             this.agentId = agentId;
+            this.target = target;
+            this.site = site;
             this.sourceId = sourceId;
             this.satisfaction = satisfaction;
             this.startedTick = startedTick;
