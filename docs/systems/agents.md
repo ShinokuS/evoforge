@@ -9,8 +9,10 @@ The current production slice demonstrates:
 ```text
 Need progression -> motivation threshold
         ↓
-3D Perception -> mechanic-owned opportunities -> common deterministic Utility
-        ↓                                      ↘ no concrete opportunity
+3D Perception -> mechanic-owned opportunities
+        ↓
+cheap execution eligibility -> common deterministic Utility
+        ↓                                      ↘ no concrete usable opportunity
 committed intent                                semantic search demand
         ↓                                            ↓
 MoveTo to explicit InteractionSite          visual sweep / relative exploration
@@ -40,8 +42,8 @@ PerceptionSnapshot
 mechanic-owned AgentOpportunityProvider(s)
    ↓
 AgentSystem
-   ├─ concrete opportunity -> MoveTo InteractionSite -> provider-owned use lifecycle
-   └─ no opportunity -> semantic search demand -> AgentSearchSystem
+   ├─ concrete opportunity -> execution eligibility -> Utility -> MoveTo InteractionSite -> provider-owned use lifecycle
+   └─ no usable opportunity -> semantic search demand -> AgentSearchSystem
 ```
 
 Need progression, Water flow, precipitation, evaporation, finite stock and Growth are independent world processes. They change authoritative state; Agent observes the resulting present-tense world through ordinary perception/decision passes.
@@ -67,6 +69,7 @@ Simulation internally uses XYZ coordinates, but cognition/search is not given an
 | object-source Need effects/use timing | `NeedSatisfactionDefinitions` + provider |
 | liquid drinking capability/use timing | `LiquidDrinkDefinitions` + provider |
 | physical interaction reach | `InteractionReachProfile` + `InteractionAccessResolver` |
+| local mover arrival eligibility | `MoverDestinationAccessResolver` |
 | source regrowth | `GrowthSystem` |
 | semantic knowledge that a Need has environmental solutions | `NeedSolutionKnowledgeDefinitions` |
 | selected autonomous intent | `AgentSystem` |
@@ -104,11 +107,12 @@ object definition
   ├─ needSolutionKnowledge
   ├─ needSatisfaction
   ├─ liquidDrink
+  ├─ movement / traversal capability
   ├─ consumableStock
   └─ growth
 ```
 
-This keeps sensing, physiology, source capability, interaction semantics and regrowth independently extensible.
+This keeps sensing, physiology, locomotion, source capability, interaction semantics and regrowth independently extensible.
 
 ## Needs, motivation and progression
 
@@ -145,7 +149,7 @@ Each concrete opportunity carries:
 
 ```text
 OpportunityTarget   mechanic-owned source identity
-InteractionSite     reachable standing coordinate for use
+InteractionSite     physical standing coordinate for use
 OpportunityEvaluation
 ```
 
@@ -178,6 +182,8 @@ Diagonal reach is not allowed. The standing `InteractionSite` itself must contai
 This means a Cow standing at `z=1` can drink adjacent Water at `z=0` from the shore, and can drink an adjacent rain puddle at `z=1`, without climbing above the puddle or descending into the lower Water cell merely to use it.
 
 The reach/profile boundary is generic. Future mechanics can declare different reach patterns without adding Cow- or Water-specific branches to Agent.
+
+Interaction reach is not global route proof. Before committing an opportunity, Agent also asks the generic `MoverDestinationAccessResolver` whether the non-current standing site has at least one structurally valid incoming Navigation edge allowed by the mover's current traversal policy. This is a cheap necessary condition only: it rejects a site that cannot be entered at all, but it does not claim that the site is globally reachable from the actor's present location. MoveTo/Pathfinding remains the owner of real route search and execution revalidation.
 
 ## Timed use and finite sources
 
@@ -226,7 +232,7 @@ travel
 motivation
 ```
 
-`AgentSystem` converts that evidence through the shared fixed-point `UtilityMath` and performs one deterministic ordering across all providers.
+`AgentSystem` converts that evidence through the shared fixed-point `UtilityMath` and performs one deterministic ordering across all providers. Hard execution eligibility is applied before commitment: an opportunity whose standing site is already known unusable in the current local context, or whose site has no mover-permitted incoming edge, cannot win merely because its Utility is high.
 
 Current tie-breaking is stable: Utility first, then distance, source-neutral target key, interaction-site coordinates and provider order. Hunger and Thirst therefore compete in one decision surface rather than in separate provider-specific priority systems.
 
@@ -246,9 +252,13 @@ These are lifecycle phases, not a closed action catalog. `USING_OPPORTUNITY` del
 
 Once an opportunity is committed, Agent does not rescore unrelated motivations every poll while MoveTo or provider-owned use remains active. This keeps intent stable and prevents decision ping-pong during normal execution.
 
-When a concrete opportunity fails because its route or use cannot complete, Agent drops that intent and quarantines the exact `(provider, target, site)` for the current local position context. Other perceived candidates can then be tried without falling into an A/B retry loop between several unusable higher-ranked alternatives. The quarantine is cleared when the actor changes position, completes search relocation, successfully completes use, or reaches an idle retry boundary, so transient failures do not become permanent knowledge.
+Failure scope follows the failed contract. A terminal MoveTo failure means that the physical standing site failed as a locomotion destination, so Agent quarantines that `(x,y,z)` site for the current local position context regardless of which provider/target happened to reference it. A provider-owned use failure remains exact `(provider,target,site)` state because use semantics can differ even at the same standing coordinate.
+
+The local quarantine is cleared when the actor changes position, completes search relocation, successfully completes use, or reaches an idle retry boundary. It is therefore transient execution knowledge, not permanent map memory.
 
 A MoveTo request may be accepted as an operation yet reach a terminal `NO_PATH`/edge-failure outcome synchronously during initial planning. Agent observes that terminal result before publishing a moving intent; an immediately failed route therefore does not create a one-poll phantom `MOVING_TO_OPPORTUNITY` state.
+
+There is deliberately no generic rule such as "if stationary for N ticks, move", "if Thirst is full, escape", or a Cow/lake-specific fallback. Being stationary is not itself an AI failure. Recovery is driven by semantic eligibility, execution outcomes and search demand.
 
 This is recovery, not a general interruption policy. Deliberate preemption of a still-valid committed intent by a newly urgent motivation remains future work that needs a concrete gameplay case.
 
@@ -266,7 +276,7 @@ Need changes do not currently push a special reactive wake-up into Agent. Repres
 
 The Surface inspector reads those authoritative projections. For autonomous objects it can show Needs, current lifecycle activity/target, Vision cell/object counts and the selected candidate's common Utility evidence without reconstructing decision semantics in presentation.
 
-Failed autonomous opportunities also emit sparse structured DEBUG `agent.opportunity_failed` events with the actor, provider, target, interaction site, failure stage and result code. Repeated failure of the same opportunity in one local context is coalesced by the quarantine rather than producing per-tick log spam.
+Failed autonomous opportunities emit sparse structured DEBUG `agent.opportunity_failed` events with the actor, provider, target, interaction site, failure stage and result code. Movement failures are coalesced by physical standing site within the local context, while provider-use failures retain exact opportunity scope.
 
 The integrated **Agents -> Living Cow Meadow** scenario combines:
 
@@ -284,6 +294,8 @@ multiple exclusive Cows
 ```
 
 The lake is deliberately on the map edge. Meadow terrain is mostly absorbent, while a small deterministic set of shallow low-infiltration micro-basins produces temporary puddles during the rain window. Those puddles are consequences of the same Hydrology systems, not pre-seeded visual props.
+
+The scenario Cow also declares a shallow-water `WaterWadingProfile` as locomotion capability data. That content aspect lets it traverse small rainwater depths while rejecting the deeper lake as a movement destination; drinking from shore is still provided by the independent interaction-reach mechanic. This is definition/scenario composition, not a generic Agent branch.
 
 ## Current proofs
 
@@ -308,15 +320,18 @@ Headless/scenario coverage proves, among other invariants:
 - a Cow at `z=1` can drink a cardinal same-level puddle at `z=1`;
 - diagonal and physically blocked interaction sites are rejected;
 - partial puddle consumption preserves exact Water accounting and proportional Thirst relief;
+- a locally mover-ineligible higher-ranked opportunity cannot win commitment over a usable fallback;
 - one failed/occupied opportunity does not trap the agent when another candidate exists;
 - several higher-ranked unusable opportunities cannot form a retry loop that starves a reachable fallback;
-- Living Cow Meadow does not permit a Cow to remain stationary for a prolonged window with both Hunger and Thirst at maximum;
+- movement-site failure scope is independent of which target references that standing site;
 - multiple exclusive Cows remain non-overlapping while contending for a finite source;
 - Living Cow Meadow produces sparse rain puddles, uses both puddle and lower edge-lake Water, continues grazing and returns to rain on the next climate cycle.
 
+No test defines an arbitrary maximum time that an Agent is allowed to remain stationary. Scenario acceptance is expressed through semantic world interactions and invariant outcomes instead.
+
 ## Deferred work
 
-The immediate follow-up after this vertical slice is representative-scale profiling before introducing AI/world hot-path structures.
+The immediate follow-up after this vertical slice is representative-scale profiling before introducing broader AI/world hot-path structures. The observed repeated-`NO_PATH` runtime burst justified the narrow eligibility/failure-scope correction above; it does not justify a general polling, watchdog or behavior-timeout framework.
 
 Still deferred:
 
