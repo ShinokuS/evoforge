@@ -34,6 +34,7 @@ public final class LivingCowScenario implements VisualizerScenario {
     static final int LAKE_MAX_X = 18;
     static final int LAKE_MIN_Y = -3;
     static final int LAKE_MAX_Y = 3;
+    static final int LAKE_COW_START_X = 13;
 
     static final long CLIMATE_CYCLE_TICKS = 360L;
     static final long RAIN_ACTIVE_TICKS = 120L;
@@ -140,7 +141,7 @@ public final class LivingCowScenario implements VisualizerScenario {
         ObjectId dandelionNorthEast = assembly.createObject(dandelion);
 
         assembly.placeObject(meadowCow, 0, 0, STANDING_Z);
-        assembly.placeObject(lakeCow, 12, 0, STANDING_Z);
+        assembly.placeObject(lakeCow, LAKE_COW_START_X, 0, STANDING_Z);
         assembly.placeObject(grassEast, 5, 1, STANDING_Z);
         assembly.placeObject(grassSouthEast, 10, -9, STANDING_Z);
         assembly.placeObject(cloverNorth, -3, 11, STANDING_Z);
