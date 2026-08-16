@@ -3,13 +3,15 @@ package io.github.evoforge.simulation.world.agent.decision;
 import io.github.evoforge.simulation.time.ProcessScheduler;
 import io.github.evoforge.simulation.time.SimulationTime;
 import io.github.evoforge.simulation.world.agent.AgentDefinitions;
+import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunity;
 import io.github.evoforge.simulation.world.agent.opportunity.AgentOpportunityProvider;
+import io.github.evoforge.simulation.world.agent.opportunity.InteractionSite;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityEvaluation;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDemand;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityTarget;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseActionId;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseCompletion;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseStartAttempt;
-import io.github.evoforge.simulation.world.agent.perception.PerceivedObject;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionLookup;
 import io.github.evoforge.simulation.world.agent.perception.PerceptionSnapshot;
 import io.github.evoforge.simulation.world.agent.search.AgentSearchSystem;
@@ -37,9 +39,12 @@ public final class AgentSystem implements AgentDecisionLookup {
     private static final long ACTIVE_POLL_TICKS = 1L;
     private static final long IDLE_RECHECK_TICKS = 10L;
     private static final Comparator<Candidate> CANDIDATE_ORDER =
-            Comparator.<Candidate>comparingLong(candidate -> candidate.trace.score()).reversed()
+            Comparator.<Candidate>comparingLong(candidate -> candidate.trace.utility()).reversed()
                     .thenComparingInt(candidate -> candidate.trace.distance())
-                    .thenComparingLong(candidate -> candidate.trace.sourceId().asLong())
+                    .thenComparing(candidate -> candidate.trace.targetKey())
+                    .thenComparingInt(candidate -> candidate.trace.x())
+                    .thenComparingInt(candidate -> candidate.trace.y())
+                    .thenComparingInt(candidate -> candidate.trace.z())
                     .thenComparingInt(candidate -> candidate.providerIndex);
     private static final Comparator<SearchCandidate> SEARCH_ORDER =
             Comparator.<SearchCandidate>comparingLong(candidate -> candidate.demand.urgency()).reversed()
@@ -137,9 +142,11 @@ public final class AgentSystem implements AgentDecisionLookup {
     }
 
     @Override
-    public ObjectId currentTarget(ObjectId agentId) {
+    public String currentTargetKey(ObjectId agentId) {
         ActiveAgent active = agentId == null ? null : byObjectId.get(agentId);
-        return active == null || active.opportunityIntent == null ? null : active.opportunityIntent.sourceId;
+        return active == null || active.opportunityIntent == null
+                ? null
+                : active.opportunityIntent.target.debugKey();
     }
 
     @Override
@@ -152,20 +159,23 @@ public final class AgentSystem implements AgentDecisionLookup {
                 return new AgentIntentTrace(
                         AgentIntentPhase.USING_OPPORTUNITY,
                         providers.get(intent.providerIndex).id(),
-                        intent.sourceId,
+                        intent.target.debugKey(),
+                        intent.site,
                         intent.useStartedTick,
                         intent.useExpectedCompletionTick);
             }
             return new AgentIntentTrace(
                     AgentIntentPhase.MOVING_TO_OPPORTUNITY,
                     providers.get(intent.providerIndex).id(),
-                    intent.sourceId,
+                    intent.target.debugKey(),
+                    intent.site,
                     intent.startedTick,
                     -1L);
         }
         if (active.searchRelocation != null) {
             return new AgentIntentTrace(
                     AgentIntentPhase.SEARCH_RELOCATION,
+                    null,
                     null,
                     null,
                     active.searchRelocation.startedTick,
@@ -194,18 +204,16 @@ public final class AgentSystem implements AgentDecisionLookup {
         }
 
         search.cancel(active.objectId);
-        MoveToStartAttempt attempt = moveTo.start(
-                active.objectId,
-                selected.trace.x(),
-                selected.trace.y(),
-                selected.trace.z());
+        InteractionSite site = selected.opportunity.site();
+        MoveToStartAttempt attempt = moveTo.start(active.objectId, site.x(), site.y(), site.z());
         if (!attempt.accepted()) {
             scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
             return;
         }
         active.opportunityIntent = new ActiveOpportunityIntent(
                 selected.providerIndex,
-                selected.trace.sourceId(),
+                selected.opportunity.target(),
+                site,
                 attempt.actionId(),
                 time.tick());
         scheduler.scheduleAfter(ACTIVE_POLL_TICKS, active.processId);
@@ -258,23 +266,33 @@ public final class AgentSystem implements AgentDecisionLookup {
         PerceptionSnapshot snapshot = perception.perceive(agentId);
         if (snapshot == null) throw new IllegalStateException("perception returned null snapshot: " + agentId);
         List<Candidate> result = new ArrayList<>();
-        for (PerceivedObject perceived : snapshot.objects()) {
-            for (int providerIndex = 0; providerIndex < providers.size(); providerIndex++) {
-                AgentOpportunityProvider provider = providers.get(providerIndex);
-                OpportunityEvaluation evaluation = provider.evaluate(agentId, perceived.objectId(), perceived.distance());
-                if (evaluation == null) continue;
-                result.add(new Candidate(
-                        providerIndex,
-                        new AgentCandidateTrace(
-                                provider.id(),
-                                perceived.objectId(),
-                                perceived.x(),
-                                perceived.y(),
-                                perceived.z(),
-                                perceived.distance(),
-                                evaluation.expectedBenefit(),
-                                evaluation.score(),
-                                evaluation.motivation())));
+        for (int providerIndex = 0; providerIndex < providers.size(); providerIndex++) {
+            AgentOpportunityProvider provider = providers.get(providerIndex);
+            List<AgentOpportunity> opportunities = provider.opportunities(agentId, snapshot);
+            if (opportunities == null) {
+                throw new IllegalStateException("opportunity provider returned null opportunities: " + provider.id());
+            }
+            for (AgentOpportunity opportunity : opportunities) {
+                if (opportunity == null) {
+                    throw new IllegalStateException("opportunity provider returned null opportunity: " + provider.id());
+                }
+                OpportunityEvaluation evaluation = opportunity.evaluation();
+                long utility = UtilityMath.score(evaluation);
+                InteractionSite site = opportunity.site();
+                AgentCandidateTrace trace = new AgentCandidateTrace(
+                        provider.id(),
+                        opportunity.target().debugKey(),
+                        site.x(),
+                        site.y(),
+                        site.z(),
+                        site.distance(),
+                        evaluation.expectedBenefit(),
+                        evaluation.pressure(),
+                        evaluation.relief(),
+                        evaluation.travel(),
+                        utility,
+                        evaluation.motivation());
+                result.add(new Candidate(providerIndex, opportunity, trace));
             }
         }
         return result;
@@ -290,13 +308,18 @@ public final class AgentSystem implements AgentDecisionLookup {
                 return;
             }
             OpportunityUseCompletion completion = provider.lastUseCompletion(active.objectId);
-            if (completion == null || !intent.useActionId.equals(completion.actionId())
-                    || !intent.sourceId.equals(completion.sourceId())) {
+            if (completion == null
+                    || !intent.useActionId.equals(completion.actionId())
+                    || !intent.target.equals(completion.target())
+                    || !intent.site.equals(completion.site())) {
                 throw new IllegalStateException("autonomous opportunity-use completion was lost: " + active.objectId);
             }
             if (completion.result().accepted()
-                    && provider.evaluate(active.objectId, intent.sourceId, 0) != null) {
-                OpportunityUseStartAttempt nextUse = provider.startUse(active.objectId, intent.sourceId);
+                    && provider.evaluate(active.objectId, intent.target, intent.site) != null) {
+                OpportunityUseStartAttempt nextUse = provider.startUse(
+                        active.objectId,
+                        intent.target,
+                        intent.site);
                 if (nextUse == null) {
                     throw new IllegalStateException("opportunity provider returned null continuation start attempt");
                 }
@@ -325,7 +348,10 @@ public final class AgentSystem implements AgentDecisionLookup {
             return;
         }
 
-        OpportunityUseStartAttempt use = provider.startUse(active.objectId, intent.sourceId);
+        OpportunityUseStartAttempt use = provider.startUse(
+                active.objectId,
+                intent.target,
+                intent.site);
         if (use == null) throw new IllegalStateException("opportunity provider returned null use start attempt");
         if (!use.accepted()) {
             active.opportunityIntent = null;
@@ -384,7 +410,11 @@ public final class AgentSystem implements AgentDecisionLookup {
         return copy;
     }
 
-    private record Candidate(int providerIndex, AgentCandidateTrace trace) { }
+    private record Candidate(
+            int providerIndex,
+            AgentOpportunity opportunity,
+            AgentCandidateTrace trace) { }
+
     private record SearchCandidate(int providerIndex, OpportunitySearchDemand demand) { }
 
     private static final class ActiveAgent {
@@ -401,7 +431,8 @@ public final class AgentSystem implements AgentDecisionLookup {
 
     private static final class ActiveOpportunityIntent {
         private final int providerIndex;
-        private final ObjectId sourceId;
+        private final OpportunityTarget target;
+        private final InteractionSite site;
         private final MoveToActionId moveToActionId;
         private final long startedTick;
         private OpportunityUseActionId useActionId;
@@ -410,11 +441,13 @@ public final class AgentSystem implements AgentDecisionLookup {
 
         private ActiveOpportunityIntent(
                 int providerIndex,
-                ObjectId sourceId,
+                OpportunityTarget target,
+                InteractionSite site,
                 MoveToActionId moveToActionId,
                 long startedTick) {
             this.providerIndex = providerIndex;
-            this.sourceId = sourceId;
+            this.target = target;
+            this.site = site;
             this.moveToActionId = moveToActionId;
             this.startedTick = startedTick;
         }
