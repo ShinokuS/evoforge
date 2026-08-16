@@ -15,13 +15,13 @@ Existing precipitation and evaporation schedules are operational runtime pulse t
 - precipitation supply;
 - potential evaporative demand.
 
-Both use `CellVolumeRate` (`cell-volume units / simulation tick`).
+Both use `CellVolumeRate` (`cell-volume units / simulation tick`). These rates are a normalized internal generation contract, **not a world-creation UI contract**. A player or world author should express a small number of semantic intentions such as overall wetness, stability/variability or extremity. A future balancer/calibration stage translates those human-scale controls into coherent `WorldSpec` facts and rates. Raw cell-volume rates, solver intervals and pulse sizes must not become required user tuning knobs.
 
 `WorldAtlas` owns the resulting immutable `HydroClimateField`. The first authoring algorithm is deliberately uniform: each XY column receives the requested normal unchanged. This is not a claim that climate must remain spatially uniform. It avoids inventing latitude, wind, temperature or random climate noise before those have causal models and consumers.
 
 The compatibility `WorldSpec(WorldBounds)` constructor uses `HydroClimateSpec.UNFORCED` (zero supply and zero demand). It introduces no hidden baseline climate into existing callers.
 
-Climate normals are not weather events. They do not schedule rain, remove Water or mutate Soil. A later runtime-forcing bridge may realize these normals through precipitation/evaporation processes while preserving the existing authoritative hydrology systems.
+Climate normals are not weather events. They do not schedule rain, remove Water or mutate Soil. A runtime-forcing bridge realizes these normals through precipitation/evaporation processes while preserving the existing authoritative hydrology systems.
 
 ## Consequences
 
@@ -29,6 +29,7 @@ Climate normals are not weather events. They do not schedule rain, remove Water 
 - Atlas can reason about long-term water availability without owning runtime Water;
 - no arbitrary reference period or real-world tick duration is needed;
 - old `WorldSpec(bounds)` callers remain deterministic and explicitly unforced;
+- user-facing world creation remains semantic and minimal while internal calibration may stay exact and technical;
 - spatial climate variation is deferred until a real causal input such as atmospheric circulation, temperature or another accepted model exists;
 - temperature, seasonality, wind, biome and weather anomalies remain separate future semantics.
 
@@ -37,5 +38,7 @@ Climate normals are not weather events. They do not schedule rain, remove Water 
 Random climate noise was rejected because variation without a causal model would make visual texture into simulation physics.
 
 Embedding `PrecipitationSchedule` or `EvaporationSchedule` in Atlas was rejected because schedules are runtime realization, not long-term generated facts.
+
+Exposing `HydroClimateSpec` rates as the primary generation UI was rejected because it would force users to balance simulation units instead of describing the world they want.
 
 Inferring water supply from drainage contributing area was rejected because drainage routes supplied Water; it does not create atmospheric Water.
