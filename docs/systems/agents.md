@@ -246,7 +246,9 @@ These are lifecycle phases, not a closed action catalog. `USING_OPPORTUNITY` del
 
 Once an opportunity is committed, Agent does not rescore unrelated motivations every poll while MoveTo or provider-owned use remains active. This keeps intent stable and prevents decision ping-pong during normal execution.
 
-When an opportunity fails because its route/use can no longer complete, Agent drops that intent and suppresses the exact failed `(provider, target, site)` for the next decision pass. Other currently perceived candidates can then win instead of the agent retrying one impossible favorite forever. The suppression is deliberately short-lived so a transiently blocked opportunity may be considered again later.
+When a concrete opportunity fails because its route or use cannot complete, Agent drops that intent and quarantines the exact `(provider, target, site)` for the current local position context. Other perceived candidates can then be tried without falling into an A/B retry loop between several unusable higher-ranked alternatives. The quarantine is cleared when the actor changes position, completes search relocation, successfully completes use, or reaches an idle retry boundary, so transient failures do not become permanent knowledge.
+
+A MoveTo request may be accepted as an operation yet reach a terminal `NO_PATH`/edge-failure outcome synchronously during initial planning. Agent observes that terminal result before publishing a moving intent; an immediately failed route therefore does not create a one-poll phantom `MOVING_TO_OPPORTUNITY` state.
 
 This is recovery, not a general interruption policy. Deliberate preemption of a still-valid committed intent by a newly urgent motivation remains future work that needs a concrete gameplay case.
 
@@ -263,6 +265,8 @@ Need changes do not currently push a special reactive wake-up into Agent. Repres
 `SimulationView` exposes read-only Orientation, Vision, Need, NeedProgression, ConsumableStock, Growth, Agent Decision/Search and MoveTo state. Decision/intent traces expose source-neutral target keys and explicit interaction sites.
 
 The Surface inspector reads those authoritative projections. For autonomous objects it can show Needs, current lifecycle activity/target, Vision cell/object counts and the selected candidate's common Utility evidence without reconstructing decision semantics in presentation.
+
+Failed autonomous opportunities also emit sparse structured DEBUG `agent.opportunity_failed` events with the actor, provider, target, interaction site, failure stage and result code. Repeated failure of the same opportunity in one local context is coalesced by the quarantine rather than producing per-tick log spam.
 
 The integrated **Agents -> Living Cow Meadow** scenario combines:
 
@@ -304,7 +308,9 @@ Headless/scenario coverage proves, among other invariants:
 - a Cow at `z=1` can drink a cardinal same-level puddle at `z=1`;
 - diagonal and physically blocked interaction sites are rejected;
 - partial puddle consumption preserves exact Water accounting and proportional Thirst relief;
-- failed/occupied opportunity sites do not trap the agent when another candidate exists;
+- one failed/occupied opportunity does not trap the agent when another candidate exists;
+- several higher-ranked unusable opportunities cannot form a retry loop that starves a reachable fallback;
+- Living Cow Meadow does not permit a Cow to remain stationary for a prolonged window with both Hunger and Thirst at maximum;
 - multiple exclusive Cows remain non-overlapping while contending for a finite source;
 - Living Cow Meadow produces sparse rain puddles, uses both puddle and lower edge-lake Water, continues grazing and returns to rain on the next climate cycle.
 
