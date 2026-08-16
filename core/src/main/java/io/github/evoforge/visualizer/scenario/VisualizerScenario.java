@@ -15,5 +15,8 @@ public interface VisualizerScenario {
 
     String description();
 
+    /** Whether the generic visualizer should expose player-authored Move actions. */
+    default boolean manualMovementEnabled() { return true; }
+
     ScenarioSession create();
 }
