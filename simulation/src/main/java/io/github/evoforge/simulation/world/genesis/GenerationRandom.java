@@ -5,8 +5,9 @@ import java.nio.charset.StandardCharsets;
 /**
  * Pure deterministic random sampler for world generation.
  *
- * <p>Samples are addressed by semantic stage and purpose plus an exact XYZ coordinate and ordinal.
- * Call order is not part of the random state, so unrelated generation work cannot shift existing samples.
+ * <p>Samples are addressed by semantic stage and purpose plus three stable scope coordinates and an
+ * ordinal. Direct cell-scoped generation uses global XYZ; macro stages may use their own stable
+ * lattice coordinates. Call order is not part of the random state.
  */
 public final class GenerationRandom {
     private static final long SEED_SALT = 0x243f6a8885a308d3L;
@@ -39,9 +40,9 @@ public final class GenerationRandom {
     public long sampleLong(
             GenerationStageId stage,
             GenerationPurposeId purpose,
-            int x,
-            int y,
-            int z,
+            long x,
+            long y,
+            long z,
             long ordinal) {
         if (stage == null) {
             throw new IllegalArgumentException("stage must not be null");
@@ -56,9 +57,9 @@ public final class GenerationRandom {
         long state = mix64(masterSeed ^ SEED_SALT);
         state = mix64(state ^ stableStringHash(stage.value()) ^ STAGE_SALT);
         state = mix64(state ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
-        state = mix64(state ^ (long) x ^ X_SALT);
-        state = mix64(state ^ (long) y ^ Y_SALT);
-        state = mix64(state ^ (long) z ^ Z_SALT);
+        state = mix64(state ^ x ^ X_SALT);
+        state = mix64(state ^ y ^ Y_SALT);
+        state = mix64(state ^ z ^ Z_SALT);
         return mix64(state ^ ordinal ^ ORDINAL_SALT);
     }
 
