@@ -47,7 +47,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
                 pathfinder,
                 movement,
                 MoveToQueryConstraintProvider.IDENTITY,
-                MoveToCompletionSink.IGNORE);
+                new MoveToCompletionRelay());
     }
 
     public MoveToSystem(
@@ -60,7 +60,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
                 pathfinder,
                 movement,
                 queryConstraints,
-                MoveToCompletionSink.IGNORE);
+                new MoveToCompletionRelay());
     }
 
     public MoveToSystem(
@@ -79,6 +79,14 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
         this.movement = movement;
         this.queryConstraints = queryConstraints;
         this.completionSink = completionSink;
+    }
+
+    /** Binds the autonomous completion consumer when this MoveTo uses its default bootstrap relay. */
+    public void bindCompletionSink(MoveToCompletionSink target) {
+        if (!(completionSink instanceof MoveToCompletionRelay relay)) {
+            throw new IllegalStateException("MoveTo completion sink was supplied explicitly");
+        }
+        relay.bind(target);
     }
 
     public MoveToStartAttempt start(ObjectId objectId, int goalX, int goalY, int goalZ) {
