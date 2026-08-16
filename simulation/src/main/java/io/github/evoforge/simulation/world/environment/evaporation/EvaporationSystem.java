@@ -66,44 +66,92 @@ public final class EvaporationSystem {
             return EvaporationBatchResult.empty();
         }
 
-        TreeSet<Column> columns = new TreeSet<>();
-        waterSurfaces.forEach((x, y, z) -> columns.add(new Column(x, y)));
-        retainedCells.forEach(
-                WaterSystem.TYPE,
-                (x, y, z) -> columns.add(new Column(x, y)));
+        return applyByColumn((x, y) -> amount);
+    }
 
+    /**
+     * Applies independently resolved potential evaporation demand to every currently
+     * wet state-bearing column.
+     *
+     * <p>Requests may exceed one cell volume. The existing per-column evaporation
+     * physics realizes them in bounded chunks. Once a chunk cannot be fulfilled,
+     * the column is exhausted for this instant and the unresolved tail is accounted
+     * as unfulfilled without synthetic extra work.
+     */
+    public EvaporationBatchResult applyByColumn(
+            EvaporationDemandLookup demands) {
+        if (demands == null) {
+            throw new IllegalArgumentException("demands must not be null");
+        }
+
+        TreeSet<Column> columns = wetColumns();
         if (columns.isEmpty()) {
             return EvaporationBatchResult.empty();
         }
 
+        int appliedColumns = 0;
         long requested = 0L;
         long waterRemoved = 0L;
         long retainedWaterRemoved = 0L;
         long unfulfilled = 0L;
 
         for (Column column : columns) {
-            EvaporationResult result = applyColumn(
-                    column.x(),
-                    column.y(),
-                    amount);
-            requested = Math.addExact(requested, result.requested());
-            waterRemoved = Math.addExact(
-                    waterRemoved,
-                    result.surfaceWaterRemoved());
-            retainedWaterRemoved = Math.addExact(
-                    retainedWaterRemoved,
-                    result.retainedWaterRemoved());
-            unfulfilled = Math.addExact(
-                    unfulfilled,
-                    result.unfulfilled());
+            long remaining = demands.amountAt(column.x(), column.y());
+            if (remaining < 0L) {
+                throw new IllegalArgumentException(
+                        "evaporation demand must be non-negative");
+            }
+            if (remaining == 0L) {
+                continue;
+            }
+
+            appliedColumns = Math.incrementExact(appliedColumns);
+            while (remaining > 0L) {
+                int chunk = (int) Math.min(
+                        remaining,
+                        (long) CellVolume.FULL);
+                EvaporationResult result = applyColumn(
+                        column.x(),
+                        column.y(),
+                        chunk);
+
+                requested = Math.addExact(requested, result.requested());
+                waterRemoved = Math.addExact(
+                        waterRemoved,
+                        result.surfaceWaterRemoved());
+                retainedWaterRemoved = Math.addExact(
+                        retainedWaterRemoved,
+                        result.retainedWaterRemoved());
+                unfulfilled = Math.addExact(
+                        unfulfilled,
+                        result.unfulfilled());
+                remaining -= chunk;
+
+                if (result.unfulfilled() > CellVolume.EMPTY) {
+                    requested = Math.addExact(requested, remaining);
+                    unfulfilled = Math.addExact(unfulfilled, remaining);
+                    break;
+                }
+            }
         }
 
-        return new EvaporationBatchResult(
-                columns.size(),
-                requested,
-                waterRemoved,
-                retainedWaterRemoved,
-                unfulfilled);
+        return appliedColumns == 0
+                ? EvaporationBatchResult.empty()
+                : new EvaporationBatchResult(
+                        appliedColumns,
+                        requested,
+                        waterRemoved,
+                        retainedWaterRemoved,
+                        unfulfilled);
+    }
+
+    private TreeSet<Column> wetColumns() {
+        TreeSet<Column> columns = new TreeSet<>();
+        waterSurfaces.forEach((x, y, z) -> columns.add(new Column(x, y)));
+        retainedCells.forEach(
+                WaterSystem.TYPE,
+                (x, y, z) -> columns.add(new Column(x, y)));
+        return columns;
     }
 
     private EvaporationResult applyColumn(
