@@ -51,6 +51,7 @@ final class GeneratedTerrainMaterialAuditProfileTest {
             TerrainMaterialField materials = new TerrainMaterialGenerationStage().generate(
                     atlas.elevation(),
                     atlas.drainage(),
+                    atlas.surfaceHydrology(),
                     profile);
             GeneratedTerrainMaterialDiagnostics diagnostics =
                     new GeneratedTerrainMaterialDiagnosticsProbe().snapshot(
