@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.world.terrain.generation;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /** Runtime-ready terrain generation contract after authored references and roles are validated. */
 public record CompiledTerrainProfile(
@@ -21,5 +23,11 @@ public record CompiledTerrainProfile(
             if (preset.capability() == capability) return true;
         }
         return false;
+    }
+
+    public Set<TerrainMaterialRole> requiredRoles() {
+        EnumSet<TerrainMaterialRole> result = EnumSet.noneOf(TerrainMaterialRole.class);
+        for (TerrainPreset preset : presets) result.addAll(preset.requiredRoles());
+        return Set.copyOf(result);
     }
 }
