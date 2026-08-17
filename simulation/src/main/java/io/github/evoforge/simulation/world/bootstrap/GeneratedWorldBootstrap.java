@@ -5,6 +5,7 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
+import io.github.evoforge.simulation.world.climate.ClimateHydroForcingView;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
@@ -96,7 +97,7 @@ public final class GeneratedWorldBootstrap {
                 atlas.elevation(),
                 materials);
         materializeInitialSurfaceWater(atlas, assembly);
-        assembly.generatedHydroClimate(atlas.hydroClimate());
+        assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
 
         SimulationRuntime runtime = assembly.start();
         return new GeneratedWorldRuntime(atlas, materialization, runtime);
