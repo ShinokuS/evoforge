@@ -1,5 +1,8 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
+import io.github.evoforge.simulation.world.climate.ClimateNormalsGenerationStage;
+import io.github.evoforge.simulation.world.climate.ClimateNormalsGenerator;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.geology.GeologyField;
 import io.github.evoforge.simulation.world.geology.GeologyGenerationStage;
@@ -9,26 +12,26 @@ import io.github.evoforge.simulation.world.geology.GeologyGenerator;
 public final class WorldAtlasGenerator {
     private final ElevationGenerator elevationGenerator;
     private final GeologyGenerator geologyGenerator;
+    private final ClimateNormalsGenerator climateGenerator;
     private final DrainageGenerator drainageGenerator;
     private final SurfaceHydrologyGenerator surfaceHydrologyGenerator;
-    private final HydroClimateGenerator hydroClimateGenerator;
 
     public WorldAtlasGenerator() {
         this(
                 new ElevationGenerationStage(),
                 new GeologyGenerationStage(),
+                new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
-                new SurfaceHydrologyGenerationStage(),
-                new HydroClimateGenerationStage());
+                new SurfaceHydrologyGenerationStage());
     }
 
     public WorldAtlasGenerator(ElevationGenerator elevationGenerator) {
         this(
                 elevationGenerator,
                 new GeologyGenerationStage(),
+                new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
-                new SurfaceHydrologyGenerationStage(),
-                new HydroClimateGenerationStage());
+                new SurfaceHydrologyGenerationStage());
     }
 
     /** Named injection seam avoids ambiguity with the legacy single-lambda elevation constructor. */
@@ -36,9 +39,19 @@ public final class WorldAtlasGenerator {
         return new WorldAtlasGenerator(
                 new ElevationGenerationStage(),
                 geologyGenerator,
+                new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
-                new SurfaceHydrologyGenerationStage(),
-                new HydroClimateGenerationStage());
+                new SurfaceHydrologyGenerationStage());
+    }
+
+    /** Named injection seam for custom climate generation without widening the constructor surface. */
+    public static WorldAtlasGenerator withClimate(ClimateNormalsGenerator climateGenerator) {
+        return new WorldAtlasGenerator(
+                new ElevationGenerationStage(),
+                new GeologyGenerationStage(),
+                climateGenerator,
+                new DrainageGenerationStage(),
+                new SurfaceHydrologyGenerationStage());
     }
 
     public WorldAtlasGenerator(
@@ -47,56 +60,41 @@ public final class WorldAtlasGenerator {
         this(
                 elevationGenerator,
                 new GeologyGenerationStage(),
+                new ClimateNormalsGenerationStage(),
                 drainageGenerator,
-                new SurfaceHydrologyGenerationStage(),
-                new HydroClimateGenerationStage());
+                new SurfaceHydrologyGenerationStage());
     }
 
-    /** Compatibility constructor retaining the previous three-algorithm injection surface. */
     public WorldAtlasGenerator(
             ElevationGenerator elevationGenerator,
             DrainageGenerator drainageGenerator,
-            HydroClimateGenerator hydroClimateGenerator) {
+            SurfaceHydrologyGenerator surfaceHydrologyGenerator) {
         this(
                 elevationGenerator,
                 new GeologyGenerationStage(),
+                new ClimateNormalsGenerationStage(),
                 drainageGenerator,
-                new SurfaceHydrologyGenerationStage(),
-                hydroClimateGenerator);
-    }
-
-    /** Compatibility constructor retaining the previous four-algorithm injection surface. */
-    public WorldAtlasGenerator(
-            ElevationGenerator elevationGenerator,
-            DrainageGenerator drainageGenerator,
-            SurfaceHydrologyGenerator surfaceHydrologyGenerator,
-            HydroClimateGenerator hydroClimateGenerator) {
-        this(
-                elevationGenerator,
-                new GeologyGenerationStage(),
-                drainageGenerator,
-                surfaceHydrologyGenerator,
-                hydroClimateGenerator);
+                surfaceHydrologyGenerator);
     }
 
     public WorldAtlasGenerator(
             ElevationGenerator elevationGenerator,
             GeologyGenerator geologyGenerator,
+            ClimateNormalsGenerator climateGenerator,
             DrainageGenerator drainageGenerator,
-            SurfaceHydrologyGenerator surfaceHydrologyGenerator,
-            HydroClimateGenerator hydroClimateGenerator) {
+            SurfaceHydrologyGenerator surfaceHydrologyGenerator) {
         if (elevationGenerator == null
                 || geologyGenerator == null
+                || climateGenerator == null
                 || drainageGenerator == null
-                || surfaceHydrologyGenerator == null
-                || hydroClimateGenerator == null) {
+                || surfaceHydrologyGenerator == null) {
             throw new IllegalArgumentException("WorldAtlas generators must not be null");
         }
         this.elevationGenerator = elevationGenerator;
         this.geologyGenerator = geologyGenerator;
+        this.climateGenerator = climateGenerator;
         this.drainageGenerator = drainageGenerator;
         this.surfaceHydrologyGenerator = surfaceHydrologyGenerator;
-        this.hydroClimateGenerator = hydroClimateGenerator;
     }
 
     public WorldAtlas generate(WorldGenesis genesis) {
@@ -107,6 +105,9 @@ public final class WorldAtlasGenerator {
 
         GeologyField geology = geologyGenerator.generate(genesis);
         if (geology == null) throw new IllegalStateException("geologyGenerator returned null");
+
+        ClimateNormalsField climate = climateGenerator.generate(genesis, elevation);
+        if (climate == null) throw new IllegalStateException("climateGenerator returned null");
 
         DrainageField drainage = drainageGenerator.generate(elevation);
         if (drainage == null) throw new IllegalStateException("drainageGenerator returned null");
@@ -119,15 +120,12 @@ public final class WorldAtlasGenerator {
             throw new IllegalStateException("surfaceHydrologyGenerator returned null");
         }
 
-        HydroClimateField hydroClimate = hydroClimateGenerator.generate(genesis.spec());
-        if (hydroClimate == null) throw new IllegalStateException("hydroClimateGenerator returned null");
-
         return new WorldAtlas(
                 genesis,
                 elevation,
                 geology,
+                climate,
                 drainage,
-                surfaceHydrology,
-                hydroClimate);
+                surfaceHydrology);
     }
 }
