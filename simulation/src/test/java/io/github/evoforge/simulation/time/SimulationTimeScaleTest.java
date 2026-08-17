@@ -19,6 +19,16 @@ final class SimulationTimeScaleTest {
     }
 
     @Test
+    void quantizesPositivePhysicalDurationsByCeiling() {
+        SimulationTimeScale scale = SimulationTimeScale.of(Duration.ofMillis(250L));
+
+        assertEquals(1L, scale.ticksForCeiling(BigInteger.ONE));
+        assertEquals(1L, scale.ticksForCeiling(BigInteger.valueOf(250_000_000L)));
+        assertEquals(2L, scale.ticksForCeiling(BigInteger.valueOf(250_000_001L)));
+        assertEquals(4L, scale.ticksForCeiling(BigInteger.valueOf(1_000_000_000L)));
+    }
+
+    @Test
     void exactConversionDoesNotOverflowForLargeTickCounts() {
         SimulationTimeScale scale = SimulationTimeScale.of(Duration.ofSeconds(Long.MAX_VALUE));
 
@@ -40,5 +50,9 @@ final class SimulationTimeScaleTest {
                 () -> SimulationTimeScale.of(Duration.ofNanos(-1L)));
         SimulationTimeScale scale = SimulationTimeScale.of(Duration.ofNanos(1L));
         assertThrows(IllegalArgumentException.class, () -> scale.elapsedNanoseconds(-1L));
+        assertThrows(IllegalArgumentException.class, () -> scale.ticksForCeiling(null));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> scale.ticksForCeiling(BigInteger.ZERO));
     }
 }

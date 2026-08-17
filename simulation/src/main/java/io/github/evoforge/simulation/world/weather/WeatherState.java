@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.weather;
 
 import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
+import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
 
@@ -69,6 +70,21 @@ public final class WeatherState {
             throw new IllegalArgumentException("weather cell state must not be null");
         }
         cells[indexOf(x, y)] = state;
+    }
+
+    /** Updates only current precipitation while preserving temperature and evaporation demand. */
+    public void setPrecipitationRateAt(int x, int y, WaterDepthRate precipitationRate) {
+        if (precipitationRate == null) {
+            throw new IllegalArgumentException("precipitation rate must not be null");
+        }
+        WeatherCellState current = at(x, y);
+        setAt(
+                x,
+                y,
+                new WeatherCellState(
+                        current.airTemperature(),
+                        precipitationRate,
+                        current.evaporativeDemandRate()));
     }
 
     public boolean contains(int x, int y) {
