@@ -9,7 +9,7 @@ Generation/calibration prepare immutable inputs. Runtime bootstrap consumes thos
 ## Canonical two-phase path
 
 ```text
-WorldSpec + seed
+WorldSpec + seed + WorldGenerationIntent
       ↓
 WorldGenesis
       ↓
@@ -37,6 +37,8 @@ GeneratedWorldRuntimeBootstrap
       ↓
 SimulationRuntime
 ```
+
+`WorldGenerationIntent` is immutable macro-generation intent carried by `WorldGenesis`; historical revisions that predate a given intent coordinate may deliberately ignore it. It does not survive as a mutable runtime control surface.
 
 `GeneratedWorldPreparation` has no runtime or scheduler dependency. `GeneratedWorldRuntimeBootstrap` has no generator/calibrator dependency.
 
@@ -93,7 +95,7 @@ Current weather is externally observable through read-only `WeatherLookup`; muta
 
 Changing physical rates are integrated interval-by-interval through exact rational carry. A rain event beginning late in simulation therefore cannot retroactively accumulate rainfall for earlier dry ticks.
 
-Low-level rainfall pulse parameters are not authored world intent. They are intended to be compiled from future algorithm-independent calibrated rainfall-regime data.
+Low-level rainfall pulse parameters are not authored world intent. They are intended to be compiled from algorithm-independent calibrated rainfall-regime data.
 
 ## Calibration boundary
 
@@ -113,4 +115,4 @@ Diagnostics observe the ordinary started `SimulationRuntime`. Warmup advances th
 
 A generated-world audit may compare prepared facts and runtime state, but it does not grant preparation code authority over the running world.
 
-See [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Warmup](generated-world-warmup.md), [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md), [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
+See [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Warmup](generated-world-warmup.md), [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md), [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
