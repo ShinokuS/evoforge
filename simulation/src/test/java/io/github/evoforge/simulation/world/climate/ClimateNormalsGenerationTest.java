@@ -43,7 +43,7 @@ final class ClimateNormalsGenerationTest {
     }
 
     @Test
-    void v5TemperatureUsesPreciseElevationWhileV4KeepsUniformFallback() {
+    void v5AndV6TemperatureUsePreciseElevationWhileV4KeepsUniformFallback() {
         WorldBounds bounds = new WorldBounds(0, 1, 0, 0, -10, 10);
         ClimateSpec climate = ClimateSpec.of(
                 ClimateTemperature.ofMilliCelsius(20_000),
@@ -75,12 +75,19 @@ final class ClimateNormalsGenerationTest {
                 new WorldGenesis(spec, 1L, GenerationRevision.V4, RngRevision.V1), elevation);
         ClimateNormalsField v5 = stage.generate(
                 new WorldGenesis(spec, 1L, GenerationRevision.V5, RngRevision.V1), elevation);
+        ClimateNormalsField v6 = stage.generate(
+                new WorldGenesis(spec, 1L, GenerationRevision.V6, RngRevision.V1), elevation);
 
         assertEquals(20_000, v4.meanTemperatureAt(0, 0).milliCelsius());
         assertEquals(20_000, v4.meanTemperatureAt(1, 0).milliCelsius());
         assertEquals(18_500, v5.meanTemperatureAt(0, 0).milliCelsius());
         assertEquals(16_750, v5.meanTemperatureAt(1, 0).milliCelsius());
         assertNotEquals(v5.meanTemperatureAt(0, 0), v5.meanTemperatureAt(1, 0));
+        for (int x = 0; x <= 1; x++) {
+            assertEquals(v5.meanTemperatureAt(x, 0), v6.meanTemperatureAt(x, 0));
+            assertEquals(v5.precipitationSupplyAt(x, 0), v6.precipitationSupplyAt(x, 0));
+            assertEquals(v5.evaporativeDemandAt(x, 0), v6.evaporativeDemandAt(x, 0));
+        }
     }
 
     @Test
