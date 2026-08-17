@@ -20,6 +20,7 @@ public record GeneratedWorldDiagnostics(
         int geologyUnits,
         long terminalBasins,
         long maximumContributingArea,
+        int generatedChannelColumns,
         long generatedInitialWaterVolume,
         int generatedInitialWaterColumns,
         int generatedShorelineColumns,
@@ -47,6 +48,7 @@ public record GeneratedWorldDiagnostics(
                 || geologyUnits < 0
                 || terminalBasins < 0L
                 || maximumContributingArea < 0L
+                || generatedChannelColumns < 0
                 || generatedInitialWaterVolume < 0L
                 || generatedInitialWaterColumns < 0
                 || generatedShorelineColumns < 0
