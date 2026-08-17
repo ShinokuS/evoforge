@@ -60,7 +60,8 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static ElevationField generateOceanFirst(WorldGenesis genesis) {
         WorldBounds bounds = genesis.spec().bounds();
         if (bounds.minZ() >= 0 || bounds.maxZ() <= 0) {
-            throw new IllegalArgumentException("ocean-first generation requires world bounds below and above sea level z=0");
+            throw new IllegalArgumentException(
+                    "ocean-first generation requires world bounds below and above sea level z=0");
         }
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
@@ -72,8 +73,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         int coherentScale = interpolatedScale(4, Math.max(4, maxDimension), intent.landmassScale());
         int fragmentedScale = Math.max(2, coherentScale / 4);
         int fragmentPpm = intent.fragmentation().partsPerMillion();
-        int[] potential = new int[area];
-        Integer[] order = new Integer[area];
+        long[] rankKeys = new long[area];
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
@@ -82,30 +82,36 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                 int x = bounds.minX() + localX;
                 int coherent = valueNoise(random, LANDMASS, x, y, coherentScale);
                 int fragmented = valueNoise(random, FRAGMENT, x, y, fragmentedScale);
-                potential[index] = (int) (((long) coherent * (NormalizedValue.SCALE - fragmentPpm)
+                int potential = (int) (((long) coherent * (NormalizedValue.SCALE - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / NormalizedValue.SCALE);
-                order[index] = index;
+                rankKeys[index] = rankKey(potential, index);
                 index++;
             }
         }
-        Arrays.sort(order, (left, right) -> {
-            int byPotential = Integer.compare(potential[right], potential[left]);
-            return byPotential != 0 ? byPotential : Integer.compare(left, right);
-        });
+        Arrays.sort(rankKeys);
 
         int landCount = calibratedLandCount(area, intent.landCoverage());
         long[] elevations = new long[area];
-        long landAmplitude = Math.multiplyExact((long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
-        long oceanAmplitude = Math.multiplyExact(-(long) bounds.minZ(), ElevationField.SUBUNITS_PER_CELL);
+        long landAmplitude = Math.multiplyExact(
+                (long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
+        long oceanAmplitude = Math.multiplyExact(
+                -(long) bounds.minZ(), ElevationField.SUBUNITS_PER_CELL);
         for (int rank = 0; rank < area; rank++) {
-            int cell = order[rank];
+            int cell = (int) rankKeys[rank];
             if (rank < landCount) {
                 elevations[cell] = positiveRankHeight(rank, landCount, landAmplitude);
             } else {
-                elevations[cell] = -positiveRankHeight(area - 1 - rank, area - landCount, oceanAmplitude);
+                elevations[cell] = -positiveRankHeight(
+                        area - 1 - rank, area - landCount, oceanAmplitude);
             }
         }
         return new DenseElevationField(bounds, elevations);
+    }
+
+    /** Sort ascending by descending potential, then ascending stable cell index. */
+    private static long rankKey(int potential, int cellIndex) {
+        long invertedPotential = SAMPLE_MAX - potential;
+        return (invertedPotential << 32) | (cellIndex & 0xffff_ffffL);
     }
 
     private static int calibratedLandCount(int area, NormalizedValue coverage) {
@@ -121,7 +127,8 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     }
 
     private static int interpolatedScale(int min, int max, NormalizedValue coordinate) {
-        return min + (int) (((long) (max - min) * coordinate.partsPerMillion()) / NormalizedValue.SCALE);
+        return min + (int) (((long) (max - min) * coordinate.partsPerMillion())
+                / NormalizedValue.SCALE);
     }
 
     private static long legacyElevationSubunitsAt(
@@ -137,14 +144,20 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         long numerator = (long) normalized * surfaceSpan;
         long wholeCells = numerator / SAMPLE_MAX;
         long discreteElevation = surfaceMin + wholeCells;
-        long discreteSubunits = Math.multiplyExact(discreteElevation, ElevationField.SUBUNITS_PER_CELL);
+        long discreteSubunits = Math.multiplyExact(
+                discreteElevation, ElevationField.SUBUNITS_PER_CELL);
         if (!precise) return discreteSubunits;
         long remainder = numerator % SAMPLE_MAX;
         long fractionalSubunits = (remainder * ElevationField.SUBUNITS_PER_CELL) / SAMPLE_MAX;
         return Math.addExact(discreteSubunits, fractionalSubunits);
     }
 
-    private static int valueNoise(GenerationRandom random, GenerationPurposeId purpose, int x, int y, int scale) {
+    private static int valueNoise(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            int x,
+            int y,
+            int scale) {
         long latticeX = Math.floorDiv((long) x, scale);
         long latticeY = Math.floorDiv((long) y, scale);
         int offsetX = (int) Math.floorMod((long) x, scale);
@@ -158,8 +171,13 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return interpolate(lower, upper, offsetY, scale);
     }
 
-    private static int sample(GenerationRandom random, GenerationPurposeId purpose, long latticeX, long latticeY) {
-        return (int) ((random.sampleLong(STAGE_ID, purpose, latticeX, latticeY, 0L, 0L) >>> 48) & SAMPLE_MAX);
+    private static int sample(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            long latticeX,
+            long latticeY) {
+        return (int) ((random.sampleLong(
+                STAGE_ID, purpose, latticeX, latticeY, 0L, 0L) >>> 48) & SAMPLE_MAX);
     }
 
     private static int interpolate(int from, int to, int offset, int scale) {
