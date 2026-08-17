@@ -16,6 +16,7 @@ public final class SurfaceMorphologyGenerationStage implements SurfaceMorphology
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.toIntExact(Math.multiplyExact((long) width, height));
         long[] maximumSlope = new long[area];
+        long[] convexity = new long[area];
         long[] concavity = new long[area];
 
         int index = 0;
@@ -25,6 +26,7 @@ public final class SurfaceMorphologyGenerationStage implements SurfaceMorphology
                 int worldX = (int) x;
                 LocalMorphology morphology = morphologyAt(elevation, worldX, worldY);
                 maximumSlope[index] = morphology.maximumSlope();
+                convexity[index] = morphology.convexity();
                 concavity[index] = morphology.concavity();
                 index++;
             }
@@ -33,6 +35,7 @@ public final class SurfaceMorphologyGenerationStage implements SurfaceMorphology
                 bounds,
                 width,
                 maximumSlope,
+                convexity,
                 concavity);
     }
 
@@ -59,30 +62,38 @@ public final class SurfaceMorphologyGenerationStage implements SurfaceMorphology
             }
         }
 
+        long convexity = 0L;
         long concavity = 0L;
         if (neighbors > 0) {
             long averageNeighbor = neighborSum / neighbors;
+            convexity = Math.max(0L, center - averageNeighbor);
             concavity = Math.max(0L, averageNeighbor - center);
         }
-        return new LocalMorphology(maximumSlope, concavity);
+        return new LocalMorphology(maximumSlope, convexity, concavity);
     }
 
-    private record LocalMorphology(long maximumSlope, long concavity) { }
+    private record LocalMorphology(
+            long maximumSlope,
+            long convexity,
+            long concavity) { }
 
     private static final class DenseSurfaceMorphologyField implements SurfaceMorphologyField {
         private final WorldBounds bounds;
         private final int width;
         private final long[] maximumSlope;
+        private final long[] convexity;
         private final long[] concavity;
 
         private DenseSurfaceMorphologyField(
                 WorldBounds bounds,
                 int width,
                 long[] maximumSlope,
+                long[] convexity,
                 long[] concavity) {
             this.bounds = bounds;
             this.width = width;
             this.maximumSlope = maximumSlope;
+            this.convexity = convexity;
             this.concavity = concavity;
         }
 
@@ -94,6 +105,11 @@ public final class SurfaceMorphologyGenerationStage implements SurfaceMorphology
         @Override
         public long maximumNeighborSlopeSubunitsAt(int x, int y) {
             return maximumSlope[indexOf(x, y)];
+        }
+
+        @Override
+        public long convexitySubunitsAt(int x, int y) {
+            return convexity[indexOf(x, y)];
         }
 
         @Override
