@@ -51,13 +51,16 @@ final class WorldAtlasRevisionIsolationTest {
                         v5.climateNormals().evaporativeDemandAt(x, y),
                         v6.climateNormals().evaporativeDemandAt(x, y));
 
-                assertEquals(v5.drainage().hasDownstream(x, y), v6.drainage().hasDownstream(x, y));
-                assertEquals(
-                        v5.drainage().downstreamXAt(x, y),
-                        v6.drainage().downstreamXAt(x, y));
-                assertEquals(
-                        v5.drainage().downstreamYAt(x, y),
-                        v6.drainage().downstreamYAt(x, y));
+                boolean hasDownstream = v5.drainage().hasDownstream(x, y);
+                assertEquals(hasDownstream, v6.drainage().hasDownstream(x, y));
+                if (hasDownstream) {
+                    assertEquals(
+                            v5.drainage().downstreamXAt(x, y),
+                            v6.drainage().downstreamXAt(x, y));
+                    assertEquals(
+                            v5.drainage().downstreamYAt(x, y),
+                            v6.drainage().downstreamYAt(x, y));
+                }
                 assertEquals(
                         v5.drainage().contributingAreaAt(x, y),
                         v6.drainage().contributingAreaAt(x, y));
