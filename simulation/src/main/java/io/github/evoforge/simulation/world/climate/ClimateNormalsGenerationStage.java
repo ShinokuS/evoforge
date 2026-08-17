@@ -7,13 +7,12 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * First durable climate model.
+ * Durable climate-normal generation.
  *
- * <p>V1-V4 predate thermal climate and therefore retain a uniform datum-temperature fallback.
- * V5+ apply the authored elevation cooling rate to precise generated elevation. Precipitation and
- * evaporative-demand normals remain spatially uniform in this slice, so they are stored once rather
- * than materialized into per-column arrays. Weather variability and temperature-driven evaporation
- * are deliberately deferred.</p>
+ * <p>V1-V4 predate thermal climate and retain a uniform datum-temperature fallback. V5+ apply the
+ * authored elevation cooling rate. V1-V7 preserve historical cell-relative atmospheric-water
+ * normals; V8 requires physical water-depth-per-time normals. Spatial precipitation gradients,
+ * seasonality and weather remain later causal layers.</p>
  */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
 
@@ -35,18 +34,30 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 || GenerationRevision.V4.equals(revision)) {
             elevationAware = false;
         } else if (GenerationRevision.V5.equals(revision)
-                || GenerationRevision.V6.equals(revision)) {
+                || GenerationRevision.V6.equals(revision)
+                || GenerationRevision.V7.equals(revision)
+                || GenerationRevision.V8.equals(revision)) {
             elevationAware = true;
         } else {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
 
+        ClimateSpec climate = genesis.spec().climate();
+        ClimateWaterNormal.Kind expectedWaterKind = GenerationRevision.V8.equals(revision)
+                ? ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME
+                : ClimateWaterNormal.Kind.LEGACY_CELL_VOLUME_PER_TICK;
+        if (!expectedWaterKind.equals(climate.precipitationWaterNormal().kind())
+                || !expectedWaterKind.equals(climate.evaporativeDemandWaterNormal().kind())) {
+            throw new IllegalArgumentException(
+                    "generation revision " + revision.value()
+                            + " requires climate water normals of kind " + expectedWaterKind);
+        }
+
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
         int[] temperature = new int[area];
-        ClimateSpec climate = genesis.spec().climate();
 
         int index = 0;
         for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
@@ -61,8 +72,8 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         return new DenseClimateNormalsField(
                 bounds,
                 temperature,
-                climate.precipitationNormal(),
-                climate.evaporativeDemandNormal());
+                climate.precipitationWaterNormal(),
+                climate.evaporativeDemandWaterNormal());
     }
 
     private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {
