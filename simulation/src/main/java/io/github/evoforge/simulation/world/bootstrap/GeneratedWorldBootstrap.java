@@ -47,12 +47,33 @@ public final class GeneratedWorldBootstrap {
         this.terrainMaterialGenerator = terrainMaterialGenerator;
     }
 
-    /** Production path from compiled terrain semantics into authoritative runtime Landscape. */
+    /** Production path with generated climate connected to ordinary runtime atmosphere systems. */
     public GeneratedWorldRuntime create(
             WorldGenesis genesis,
             SimulationAssembly assembly,
             CompiledTerrainProfile profile,
             TerrainMaterialBindings bindings) {
+        return create(genesis, assembly, profile, bindings, true);
+    }
+
+    /**
+     * Starts the same generated world without attaching atmospheric rain/evaporation processes.
+     * Climate facts remain present in the returned Atlas and are not rewritten to zero values.
+     */
+    public GeneratedWorldRuntime createWithoutAtmosphericForcing(
+            WorldGenesis genesis,
+            SimulationAssembly assembly,
+            CompiledTerrainProfile profile,
+            TerrainMaterialBindings bindings) {
+        return create(genesis, assembly, profile, bindings, false);
+    }
+
+    private GeneratedWorldRuntime create(
+            WorldGenesis genesis,
+            SimulationAssembly assembly,
+            CompiledTerrainProfile profile,
+            TerrainMaterialBindings bindings,
+            boolean attachAtmosphericForcing) {
         if (genesis == null || assembly == null || profile == null || bindings == null) {
             throw new IllegalArgumentException(
                     "generated world bootstrap dependencies must not be null");
@@ -68,25 +89,49 @@ public final class GeneratedWorldBootstrap {
         return start(
                 atlas,
                 assembly,
-                TerrainMaterialResolver.resolved(materials, bindings));
+                TerrainMaterialResolver.resolved(materials, bindings),
+                attachAtmosphericForcing);
     }
 
-    /** Compatibility/custom path for callers that intentionally own terrain material resolution. */
+    /** Compatibility/custom path with generated climate connected to runtime atmosphere. */
     public GeneratedWorldRuntime create(
             WorldGenesis genesis,
             SimulationAssembly assembly,
             TerrainMaterialResolver materials) {
+        return create(genesis, assembly, materials, true);
+    }
+
+    /**
+     * Custom material-resolution path that preserves climate facts while leaving atmosphere off.
+     */
+    public GeneratedWorldRuntime createWithoutAtmosphericForcing(
+            WorldGenesis genesis,
+            SimulationAssembly assembly,
+            TerrainMaterialResolver materials) {
+        return create(genesis, assembly, materials, false);
+    }
+
+    private GeneratedWorldRuntime create(
+            WorldGenesis genesis,
+            SimulationAssembly assembly,
+            TerrainMaterialResolver materials,
+            boolean attachAtmosphericForcing) {
         if (genesis == null || assembly == null || materials == null) {
             throw new IllegalArgumentException(
                     "generated world bootstrap dependencies must not be null");
         }
-        return start(atlasGenerator.generate(genesis), assembly, materials);
+        return start(
+                atlasGenerator.generate(genesis),
+                assembly,
+                materials,
+                attachAtmosphericForcing);
     }
 
     private GeneratedWorldRuntime start(
             WorldAtlas atlas,
             SimulationAssembly assembly,
-            TerrainMaterialResolver materials) {
+            TerrainMaterialResolver materials,
+            boolean attachAtmosphericForcing) {
         WorldBounds bounds = atlas.genesis().spec().bounds();
         assembly.worldBounds(
                 bounds.minX(), bounds.maxX(),
@@ -97,7 +142,9 @@ public final class GeneratedWorldBootstrap {
                 atlas.elevation(),
                 materials);
         materializeInitialSurfaceWater(atlas, assembly);
-        assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
+        if (attachAtmosphericForcing) {
+            assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
+        }
 
         SimulationRuntime runtime = assembly.start();
         return new GeneratedWorldRuntime(atlas, materialization, runtime);
