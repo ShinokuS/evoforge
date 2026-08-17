@@ -93,60 +93,53 @@ public final class GeologyGenerationStage implements GeologyGenerator {
     }
 
     private int legacyGraniteOrdinal() {
-        GeologyUnitKey granite = GeologyProfiles.GRANITE;
-        for (int ordinal = 0; ordinal < profile.units().size(); ordinal++) {
-            if (profile.units().get(ordinal).key().equals(granite)) {
-                return ordinal;
-            }
+        for (int index = 0; index < profile.units().size(); index++) {
+            if (GeologyProfiles.GRANITE.equals(profile.units().get(index))) return index;
         }
-        throw new IllegalStateException("geology profile does not define legacy granite unit");
+        throw new IllegalArgumentException(
+                "pre-v4 generation requires legacy geology unit: " + GeologyProfiles.GRANITE.value());
     }
 
     private static Province provinceAt(GenerationRandom random, int x, int y) {
         long cellX = Math.floorDiv((long) x, PROVINCE_SCALE);
         long cellY = Math.floorDiv((long) y, PROVINCE_SCALE);
-        Province closest = null;
-        long closestDistance = Long.MAX_VALUE;
+        Province best = null;
+        long bestDistance = Long.MAX_VALUE;
 
-        for (long offsetY = -1L; offsetY <= 1L; offsetY++) {
-            for (long offsetX = -1L; offsetX <= 1L; offsetX++) {
-                long latticeX = cellX + offsetX;
-                long latticeY = cellY + offsetY;
-                Province candidate = provinceSite(random, latticeX, latticeY);
-                long dx = (long) x - candidate.siteX();
-                long dy = (long) y - candidate.siteY();
-                long distance = dx * dx + dy * dy;
-                if (closest == null
-                        || distance < closestDistance
-                        || (distance == closestDistance && candidate.id() < closest.id())) {
-                    closest = candidate;
-                    closestDistance = distance;
+        for (long latticeY = cellY - 1L; latticeY <= cellY + 1L; latticeY++) {
+            for (long latticeX = cellX - 1L; latticeX <= cellX + 1L; latticeX++) {
+                long siteX = latticeX * PROVINCE_SCALE + Math.floorMod(
+                        random.sampleLong(STAGE_ID, SITE_X, latticeX, latticeY, 0L, 0L),
+                        PROVINCE_SCALE);
+                long siteY = latticeY * PROVINCE_SCALE + Math.floorMod(
+                        random.sampleLong(STAGE_ID, SITE_Y, latticeX, latticeY, 0L, 0L),
+                        PROVINCE_SCALE);
+                long dx = (long) x - siteX;
+                long dy = (long) y - siteY;
+                long distance = Math.addExact(Math.multiplyExact(dx, dx), Math.multiplyExact(dy, dy));
+                long id = random.sampleLong(
+                        STAGE_ID,
+                        PROVINCE_ID,
+                        latticeX,
+                        latticeY,
+                        0L,
+                        0L);
+                Province candidate = new Province(latticeX, latticeY, id);
+                if (distance < bestDistance
+                        || (distance == bestDistance && before(candidate, best))) {
+                    best = candidate;
+                    bestDistance = distance;
                 }
             }
         }
-        return closest;
+        return best;
     }
 
-    private static Province provinceSite(
-            GenerationRandom random,
-            long latticeX,
-            long latticeY) {
-        int jitterX = (int) Math.floorMod(
-                random.sampleLong(STAGE_ID, SITE_X, latticeX, latticeY, 0L, 0L),
-                PROVINCE_SCALE);
-        int jitterY = (int) Math.floorMod(
-                random.sampleLong(STAGE_ID, SITE_Y, latticeX, latticeY, 0L, 0L),
-                PROVINCE_SCALE);
-        long siteX = Math.addExact(Math.multiplyExact(latticeX, PROVINCE_SCALE), jitterX);
-        long siteY = Math.addExact(Math.multiplyExact(latticeY, PROVINCE_SCALE), jitterY);
-        long id = random.sampleLong(STAGE_ID, PROVINCE_ID, latticeX, latticeY, 0L, 0L);
-        return new Province(latticeX, latticeY, siteX, siteY, id);
+    private static boolean before(Province candidate, Province current) {
+        if (current == null) return true;
+        int x = Long.compare(candidate.latticeX(), current.latticeX());
+        return x < 0 || (x == 0 && candidate.latticeY() < current.latticeY());
     }
 
-    private record Province(
-            long latticeX,
-            long latticeY,
-            long siteX,
-            long siteY,
-            long id) { }
+    private record Province(long latticeX, long latticeY, long id) { }
 }
