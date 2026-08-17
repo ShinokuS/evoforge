@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
 /** Replaceable deterministic algorithm for generated finite surface-water initial conditions. */
@@ -11,17 +12,27 @@ public interface SurfaceHydrologyGenerator {
             ElevationField elevation,
             DrainageField drainage);
 
-    /**
-     * Production composition path with an explicit durable hydrography dependency.
-     *
-     * <p>Custom legacy generators may intentionally ignore the new fact; the production stage
-     * overrides this method and consumes it directly.</p>
-     */
+    /** Production composition path with an explicit durable hydrography dependency. */
     default SurfaceHydrologyField generate(
             WorldGenesis genesis,
             ElevationField elevation,
             DrainageField drainage,
             HydrographyField hydrography) {
         return generate(genesis, elevation, drainage);
+    }
+
+    /**
+     * Production composition path with durable hydrography and climate dependencies.
+     *
+     * <p>The default preserves source compatibility for custom generators. The canonical stage
+     * consumes both facts explicitly for V7+ climate-aware initial Water.</p>
+     */
+    default SurfaceHydrologyField generate(
+            WorldGenesis genesis,
+            ElevationField elevation,
+            DrainageField drainage,
+            HydrographyField hydrography,
+            ClimateNormalsField climate) {
+        return generate(genesis, elevation, drainage, hydrography);
     }
 }
