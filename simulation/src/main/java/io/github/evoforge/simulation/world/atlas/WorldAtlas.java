@@ -11,6 +11,7 @@ public final class WorldAtlas {
     private final GeologyField geology;
     private final ClimateNormalsField climateNormals;
     private final DrainageField drainage;
+    private final HydrographyField hydrography;
     private final SurfaceHydrologyField surfaceHydrology;
 
     WorldAtlas(
@@ -19,12 +20,14 @@ public final class WorldAtlas {
             GeologyField geology,
             ClimateNormalsField climateNormals,
             DrainageField drainage,
+            HydrographyField hydrography,
             SurfaceHydrologyField surfaceHydrology) {
         if (genesis == null
                 || elevation == null
                 || geology == null
                 || climateNormals == null
                 || drainage == null
+                || hydrography == null
                 || surfaceHydrology == null) {
             throw new IllegalArgumentException("Atlas generated facts must not be null");
         }
@@ -40,6 +43,9 @@ public final class WorldAtlas {
         if (!genesis.spec().bounds().equals(drainage.bounds())) {
             throw new IllegalArgumentException("drainage bounds must match world genesis bounds");
         }
+        if (!genesis.spec().bounds().equals(hydrography.bounds())) {
+            throw new IllegalArgumentException("hydrography bounds must match world genesis bounds");
+        }
         if (!genesis.spec().bounds().equals(surfaceHydrology.bounds())) {
             throw new IllegalArgumentException(
                     "surface hydrology bounds must match world genesis bounds");
@@ -49,6 +55,7 @@ public final class WorldAtlas {
         this.geology = geology;
         this.climateNormals = climateNormals;
         this.drainage = drainage;
+        this.hydrography = hydrography;
         this.surfaceHydrology = surfaceHydrology;
     }
 
@@ -70,6 +77,10 @@ public final class WorldAtlas {
 
     public DrainageField drainage() {
         return drainage;
+    }
+
+    public HydrographyField hydrography() {
+        return hydrography;
     }
 
     public SurfaceHydrologyField surfaceHydrology() {
