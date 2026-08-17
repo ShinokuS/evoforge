@@ -35,7 +35,8 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 || GenerationRevision.V4.equals(revision)) {
             elevationAware = false;
         } else if (GenerationRevision.V5.equals(revision)
-                || GenerationRevision.V6.equals(revision)) {
+                || GenerationRevision.V6.equals(revision)
+                || GenerationRevision.V7.equals(revision)) {
             elevationAware = true;
         } else {
             throw new IllegalArgumentException(
