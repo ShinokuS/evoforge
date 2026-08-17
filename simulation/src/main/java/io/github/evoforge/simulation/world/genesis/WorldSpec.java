@@ -8,7 +8,7 @@ public record WorldSpec(
         ClimateSpec climate) {
 
     public WorldSpec(WorldBounds bounds) {
-        this(bounds, ClimateSpec.STANDARD_UNFORCED);
+        this(bounds, ClimateSpec.STANDARD_BASELINE);
     }
 
     public WorldSpec {
