@@ -3,24 +3,14 @@ package io.github.evoforge.simulation.world.preparation;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 
-/**
- * Immutable generated preparation output consumed later by runtime materialization.
- *
- * <p>The product contains durable generated facts, stable material identities and generated
- * physical landscape properties. It owns no runtime stores, schedulers, mutable WeatherState, or
- * simulation process.</p>
- */
+/** Immutable generated preparation output consumed later by runtime materialization. */
 public record PreparedGeneratedWorld(
         WorldAtlas atlas,
         TerrainMaterialField terrainMaterials,
         GeneratedLandscapeProperties landscapeProperties) {
 
-    /** Compatibility baseline for generation stages that have not resolved physical properties. */
     public PreparedGeneratedWorld(WorldAtlas atlas, TerrainMaterialField terrainMaterials) {
-        this(
-                atlas,
-                terrainMaterials,
-                GeneratedLandscapeProperties.empty(atlas.genesis().spec().bounds()));
+        this(atlas, terrainMaterials, emptyPropertiesFor(atlas));
     }
 
     public PreparedGeneratedWorld {
@@ -38,5 +28,12 @@ public record PreparedGeneratedWorld(
 
     public PreparedGeneratedWorld withLandscapeProperties(GeneratedLandscapeProperties properties) {
         return new PreparedGeneratedWorld(atlas, terrainMaterials, properties);
+    }
+
+    private static GeneratedLandscapeProperties emptyPropertiesFor(WorldAtlas atlas) {
+        if (atlas == null) {
+            throw new IllegalArgumentException("prepared generated world components must not be null");
+        }
+        return GeneratedLandscapeProperties.empty(atlas.genesis().spec().bounds());
     }
 }
