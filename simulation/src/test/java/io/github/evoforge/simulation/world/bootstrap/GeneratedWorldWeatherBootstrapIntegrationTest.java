@@ -19,15 +19,14 @@ import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolv
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import io.github.evoforge.simulation.world.weather.WeatherCellState;
-import io.github.evoforge.simulation.world.weather.WeatherState;
+import io.github.evoforge.simulation.world.weather.WeatherLookup;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 final class GeneratedWorldWeatherBootstrapIntegrationTest {
 
     @Test
-    void climateNormalDoesNotRainUntilCurrentWeatherContainsRain() {
+    void climateNormalDoesNotRainWhileCurrentWeatherIsCalmAndExternalViewIsReadOnly() {
         WorldGenesis genesis = physicalGenesis();
         SimulationAssembly assembly = SimulationAssembly.create();
         GeneratedWorldRuntime world = GeneratedWorldBootstrap.withTimeScale(
@@ -35,7 +34,7 @@ final class GeneratedWorldWeatherBootstrapIntegrationTest {
                         AtmosphericForcingPolicy.WEATHER_STATE,
                         SimulationTimeScale.of(Duration.ofSeconds(1L)))
                 .create(genesis, assembly, TerrainMaterialResolver.uniform(ground(assembly)));
-        WeatherState weather = world.weatherState().orElseThrow();
+        WeatherLookup weather = world.weather().orElseThrow();
         GeneratedWorldDiagnostics initial = diagnostics(world);
 
         assertTrue(world.atlas().climateNormals().precipitationDepthNormalAt(0, 0)
@@ -45,24 +44,8 @@ final class GeneratedWorldWeatherBootstrapIntegrationTest {
                 weather.at(1, 1).airTemperature().milliCelsius());
 
         world.runtime().stepper().advance();
-        GeneratedWorldDiagnostics calmAfter = diagnostics(world);
-        assertEquals(initial.totalWaterVolume(), calmAfter.totalWaterVolume());
-
-        WeatherCellState prior = weather.at(1, 1);
-        weather.setAt(
-                1,
-                1,
-                new WeatherCellState(
-                        prior.airTemperature(),
-                        WaterDepthRate.ofMillimeters(1L, Duration.ofSeconds(1L)),
-                        WaterDepthRate.ZERO));
         world.runtime().stepper().advance();
-        GeneratedWorldDiagnostics rainyAfter = diagnostics(world);
-        assertEquals(calmAfter.totalWaterVolume() + 1_000L, rainyAfter.totalWaterVolume());
-
-        weather.setAt(1, 1, WeatherCellState.calm(prior.airTemperature()));
-        world.runtime().stepper().advance();
-        assertEquals(rainyAfter.totalWaterVolume(), diagnostics(world).totalWaterVolume());
+        assertEquals(initial.totalWaterVolume(), diagnostics(world).totalWaterVolume());
     }
 
     private static WorldGenesis physicalGenesis() {

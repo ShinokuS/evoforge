@@ -8,12 +8,10 @@ import java.util.Arrays;
 /**
  * Authoritative mutable current-weather state by global XY column.
  *
- * <p>This is runtime state, not a generated climate fact. Climate normals may initialize a neutral
- * starting atmosphere, while a weather driver is responsible for subsequent event evolution.
- * This class intentionally contains no rain probability, event cadence, season rule or balancing
- * coefficient.</p>
+ * <p>This is runtime state, not a generated climate fact. Mutation is intended for simulation-owned
+ * weather drivers; external runtime observation should use the {@link WeatherLookup} capability.</p>
  */
-public final class WeatherState {
+public final class WeatherState implements WeatherLookup {
     private final WorldBounds bounds;
     private final int width;
     private final WeatherCellState[] cells;
@@ -30,10 +28,6 @@ public final class WeatherState {
         Arrays.fill(cells, initialState);
     }
 
-    /**
-     * Initializes each column at its generated long-term mean temperature with no instantaneous
-     * precipitation or evaporative forcing. This is an initial condition, not a weather model.
-     */
     public static WeatherState calmFromClimateNormals(ClimateNormalsField climate) {
         if (climate == null) {
             throw new IllegalArgumentException("climate normals must not be null");
@@ -57,10 +51,12 @@ public final class WeatherState {
         return state;
     }
 
+    @Override
     public WorldBounds bounds() {
         return bounds;
     }
 
+    @Override
     public WeatherCellState at(int x, int y) {
         return cells[indexOf(x, y)];
     }
@@ -87,9 +83,9 @@ public final class WeatherState {
                         current.evaporativeDemandRate()));
     }
 
+    @Override
     public boolean contains(int x, int y) {
-        return x >= bounds.minX() && x <= bounds.maxX()
-                && y >= bounds.minY() && y <= bounds.maxY();
+        return WeatherLookup.super.contains(x, y);
     }
 
     private int indexOf(int x, int y) {

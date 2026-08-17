@@ -100,7 +100,7 @@ public final class GeneratedWorldRuntimeBootstrap {
                 materialization,
                 runtime,
                 timeScale,
-                atmosphere.weatherState());
+                atmosphere.weather());
     }
 
     private static void materializeInitialSurfaceWater(

@@ -1,16 +1,16 @@
 package io.github.evoforge.simulation.world.bootstrap;
 
 import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
-import io.github.evoforge.simulation.world.weather.WeatherState;
+import io.github.evoforge.simulation.world.weather.WeatherLookup;
 import java.util.Optional;
 
 /** Runtime-only atmosphere objects created from already prepared immutable world data. */
 public record AtmosphericRuntimeComposition(
         Optional<AtmosphericWaterForcing> waterForcing,
-        Optional<WeatherState> weatherState) {
+        Optional<WeatherLookup> weather) {
 
     public AtmosphericRuntimeComposition {
-        if (waterForcing == null || weatherState == null) {
+        if (waterForcing == null || weather == null) {
             throw new IllegalArgumentException("atmospheric runtime composition optionals must not be null");
         }
     }
@@ -26,7 +26,7 @@ public record AtmosphericRuntimeComposition(
 
     public static AtmosphericRuntimeComposition weather(
             AtmosphericWaterForcing forcing,
-            WeatherState weather) {
+            WeatherLookup weather) {
         if (forcing == null || weather == null) {
             throw new IllegalArgumentException("weather composition components must not be null");
         }

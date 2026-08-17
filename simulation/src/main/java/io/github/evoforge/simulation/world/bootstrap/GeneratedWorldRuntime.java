@@ -4,17 +4,17 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
-import io.github.evoforge.simulation.world.weather.WeatherState;
+import io.github.evoforge.simulation.world.weather.WeatherLookup;
 import java.math.BigInteger;
 import java.util.Optional;
 
-/** Started runtime paired with the immutable Atlas and initialization result that produced it. */
+/** Started runtime paired with immutable generated provenance and initialization results. */
 public record GeneratedWorldRuntime(
         WorldAtlas atlas,
         TerrainMaterializationResult materialization,
         SimulationRuntime runtime,
         Optional<SimulationTimeScale> timeScale,
-        Optional<WeatherState> weatherState) {
+        Optional<WeatherLookup> weather) {
 
     public GeneratedWorldRuntime(
             WorldAtlas atlas,
@@ -36,9 +36,8 @@ public record GeneratedWorldRuntime(
                 || materialization == null
                 || runtime == null
                 || timeScale == null
-                || weatherState == null) {
-            throw new IllegalArgumentException(
-                    "generated world runtime components must not be null");
+                || weather == null) {
+            throw new IllegalArgumentException("generated world runtime components must not be null");
         }
     }
 
