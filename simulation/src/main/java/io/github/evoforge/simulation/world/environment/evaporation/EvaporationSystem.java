@@ -1,6 +1,5 @@
 package io.github.evoforge.simulation.world.environment.evaporation;
 
-import java.util.Comparator;
 import java.util.TreeSet;
 
 import io.github.evoforge.simulation.world.environment.sky.SkySurface;
@@ -19,10 +18,8 @@ import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
  * Simple deterministic Water evaporation sink over currently wet state-bearing columns.
  *
  * <p>The configured amount is an absolute Water volume per exposed XY column, not a
- * percentage. Free Water is removed before retained Water. Retained Water is then removed
- * top-down through the contiguous porous Soil column exposed to the atmosphere. A non-porous
- * layer terminates that path. Other retained liquid constituents are neither candidates nor
- * sinks of this Water-specific process.
+ * percentage. Free Water is removed before retained Water. Other retained liquid
+ * constituents are neither candidates nor sinks of this Water-specific process.
  */
 public final class EvaporationSystem {
 
@@ -195,7 +192,8 @@ public final class EvaporationSystem {
                 }
 
                 if (remaining > CellVolume.EMPTY) {
-                    int removed = removeRetainedFromConnectedSoilColumn(
+                    int removed = soilLiquids.removeAtMost(
+                            WaterSystem.TYPE,
                             x,
                             y,
                             surface.z(),
@@ -216,52 +214,6 @@ public final class EvaporationSystem {
                 waterRemoved,
                 retainedWaterRemoved,
                 remaining);
-    }
-
-    private int removeRetainedFromConnectedSoilColumn(
-            int x,
-            int y,
-            int surfaceZ,
-            int requested) {
-        TreeSet<Integer> retainedZ = new TreeSet<>(Comparator.reverseOrder());
-        retainedCells.forEach(
-                WaterSystem.TYPE,
-                (cellX, cellY, cellZ) -> {
-                    if (cellX == x && cellY == y && cellZ <= surfaceZ) {
-                        retainedZ.add(cellZ);
-                    }
-                });
-
-        int remaining = requested;
-        int removed = CellVolume.EMPTY;
-        int connectedDownTo = surfaceZ;
-        for (int z : retainedZ) {
-            if (!porousBetween(x, y, connectedDownTo, z)) {
-                break;
-            }
-            int amount = soilLiquids.removeAtMost(
-                    WaterSystem.TYPE,
-                    x,
-                    y,
-                    z,
-                    remaining);
-            removed = Math.addExact(removed, amount);
-            remaining -= amount;
-            connectedDownTo = z - 1;
-            if (remaining == CellVolume.EMPTY) {
-                break;
-            }
-        }
-        return removed;
-    }
-
-    private boolean porousBetween(int x, int y, int fromZ, int toZ) {
-        for (int z = fromZ; z >= toZ; z--) {
-            if (soilLiquids.propertiesAt(x, y, z) == null) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static boolean opensFromAbove(Shape shape) {
