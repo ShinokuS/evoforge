@@ -18,6 +18,8 @@ import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainPro
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
+import io.github.evoforge.simulation.world.weather.WeatherHydroForcingView;
+import io.github.evoforge.simulation.world.weather.WeatherState;
 import java.util.Optional;
 
 /**
@@ -29,10 +31,10 @@ import java.util.Optional;
  * Specialized callers may still provide a raw resolver. This bootstrap owns neither authored-data
  * parsing nor runtime world state.</p>
  *
- * <p>Generated climate is always part of the Atlas. Whether its current hydrologic projection
- * participates in runtime is selected independently through {@link AtmosphericForcingPolicy}. V8
- * physical climate needs both physical world geometry and a physical tick duration only when that
- * atmospheric projection is actually installed.</p>
+ * <p>Generated climate is always part of the Atlas. Atmospheric runtime composition is selected
+ * independently through {@link AtmosphericForcingPolicy}. The transitional climate-normal path
+ * remains available for compatibility; the weather-state path creates one mutable current-weather
+ * owner and converts only that current physical state into the existing Water forcing protocol.</p>
  */
 public final class GeneratedWorldBootstrap {
     private final WorldAtlasGenerator atlasGenerator;
@@ -192,12 +194,20 @@ public final class GeneratedWorldBootstrap {
                 atlas.elevation(),
                 materials);
         materializeInitialSurfaceWater(atlas, assembly);
-        if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(atmosphericForcingPolicy)) {
-            assembly.generatedHydroClimate(runtimeClimateForcing(atlas));
+
+        Optional<WeatherState> weatherState = Optional.empty();
+        switch (atmosphericForcingPolicy) {
+            case CLIMATE_NORMALS -> assembly.generatedHydroClimate(runtimeClimateForcing(atlas));
+            case WEATHER_STATE -> {
+                WeatherState weather = WeatherState.calmFromClimateNormals(atlas.climateNormals());
+                assembly.generatedHydroClimate(runtimeWeatherForcing(atlas, weather));
+                weatherState = Optional.of(weather);
+            }
+            case DISABLED -> { }
         }
 
         SimulationRuntime runtime = assembly.start();
-        return new GeneratedWorldRuntime(atlas, materialization, runtime, timeScale);
+        return new GeneratedWorldRuntime(atlas, materialization, runtime, timeScale, weatherState);
     }
 
     private ClimateHydroForcingView runtimeClimateForcing(WorldAtlas atlas) {
@@ -206,9 +216,25 @@ public final class GeneratedWorldBootstrap {
             return new ClimateHydroForcingView(atlas.climateNormals());
         }
         PhysicalSpaceScale spaceScale = atlas.genesis().spec().requirePhysicalSpaceScale();
-        SimulationTimeScale physicalTime = timeScale.orElseThrow(() -> new IllegalStateException(
-                "physical climate forcing requires an explicit simulation time scale"));
+        SimulationTimeScale physicalTime = requirePhysicalTime(
+                "physical climate forcing requires an explicit simulation time scale");
         return new ClimateHydroForcingView(atlas.climateNormals(), spaceScale, physicalTime);
+    }
+
+    private WeatherHydroForcingView runtimeWeatherForcing(
+            WorldAtlas atlas,
+            WeatherState weather) {
+        PhysicalSpaceScale spaceScale = atlas.genesis().spec().requirePhysicalSpaceScale();
+        SimulationTimeScale physicalTime = requirePhysicalTime(
+                "weather-state forcing requires an explicit simulation time scale");
+        if (!atlas.genesis().spec().bounds().equals(weather.bounds())) {
+            throw new IllegalStateException("weather state bounds must match generated world bounds");
+        }
+        return new WeatherHydroForcingView(weather, spaceScale, physicalTime);
+    }
+
+    private SimulationTimeScale requirePhysicalTime(String message) {
+        return timeScale.orElseThrow(() -> new IllegalStateException(message));
     }
 
     private static void materializeInitialSurfaceWater(
