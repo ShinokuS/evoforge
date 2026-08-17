@@ -43,7 +43,9 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
             return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
         }
-        if (!GenerationRevision.V3.equals(revision) && !GenerationRevision.V4.equals(revision)) {
+        if (!GenerationRevision.V3.equals(revision)
+                && !GenerationRevision.V4.equals(revision)
+                && !GenerationRevision.V5.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
