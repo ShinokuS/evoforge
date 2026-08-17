@@ -3,6 +3,7 @@ package io.github.evoforge;
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.Version;
 import com.badlogic.gdx.graphics.GL20;
@@ -11,6 +12,7 @@ import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
+import io.github.evoforge.visualizer.screen.WorldGenerationPreviewScreen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,14 +44,21 @@ public final class Main extends Game {
     }
 
     @Override
+    public void render() {
+        if (getScreen() instanceof ScenarioMenuScreen
+                && Gdx.input.isKeyJustPressed(Input.Keys.F9)) {
+            showWorldPreviewNow();
+        }
+        super.render();
+    }
+
+    @Override
     public void dispose() {
         LOGGER.atInfo()
                 .addKeyValue("event", "app.dispose")
                 .log("Disposing EvoForge application");
         Screen current = getScreen();
-        if (current != null) {
-            current.dispose();
-        }
+        if (current != null) current.dispose();
     }
 
     private void requestScenario(VisualizerScenario scenario) {
@@ -61,9 +70,7 @@ public final class Main extends Game {
     }
 
     private void showScenarioMenuNow() {
-        replaceScreen(new ScenarioMenuScreen(
-                scenarios,
-                this::requestScenario));
+        replaceScreen(new ScenarioMenuScreen(scenarios, this::requestScenario));
     }
 
     private void showScenarioNow(VisualizerScenario scenario) {
@@ -73,11 +80,13 @@ public final class Main extends Game {
                 this::requestScenarioMenu));
     }
 
+    private void showWorldPreviewNow() {
+        replaceScreen(new WorldGenerationPreviewScreen(this::requestScenarioMenu));
+    }
+
     private void replaceScreen(Screen next) {
         Screen previous = getScreen();
         setScreen(next);
-        if (previous != null) {
-            previous.dispose();
-        }
+        if (previous != null) previous.dispose();
     }
 }
