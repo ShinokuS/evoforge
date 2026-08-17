@@ -3,6 +3,7 @@ package io.github.evoforge.simulation.world.environment.climate;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.github.evoforge.simulation.world.atlas.DynamicHydroClimateField;
 import io.github.evoforge.simulation.world.atlas.HydroClimateField;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationBatchResult;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
@@ -11,17 +12,15 @@ import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipit
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 
 /**
- * Realizes a hydrologic projection of generated Climate Normals through existing Water mechanics.
+ * Realizes a hydrologic atmospheric forcing projection through existing Water mechanics.
  *
- * <p>This runtime adapter owns no climate facts, Water, Soil or weather state. Generated worlds
- * provide a narrow {@link HydroClimateField} view of their authoritative ClimateNormalsField; this
- * system turns those rates into exact per-tick source/sink requests and delegates all mutation to
- * the existing evaporation and precipitation systems.</p>
+ * <p>This runtime adapter owns no climate facts, Water, Soil or weather state. Static generated
+ * climate uses analytically tick-anchored rates; dynamic weather fields advance once at the start of
+ * each interval and expose exact already-integrated whole-volume requests for that interval.</p>
  *
  * <p>Potential evaporation is evaluated against state present at the start of the interval; the
  * precipitation supply for that interval is then added at its boundary. This deterministic
- * discretization prevents newly supplied rain from being immediately removed by the same
- * baseline-climate tick. Eventful weather remains a separate future concern.</p>
+ * discretization prevents newly supplied rain from being immediately removed by the same tick.</p>
  */
 public final class HydroClimateForcingSystem {
 
@@ -43,30 +42,34 @@ public final class HydroClimateForcingSystem {
     }
 
     /**
-     * Realizes exactly one positive absolute simulation tick of baseline forcing.
+     * Realizes exactly one positive absolute simulation tick of atmospheric forcing.
      *
-     * <p>This is an imperative mutation boundary, not an idempotent query. The runtime composition
-     * must invoke it exactly once for each simulation tick that is advanced; replay/rollback needs
-     * its own authoritative state restoration rather than repeated application of the same tick.
+     * <p>This is an imperative mutation boundary, not an idempotent query. Runtime composition must
+     * invoke it exactly once for every advanced simulation tick.</p>
      */
     public HydroClimateForcingResult update(long tick) {
         if (tick <= 0L) {
             throw new IllegalArgumentException("tick must be positive");
         }
 
+        DynamicHydroClimateField dynamic = forcing instanceof DynamicHydroClimateField candidate
+                ? candidate
+                : null;
+        if (dynamic != null) {
+            dynamic.advanceToTick(tick);
+        }
+
         Map<CellVolumeRate, Long> dueByRate = new HashMap<>();
 
         EvaporationBatchResult evaporationResult = evaporation.applyByColumn(
-                (x, y) -> due(
-                        forcing.evaporativeDemandAt(x, y),
-                        tick,
-                        dueByRate));
+                (x, y) -> dynamic != null
+                        ? dynamic.evaporativeDemandDueAt(x, y)
+                        : due(forcing.evaporativeDemandAt(x, y), tick, dueByRate));
 
         PrecipitationBatchResult precipitationResult = precipitation.applyByColumn(
-                (x, y) -> due(
-                        forcing.precipitationSupplyAt(x, y),
-                        tick,
-                        dueByRate));
+                (x, y) -> dynamic != null
+                        ? dynamic.precipitationDueAt(x, y)
+                        : due(forcing.precipitationSupplyAt(x, y), tick, dueByRate));
 
         return new HydroClimateForcingResult(
                 evaporationResult,

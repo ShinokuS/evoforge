@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.weather;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.mechanics.measurement.AirTemperature;
@@ -34,5 +35,53 @@ final class WeatherHydroForcingViewTest {
 
         assertEquals(0L, view.precipitationSupplyAt(0, 0).volumeDueAtTick(1L));
         assertEquals(1_000L, view.precipitationSupplyAt(1, 0).volumeDueAtTick(1L));
+    }
+
+    @Test
+    void dynamicIntegrationUsesOnlyCurrentIntervalsAndPreservesFractionalCarry() {
+        WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -2, 2);
+        WeatherState weather = new WeatherState(
+                bounds,
+                WeatherCellState.calm(AirTemperature.ofMilliCelsius(10_000)));
+        WeatherHydroForcingView view = new WeatherHydroForcingView(
+                weather,
+                PhysicalSpaceScale.cubicMillimeters(1_000L),
+                SimulationTimeScale.of(Duration.ofSeconds(1L)));
+
+        view.advanceToTick(1L);
+        assertEquals(0L, view.precipitationDueAt(0, 0));
+
+        weather.setPrecipitationRateAt(
+                0,
+                0,
+                WaterDepthRate.ofNanometers(500L, Duration.ofSeconds(1L)));
+        view.advanceToTick(2L);
+        assertEquals(0L, view.precipitationDueAt(0, 0));
+
+        weather.setPrecipitationRateAt(0, 0, WaterDepthRate.ZERO);
+        view.advanceToTick(3L);
+        assertEquals(0L, view.precipitationDueAt(0, 0));
+
+        weather.setPrecipitationRateAt(
+                0,
+                0,
+                WaterDepthRate.ofNanometers(500L, Duration.ofSeconds(1L)));
+        view.advanceToTick(4L);
+        assertEquals(1L, view.precipitationDueAt(0, 0));
+    }
+
+    @Test
+    void dynamicIntegrationRejectsSkippedOrRepeatedTicks() {
+        WeatherState weather = new WeatherState(
+                new WorldBounds(0, 0, 0, 0, -1, 1),
+                WeatherCellState.calm(AirTemperature.ofMilliCelsius(10_000)));
+        WeatherHydroForcingView view = new WeatherHydroForcingView(
+                weather,
+                PhysicalSpaceScale.cubicMillimeters(1_000L),
+                SimulationTimeScale.of(Duration.ofSeconds(1L)));
+
+        assertThrows(IllegalStateException.class, () -> view.advanceToTick(2L));
+        view.advanceToTick(1L);
+        assertThrows(IllegalStateException.class, () -> view.advanceToTick(1L));
     }
 }
