@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.weather;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
-import io.github.evoforge.simulation.world.atlas.DynamicHydroClimateField;
+import io.github.evoforge.simulation.world.atlas.HydroClimateField;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRateIntegrator;
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRateCellVolumeCompiler;
@@ -9,14 +9,14 @@ import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Runtime hydrologic projection of current WeatherState.
+ * Runtime atmospheric-water projection of authoritative current WeatherState.
  *
- * <p>Weather owns physical current rates. This view converts them into the historical
- * CellVolume/tick protocol and integrates changing rates exactly one interval at a time. Fractional
- * CellVolume carry is preserved across weather transitions, so starting rain late in a simulation
- * cannot retroactively apply earlier ticks.</p>
+ * <p>Weather owns current physical rates. This adapter advances the injected WeatherDriver first,
+ * converts current rates into CellVolume/tick second, and integrates only that one actual interval.
+ * Fractional CellVolume carry is preserved across weather transitions.</p>
  */
-public final class WeatherHydroForcingView implements DynamicHydroClimateField {
+@SuppressWarnings("removal")
+public final class WeatherHydroForcingView implements HydroClimateField {
     private final WeatherState weather;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
@@ -62,16 +62,16 @@ public final class WeatherHydroForcingView implements DynamicHydroClimateField {
         return weather.bounds();
     }
 
-    @Override
-    public CellVolumeRate precipitationSupplyAt(int x, int y) {
+    /** Query helper exposing the currently compiled precipitation rate. */
+    public CellVolumeRate precipitationRateAt(int x, int y) {
         return WaterDepthRateCellVolumeCompiler.compile(
                 weather.at(x, y).precipitationRate(),
                 spaceScale,
                 timeScale);
     }
 
-    @Override
-    public CellVolumeRate evaporativeDemandAt(int x, int y) {
+    /** Query helper exposing the currently compiled evaporative-demand rate. */
+    public CellVolumeRate evaporativeDemandRateAt(int x, int y) {
         return WaterDepthRateCellVolumeCompiler.compile(
                 weather.at(x, y).evaporativeDemandRate(),
                 spaceScale,
@@ -98,9 +98,9 @@ public final class WeatherHydroForcingView implements DynamicHydroClimateField {
                 int worldX = (int) x;
                 int index = indexOf(worldX, worldY);
                 precipitationDue[index] = integrator(precipitationIntegrators, index)
-                        .advance(precipitationSupplyAt(worldX, worldY));
+                        .advance(precipitationRateAt(worldX, worldY));
                 evaporationDue[index] = integrator(evaporationIntegrators, index)
-                        .advance(evaporativeDemandAt(worldX, worldY));
+                        .advance(evaporativeDemandRateAt(worldX, worldY));
             }
         }
         lastIntegratedTick = tick;
@@ -108,12 +108,20 @@ public final class WeatherHydroForcingView implements DynamicHydroClimateField {
 
     @Override
     public long precipitationDueAt(int x, int y) {
+        requireAdvanced();
         return precipitationDue[indexOf(x, y)];
     }
 
     @Override
     public long evaporativeDemandDueAt(int x, int y) {
+        requireAdvanced();
         return evaporationDue[indexOf(x, y)];
+    }
+
+    private void requireAdvanced() {
+        if (lastIntegratedTick <= 0L) {
+            throw new IllegalStateException("weather forcing must advance before interval amounts are read");
+        }
     }
 
     private CellVolumeRateIntegrator integrator(CellVolumeRateIntegrator[] integrators, int index) {

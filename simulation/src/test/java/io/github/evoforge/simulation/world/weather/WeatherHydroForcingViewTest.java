@@ -23,7 +23,7 @@ final class WeatherHydroForcingViewTest {
                 PhysicalSpaceScale.cubicMillimeters(1_000L),
                 SimulationTimeScale.of(Duration.ofSeconds(1L)));
 
-        assertEquals(0L, view.precipitationSupplyAt(1, 0).volumeDueAtTick(1L));
+        assertEquals(0L, view.precipitationRateAt(1, 0).volumeDueAtTick(1L));
 
         weather.setAt(
                 1,
@@ -33,8 +33,8 @@ final class WeatherHydroForcingViewTest {
                         WaterDepthRate.ofMillimeters(1L, Duration.ofSeconds(1L)),
                         WaterDepthRate.ZERO));
 
-        assertEquals(0L, view.precipitationSupplyAt(0, 0).volumeDueAtTick(1L));
-        assertEquals(1_000L, view.precipitationSupplyAt(1, 0).volumeDueAtTick(1L));
+        assertEquals(0L, view.precipitationRateAt(0, 0).volumeDueAtTick(1L));
+        assertEquals(1_000L, view.precipitationRateAt(1, 0).volumeDueAtTick(1L));
     }
 
     @Test

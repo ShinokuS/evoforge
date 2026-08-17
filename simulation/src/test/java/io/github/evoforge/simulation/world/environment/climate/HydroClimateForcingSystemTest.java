@@ -10,7 +10,6 @@ import io.github.evoforge.simulation.world.atlas.HydroClimateField;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipitationSystem;
-import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
@@ -137,24 +136,35 @@ final class HydroClimateForcingSystemTest {
         assertThrows(IllegalArgumentException.class, () -> forcing.update(0L));
     }
 
+    @SuppressWarnings("removal")
     private static HydroClimateField field(
             ColumnRate precipitation,
             ColumnRate evaporation) {
         WorldBounds bounds = new WorldBounds(-4, 4, -4, 4, -4, 8);
         return new HydroClimateField() {
+            private long currentTick;
+
             @Override
             public WorldBounds bounds() {
                 return bounds;
             }
 
             @Override
-            public CellVolumeRate precipitationSupplyAt(int x, int y) {
-                return precipitation.at(x, y);
+            public void advanceToTick(long tick) {
+                if (tick <= 0L) {
+                    throw new IllegalArgumentException("tick must be positive");
+                }
+                currentTick = tick;
             }
 
             @Override
-            public CellVolumeRate evaporativeDemandAt(int x, int y) {
-                return evaporation.at(x, y);
+            public long precipitationDueAt(int x, int y) {
+                return precipitation.at(x, y).volumeDueAtTick(currentTick);
+            }
+
+            @Override
+            public long evaporativeDemandDueAt(int x, int y) {
+                return evaporation.at(x, y).volumeDueAtTick(currentTick);
             }
         };
     }

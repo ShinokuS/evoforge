@@ -8,16 +8,18 @@ import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Narrow runtime-facing hydrologic projection of authoritative climate normals.
+ * Runtime compatibility projection of durable Climate Normals into atmospheric Water forcing.
  *
- * <p>Legacy V1-V7 climate can pass through its historical CellVolume/tick rates unchanged. V8
- * physical depth normals are converted only here, using explicit world-space and runtime-time
- * scales. The view owns no climate state and remains replaceable by future WeatherState forcing.</p>
+ * <p>Climate remains immutable generated data. This adapter only interprets its static water normals
+ * for the currently requested runtime interval. It owns no weather state and exists so historical
+ * climate-direct runs can use the same atmospheric consumer as eventful WeatherState.</p>
  */
+@SuppressWarnings("removal")
 public final class ClimateHydroForcingView implements HydroClimateField {
     private final ClimateNormalsField climate;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
+    private long currentTick;
 
     /** Legacy V1-V7 projection retaining historical tick-relative semantics. */
     public ClimateHydroForcingView(ClimateNormalsField climate) {
@@ -52,13 +54,38 @@ public final class ClimateHydroForcingView implements HydroClimateField {
     }
 
     @Override
-    public CellVolumeRate precipitationSupplyAt(int x, int y) {
-        return compile(climate.precipitationWaterNormalAt(x, y));
+    public void advanceToTick(long tick) {
+        if (tick <= 0L) {
+            throw new IllegalArgumentException("atmospheric forcing tick must be positive");
+        }
+        currentTick = tick;
     }
 
     @Override
-    public CellVolumeRate evaporativeDemandAt(int x, int y) {
+    public long precipitationDueAt(int x, int y) {
+        return precipitationRateAt(x, y).volumeDueAtTick(requireCurrentTick());
+    }
+
+    @Override
+    public long evaporativeDemandDueAt(int x, int y) {
+        return evaporativeDemandRateAt(x, y).volumeDueAtTick(requireCurrentTick());
+    }
+
+    /** Compatibility/query helper exposing the compiled static rate itself. */
+    public CellVolumeRate precipitationRateAt(int x, int y) {
+        return compile(climate.precipitationWaterNormalAt(x, y));
+    }
+
+    /** Compatibility/query helper exposing the compiled static rate itself. */
+    public CellVolumeRate evaporativeDemandRateAt(int x, int y) {
         return compile(climate.evaporativeDemandWaterNormalAt(x, y));
+    }
+
+    private long requireCurrentTick() {
+        if (currentTick <= 0L) {
+            throw new IllegalStateException("atmospheric forcing must advance before interval amounts are read");
+        }
+        return currentTick;
     }
 
     private CellVolumeRate compile(ClimateWaterNormal normal) {
