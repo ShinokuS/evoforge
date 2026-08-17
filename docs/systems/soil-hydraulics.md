@@ -8,6 +8,9 @@ Soil follows the same ownership law as the rest of generated-world state:
 Definition
   normalized semantic character
         ↓
+Generated local development
+  morphology + drainage + material identity
+        ↓
 Generated / calibrated properties
   composition + physical hydraulic profile
         ↓
@@ -43,20 +46,56 @@ there are no hidden `poor / medium / rich` or `sand / loam / clay` thresholds.
 
 `SoilDefinitionCompiler` parses only this semantic aspect and produces
 `SoilSemanticProfileBindings`. It deliberately knows nothing about Saxton-Rawls, conductivity,
-porosity, cell size or tick duration.
+porosity, cell size, tick duration or where a material appears in one particular world.
+
+## Causal local Soil formation
+
+`SoilFormationGenerator` is the replaceable boundary that develops authored material archetypes
+from generated world facts. The first implementation, `SoilFormationGenerationStage`, consumes:
+
+- `TerrainMaterialField` — which authored archetype exists in a generated solid cell;
+- `SurfaceMorphologyField` — local maximum slope and positive concavity derived from precise
+  elevation;
+- `DrainageField` — contributing-area accumulation across the closed generated world;
+- `SoilSemanticProfileBindings` — immutable authored material meaning.
+
+`GeneratedWorldPreparation` derives surface morphology once and passes that same immutable field to
+both Terrain material generation and Soil formation. Terrain and Soil therefore cannot quietly use
+two different definitions of local slope/concavity.
+
+The first formation model is deliberately narrow. It adjusts only `mineralFineness`:
+
+- topographic exposure/steepness moves the local developed profile toward coarser mineral character;
+- concavity moves it toward finer accumulated material;
+- drainage accumulation continuously strengthens the concavity response.
+
+All responses are continuous fixed-point transformations. Morphology uses smooth saturating
+responses and drainage uses relative contributing area; there are no texture categories, named
+terrain switches or gameplay threshold bands. `SoilFormationCalibration` owns the explicit model
+response scales and maximum allowed shift away from the authored archetype.
+
+`organicMatter` is intentionally left unchanged by this first geomorphic model. Changing it without
+vegetation, climate history and pedogenesis would only replace coordinate noise with another
+unsupported guess.
+
+Generated Geology is also not interpreted yet. Current geology Definitions provide stable unit and
+material identity but no physical weathering/mineral-release traits. Soil formation therefore does
+not infer parent-material behavior from names such as `granite` or `limestone`. A later geology
+slice must add explicit physical/semantic parent-material traits before geology can causally alter
+soil composition.
 
 ## Semantic → physical composition
 
-`SoilCompositionCompiler` is a replaceable preparation model. The current
-`ContinuousSoilCompositionCompiler` projects mineral fineness continuously through a quadratic
-mixture curve and uses an explicit `SoilCompositionCalibration` for the maximum representative
-organic fraction.
+After local formation, `SoilCompositionCompiler` converts the developed semantic profile into
+physical composition. The current `ContinuousSoilCompositionCompiler` projects mineral fineness
+continuously through a quadratic mixture curve and uses an explicit `SoilCompositionCalibration`
+for the maximum representative organic fraction.
 
 The result, `SoilCompositionProfile`, contains physical sand/silt/clay and organic-matter fractions.
 Those values are generated/model output, not authored content.
 
-A future soil-development model may derive the same profile from parent geology, deposition,
-weathering, climate, vegetation, compaction and history without changing runtime Soil.
+This boundary remains replaceable: later weathering, sediment provenance, compaction or pedogenesis
+models may produce richer composition without changing runtime Soil.
 
 ## Physical hydraulic profile
 
@@ -71,20 +110,24 @@ weathering, climate, vegetation, compaction and history without changing runtime
 The current replaceable implementation is `SaxtonRawls2006SoilHydraulicCalibrator`. Its empirical
 coefficients belong only to that model. They are not Definition constants or runtime rules.
 
-`SoilHydraulicProfileResolver` is the explicit boundary that combines semantic bindings with a
-composition compiler and hydraulic calibrator. Definition loading therefore stops at semantics;
-physical resolution is a separate preparation operation.
+`SoilHydraulicProfileResolver` remains the material-level compatibility boundary for callers that
+need one physical profile per authored material. The generated-world path with Soil semantics uses
+`SoilFormationGenerationStage` instead and therefore may produce multiple physical profiles for the
+same `TerrainMaterialKey` in one world.
 
 ## Generated spatial properties
 
 `SoilHydraulicProfileField` is the immutable spatial preparation contract. Material identity is not
-part of that interface: the same `TerrainMaterialKey` may eventually resolve to different hydraulic
-profiles at neighboring coordinates because of parent geology, deposition, compaction, drainage,
-vegetation or soil-development history.
+part of that interface: the same `TerrainMaterialKey` may resolve to different hydraulic profiles at
+neighboring coordinates because generated local development happened before runtime.
 
-`MaterialSoilHydraulicProfileField` is only the current deterministic baseline. It projects a
-prepared material identity to its calibrated profile and deliberately adds no coordinate noise.
-Later causal soil generators can replace that implementation without changing runtime mechanics.
+`SoilFormationGenerationStage` materializes those local physical profiles during preparation.
+`MaterialSoilHydraulicProfileField` remains a deterministic material-level compatibility adapter; it
+adds no coordinate noise and is not needed by the causal generated-world path.
+
+`GeneratedWorldPreparation.prepare(genesis, profile, soilSemantics)` produces the authoritative Soil
+field and stores it in `GeneratedLandscapeProperties`. The historical two-argument `prepare` remains
+available for worlds/scenarios that intentionally have no generated Soil field.
 
 `GeneratedLandscapeProperties` distinguishes two cases that must not be conflated:
 
@@ -126,7 +169,7 @@ rainfall
   ↓
 free surface Water
   ↓
-local infiltration / pore-capacity limit
+local generated infiltration / pore-capacity limit
   ↓
 absorbed amount + remaining free Water
   ↓
@@ -139,30 +182,34 @@ changing the liquid mechanic.
 
 ## Exactness
 
-Physical conductivity is preserved up to the runtime compilation boundary. The current runtime
-stores permeability as whole normalized volume per tick, so a physical combination requiring a
-fractional unit is rejected rather than silently rounded. Acceptance scenarios must use a physical
-time/space scale that is representable by the current runtime. A later rational infiltration rate
-can remove this representation limit without changing authored semantics, generated fields, or
+Authored semantic values and local formation responses use fixed-point integer coordinates. Physical
+conductivity is preserved up to the runtime compilation boundary. The current runtime stores
+permeability as whole normalized volume per tick, so a physical combination requiring a fractional
+unit is rejected rather than silently rounded. A later rational infiltration rate can remove this
+representation limit without changing authored semantics, generated fields or
 `SoilHydraulicProfile`.
 
 ## Acceptance
 
-`Water / Hydrology -> Soil Hydraulic Contrast` compares fineness `0.10` and `0.80` with identical
-organic character under the same generated climate and rainfall process. Composition and hydraulics
-are derived before startup; the scenario then demonstrates different retained/free Water response
-through ordinary Weather, Soil and Water systems.
+`SoilFormationGenerationStageTest` fixes an exact causal example in which three cells share one Soil
+material archetype but receive exposed, neutral and depositional morphology/drainage contexts. The
+resulting developed mineral-fineness coordinates are distinct while authored organic character is
+preserved.
 
-Generated-world integration tests additionally prove that one runtime may expose different
-`SoilProperties` at different coordinates even when all Terrain cells share the same material
-identity, and that an authoritative generated `null` does not fall back to material-wide Soil.
+`CausalSoilFormationBootstrapIntegrationTest` carries that distinction through the full boundary:
+Definition semantics -> generated formation -> physical hydraulic field -> runtime
+`SoilPropertiesLookup`. This supplements the lower-level #88 acceptance that already proves a
+prepared spatial field overrides material fallback authoritatively.
 
-The older `Rain Cycle` and Cow visual fixtures use explicit hydraulic terrain materials. They no
-longer rely on seeded runtime soil variation.
+`Water / Hydrology -> Soil Hydraulic Contrast` still verifies the liquid-side physical consequence
+of contrasting hydraulics under the same rainfall process. The older `Rain Cycle` and Cow visual
+fixtures use explicit hydraulic terrain materials and no seeded runtime variation.
 
 ## Deferred physics
 
-This slice does not yet implement unsaturated conductivity curves, matric suction, vertical
-redistribution/deep drainage, groundwater coupling, soil horizons, pedogenesis, compaction/gravel
-corrections or root uptake. Those mechanisms should consume or enrich generated physical facts;
-they must not reintroduce material-name switches or authored per-tick values.
+This slice does not yet implement parent-geology weathering traits, sediment provenance/history,
+climate-driven pedogenesis, vegetation/organic accumulation, compaction/gravel corrections, soil
+horizons, unsaturated conductivity curves, matric suction, vertical redistribution/deep drainage,
+groundwater coupling or root uptake. Those mechanisms should consume or enrich generated physical
+facts; they must not reintroduce material-name switches, coordinate hashes or authored per-tick
+values.
