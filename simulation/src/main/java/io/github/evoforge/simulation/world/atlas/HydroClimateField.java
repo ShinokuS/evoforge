@@ -3,7 +3,13 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Immutable long-term hydrologic climate normals by global XY world column. */
+/**
+ * Narrow runtime atmospheric-water forcing contract by global XY column.
+ *
+ * <p>This interface is not an independent generated climate owner. Generated worlds project their
+ * authoritative ClimateNormalsField into this contract so the existing rain and evaporation
+ * systems consume only the dimensions they currently understand.</p>
+ */
 public interface HydroClimateField {
     WorldBounds bounds();
 
