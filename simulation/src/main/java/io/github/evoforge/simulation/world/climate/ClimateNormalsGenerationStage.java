@@ -1,9 +1,8 @@
 package io.github.evoforge.simulation.world.climate;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.genesis.ClimateNormalsSpec;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -12,10 +11,11 @@ import java.util.Arrays;
 /**
  * First durable climate model.
  *
- * <p>V1-V4 did not author thermal climate, so they retain a uniform datum-temperature fallback.
- * V5 applies an explicit authored cooling rate to precise generated elevation. Hydrologic climate
- * rates remain exactly those requested by {@link HydroClimateSpec}; spatial precipitation and
- * evaporation mechanics are deliberately deferred to a later causal slice.</p>
+ * <p>V1-V4 predate thermal climate and therefore retain a uniform datum-temperature fallback.
+ * V5 applies the authored elevation cooling rate to precise generated elevation. Precipitation and
+ * evaporative-demand normals are authored once in {@link ClimateSpec} and remain spatially uniform
+ * in this slice; weather variability and temperature-driven evaporation are deliberately deferred.
+ * </p>
  */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
 
@@ -50,10 +50,9 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         CellVolumeRate[] precipitation = new CellVolumeRate[area];
         CellVolumeRate[] evaporation = new CellVolumeRate[area];
 
-        ClimateNormalsSpec thermal = genesis.spec().climateNormals();
-        HydroClimateSpec hydrologic = genesis.spec().hydroClimate();
-        Arrays.fill(precipitation, hydrologic.precipitationSupply());
-        Arrays.fill(evaporation, hydrologic.evaporativeDemand());
+        ClimateSpec climate = genesis.spec().climate();
+        Arrays.fill(precipitation, climate.precipitationSupply());
+        Arrays.fill(evaporation, climate.evaporativeDemand());
 
         int index = 0;
         for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
@@ -61,20 +60,20 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
             for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
                 int worldX = (int) x;
                 temperature[index++] = elevationAware
-                        ? temperatureAt(thermal, elevation.elevationSubunitsAt(worldX, worldY))
-                        : thermal.datumMeanTemperatureMilliCelsius();
+                        ? temperatureAt(climate, elevation.elevationSubunitsAt(worldX, worldY))
+                        : climate.datumMeanTemperature().milliCelsius();
             }
         }
         return new DenseClimateNormalsField(bounds, temperature, precipitation, evaporation);
     }
 
-    private static int temperatureAt(ClimateNormalsSpec spec, long elevationSubunits) {
+    private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {
         long scaledCooling = Math.multiplyExact(
                 elevationSubunits,
                 (long) spec.coolingMilliCelsiusPerElevationCell());
         long cooling = Math.floorDiv(scaledCooling, ElevationField.SUBUNITS_PER_CELL);
         long temperature = Math.subtractExact(
-                (long) spec.datumMeanTemperatureMilliCelsius(),
+                (long) spec.datumMeanTemperature().milliCelsius(),
                 cooling);
         int exact = Math.toIntExact(temperature);
         ClimateTemperature.ofMilliCelsius(exact);
