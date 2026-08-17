@@ -18,6 +18,11 @@ import org.junit.jupiter.api.Test;
 final class GeneratedWorldAuditProfileTest {
 
     private static final long[] SEEDS = {0L, 1L, 42L, 991L, 123_456_789L};
+    private static final ClimateSpec AUDIT_CLIMATE = ClimateSpec.of(
+            ClimateTemperature.ofMilliCelsius(12_000),
+            250,
+            CellVolumeRate.of(100_001L, 3L),
+            CellVolumeRate.of(20_003L, 4L));
 
     @Test
     void printsRepresentativeGeneratedWorldCheckpoints() {
@@ -36,20 +41,26 @@ final class GeneratedWorldAuditProfileTest {
 
         for (long seed : SEEDS) {
             for (AuditProfile profile : profiles()) {
-                GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
-                        seed,
-                        profile.climate(),
-                        bounds);
+                GeneratedWorldRuntime world = profile.atmosphereEnabled()
+                        ? GeneratedWorldWarmupFixture.create(seed, profile.climate(), bounds)
+                        : GeneratedWorldWarmupFixture.createWithoutAtmosphericForcing(
+                                seed,
+                                profile.climate(),
+                                bounds);
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
                 GeneratedWorldDiagnostics initial = trace.get(0);
                 assertTrue(initial.geologyProvinces() >= 1);
-                assertTrue(initial.geologyUnits() > 1, "V5 geology collapsed to one unit");
+                assertTrue(initial.geologyUnits() > 1, "generated geology collapsed to one unit");
                 assertTrue(initial.generatedInitialWaterVolume() > 0L);
                 assertTrue(initial.generatedInitialWaterColumns() > 0);
                 assertTrue(initial.generatedShorelineColumns() > 0);
                 assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
+                assertEquals(
+                        AUDIT_CLIMATE.precipitationSupply(),
+                        world.atlas().climateNormals().precipitationSupplyAt(
+                                bounds.minX(), bounds.minY()));
 
                 for (GeneratedWorldDiagnostics snapshot : trace) {
                     assertTrue(snapshot.surfaceMatchesAtlas());
@@ -72,7 +83,7 @@ final class GeneratedWorldAuditProfileTest {
                 }
 
                 GeneratedWorldDiagnostics end = trace.get(trace.size() - 1);
-                if (profile.hasAtmosphericSupply()) {
+                if (profile.atmosphereEnabled()) {
                     assertTrue(end.totalWaterVolume() > initial.totalWaterVolume());
                     assertTrue(end.retainedWaterVolume() > 0L);
                 } else {
@@ -92,20 +103,13 @@ final class GeneratedWorldAuditProfileTest {
 
     private static List<AuditProfile> profiles() {
         return List.of(
-                new AuditProfile("unforced", ClimateSpec.STANDARD_UNFORCED, false),
-                new AuditProfile(
-                        "fractional-net-supply",
-                        ClimateSpec.of(
-                                ClimateTemperature.ofMilliCelsius(12_000),
-                                250,
-                                CellVolumeRate.of(100_001L, 3L),
-                                CellVolumeRate.of(20_003L, 4L)),
-                        true));
+                new AuditProfile("atmosphere-disabled", AUDIT_CLIMATE, false),
+                new AuditProfile("atmosphere-enabled", AUDIT_CLIMATE, true));
     }
 
     /** Developer audit inputs, not a user-facing climate preset contract. */
     private record AuditProfile(
             String name,
             ClimateSpec climate,
-            boolean hasAtmosphericSupply) { }
+            boolean atmosphereEnabled) { }
 }
