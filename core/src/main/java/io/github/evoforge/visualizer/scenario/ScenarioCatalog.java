@@ -4,6 +4,7 @@ import io.github.evoforge.visualizer.scenario.agent.CowForagingScenario;
 import io.github.evoforge.visualizer.scenario.agent.CowVisualSearchScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowHerdScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowScenario;
+import io.github.evoforge.visualizer.scenario.environment.CausalSoilFormationScenario;
 import io.github.evoforge.visualizer.scenario.environment.GeneratedRainfallRegimeScenario;
 import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 import io.github.evoforge.visualizer.scenario.environment.SoilHydraulicContrastScenario;
@@ -74,6 +75,7 @@ public final class ScenarioCatalog {
                         new RainHydrologyScenario(),
                         new GeneratedRainfallRegimeScenario(),
                         new SoilHydraulicContrastScenario(),
+                        new CausalSoilFormationScenario(),
                         new WaterZStackScenario(),
                         new WaterRampGatesScenario()),
                 ScenarioGroup.of("agents", "Agents",
