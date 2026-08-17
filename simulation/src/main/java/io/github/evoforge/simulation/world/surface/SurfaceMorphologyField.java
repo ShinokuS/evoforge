@@ -15,6 +15,9 @@ public interface SurfaceMorphologyField {
     /** Largest absolute elevation difference to an in-bounds neighboring column. */
     long maximumNeighborSlopeSubunitsAt(int x, int y);
 
+    /** Positive difference between this column and mean neighbor elevation, otherwise zero. */
+    long convexitySubunitsAt(int x, int y);
+
     /** Positive difference between mean neighbor elevation and this column, otherwise zero. */
     long concavitySubunitsAt(int x, int y);
 }
