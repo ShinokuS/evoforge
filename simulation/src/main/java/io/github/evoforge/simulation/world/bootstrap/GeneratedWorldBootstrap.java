@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.bootstrap;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
+import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
@@ -15,6 +16,7 @@ import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainPro
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
+import java.util.Optional;
 
 /**
  * One-shot production composition path from immutable genesis provenance into a started runtime.
@@ -28,24 +30,31 @@ import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGen
  * <p>Generated climate is always part of the Atlas. Whether its current direct hydrologic
  * projection participates in runtime is selected independently through
  * {@link AtmosphericForcingPolicy}; the default production path installs it.</p>
+ *
+ * <p>Physical space belongs to {@code WorldSpec} provenance. A physical tick duration is runtime
+ * composition and may be supplied independently through the named {@code withTimeScale} factories.
+ * Neither dimension is invented when absent.</p>
  */
 public final class GeneratedWorldBootstrap {
     private final WorldAtlasGenerator atlasGenerator;
     private final TerrainMaterialGenerator terrainMaterialGenerator;
     private final AtmosphericForcingPolicy atmosphericForcingPolicy;
+    private final Optional<SimulationTimeScale> timeScale;
 
     public GeneratedWorldBootstrap() {
         this(
                 new WorldAtlasGenerator(),
                 new TerrainMaterialGenerationStage(),
-                AtmosphericForcingPolicy.CLIMATE_NORMALS);
+                AtmosphericForcingPolicy.CLIMATE_NORMALS,
+                Optional.empty());
     }
 
     public GeneratedWorldBootstrap(WorldAtlasGenerator atlasGenerator) {
         this(
                 atlasGenerator,
                 new TerrainMaterialGenerationStage(),
-                AtmosphericForcingPolicy.CLIMATE_NORMALS);
+                AtmosphericForcingPolicy.CLIMATE_NORMALS,
+                Optional.empty());
     }
 
     public GeneratedWorldBootstrap(
@@ -54,7 +63,8 @@ public final class GeneratedWorldBootstrap {
         this(
                 atlasGenerator,
                 new TerrainMaterialGenerationStage(),
-                atmosphericForcingPolicy);
+                atmosphericForcingPolicy,
+                Optional.empty());
     }
 
     public GeneratedWorldBootstrap(
@@ -63,21 +73,70 @@ public final class GeneratedWorldBootstrap {
         this(
                 atlasGenerator,
                 terrainMaterialGenerator,
-                AtmosphericForcingPolicy.CLIMATE_NORMALS);
+                AtmosphericForcingPolicy.CLIMATE_NORMALS,
+                Optional.empty());
     }
 
     public GeneratedWorldBootstrap(
             WorldAtlasGenerator atlasGenerator,
             TerrainMaterialGenerator terrainMaterialGenerator,
             AtmosphericForcingPolicy atmosphericForcingPolicy) {
+        this(
+                atlasGenerator,
+                terrainMaterialGenerator,
+                atmosphericForcingPolicy,
+                Optional.empty());
+    }
+
+    public static GeneratedWorldBootstrap withTimeScale(SimulationTimeScale timeScale) {
+        return withTimeScale(
+                new WorldAtlasGenerator(),
+                new TerrainMaterialGenerationStage(),
+                AtmosphericForcingPolicy.CLIMATE_NORMALS,
+                timeScale);
+    }
+
+    public static GeneratedWorldBootstrap withTimeScale(
+            WorldAtlasGenerator atlasGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy,
+            SimulationTimeScale timeScale) {
+        return withTimeScale(
+                atlasGenerator,
+                new TerrainMaterialGenerationStage(),
+                atmosphericForcingPolicy,
+                timeScale);
+    }
+
+    public static GeneratedWorldBootstrap withTimeScale(
+            WorldAtlasGenerator atlasGenerator,
+            TerrainMaterialGenerator terrainMaterialGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy,
+            SimulationTimeScale timeScale) {
+        if (timeScale == null) {
+            throw new IllegalArgumentException("simulation time scale must not be null");
+        }
+        return new GeneratedWorldBootstrap(
+                atlasGenerator,
+                terrainMaterialGenerator,
+                atmosphericForcingPolicy,
+                Optional.of(timeScale));
+    }
+
+    private GeneratedWorldBootstrap(
+            WorldAtlasGenerator atlasGenerator,
+            TerrainMaterialGenerator terrainMaterialGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy,
+            Optional<SimulationTimeScale> timeScale) {
         if (atlasGenerator == null
                 || terrainMaterialGenerator == null
-                || atmosphericForcingPolicy == null) {
+                || atmosphericForcingPolicy == null
+                || timeScale == null) {
             throw new IllegalArgumentException("generated world bootstrap dependencies must not be null");
         }
         this.atlasGenerator = atlasGenerator;
         this.terrainMaterialGenerator = terrainMaterialGenerator;
         this.atmosphericForcingPolicy = atmosphericForcingPolicy;
+        this.timeScale = timeScale;
     }
 
     /** Production path from compiled terrain semantics into authoritative runtime Landscape. */
@@ -126,6 +185,10 @@ public final class GeneratedWorldBootstrap {
                 bounds.minY(), bounds.maxY(),
                 bounds.minZ(), bounds.maxZ());
 
+        atlas.genesis().spec().physicalSpaceScale().ifPresent(scale ->
+                assembly.physicalCellVolumeMilliliters(
+                        scale.physicalCellVolumeExact().millilitersPerFullCell()));
+
         TerrainMaterializationResult materialization = assembly.materializeGeneratedTerrain(
                 atlas.elevation(),
                 materials);
@@ -135,7 +198,7 @@ public final class GeneratedWorldBootstrap {
         }
 
         SimulationRuntime runtime = assembly.start();
-        return new GeneratedWorldRuntime(atlas, materialization, runtime);
+        return new GeneratedWorldRuntime(atlas, materialization, runtime, timeScale);
     }
 
     private static void materializeInitialSurfaceWater(
