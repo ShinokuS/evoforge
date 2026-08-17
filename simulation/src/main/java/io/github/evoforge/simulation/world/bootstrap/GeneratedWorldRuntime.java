@@ -4,27 +4,40 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
+import io.github.evoforge.simulation.world.weather.WeatherLookup;
 import java.math.BigInteger;
 import java.util.Optional;
 
-/** Started runtime paired with the immutable Atlas and initialization result that produced it. */
+/** Started runtime paired with immutable generated provenance and initialization results. */
 public record GeneratedWorldRuntime(
         WorldAtlas atlas,
         TerrainMaterializationResult materialization,
         SimulationRuntime runtime,
-        Optional<SimulationTimeScale> timeScale) {
+        Optional<SimulationTimeScale> timeScale,
+        Optional<WeatherLookup> weather) {
 
     public GeneratedWorldRuntime(
             WorldAtlas atlas,
             TerrainMaterializationResult materialization,
             SimulationRuntime runtime) {
-        this(atlas, materialization, runtime, Optional.empty());
+        this(atlas, materialization, runtime, Optional.empty(), Optional.empty());
+    }
+
+    public GeneratedWorldRuntime(
+            WorldAtlas atlas,
+            TerrainMaterializationResult materialization,
+            SimulationRuntime runtime,
+            Optional<SimulationTimeScale> timeScale) {
+        this(atlas, materialization, runtime, timeScale, Optional.empty());
     }
 
     public GeneratedWorldRuntime {
-        if (atlas == null || materialization == null || runtime == null || timeScale == null) {
-            throw new IllegalArgumentException(
-                    "generated world runtime components must not be null");
+        if (atlas == null
+                || materialization == null
+                || runtime == null
+                || timeScale == null
+                || weather == null) {
+            throw new IllegalArgumentException("generated world runtime components must not be null");
         }
     }
 

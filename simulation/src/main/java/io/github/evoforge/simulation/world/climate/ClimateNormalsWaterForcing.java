@@ -1,26 +1,20 @@
 package io.github.evoforge.simulation.world.climate;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRateCellVolumeCompiler;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/**
- * Narrow runtime-facing hydrologic projection of authoritative climate normals.
- *
- * <p>Legacy V1-V7 climate can pass through its historical CellVolume/tick rates unchanged. V8
- * physical depth normals are converted only here, using explicit world-space and runtime-time
- * scales. The view owns no climate state and remains replaceable by future WeatherState forcing.</p>
- */
-public final class ClimateHydroForcingView implements HydroClimateField {
+/** Runtime compatibility projection of durable Climate Normals into atmospheric Water forcing. */
+public final class ClimateNormalsWaterForcing implements AtmosphericWaterForcing {
     private final ClimateNormalsField climate;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
+    private long currentTick;
 
-    /** Legacy V1-V7 projection retaining historical tick-relative semantics. */
-    public ClimateHydroForcingView(ClimateNormalsField climate) {
+    public ClimateNormalsWaterForcing(ClimateNormalsField climate) {
         this(climate, null, null);
         if (ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME.equals(climate.waterNormalKind())) {
             throw new IllegalArgumentException(
@@ -28,14 +22,11 @@ public final class ClimateHydroForcingView implements HydroClimateField {
         }
     }
 
-    /** Physical V8+ projection from depth/time normals into CellVolume/tick runtime forcing. */
-    public ClimateHydroForcingView(
+    public ClimateNormalsWaterForcing(
             ClimateNormalsField climate,
             PhysicalSpaceScale spaceScale,
             SimulationTimeScale timeScale) {
-        if (climate == null) {
-            throw new IllegalArgumentException("climate normals must not be null");
-        }
+        if (climate == null) throw new IllegalArgumentException("climate normals must not be null");
         if (ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME.equals(climate.waterNormalKind())
                 && (spaceScale == null || timeScale == null)) {
             throw new IllegalArgumentException(
@@ -46,25 +37,39 @@ public final class ClimateHydroForcingView implements HydroClimateField {
         this.timeScale = timeScale;
     }
 
-    @Override
-    public WorldBounds bounds() {
-        return climate.bounds();
-    }
+    @Override public WorldBounds bounds() { return climate.bounds(); }
 
     @Override
-    public CellVolumeRate precipitationSupplyAt(int x, int y) {
+    public void advanceToTick(long tick) {
+        if (tick <= 0L) throw new IllegalArgumentException("atmospheric forcing tick must be positive");
+        currentTick = tick;
+    }
+
+    @Override public long precipitationDueAt(int x, int y) {
+        return precipitationRateAt(x, y).volumeDueAtTick(requireCurrentTick());
+    }
+
+    @Override public long evaporativeDemandDueAt(int x, int y) {
+        return evaporativeDemandRateAt(x, y).volumeDueAtTick(requireCurrentTick());
+    }
+
+    public CellVolumeRate precipitationRateAt(int x, int y) {
         return compile(climate.precipitationWaterNormalAt(x, y));
     }
 
-    @Override
-    public CellVolumeRate evaporativeDemandAt(int x, int y) {
+    public CellVolumeRate evaporativeDemandRateAt(int x, int y) {
         return compile(climate.evaporativeDemandWaterNormalAt(x, y));
     }
 
-    private CellVolumeRate compile(ClimateWaterNormal normal) {
-        if (normal instanceof ClimateWaterNormal.LegacyCellVolume legacy) {
-            return legacy.rate();
+    private long requireCurrentTick() {
+        if (currentTick <= 0L) {
+            throw new IllegalStateException("atmospheric forcing must advance before interval amounts are read");
         }
+        return currentTick;
+    }
+
+    private CellVolumeRate compile(ClimateWaterNormal normal) {
+        if (normal instanceof ClimateWaterNormal.LegacyCellVolume legacy) return legacy.rate();
         if (normal instanceof ClimateWaterNormal.PhysicalDepth physical) {
             return WaterDepthRateCellVolumeCompiler.compile(physical.rate(), spaceScale, timeScale);
         }

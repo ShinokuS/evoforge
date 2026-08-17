@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.mechanics.measurement.PhysicalCellVolume;
@@ -13,7 +13,7 @@ import java.util.Map;
 record SimulationStartupConfig(
         PrecipitationSchedule precipitation,
         EvaporationSchedule evaporation,
-        HydroClimateField hydroClimate,
+        AtmosphericWaterForcing atmosphericWaterForcing,
         PhysicalCellVolume physicalCellVolume,
         List<ObjectId> createdObjects,
         Map<ObjectId, FacingDirection> initialFacing) {

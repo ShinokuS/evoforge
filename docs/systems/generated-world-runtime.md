@@ -2,96 +2,115 @@
 
 ## Purpose
 
-Provide one production path from immutable generated-world provenance to an ordinary started `SimulationRuntime` without giving generation ownership of lived Terrain, Soil or Water state.
+Keep generated-world preparation and lived simulation as two explicit phases with one-way data flow.
 
-## Bootstrap path
+Generation/calibration prepare immutable inputs. Runtime bootstrap consumes those inputs once. After `SimulationRuntime` starts, generation and calibration no longer participate in world evolution.
+
+## Canonical two-phase path
 
 ```text
 WorldSpec + seed
       ↓
 WorldGenesis
       ↓
-GeneratedWorldBootstrap
-      ↓
-WorldAtlasGenerator
+GeneratedWorldPreparation          PURE
       ↓
 WorldAtlas
   ├─ ElevationField
+  ├─ GeologyField
+  ├─ ClimateNormalsField
   ├─ DrainageField
-  └─ HydroClimateField
+  ├─ HydrographyField
+  └─ SurfaceHydrologyField
       ↓
-configured SimulationAssembly + TerrainMaterialResolver
+stable TerrainMaterialField
       ↓
-materialize generated Terrain
+PreparedGeneratedWorld
       ↓
-attach generated HydroClimate
+================ START BOUNDARY ================
       ↓
-SimulationAssembly.start()
+GeneratedWorldRuntimeBootstrap
+  ├─ bind stable material keys to runtime definitions
+  ├─ materialize initial Terrain / finite Water
+  ├─ compose runtime atmosphere once
+  └─ SimulationAssembly.start()
       ↓
 SimulationRuntime
 ```
 
-The assembly passed to bootstrap is deliberately still content-configurable. Definitions such as movement capabilities, terrain materials or future plants/animals are prepared by normal content composition before bootstrap. Generated-world orchestration therefore does not contain a second content registry or material-name switch.
+`GeneratedWorldPreparation` has no runtime or scheduler dependency. `GeneratedWorldRuntimeBootstrap` has no generator/calibrator dependency.
 
-## Terrain setup
+`GeneratedWorldBootstrap` remains only a convenience facade for older one-call callers; internally it delegates to the two explicit phases. Architecture-sensitive code should use the two phases directly.
 
-`GeneratedWorldBootstrap` first configures runtime `WorldBounds` from `WorldGenesis`, then asks `SimulationAssembly.materializeGeneratedTerrain(...)` to translate Atlas elevation through the existing `WorldTerrainMaterializer`.
+## Generated facts vs runtime state
 
-The assembly method is only a narrow access seam to Assembly-owned definitions and Landscape mutations. Materialization behavior itself remains in the `world.materialization` subsystem.
+`WorldAtlas` contains durable generated facts only. Runtime interfaces do not belong to `world.atlas`.
 
-The supplied `TerrainMaterialResolver` remains pure and replaceable. The current vertical slice may explicitly use a uniform material; future geology/material fields can provide another resolver without changing bootstrap.
+Examples:
 
-## Generated hydrologic climate
+- `ClimateNormalsField` — durable long-term climate fact;
+- `SurfaceHydrologyField` — generated initial-condition fact;
+- `WeatherState` — mutable current runtime atmosphere;
+- Water/Soil stores — mutable simulation state.
 
-`SimulationAssembly.generatedHydroClimate(...)` accepts an immutable `HydroClimateField` whose bounds exactly match the runtime world.
+Initial finite Water is materialized once from prepared facts. Thereafter ordinary runtime Water mechanics own it.
 
-Generated climate is mutually exclusive with the older hand-authored periodic precipitation/evaporation schedules. A runtime therefore has one atmospheric baseline source, not two independently configured sources that accidentally duplicate Water mass.
+## Runtime atmosphere
 
-At runtime:
+Atmosphere is composed through the open `AtmosphericRuntimePlan` seam.
 
 ```text
-HydroClimateField
-      ↓
-HydroClimateForcingSystem
-      ↓
-HydroClimateForcingProcess
-      ↓ Scheduler, once per advanced tick
-EvaporationSystem + SkyPrecipitationSystem
-      ↓
-existing Soil / Water / Liquid Flow owners
+prepared immutable facts
+        ↓
+AtmosphericRuntimePlan        called once before start
+        ↓
+AtmosphericRuntimeComposition
+  ├ AtmosphericWaterForcing
+  └ optional WeatherLookup
+        ↓
+AtmosphericWaterForcingSystem
+        ↓
+Evaporation / Precipitation
+        ↓
+Water / Soil
 ```
 
-`HydroClimateForcingProcess` owns cadence metadata only. It does not own weather, Water or Soil state. It schedules the exact forcing system for each positive absolute simulation tick. When free surface Water changes, existing liquid flow is reactivated through its normal process boundary.
+`AtmosphericWaterForcingSystem` consumes one `AtmosphericWaterForcing` contract and never branches on the concrete model.
 
-The process deliberately does not invent storms, seasons or random event timing. It realizes the current baseline climate normals exactly. Eventful weather remains a later layer that must preserve long-term climate semantics.
+Built-in plans currently include:
 
-## Bootstrap result
+- disabled atmosphere;
+- historical direct ClimateNormals forcing for compatibility;
+- calm current `WeatherState` forcing.
 
-`GeneratedWorldRuntime` carries:
+Applications may supply another `AtmosphericRuntimePlan` without editing a central enum or forcing consumer. `AtmosphericForcingPolicy` is retained only as a compatibility selector for old callers.
 
-- immutable `WorldAtlas` provenance/facts;
-- `TerrainMaterializationResult` initialization accounting;
-- the started ordinary `SimulationRuntime`.
+Current weather is externally observable through read-only `WeatherLookup`; mutable `WeatherState` remains an implementation detail of simulation-owned weather evolution.
 
-It is a pairing/result object, not a new mutable world owner. Runtime stepping still happens through `SimulationRuntime.stepper()` and observation still happens through `SimulationView` and generated-world diagnostics.
+## Eventful weather
+
+`WeatherDriver` evolves `WeatherState`. `AlternatingRainfallPulseDriver` is one replaceable deterministic rainfall algorithm, not a universal definition of rain.
+
+Changing physical rates are integrated interval-by-interval through exact rational carry. A rain event beginning late in simulation therefore cannot retroactively accumulate rainfall for earlier dry ticks.
+
+Low-level rainfall pulse parameters are not authored world intent. They are intended to be compiled from future algorithm-independent calibrated rainfall-regime data.
+
+## Calibration boundary
+
+Calibration belongs before the start boundary. Domain calibrators create immutable prepared parameters and disappear before simulation begins.
+
+They must be narrow, typed and independently replaceable; there is no global Balancer and no generic calibration service registry. See [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
+
+## Algorithm composition
+
+World generation uses explicit typed algorithm contracts. `WorldGenerationAlgorithms` groups replaceable algorithms without constructor explosion or a generic service locator.
+
+Execution order follows real dependencies; no fake dependency is added merely to create a visually linear pipeline.
 
 ## Diagnostics and warmup
 
-Immediately after bootstrap, `GeneratedWorldDiagnosticsProbe` can capture a `tick=0` audit. `GeneratedWorldWarmup` advances this same production runtime to explicitly requested absolute checkpoint ticks and captures further diagnostics through the same probe.
+Diagnostics observe the ordinary started `SimulationRuntime`. Warmup advances that runtime through the same scheduler and does not re-enter generation or calibration.
 
-Warmup has no implicit equilibrium condition and no universal duration. The regular CI matrix currently uses small verification checkpoints to exercise determinism across several seeds; longer developer audits are opt-in through `:simulation:generatedWorldAudit`.
+A generated-world audit may compare prepared facts and runtime state, but it does not grant preparation code authority over the running world.
 
-Balance/viability interpretation remains separate from runtime and warmup. The checkpoint trace is evidence for a future evaluator, not a hidden verdict.
-
-## Current acceptance
-
-Headless integration verifies that:
-
-- an unforced generated world starts through this single path and creates no Water from nothing;
-- Atlas-driven HydroClimate precipitation is executed by the production scheduler;
-- generated Terrain remains aligned with Atlas surface facts when no terrain-changing runtime mechanic exists;
-- same seed + same content setup + same ticks yields identical diagnostics across replay;
-- generated climate cannot be combined with legacy periodic atmospheric schedules;
-- deterministic warmup checkpoints can be reproduced across a representative seed/climate matrix.
-
-See [Generated World Warmup](generated-world-warmup.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Diagnostics](generated-world-diagnostics.md), [Surface Hydrology](hydrology.md), [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md), and [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md).
+See [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Generated World Warmup](generated-world-warmup.md), [Decision 018](../decisions/018-generated-world-runtime-bootstrap.md), [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).

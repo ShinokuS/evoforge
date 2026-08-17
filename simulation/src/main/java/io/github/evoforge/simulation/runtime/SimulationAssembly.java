@@ -11,7 +11,7 @@ import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationD
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinition;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinition;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
@@ -58,7 +58,7 @@ public final class SimulationAssembly {
     private final Map<ObjectId, FacingDirection> initialFacing = new HashMap<>();
     private PrecipitationSchedule precipitationSchedule;
     private EvaporationSchedule evaporationSchedule;
-    private HydroClimateField generatedHydroClimate;
+    private AtmosphericWaterForcing atmosphericWaterForcing;
     private PhysicalCellVolume physicalCellVolume;
     private WorldBounds worldBounds;
     private boolean started;
@@ -146,7 +146,7 @@ public final class SimulationAssembly {
         if (schedule == null) {
             throw new IllegalArgumentException("precipitation schedule must not be null");
         }
-        requireNoGeneratedHydroClimate();
+        requireNoAtmosphericWaterForcing();
         precipitationSchedule = schedule;
         return this;
     }
@@ -173,37 +173,40 @@ public final class SimulationAssembly {
             int amountPerColumn,
             long intervalTicks) {
         requireNotStarted();
-        requireNoGeneratedHydroClimate();
+        requireNoAtmosphericWaterForcing();
         evaporationSchedule = new EvaporationSchedule(amountPerColumn, intervalTicks);
         return this;
     }
 
-    /**
-     * Selects one immutable Atlas hydrologic-climate field as the runtime atmospheric baseline.
-     * Legacy periodic precipitation/evaporation schedules are mutually exclusive with this mode.
-     */
-    public SimulationAssembly generatedHydroClimate(HydroClimateField climate) {
+    /** Selects one runtime atmospheric Water source/sink producer. */
+    public SimulationAssembly atmosphericWaterForcing(AtmosphericWaterForcing forcing) {
         requireNotStarted();
-        if (climate == null) {
-            throw new IllegalArgumentException("climate must not be null");
+        if (forcing == null) {
+            throw new IllegalArgumentException("atmospheric water forcing must not be null");
         }
         if (worldBounds == null) {
             throw new IllegalStateException(
-                    "world bounds must be configured before generated hydro-climate");
+                    "world bounds must be configured before atmospheric water forcing");
         }
-        if (!worldBounds.equals(climate.bounds())) {
+        if (!worldBounds.equals(forcing.bounds())) {
             throw new IllegalArgumentException(
-                    "generated hydro-climate bounds must match runtime world bounds");
+                    "atmospheric water forcing bounds must match runtime world bounds");
         }
         if (precipitationSchedule != null || evaporationSchedule != null) {
             throw new IllegalStateException(
-                    "generated hydro-climate cannot be combined with periodic atmospheric schedules");
+                    "atmospheric water forcing cannot be combined with periodic atmospheric schedules");
         }
-        if (generatedHydroClimate != null) {
-            throw new IllegalStateException("generated hydro-climate is already configured");
+        if (atmosphericWaterForcing != null) {
+            throw new IllegalStateException("atmospheric water forcing is already configured");
         }
-        generatedHydroClimate = climate;
+        atmosphericWaterForcing = forcing;
         return this;
+    }
+
+    /** @deprecated Use {@link #atmosphericWaterForcing(AtmosphericWaterForcing)}. */
+    @Deprecated(forRemoval = true)
+    public SimulationAssembly generatedHydroClimate(AtmosphericWaterForcing forcing) {
+        return atmosphericWaterForcing(forcing);
     }
 
     /**
@@ -529,7 +532,7 @@ public final class SimulationAssembly {
                 new SimulationStartupConfig(
                         precipitationSchedule,
                         evaporationSchedule,
-                        generatedHydroClimate,
+                        atmosphericWaterForcing,
                         physicalCellVolume,
                         createdObjects,
                         initialFacing));
@@ -556,10 +559,10 @@ public final class SimulationAssembly {
         }
     }
 
-    private void requireNoGeneratedHydroClimate() {
-        if (generatedHydroClimate != null) {
+    private void requireNoAtmosphericWaterForcing() {
+        if (atmosphericWaterForcing != null) {
             throw new IllegalStateException(
-                    "periodic atmospheric schedules cannot be combined with generated hydro-climate");
+                    "periodic atmospheric schedules cannot be combined with atmospheric water forcing");
         }
     }
 

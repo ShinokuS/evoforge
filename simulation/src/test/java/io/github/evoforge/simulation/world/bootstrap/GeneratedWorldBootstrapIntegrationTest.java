@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
-import io.github.evoforge.simulation.world.climate.ClimateHydroForcingView;
+import io.github.evoforge.simulation.world.climate.ClimateNormalsWaterForcing;
 import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsProbe;
@@ -146,14 +146,14 @@ final class GeneratedWorldBootstrapIntegrationTest {
                                         CellVolumeRate.of(1L, 2L),
                                         CellVolumeRate.ZERO)),
                         5L));
-        ClimateHydroForcingView forcing = new ClimateHydroForcingView(atlas.climateNormals());
+        ClimateNormalsWaterForcing forcing = new ClimateNormalsWaterForcing(atlas.climateNormals());
 
         SimulationAssembly generatedFirst = SimulationAssembly.create()
                 .worldBounds(
                         bounds.minX(), bounds.maxX(),
                         bounds.minY(), bounds.maxY(),
                         bounds.minZ(), bounds.maxZ())
-                .generatedHydroClimate(forcing);
+                .atmosphericWaterForcing(forcing);
         assertThrows(
                 IllegalStateException.class,
                 () -> generatedFirst.periodicPrecipitation(1, 1L));
@@ -169,7 +169,7 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 .periodicPrecipitation(1, 1L);
         assertThrows(
                 IllegalStateException.class,
-                () -> legacyFirst.generatedHydroClimate(forcing));
+                () -> legacyFirst.atmosphericWaterForcing(forcing));
     }
 
     private static GeneratedWorldRuntime create(

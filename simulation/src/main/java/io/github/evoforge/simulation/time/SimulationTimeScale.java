@@ -41,4 +41,26 @@ public record SimulationTimeScale(Duration tickDuration) {
         }
         return nanosecondsPerTick().multiply(BigInteger.valueOf(ticks));
     }
+
+    /**
+     * Smallest positive number of whole simulation ticks that can represent the supplied physical
+     * duration. This is the canonical quantization boundary for event-driven physical processes.
+     */
+    public long ticksForCeiling(BigInteger durationNanoseconds) {
+        if (durationNanoseconds == null || durationNanoseconds.signum() <= 0) {
+            throw new IllegalArgumentException("physical duration must be positive");
+        }
+        BigInteger[] division = durationNanoseconds.divideAndRemainder(nanosecondsPerTick());
+        BigInteger ticks = division[0];
+        if (division[1].signum() != 0) {
+            ticks = ticks.add(BigInteger.ONE);
+        }
+        if (ticks.signum() <= 0) {
+            ticks = BigInteger.ONE;
+        }
+        if (ticks.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            throw new IllegalStateException("physical duration exceeds simulation tick range");
+        }
+        return ticks.longValueExact();
+    }
 }
