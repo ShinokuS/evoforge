@@ -43,7 +43,7 @@ final class ClimateNormalsGenerationTest {
     }
 
     @Test
-    void v5AndV6TemperatureUsePreciseElevationWhileV4KeepsUniformFallback() {
+    void v5ThroughV7TemperatureUsePreciseElevationWhileV4KeepsUniformFallback() {
         WorldBounds bounds = new WorldBounds(0, 1, 0, 0, -10, 10);
         ClimateSpec climate = ClimateSpec.of(
                 ClimateTemperature.ofMilliCelsius(20_000),
@@ -77,6 +77,8 @@ final class ClimateNormalsGenerationTest {
                 new WorldGenesis(spec, 1L, GenerationRevision.V5, RngRevision.V1), elevation);
         ClimateNormalsField v6 = stage.generate(
                 new WorldGenesis(spec, 1L, GenerationRevision.V6, RngRevision.V1), elevation);
+        ClimateNormalsField v7 = stage.generate(
+                new WorldGenesis(spec, 1L, GenerationRevision.V7, RngRevision.V1), elevation);
 
         assertEquals(20_000, v4.meanTemperatureAt(0, 0).milliCelsius());
         assertEquals(20_000, v4.meanTemperatureAt(1, 0).milliCelsius());
@@ -85,19 +87,22 @@ final class ClimateNormalsGenerationTest {
         assertNotEquals(v5.meanTemperatureAt(0, 0), v5.meanTemperatureAt(1, 0));
         for (int x = 0; x <= 1; x++) {
             assertEquals(v5.meanTemperatureAt(x, 0), v6.meanTemperatureAt(x, 0));
+            assertEquals(v6.meanTemperatureAt(x, 0), v7.meanTemperatureAt(x, 0));
             assertEquals(v5.precipitationSupplyAt(x, 0), v6.precipitationSupplyAt(x, 0));
+            assertEquals(v6.precipitationSupplyAt(x, 0), v7.precipitationSupplyAt(x, 0));
             assertEquals(v5.evaporativeDemandAt(x, 0), v6.evaporativeDemandAt(x, 0));
+            assertEquals(v6.evaporativeDemandAt(x, 0), v7.evaporativeDemandAt(x, 0));
         }
     }
 
     @Test
-    void defaultWorldClimateIsExplicitlyUnforcedAndValidationIsStrict() {
+    void defaultWorldClimateProvidesNeutralHydrologicBaselineAndValidationIsStrict() {
         WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -1, 1);
         WorldSpec spec = new WorldSpec(bounds);
         ClimateSpec climate = spec.climate();
 
-        assertEquals(CellVolumeRate.ZERO, climate.precipitationSupply());
-        assertEquals(CellVolumeRate.ZERO, climate.evaporativeDemand());
+        assertEquals(CellVolumeRate.of(1L, 1L), climate.precipitationSupply());
+        assertEquals(CellVolumeRate.of(1L, 1L), climate.evaporativeDemand());
         assertThrows(IllegalArgumentException.class, () -> new WorldSpec(bounds, null));
         assertThrows(IllegalArgumentException.class,
                 () -> ClimateTemperature.ofMilliCelsius(-273_151));
