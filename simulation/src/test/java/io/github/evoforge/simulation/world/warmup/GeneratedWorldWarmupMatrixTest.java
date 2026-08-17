@@ -3,17 +3,16 @@ package io.github.evoforge.simulation.world.warmup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
-
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
-
-import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
-import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 
 final class GeneratedWorldWarmupMatrixTest {
 
@@ -91,11 +90,13 @@ final class GeneratedWorldWarmupMatrixTest {
         return List.of(
                 new MatrixProfile(
                         "unforced",
-                        HydroClimateSpec.UNFORCED,
+                        ClimateSpec.STANDARD_UNFORCED,
                         false),
                 new MatrixProfile(
                         "fractional-net-supply",
-                        HydroClimateSpec.of(
+                        ClimateSpec.of(
+                                ClimateTemperature.ofMilliCelsius(12_000),
+                                250,
                                 CellVolumeRate.of(100_001L, 3L),
                                 CellVolumeRate.of(20_003L, 4L)),
                         true));
@@ -104,7 +105,7 @@ final class GeneratedWorldWarmupMatrixTest {
     /** Internal engine-test profile; these exact rates are not user-facing world controls. */
     private record MatrixProfile(
             String name,
-            HydroClimateSpec climate,
+            ClimateSpec climate,
             boolean hasAtmosphericSupply) {
     }
 }
