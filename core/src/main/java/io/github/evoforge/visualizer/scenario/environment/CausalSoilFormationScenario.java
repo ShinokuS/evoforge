@@ -16,6 +16,7 @@ import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerat
 import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfile;
 import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfileBindings;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
@@ -82,7 +83,7 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         WorldGenesis genesis = WorldGenesis.current(
-                new WorldSpec(BOUNDS, io.github.evoforge.simulation.world.genesis.ClimateSpec.STANDARD, SPACE),
+                new WorldSpec(BOUNDS, ClimateSpec.STANDARD, SPACE),
                 0x50A1F04DL);
         WorldGenerationAlgorithms algorithms = WorldGenerationAlgorithms.standard()
                 .withElevation(ignored -> acceptanceElevation())
@@ -166,10 +167,8 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
         long retained = runtime.view().soilLiquids()
                 .amountOf(WaterSystem.TYPE, x, y, SURFACE_Z);
         long free = 0L;
-        for (int px = x - 1; px <= x + 1; px++) {
-            for (int py = y - 1; py <= y + 1; py++) {
-                free += runtime.view().water().amount(px, py, WATER_Z);
-            }
+        for (int z = BOUNDS.minZ(); z <= BOUNDS.maxZ(); z++) {
+            free += runtime.view().water().amount(x, y, z);
         }
         return new CellWater(retained, free);
     }
