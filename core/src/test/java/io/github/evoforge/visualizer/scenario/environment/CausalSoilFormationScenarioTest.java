@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 final class CausalSoilFormationScenarioTest {
 
     @Test
-    void sameTerrainMaterialRespondsDifferentlyAfterCausalFormation() {
+    void sameTerrainMaterialRespondsDifferentlyAfterCausalFormationAndThenDries() {
         ScenarioSession session = new CausalSoilFormationScenario().create();
 
         assertEquals(
@@ -55,6 +55,15 @@ final class CausalSoilFormationScenarioTest {
         assertTrue(
                 basinWater.free() > ridgeWater.free(),
                 "the slower concave soil must leave more free Water without any Puddle generator");
+
+        while (session.runtime().time().tick() < 40L) {
+            session.runtime().stepper().advance();
+        }
+
+        assertEquals(0L, ridgeWater(session).retained(), "dry phase must empty retained ridge Water");
+        assertEquals(0L, basinWater(session).retained(), "dry phase must empty retained basin Water");
+        assertEquals(0L, ridgeWater(session).free(), "dry phase must empty free ridge Water");
+        assertEquals(0L, basinWater(session).free(), "dry phase must empty free basin Water");
     }
 
     private static CausalSoilFormationScenario.CellWater ridgeWater(ScenarioSession session) {
