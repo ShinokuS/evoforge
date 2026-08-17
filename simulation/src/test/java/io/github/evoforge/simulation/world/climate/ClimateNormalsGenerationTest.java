@@ -34,10 +34,16 @@ final class ClimateNormalsGenerationTest {
         HydroClimateField forcing = new ClimateHydroForcingView(normals);
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                assertEquals(climate.precipitationSupply(), normals.precipitationSupplyAt(x, y));
-                assertEquals(climate.evaporativeDemand(), normals.evaporativeDemandAt(x, y));
-                assertEquals(normals.precipitationSupplyAt(x, y), forcing.precipitationSupplyAt(x, y));
-                assertEquals(normals.evaporativeDemandAt(x, y), forcing.evaporativeDemandAt(x, y));
+                assertEquals(climate.precipitationNormal(), normals.precipitationNormalAt(x, y));
+                assertEquals(
+                        climate.evaporativeDemandNormal(),
+                        normals.evaporativeDemandNormalAt(x, y));
+                assertEquals(
+                        normals.precipitationNormalAt(x, y),
+                        forcing.precipitationSupplyAt(x, y));
+                assertEquals(
+                        normals.evaporativeDemandNormalAt(x, y),
+                        forcing.evaporativeDemandAt(x, y));
             }
         }
     }
@@ -85,19 +91,22 @@ final class ClimateNormalsGenerationTest {
         assertNotEquals(v5.meanTemperatureAt(0, 0), v5.meanTemperatureAt(1, 0));
         for (int x = 0; x <= 1; x++) {
             assertEquals(v5.meanTemperatureAt(x, 0), v6.meanTemperatureAt(x, 0));
-            assertEquals(v5.precipitationSupplyAt(x, 0), v6.precipitationSupplyAt(x, 0));
-            assertEquals(v5.evaporativeDemandAt(x, 0), v6.evaporativeDemandAt(x, 0));
+            assertEquals(v5.precipitationNormalAt(x, 0), v6.precipitationNormalAt(x, 0));
+            assertEquals(
+                    v5.evaporativeDemandNormalAt(x, 0),
+                    v6.evaporativeDemandNormalAt(x, 0));
         }
     }
 
     @Test
-    void defaultWorldClimateIsExplicitlyUnforcedAndValidationIsStrict() {
+    void defaultWorldClimateIsAWorldFactRatherThanARuntimeMode() {
         WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -1, 1);
         WorldSpec spec = new WorldSpec(bounds);
         ClimateSpec climate = spec.climate();
 
-        assertEquals(CellVolumeRate.ZERO, climate.precipitationSupply());
-        assertEquals(CellVolumeRate.ZERO, climate.evaporativeDemand());
+        assertEquals(ClimateSpec.STANDARD, climate);
+        assertEquals(CellVolumeRate.ZERO, climate.precipitationNormal());
+        assertEquals(CellVolumeRate.ZERO, climate.evaporativeDemandNormal());
         assertThrows(IllegalArgumentException.class, () -> new WorldSpec(bounds, null));
         assertThrows(IllegalArgumentException.class,
                 () -> ClimateTemperature.ofMilliCelsius(-273_151));
