@@ -45,11 +45,11 @@ final class WorldAtlasRevisionIsolationTest {
                         v5.climateNormals().meanTemperatureAt(x, y),
                         v6.climateNormals().meanTemperatureAt(x, y));
                 assertEquals(
-                        v5.climateNormals().precipitationSupplyAt(x, y),
-                        v6.climateNormals().precipitationSupplyAt(x, y));
+                        v5.climateNormals().precipitationNormalAt(x, y),
+                        v6.climateNormals().precipitationNormalAt(x, y));
                 assertEquals(
-                        v5.climateNormals().evaporativeDemandAt(x, y),
-                        v6.climateNormals().evaporativeDemandAt(x, y));
+                        v5.climateNormals().evaporativeDemandNormalAt(x, y),
+                        v6.climateNormals().evaporativeDemandNormalAt(x, y));
 
                 boolean hasDownstream = v5.drainage().hasDownstream(x, y);
                 assertEquals(hasDownstream, v6.drainage().hasDownstream(x, y));
