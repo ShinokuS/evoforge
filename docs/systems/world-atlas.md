@@ -1,133 +1,152 @@
 # World Atlas
 
-World Atlas owns durable generated facts that are authored from `WorldGenesis` before detailed world materialization. It is not terrain storage and does not simulate runtime mechanics.
+## Purpose
+
+`WorldAtlas` is the immutable durable fact set generated from `WorldGenesis`. It describes what the world was prepared to be before runtime mutation begins.
+
+Atlas is **not** Terrain storage, WeatherState, Water, Soil, a scheduler, a runtime service container, or a source of continuing simulation control.
 
 ## Current composition
 
-The current Atlas contains:
+```text
+WorldAtlas
+├─ WorldGenesis
+├─ ElevationField
+├─ GeologyField
+├─ ClimateNormalsField
+├─ DrainageField
+├─ HydrographyField
+└─ SurfaceHydrologyField
+```
+
+Every field covers the same `WorldBounds` as genesis.
+
+The layers have different causal roles:
+
+- `ElevationField` — durable macro surface height;
+- `GeologyField` — durable geological identity/stratification facts;
+- `ClimateNormalsField` — long-term climate normals, not current weather;
+- `DrainageField` — topological downstream routing and contributing area;
+- `HydrographyField` — durable channel network derived from terrain/drainage;
+- `SurfaceHydrologyField` — finite generated initial surface-Water condition and shoreline facts.
+
+A channel may exist while containing no runtime Water. Climate normals may indicate a wet climate while no rain is currently falling.
+
+## Generation dependencies
+
+`WorldAtlasGenerator` is a thin typed orchestration boundary. Current dependencies are explicit:
 
 ```text
 WorldGenesis
-ElevationField
-DrainageField
-HydroClimateField
+   ├──────────────→ Elevation
+   ├──────────────→ Geology
+   └──────┐
+          └────────→ ClimateNormals
+Elevation ─────────→ Drainage
+Elevation + Drainage ─→ Hydrography
+Elevation + Drainage + Hydrography + ClimateNormals
+                    └→ SurfaceHydrology
 ```
 
-`WorldAtlas` validates that every layer describes the same `WorldBounds` as its genesis.
+Execution order follows these real dependencies. No stage receives another stage merely to force a convenient linear pipeline.
 
-## Elevation
+## Algorithm substitution
 
-`ElevationField` is an immutable read contract over global XY world columns with two deliberately different views of one generated fact:
+Each generation layer has a narrow typed generator contract. The canonical replacement surface is `WorldGenerationAlgorithms`:
 
 ```text
-elevationSubunitsAt(x, y) -> precise macro elevation
-elevationAt(x, y)         -> discrete surface-cell z
+WorldGenerationAlgorithms
+├ elevation       : ElevationGenerator
+├ geology         : GeologyGenerator
+├ climate         : ClimateNormalsGenerator
+├ drainage        : DrainageGenerator
+├ hydrography     : HydrographyGenerator
+└ surfaceHydrology: SurfaceHydrologyGenerator
 ```
 
-One world Z cell equals `1_000_000` elevation subunits. The precise value is the durable Atlas fact used by macro algorithms that need gradients, especially drainage. `elevationAt` is the floor-derived cell coordinate intended for terrain materialization. Negative values therefore use mathematical floor semantics rather than truncation toward zero.
+The standard bundle supplies production algorithms. `withElevation(...)`, `withClimate(...)` and the other typed replacement methods allow any combination to be substituted without creating constructor overloads or a generic service registry.
 
-This distinction prevents discrete terrain representation from destroying information needed by world-scale causality. Two neighbouring columns may materialize at the same integer Z while still have an ordered elevation gradient in Atlas. Drainage uses the precise value rather than treating such columns as an artificial flat.
+A generic `Map<String,Object>` / `Map<Class<?>,Object>` generation context is deliberately rejected: dependencies and ownership remain visible in the type system.
 
-Coordinates outside the field bounds are invalid queries. Elevation remains inside a reserved central vertical band of the world's Z bounds, leaving representational room below and above for later geology/materialization, Water and open space.
+## Climate facts are not atmosphere execution
 
-The current package-private implementation stores a dense bounded `long[]` of elevation subunits. Consumers cannot depend on that representation. Tiling, compression or another representation may replace it later behind `ElevationField` if representative profiling justifies the change.
+`ClimateNormalsField` contains durable long-term facts. Depending on generation revision, historical worlds may retain legacy cell-relative water normals while V8+ can use physical water-depth-per-time normals.
 
-## Elevation generation revisions
+Neither representation is a current rain event.
 
-`ElevationGenerator` is the typed semantic algorithm contract that authors an `ElevationField` from `WorldGenesis`. `ElevationGenerationStage` currently executes two compatible authored-world revisions:
-
-- `evoforge:worldgen-v1` is the accepted legacy elevation semantics. It preserves the original integer surface height exactly and exposes precise elevation as that whole-cell value multiplied by the subunit scale.
-- `evoforge:worldgen-v2` is the current semantics. It preserves the same discrete V1 surface height for identical inputs but retains the deterministic fractional remainder that V1 discarded when mapping normalized noise into world Z.
-
-V2 therefore changes the durable generated elevation fact without rewriting the already-accepted discrete terrain shape. The revision change is intentional: regenerating a historical V1 recipe remains capable of producing its cell-quantized elevation semantics rather than silently adopting newer precision.
-
-Both revisions use the same three deterministic value-noise bands:
-
-- coarse scale: 32 world cells, weight 4;
-- medium scale: 16 world cells, weight 2;
-- detail scale: 8 world cells, weight 1.
-
-Each band has its own `GenerationPurposeId` under the common `world:elevation` stage. Lattice samples use `GenerationRandom`, so sample order is irrelevant. The RNG revision remains `evoforge:rng-v1`; the V2 change is generated-fact interpretation, not a new random algorithm.
-
-The lattice is anchored in global coordinates rather than rebased to `WorldBounds.minX/minY`. With the same seed, generation/RNG revisions and vertical bounds, overlapping XY areas therefore resolve the same precise elevation facts even when the requested horizontal crop differs.
-
-Headless tests freeze the accepted V1 discrete samples, prove that current V2 keeps those same discrete samples, prove V1 remains exactly cell-quantized, and prove V2 distinguishes neighbouring columns that are equal only after integer materialization.
-
-## Drainage
-
-`DrainageField` is the immutable macro topology derived from `ElevationField`. For each world column it exposes:
+Current atmosphere belongs to runtime:
 
 ```text
-optional in-bounds downstream column
-contributing area in source columns
-terminal basin representative
+ClimateNormalsField      durable prepared fact
+        ↓ initialization/calibration input
+WeatherState             mutable runtime state
+        ↓
+AtmosphericWaterForcing  runtime process contract
+        ↓
+Water / Soil
 ```
 
-`DrainageGenerator` is deliberately narrower than the elevation algorithm contract:
+No runtime atmospheric interface belongs in `world.atlas`.
+
+## Drainage, hydrography and Water ownership
+
+`DrainageField` is topology, not Water quantity.
+
+`HydrographyField` describes channel structure, not an infinite river source.
+
+`SurfaceHydrologyField` can provide finite tick-zero Water. Runtime bootstrap materializes that initial condition exactly once. After start, the ordinary runtime Water/Soil/liquid systems are the only owners of lived water state.
+
+This preserves scenarios such as:
 
 ```text
-generate(ElevationField) -> DrainageField
+channel exists
++ currently dry weather
+→ dry channel
+
+later rain/runoff
+→ Water enters channel through runtime physics
 ```
 
-The current `DrainageGenerationStage` first chooses a steepest strictly lower D8 neighbour using precise elevation. Exact-elevation flat components are then resolved deterministically. A flat that touches one or more lower outlets routes internally toward those outlets; a flat with no lower outlet receives one deterministic internal terminal representative. Ordinary local minima are terminal directly.
+without `DryRiver`/`WetRiver` terrain categories.
 
-No neighbour outside `WorldBounds` is ever considered. World edges are therefore closed hydrologic boundaries, not external sinks. Enclosed depressions survive as real internal basins instead of being filled or forced to drain off-map.
+## Material identity and materialization
 
-Contributing area is accumulated over the resulting acyclic topology. It is a first-order channel/river-potential fact, not Water quantity. Terminal coordinates provide stable basin membership without inventing region or chunk identity.
-
-Unlike elevation sampling, drainage topology is legitimately boundary-dependent: cropping to different `WorldBounds` creates a different closed hydrologic world and may change paths near or upstream of the new boundary.
-
-## Hydrologic climate normals
-
-`HydroClimateField` is the immutable long-term atmospheric forcing fact for each XY column. It exposes:
+Generated terrain composition chooses stable semantic material keys. Runtime content bindings resolve those keys to runtime `LandscapeDefinitionId` values only at the materialization boundary.
 
 ```text
-precipitation supply       CellVolumeRate
-evaporative demand         CellVolumeRate
+Atlas + TerrainMaterialField
+          ↓
+PreparedGeneratedWorld
+          ↓
+--------- runtime start boundary ---------
+          ↓
+TerrainMaterialBindings
+          ↓
+WorldTerrainMaterializer
+          ↓
+LandscapeSystem owns lived Terrain
 ```
 
-These are normals, not weather events. They do not schedule rain, remove Water or mutate Soil. Runtime precipitation and evaporation remain owned by their existing environment systems.
+Atlas does not remain synchronized with later Terrain mutation. It remains provenance/durable generated context.
 
-`HydroClimateSpec` belongs to `WorldSpec`, so the requested forcing is part of generation input/provenance rather than an ambient balance constant. The compatibility `WorldSpec(bounds)` constructor is explicitly `UNFORCED`: zero precipitation supply and zero evaporative demand.
+## Preparation boundary
 
-The first `HydroClimateGenerationStage` is deliberately uniform and simply authors the requested rates at every in-bounds XY column. EvoForge does not add random climate texture before there is a causal spatial model for latitude, atmospheric circulation, wind, temperature or rain shadow. A later climate algorithm may introduce spatial variation behind the same fact contract when those inputs are real.
-
-## Algorithm composition
-
-`WorldAtlasGenerator` remains deliberately thin. It composes narrow typed algorithms:
+The canonical path is:
 
 ```text
-ElevationGenerator    -> ElevationField
-                            ↓
-DrainageGenerator     -> DrainageField
-
-WorldSpec
+WorldGenesis
     ↓
-HydroClimateGenerator -> HydroClimateField
+GeneratedWorldPreparation
+    ↓
+WorldAtlas + stable material field
+    ↓
+PreparedGeneratedWorld
+    ↓
+GeneratedWorldRuntimeBootstrap
+    ↓
+SimulationRuntime
 ```
 
-The default constructor selects `ElevationGenerationStage`, `DrainageGenerationStage` and `HydroClimateGenerationStage`. Existing elevation-only and elevation+drainage constructors remain valid and pair supplied algorithms with the default missing stages.
+Generation and future calibration end before runtime starts. A running simulation does not call WorldAtlas generators or calibrators.
 
-The precision extension does not invalidate substitute elevation algorithms. `ElevationField.elevationSubunitsAt(...)` has a compatibility default derived from `elevationAt(...)`, so a substitute that only authors discrete heights remains valid and explicitly has cell-level precision until it chooses to provide more.
-
-Substitution does not remove validation. `WorldAtlasGenerator` rejects missing/broken algorithm output and `WorldAtlas` validates every generated layer against `WorldGenesis` bounds.
-
-Future stages use their own narrow semantic contracts when their real dependencies are known. They do not share one universal mutable generation context.
-
-## Materialization boundary
-
-Atlas facts remain authored/generated facts rather than mutable runtime state. The first concrete materialization consumer is now `WorldTerrainMaterializer`, which consumes only `ElevationField` and creates runtime Terrain through `LandscapeMutations`.
-
-For each XY column, Terrain is placed from `WorldBounds.minZ` through discrete `elevationAt(x,y)`, inclusive. Material identity comes from an injected `TerrainMaterialResolver`; Atlas elevation itself does not invent soil/stone/geology identity. The materializer requires an empty Terrain and is initial construction, not continuous Atlas/Landscape synchronization.
-
-Once cells are placed, `LandscapeSystem` owns their runtime state and maintains its normal Terrain surfaces, Geometry behavior and traversal revisions. Atlas remains immutable provenance/world-scale authored facts even if the lived Terrain later changes.
-
-Drainage can later guide initial hydrology/channels and climate supplies long-term atmospheric forcing. Neither becomes a second runtime Water solver. World Atlas therefore does not own free-liquid flow, soil retained liquid, objects, agents or dynamic weather.
-
-See [World Materialization](world-materialization.md) and [Decision 016](../decisions/016-atlas-terrain-materialization.md) for the ownership transfer boundary.
-
-## Deferred representation decisions
-
-No chunk dimensions, region semantics, streaming lifecycle or simulation LOD are introduced here. Temperature, wind, seasons and weather anomalies are also deferred until they have concrete consumers and causal models.
-
-See [Decision 010 — World Atlas owns durable generated facts](../decisions/010-world-atlas-generated-facts.md), [Decision 011 — World generation algorithms compose behind typed contracts](../decisions/011-world-generation-algorithm-contracts.md), [Decision 012 — Drainage preserves closed-world basins](../decisions/012-closed-world-drainage-topology.md), [Decision 013 — Long-term environmental rates use exact simulation dimensions](../decisions/013-simulation-rate-units.md), [Decision 014 — Hydrologic climate normals are generated facts, not runtime weather](../decisions/014-hydrologic-climate-normals.md), [Decision 016 — Atlas elevation materializes through a one-way Terrain ownership boundary](../decisions/016-atlas-terrain-materialization.md), and [World Genesis](world-genesis.md).
+See [Generated World Runtime](generated-world-runtime.md), [World Materialization](world-materialization.md), [Decision 010](../decisions/010-world-atlas-generated-facts.md), [Decision 011](../decisions/011-world-generation-algorithm-contracts.md), [Decision 016](../decisions/016-atlas-terrain-materialization.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
