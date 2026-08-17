@@ -11,7 +11,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Deterministic first geology model: coherent jittered macro-provinces with vertical strata.
  *
  * <p>V1-V3 predate generated geology and intentionally reproduce the former uniform granite
- * bedrock identity. V4 generates multiple content-defined units without material-specific rules.</p>
+ * bedrock identity. V4+ generate multiple content-defined units without material-specific rules.</p>
  */
 public final class GeologyGenerationStage implements GeologyGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:geology");
@@ -57,7 +57,7 @@ public final class GeologyGenerationStage implements GeologyGenerator {
             java.util.Arrays.fill(unitOrdinals, (char) granite);
             return new DenseGeologyField(bounds, profile, unitOrdinals, provinceIds);
         }
-        if (!GenerationRevision.V4.equals(revision)) {
+        if (!GenerationRevision.V4.equals(revision) && !GenerationRevision.V5.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
