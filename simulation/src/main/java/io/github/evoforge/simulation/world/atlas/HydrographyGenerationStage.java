@@ -8,10 +8,9 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Deterministic generated channel network derived from drainage accumulation and available surface
  * headroom.
  *
- * <p>V1/V2 predate generated surface Water and therefore expose no channels. V3+ preserve the
- * channel footprint that historically lived inside {@link SurfaceHydrologyGenerationStage}. The
- * field deliberately does not claim stream discharge, climate water balance, or mutable runtime
- * Water; those remain separate concerns.</p>
+ * <p>V1/V2 predate generated surface Water and expose no channels. V3+ preserve the same durable
+ * channel footprint. Climate may affect initial water but never whether this generated channel fact
+ * exists, so dry climates can retain dry channels.</p>
  */
 public final class HydrographyGenerationStage implements HydrographyGenerator {
 
@@ -40,7 +39,9 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
         if (!GenerationRevision.V3.equals(revision)
                 && !GenerationRevision.V4.equals(revision)
                 && !GenerationRevision.V5.equals(revision)
-                && !GenerationRevision.V6.equals(revision)) {
+                && !GenerationRevision.V6.equals(revision)
+                && !GenerationRevision.V7.equals(revision)
+                && !GenerationRevision.V8.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
