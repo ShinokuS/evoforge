@@ -4,39 +4,75 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import org.junit.jupiter.api.Test;
 
 final class SurfaceHydrologyGenerationStageTest {
 
     @Test
-    void currentV6PreservesFiniteChannelWaterAndAdjacentDryShoreline() {
+    void v7ScalesFiniteInitialChannelWaterByClimateMoistureShare() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
-        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
         ElevationField elevation = constantElevation(bounds, 0);
         DrainageField drainage = syntheticDrainage(bounds);
+        SurfaceHydrologyGenerationStage stage = new SurfaceHydrologyGenerationStage();
 
-        SurfaceHydrologyField field = new SurfaceHydrologyGenerationStage().generate(
-                genesis,
+        SurfaceHydrologyField legacyV6 = stage.generate(
+                genesis(bounds, climate(0L, 1L), GenerationRevision.V6),
+                elevation,
+                drainage);
+        SurfaceHydrologyField balancedV7 = stage.generate(
+                genesis(bounds, climate(1L, 1L), GenerationRevision.V7),
+                elevation,
+                drainage);
+        SurfaceHydrologyField humidV7 = stage.generate(
+                genesis(bounds, climate(3L, 1L), GenerationRevision.V7),
+                elevation,
+                drainage);
+        SurfaceHydrologyField dryV7 = stage.generate(
+                genesis(bounds, climate(0L, 1L), GenerationRevision.V7),
                 elevation,
                 drainage);
 
-        assertEquals(GenerationRevision.V6, genesis.generationRevision());
         for (int y = 0; y <= 4; y++) {
-            assertTrue(field.isInitiallyWet(2, y));
-            assertFalse(field.isShoreline(2, y));
+            int legacy = legacyV6.initialWaterVolumeAt(2, y);
+            assertTrue(legacy > 0);
+            assertEquals(legacy / 2, balancedV7.initialWaterVolumeAt(2, y));
+            assertEquals((legacy * 3) / 4, humidV7.initialWaterVolumeAt(2, y));
+            assertEquals(0, dryV7.initialWaterVolumeAt(2, y));
         }
-        assertTrue(field.isShoreline(1, 2));
-        assertTrue(field.isShoreline(3, 2));
-        assertFalse(field.isShoreline(0, 2));
-        assertFalse(field.isShoreline(4, 2));
+
+        assertTrue(balancedV7.isShoreline(1, 2));
+        assertTrue(balancedV7.isShoreline(3, 2));
+        assertFalse(balancedV7.isShoreline(0, 2));
+        assertFalse(balancedV7.isShoreline(4, 2));
+        for (int y = 0; y <= 4; y++) {
+            for (int x = 0; x <= 4; x++) {
+                assertFalse(dryV7.isInitiallyWet(x, y));
+                assertFalse(dryV7.isShoreline(x, y));
+            }
+        }
+    }
+
+    @Test
+    void currentV7UsesNeutralBaselineAndKeepsDrainageOrdering() {
+        WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
+        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
+        SurfaceHydrologyField field = new SurfaceHydrologyGenerationStage().generate(
+                genesis,
+                constantElevation(bounds, 0),
+                syntheticDrainage(bounds));
+
+        assertEquals(GenerationRevision.V7, genesis.generationRevision());
         assertTrue(field.initialWaterVolumeAt(2, 4) > field.initialWaterVolumeAt(2, 0));
-        assertTrue(field.initialWaterVolumeAt(2, 0) > 0);
-        assertTrue(field.initialWaterVolumeAt(2, 4) < 1_000_000);
+        assertEquals(150_000, field.initialWaterVolumeAt(2, 0));
+        assertEquals(350_000, field.initialWaterVolumeAt(2, 4));
     }
 
     @Test
@@ -59,6 +95,25 @@ final class SurfaceHydrologyGenerationStageTest {
                 assertFalse(field.isShoreline(x, y));
             }
         }
+    }
+
+    private static WorldGenesis genesis(
+            WorldBounds bounds,
+            ClimateSpec climate,
+            GenerationRevision revision) {
+        return new WorldGenesis(
+                new WorldSpec(bounds, climate),
+                17L,
+                revision,
+                RngRevision.V1);
+    }
+
+    private static ClimateSpec climate(long precipitation, long evaporation) {
+        return ClimateSpec.of(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                CellVolumeRate.of(precipitation, 1L),
+                CellVolumeRate.of(evaporation, 1L));
     }
 
     private static ElevationField constantElevation(WorldBounds bounds, int value) {
