@@ -59,19 +59,21 @@ final class EvaporationSystemTest {
     }
 
     @Test
-    void sustainedDemandCanDryExposedFreeAndRetainedWaterCompletely() {
+    void repeatedDemandKeepsReducingExposedRetainedWater() {
         Fixture fixture = new Fixture();
         fixture.placeSoil(0, 0, 0);
         fixture.retainWater(0, 0, 0, 70_000);
         fixture.water.addAtMost(0, 0, 1, 40_000);
 
         fixture.evaporation.applyUniform(50_000);
-        fixture.evaporation.applyUniform(50_000);
-        fixture.evaporation.applyUniform(50_000);
-
         assertEquals(0, fixture.water.lookup().amount(0, 0, 1));
-        assertEquals(0, fixture.retainedWater(0, 0, 0));
-        assertEquals(0, fixture.soilLiquids.cells().occupiedCellCount());
+        assertEquals(60_000, fixture.retainedWater(0, 0, 0));
+
+        fixture.evaporation.applyUniform(20_000);
+        assertEquals(40_000, fixture.retainedWater(0, 0, 0));
+
+        fixture.evaporation.applyUniform(15_000);
+        assertEquals(25_000, fixture.retainedWater(0, 0, 0));
     }
 
     @Test
