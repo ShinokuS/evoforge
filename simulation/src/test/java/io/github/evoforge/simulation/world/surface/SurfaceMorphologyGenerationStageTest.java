@@ -10,24 +10,31 @@ import org.junit.jupiter.api.Test;
 final class SurfaceMorphologyGenerationStageTest {
 
     @Test
-    void derivesSlopeAndConcavityFromPreciseElevationWithoutAbsoluteHeightBias() {
+    void distinguishesConvexAndConcavePositionsFromPreciseElevation() {
         long cell = ElevationField.SUBUNITS_PER_CELL;
         WorldBounds bounds = new WorldBounds(0, 2, 0, 2, -2, 2);
-        ElevationField elevation = field(
+
+        SurfaceMorphologyField bowl = new SurfaceMorphologyGenerationStage().generate(field(
                 bounds,
                 new long[] {
                         cell, cell, cell,
                         cell, 0L, cell,
                         cell, cell, cell
-                });
+                }));
+        assertEquals(cell, bowl.maximumNeighborSlopeSubunitsAt(1, 1));
+        assertEquals(0L, bowl.convexitySubunitsAt(1, 1));
+        assertEquals(cell, bowl.concavitySubunitsAt(1, 1));
 
-        SurfaceMorphologyField morphology =
-                new SurfaceMorphologyGenerationStage().generate(elevation);
-
-        assertEquals(cell, morphology.maximumNeighborSlopeSubunitsAt(1, 1));
-        assertEquals(cell, morphology.concavitySubunitsAt(1, 1));
-        assertEquals(cell, morphology.maximumNeighborSlopeSubunitsAt(0, 0));
-        assertEquals(0L, morphology.concavitySubunitsAt(0, 0));
+        SurfaceMorphologyField ridge = new SurfaceMorphologyGenerationStage().generate(field(
+                bounds,
+                new long[] {
+                        0L, 0L, 0L,
+                        0L, cell, 0L,
+                        0L, 0L, 0L
+                }));
+        assertEquals(cell, ridge.maximumNeighborSlopeSubunitsAt(1, 1));
+        assertEquals(cell, ridge.convexitySubunitsAt(1, 1));
+        assertEquals(0L, ridge.concavitySubunitsAt(1, 1));
     }
 
     @Test
@@ -55,6 +62,9 @@ final class SurfaceMorphologyGenerationStageTest {
                         first.maximumNeighborSlopeSubunitsAt(x, y),
                         second.maximumNeighborSlopeSubunitsAt(x, y));
                 assertEquals(
+                        first.convexitySubunitsAt(x, y),
+                        second.convexitySubunitsAt(x, y));
+                assertEquals(
                         first.concavitySubunitsAt(x, y),
                         second.concavitySubunitsAt(x, y));
             }
@@ -70,6 +80,9 @@ final class SurfaceMorphologyGenerationStageTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> morphology.maximumNeighborSlopeSubunitsAt(1, 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> morphology.convexitySubunitsAt(0, 1));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> morphology.concavitySubunitsAt(0, 1));
