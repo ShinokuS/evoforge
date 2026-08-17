@@ -3,17 +3,16 @@ package io.github.evoforge.simulation.world.warmup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsFormat;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.List;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 @Tag("generated-world-audit")
 final class GeneratedWorldAuditProfileTest {
@@ -46,7 +45,7 @@ final class GeneratedWorldAuditProfileTest {
 
                 GeneratedWorldDiagnostics initial = trace.get(0);
                 assertTrue(initial.geologyProvinces() >= 1);
-                assertTrue(initial.geologyUnits() > 1, "V4 geology collapsed to one unit");
+                assertTrue(initial.geologyUnits() > 1, "V5 geology collapsed to one unit");
                 assertTrue(initial.generatedInitialWaterVolume() > 0L);
                 assertTrue(initial.generatedInitialWaterColumns() > 0);
                 assertTrue(initial.generatedShorelineColumns() > 0);
@@ -93,10 +92,12 @@ final class GeneratedWorldAuditProfileTest {
 
     private static List<AuditProfile> profiles() {
         return List.of(
-                new AuditProfile("unforced", HydroClimateSpec.UNFORCED, false),
+                new AuditProfile("unforced", ClimateSpec.STANDARD_UNFORCED, false),
                 new AuditProfile(
                         "fractional-net-supply",
-                        HydroClimateSpec.of(
+                        ClimateSpec.of(
+                                ClimateTemperature.ofMilliCelsius(12_000),
+                                250,
                                 CellVolumeRate.of(100_001L, 3L),
                                 CellVolumeRate.of(20_003L, 4L)),
                         true));
@@ -105,6 +106,6 @@ final class GeneratedWorldAuditProfileTest {
     /** Developer audit inputs, not a user-facing climate preset contract. */
     private record AuditProfile(
             String name,
-            HydroClimateSpec climate,
+            ClimateSpec climate,
             boolean hasAtmosphericSupply) { }
 }
