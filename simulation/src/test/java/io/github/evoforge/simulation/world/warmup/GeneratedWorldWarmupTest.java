@@ -14,9 +14,10 @@ final class GeneratedWorldWarmupTest {
 
     @Test
     void capturesRequestedAbsoluteCheckpointsThroughOrdinaryRuntimeStepper() {
-        GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
+        GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.createWithoutAtmosphericForcing(
                 42L,
-                ClimateSpec.STANDARD_BASELINE);
+                ClimateSpec.STANDARD_BASELINE,
+                GeneratedWorldWarmupFixture.bounds());
 
         List<GeneratedWorldDiagnostics> snapshots =
                 new GeneratedWorldWarmup().run(world, 0L, 3L, 7L);
