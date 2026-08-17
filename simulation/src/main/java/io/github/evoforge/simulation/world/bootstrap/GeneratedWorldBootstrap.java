@@ -7,10 +7,12 @@ import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.climate.ClimateHydroForcingView;
+import io.github.evoforge.simulation.world.climate.ClimateWaterNormal;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
+import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
@@ -27,13 +29,10 @@ import java.util.Optional;
  * Specialized callers may still provide a raw resolver. This bootstrap owns neither authored-data
  * parsing nor runtime world state.</p>
  *
- * <p>Generated climate is always part of the Atlas. Whether its current direct hydrologic
- * projection participates in runtime is selected independently through
- * {@link AtmosphericForcingPolicy}; the default production path installs it.</p>
- *
- * <p>Physical space belongs to {@code WorldSpec} provenance. A physical tick duration is runtime
- * composition and may be supplied independently through the named {@code withTimeScale} factories.
- * Neither dimension is invented when absent.</p>
+ * <p>Generated climate is always part of the Atlas. Whether its current hydrologic projection
+ * participates in runtime is selected independently through {@link AtmosphericForcingPolicy}. V8
+ * physical climate needs both physical world geometry and a physical tick duration only when that
+ * atmospheric projection is actually installed.</p>
  */
 public final class GeneratedWorldBootstrap {
     private final WorldAtlasGenerator atlasGenerator;
@@ -194,11 +193,22 @@ public final class GeneratedWorldBootstrap {
                 materials);
         materializeInitialSurfaceWater(atlas, assembly);
         if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(atmosphericForcingPolicy)) {
-            assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
+            assembly.generatedHydroClimate(runtimeClimateForcing(atlas));
         }
 
         SimulationRuntime runtime = assembly.start();
         return new GeneratedWorldRuntime(atlas, materialization, runtime, timeScale);
+    }
+
+    private ClimateHydroForcingView runtimeClimateForcing(WorldAtlas atlas) {
+        if (!ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME.equals(
+                atlas.climateNormals().waterNormalKind())) {
+            return new ClimateHydroForcingView(atlas.climateNormals());
+        }
+        PhysicalSpaceScale spaceScale = atlas.genesis().spec().requirePhysicalSpaceScale();
+        SimulationTimeScale physicalTime = timeScale.orElseThrow(() -> new IllegalStateException(
+                "physical climate forcing requires an explicit simulation time scale"));
+        return new ClimateHydroForcingView(atlas.climateNormals(), spaceScale, physicalTime);
     }
 
     private static void materializeInitialSurfaceWater(
