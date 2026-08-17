@@ -4,19 +4,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import org.junit.jupiter.api.Test;
 
 final class HydrographyGenerationStageTest {
 
     @Test
-    void v6OwnsChannelFootprintThatInitialSurfaceWaterConsumes() {
+    void v7KeepsChannelsDurableEvenWhenClimateStartsThemDry() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
-        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
+        WorldGenesis genesis = WorldGenesis.current(
+                new WorldSpec(bounds, climate(0L, 1L)),
+                17L);
         ElevationField elevation = constantElevation(bounds, 0);
         DrainageField drainage = syntheticDrainage(bounds);
 
@@ -30,12 +35,34 @@ final class HydrographyGenerationStageTest {
                 drainage,
                 hydrography);
 
-        assertEquals(GenerationRevision.V6, genesis.generationRevision());
+        assertEquals(GenerationRevision.V7, genesis.generationRevision());
         for (int y = 0; y <= 4; y++) {
             assertTrue(hydrography.isChannelAt(2, y));
-            assertTrue(initialWater.isInitiallyWet(2, y));
+            assertFalse(initialWater.isInitiallyWet(2, y));
             assertFalse(hydrography.isChannelAt(1, y));
         }
+    }
+
+    @Test
+    void v6LegacyInitialWaterFootprintStillMatchesChannels() {
+        WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds, climate(0L, 1L)),
+                17L,
+                GenerationRevision.V6,
+                RngRevision.V1);
+        ElevationField elevation = constantElevation(bounds, 0);
+        DrainageField drainage = syntheticDrainage(bounds);
+        HydrographyField hydrography = new HydrographyGenerationStage().generate(
+                genesis,
+                elevation,
+                drainage);
+        SurfaceHydrologyField initialWater = new SurfaceHydrologyGenerationStage().generate(
+                genesis,
+                elevation,
+                drainage,
+                hydrography);
+
         for (int y = 0; y <= 4; y++) {
             for (int x = 0; x <= 4; x++) {
                 assertEquals(
@@ -80,6 +107,14 @@ final class HydrographyGenerationStageTest {
         for (int y = 0; y <= 4; y++) {
             assertFalse(field.isChannelAt(2, y));
         }
+    }
+
+    private static ClimateSpec climate(long precipitation, long evaporation) {
+        return ClimateSpec.of(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                CellVolumeRate.of(precipitation, 1L),
+                CellVolumeRate.of(evaporation, 1L));
     }
 
     private static ElevationField constantElevation(WorldBounds bounds, int value) {
