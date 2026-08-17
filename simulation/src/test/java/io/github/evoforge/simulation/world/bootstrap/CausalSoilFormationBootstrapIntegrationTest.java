@@ -72,6 +72,9 @@ final class CausalSoilFormationBootstrapIntegrationTest {
         SurfaceMorphologyGenerator morphology = elevation -> new SurfaceMorphologyField() {
             @Override public WorldBounds bounds() { return BOUNDS; }
             @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) {
+                return x == 0 || x == 2 ? 1_000_000L : 0L;
+            }
+            @Override public long convexitySubunitsAt(int x, int y) {
                 return x == 0 ? 1_000_000L : 0L;
             }
             @Override public long concavitySubunitsAt(int x, int y) {
