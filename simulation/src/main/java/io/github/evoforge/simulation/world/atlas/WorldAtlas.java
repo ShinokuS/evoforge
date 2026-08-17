@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.geology.GeologyField;
 
@@ -8,23 +9,23 @@ public final class WorldAtlas {
     private final WorldGenesis genesis;
     private final ElevationField elevation;
     private final GeologyField geology;
+    private final ClimateNormalsField climateNormals;
     private final DrainageField drainage;
     private final SurfaceHydrologyField surfaceHydrology;
-    private final HydroClimateField hydroClimate;
 
     WorldAtlas(
             WorldGenesis genesis,
             ElevationField elevation,
             GeologyField geology,
+            ClimateNormalsField climateNormals,
             DrainageField drainage,
-            SurfaceHydrologyField surfaceHydrology,
-            HydroClimateField hydroClimate) {
+            SurfaceHydrologyField surfaceHydrology) {
         if (genesis == null
                 || elevation == null
                 || geology == null
+                || climateNormals == null
                 || drainage == null
-                || surfaceHydrology == null
-                || hydroClimate == null) {
+                || surfaceHydrology == null) {
             throw new IllegalArgumentException("Atlas generated facts must not be null");
         }
         if (!genesis.spec().bounds().equals(elevation.bounds())) {
@@ -33,6 +34,9 @@ public final class WorldAtlas {
         if (!genesis.spec().bounds().equals(geology.bounds())) {
             throw new IllegalArgumentException("geology bounds must match world genesis bounds");
         }
+        if (!genesis.spec().bounds().equals(climateNormals.bounds())) {
+            throw new IllegalArgumentException("climate normals bounds must match world genesis bounds");
+        }
         if (!genesis.spec().bounds().equals(drainage.bounds())) {
             throw new IllegalArgumentException("drainage bounds must match world genesis bounds");
         }
@@ -40,15 +44,12 @@ public final class WorldAtlas {
             throw new IllegalArgumentException(
                     "surface hydrology bounds must match world genesis bounds");
         }
-        if (!genesis.spec().bounds().equals(hydroClimate.bounds())) {
-            throw new IllegalArgumentException("hydroClimate bounds must match world genesis bounds");
-        }
         this.genesis = genesis;
         this.elevation = elevation;
         this.geology = geology;
+        this.climateNormals = climateNormals;
         this.drainage = drainage;
         this.surfaceHydrology = surfaceHydrology;
-        this.hydroClimate = hydroClimate;
     }
 
     public WorldGenesis genesis() {
@@ -63,15 +64,15 @@ public final class WorldAtlas {
         return geology;
     }
 
+    public ClimateNormalsField climateNormals() {
+        return climateNormals;
+    }
+
     public DrainageField drainage() {
         return drainage;
     }
 
     public SurfaceHydrologyField surfaceHydrology() {
         return surfaceHydrology;
-    }
-
-    public HydroClimateField hydroClimate() {
-        return hydroClimate;
     }
 }
