@@ -6,7 +6,14 @@ import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Durable climate-normal generation with V9 retaining the physical V8 climate contract. */
+/**
+ * Durable climate-normal generation.
+ *
+ * <p>V1-V4 predate thermal climate and retain a uniform datum-temperature fallback. V5+ apply the
+ * authored elevation cooling rate. V1-V7 preserve historical cell-relative atmospheric-water
+ * normals; V8+ require physical water-depth-per-time normals. Spatial precipitation gradients,
+ * seasonality and weather remain later causal layers.</p>
+ */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
 
     @Override
