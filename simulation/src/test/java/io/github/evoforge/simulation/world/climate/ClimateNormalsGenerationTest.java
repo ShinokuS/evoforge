@@ -33,7 +33,7 @@ final class ClimateNormalsGenerationTest {
 
         assertEquals(GenerationRevision.V7, atlas.genesis().generationRevision());
         ClimateNormalsField normals = atlas.climateNormals();
-        ClimateHydroForcingView forcing = new ClimateHydroForcingView(normals);
+        ClimateNormalsWaterForcing forcing = new ClimateNormalsWaterForcing(normals);
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 assertEquals(climate.precipitationNormal(), normals.precipitationNormalAt(x, y));
@@ -145,18 +145,9 @@ final class ClimateNormalsGenerationTest {
 
     private static ElevationField elevation(WorldBounds bounds) {
         return new ElevationField() {
-            @Override
-            public WorldBounds bounds() {
-                return bounds;
-            }
-
-            @Override
-            public int elevationAt(int x, int y) {
-                return x == 0 ? 1 : 3;
-            }
-
-            @Override
-            public long elevationSubunitsAt(int x, int y) {
+            @Override public WorldBounds bounds() { return bounds; }
+            @Override public int elevationAt(int x, int y) { return x == 0 ? 1 : 3; }
+            @Override public long elevationSubunitsAt(int x, int y) {
                 return x == 0 ? 1_500_000L : 3_250_000L;
             }
         };

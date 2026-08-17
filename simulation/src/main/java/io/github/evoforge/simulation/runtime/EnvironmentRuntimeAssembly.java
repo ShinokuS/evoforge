@@ -3,9 +3,9 @@ package io.github.evoforge.simulation.runtime;
 import io.github.evoforge.simulation.time.BoundProcessScheduler;
 import io.github.evoforge.simulation.time.HandlerId;
 import io.github.evoforge.simulation.time.ProcessScheduler;
-import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingProcess;
-import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingResult;
-import io.github.evoforge.simulation.world.environment.climate.HydroClimateForcingSystem;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingProcess;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingResult;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingSystem;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
 import io.github.evoforge.simulation.world.environment.evaporation.PeriodicEvaporationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.PeriodicPrecipitationSystem;
@@ -95,12 +95,13 @@ final class EnvironmentRuntimeAssembly {
                     world.geometry,
                     world.water,
                     world.soilLiquids);
-            HydroClimateForcingSystem forcing = new HydroClimateForcingSystem(
+            AtmosphericWaterForcingSystem forcing = new AtmosphericWaterForcingSystem(
                     config.atmosphericWaterForcing(), evaporation, skyPrecipitation);
-            HydroClimateForcingProcess forcingProcess = new HydroClimateForcingProcess(forcing, kernel.clock);
+            AtmosphericWaterForcingProcess forcingProcess = new AtmosphericWaterForcingProcess(
+                    forcing, kernel.clock);
             HandlerId forcingHandlerId = kernel.handlers.register(processId -> {
                 forcingProcess.resume(processId);
-                HydroClimateForcingResult result = forcingProcess.lastResult();
+                AtmosphericWaterForcingResult result = forcingProcess.lastResult();
                 if (result.precipitation().surfaceWater() > 0L
                         || result.evaporation().surfaceWaterRemoved() > 0L) {
                     liquidFlowProcess.activate();

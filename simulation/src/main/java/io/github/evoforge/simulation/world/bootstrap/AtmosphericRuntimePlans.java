@@ -2,11 +2,11 @@ package io.github.evoforge.simulation.world.bootstrap;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
-import io.github.evoforge.simulation.world.climate.ClimateHydroForcingView;
+import io.github.evoforge.simulation.world.climate.ClimateNormalsWaterForcing;
 import io.github.evoforge.simulation.world.climate.ClimateWaterNormal;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
-import io.github.evoforge.simulation.world.weather.WeatherHydroForcingView;
 import io.github.evoforge.simulation.world.weather.WeatherState;
+import io.github.evoforge.simulation.world.weather.WeatherWaterForcing;
 import java.util.Optional;
 
 /** Built-in runtime atmosphere plans; applications may supply any AtmosphericRuntimePlan directly. */
@@ -32,23 +32,23 @@ public final class AtmosphericRuntimePlans {
                     timeScale,
                     "weather-state forcing requires an explicit simulation time scale");
             return AtmosphericRuntimeComposition.weather(
-                    new WeatherHydroForcingView(weather, spaceScale, physicalTime),
+                    new WeatherWaterForcing(weather, spaceScale, physicalTime),
                     weather);
         };
     }
 
-    private static ClimateHydroForcingView climateForcing(
+    private static ClimateNormalsWaterForcing climateForcing(
             WorldAtlas atlas,
             Optional<SimulationTimeScale> timeScale) {
         if (!ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME.equals(
                 atlas.climateNormals().waterNormalKind())) {
-            return new ClimateHydroForcingView(atlas.climateNormals());
+            return new ClimateNormalsWaterForcing(atlas.climateNormals());
         }
         PhysicalSpaceScale spaceScale = atlas.genesis().spec().requirePhysicalSpaceScale();
         SimulationTimeScale physicalTime = requirePhysicalTime(
                 timeScale,
                 "physical climate forcing requires an explicit simulation time scale");
-        return new ClimateHydroForcingView(atlas.climateNormals(), spaceScale, physicalTime);
+        return new ClimateNormalsWaterForcing(atlas.climateNormals(), spaceScale, physicalTime);
     }
 
     private static SimulationTimeScale requirePhysicalTime(

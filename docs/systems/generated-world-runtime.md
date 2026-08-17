@@ -68,14 +68,14 @@ AtmosphericRuntimeComposition
   ├ AtmosphericWaterForcing
   └ optional WeatherLookup
         ↓
-HydroClimateForcingSystem
+AtmosphericWaterForcingSystem
         ↓
 Evaporation / Precipitation
         ↓
 Water / Soil
 ```
 
-`HydroClimateForcingSystem` consumes one `AtmosphericWaterForcing` contract and never branches on the concrete model.
+`AtmosphericWaterForcingSystem` consumes one `AtmosphericWaterForcing` contract and never branches on the concrete model.
 
 Built-in plans currently include:
 
@@ -104,18 +104,6 @@ They must be narrow, typed and independently replaceable; there is no global Bal
 ## Algorithm composition
 
 World generation uses explicit typed algorithm contracts. `WorldGenerationAlgorithms` groups replaceable algorithms without constructor explosion or a generic service locator.
-
-The generation dependency order remains causal:
-
-```text
-WorldGenesis
- ├─→ Elevation
- ├─→ Geology
- └─→ Climate (uses Elevation where required)
-Elevation → Drainage
-Elevation + Drainage → Hydrography
-Elevation + Drainage + Hydrography + Climate → initial SurfaceHydrology
-```
 
 Execution order follows real dependencies; no fake dependency is added merely to create a visually linear pipeline.
 

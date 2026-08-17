@@ -11,8 +11,8 @@ import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.weather.WeatherCellState;
 import io.github.evoforge.simulation.world.weather.WeatherFootprint;
-import io.github.evoforge.simulation.world.weather.WeatherHydroForcingView;
 import io.github.evoforge.simulation.world.weather.WeatherState;
+import io.github.evoforge.simulation.world.weather.WeatherWaterForcing;
 import io.github.evoforge.simulation.world.weather.model.AlternatingRainfallPulseDriver;
 import io.github.evoforge.simulation.world.weather.model.RainfallPulseParameters;
 import java.time.Duration;
@@ -42,12 +42,12 @@ final class DynamicWeatherForcingIntegrationTest {
                         WaterDepthRate.ofMillimeters(1L, Duration.ofSeconds(1L))),
                 timeScale,
                 42L);
-        WeatherHydroForcingView forcing = new WeatherHydroForcingView(
+        WeatherWaterForcing forcing = new WeatherWaterForcing(
                 weather,
                 spaceScale,
                 timeScale,
                 driver);
-        assembly.generatedHydroClimate(forcing);
+        assembly.atmosphericWaterForcing(forcing);
         SimulationRuntime runtime = assembly.start();
 
         long wetStart = driver.nextTransitionTick();

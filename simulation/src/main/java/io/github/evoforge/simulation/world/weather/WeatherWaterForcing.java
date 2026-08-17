@@ -8,8 +8,8 @@ import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRateC
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Runtime atmospheric-water projection of authoritative current WeatherState. */
-public final class WeatherHydroForcingView implements AtmosphericWaterForcing {
+/** Runtime atmospheric-Water forcing backed by authoritative current WeatherState. */
+public final class WeatherWaterForcing implements AtmosphericWaterForcing {
     private final WeatherState weather;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
@@ -21,14 +21,14 @@ public final class WeatherHydroForcingView implements AtmosphericWaterForcing {
     private final long[] evaporationDue;
     private long lastIntegratedTick;
 
-    public WeatherHydroForcingView(
+    public WeatherWaterForcing(
             WeatherState weather,
             PhysicalSpaceScale spaceScale,
             SimulationTimeScale timeScale) {
         this(weather, spaceScale, timeScale, WeatherDriver.stationary());
     }
 
-    public WeatherHydroForcingView(
+    public WeatherWaterForcing(
             WeatherState weather,
             PhysicalSpaceScale spaceScale,
             SimulationTimeScale timeScale,
@@ -50,10 +50,7 @@ public final class WeatherHydroForcingView implements AtmosphericWaterForcing {
         evaporationDue = new long[area];
     }
 
-    @Override
-    public WorldBounds bounds() {
-        return weather.bounds();
-    }
+    @Override public WorldBounds bounds() { return weather.bounds(); }
 
     public CellVolumeRate precipitationRateAt(int x, int y) {
         return WaterDepthRateCellVolumeCompiler.compile(
@@ -67,9 +64,7 @@ public final class WeatherHydroForcingView implements AtmosphericWaterForcing {
 
     @Override
     public void advanceToTick(long tick) {
-        if (tick <= 0L) {
-            throw new IllegalArgumentException("weather forcing tick must be positive");
-        }
+        if (tick <= 0L) throw new IllegalArgumentException("weather forcing tick must be positive");
         long expected = Math.addExact(lastIntegratedTick, 1L);
         if (tick != expected) {
             throw new IllegalStateException(
