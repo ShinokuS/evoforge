@@ -50,6 +50,38 @@ Elevation + Drainage + Hydrography + ClimateNormals
 
 Execution order follows these real dependencies. No stage receives another stage merely to force a convenient linear pipeline.
 
+## Ocean-first elevation in V9
+
+V9 is the first generation revision where macro land/ocean shape is controlled by explicit high-level `WorldGenerationIntent` rather than emerging accidentally from a fixed elevation-noise threshold.
+
+The current intent coordinates are:
+
+```text
+landCoverage
+landmassScale
+fragmentation
+```
+
+V9 elevation uses global sea level `z = 0` as its macro datum. Vertical `WorldBounds` must therefore include valid space below and above zero.
+
+The generator first constructs a deterministic spatial land-potential field. `landmassScale` controls the coherent scale of that field and `fragmentation` blends in finer structure. The field is then ranked deterministically. `landCoverage` selects the nearest representable number of columns that must lie above sea level, giving one-column calibration precision instead of exposing an implementation-specific threshold.
+
+```text
+seed + spatial intent
+        ↓
+land-potential field
+        ↓
+deterministic rank
+        ↓
+requested land-column count
+        ↓
+positive land / negative ocean elevation around z=0
+```
+
+Tie-breaking is stable by cell index, so identical genesis input produces identical output. The ranking implementation uses primitive data and does not require boxed per-cell objects.
+
+V1-V8 keep their historical elevation behavior and ignore `WorldGenerationIntent`. V9 changes only the elevation semantics; the other existing Atlas stages retain their V8 behavior while accepting the new overall revision.
+
 ## Algorithm substitution
 
 Each generation layer has a narrow typed generator contract. The canonical replacement surface is `WorldGenerationAlgorithms`:
@@ -70,7 +102,7 @@ A generic `Map<String,Object>` / `Map<Class<?>,Object>` generation context is de
 
 ## Climate facts are not atmosphere execution
 
-`ClimateNormalsField` contains durable long-term facts. Depending on generation revision, historical worlds may retain legacy cell-relative water normals while V8+ can use physical water-depth-per-time normals.
+`ClimateNormalsField` contains durable long-term facts. Historical V1-V7 worlds use the legacy cell-relative atmospheric-water representation. V8 and V9 full-Atlas generation require physical water-depth-per-time climate normals.
 
 Neither representation is a current rain event.
 
@@ -147,6 +179,6 @@ GeneratedWorldRuntimeBootstrap
 SimulationRuntime
 ```
 
-Generation and future calibration end before runtime starts. A running simulation does not call WorldAtlas generators or calibrators.
+Generation and calibration end before runtime starts. A running simulation does not call WorldAtlas generators or calibrators.
 
-See [Generated World Runtime](generated-world-runtime.md), [World Materialization](world-materialization.md), [Decision 010](../decisions/010-world-atlas-generated-facts.md), [Decision 011](../decisions/011-world-generation-algorithm-contracts.md), [Decision 016](../decisions/016-atlas-terrain-materialization.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
+See [World Genesis](world-genesis.md), [Generated World Runtime](generated-world-runtime.md), [World Materialization](world-materialization.md), [Decision 010](../decisions/010-world-atlas-generated-facts.md), [Decision 011](../decisions/011-world-generation-algorithm-contracts.md), [Decision 016](../decisions/016-atlas-terrain-materialization.md), and [Decision 020](../decisions/020-world-preparation-and-calibration-boundary.md).
