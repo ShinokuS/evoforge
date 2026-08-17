@@ -1,184 +1,133 @@
 # Soil Hydraulics
 
-## Purpose
+## Contract
 
-Soil hydraulics turns a small human-authored description of a landscape material into physical soil behavior without exposing simulation-scale numbers in content.
-
-The canonical path is:
+Soil follows the same ownership law as the rest of generated-world state:
 
 ```text
-landscape JSON
-  texture + organicMatter
+Definition
+  normalized semantic character
         ↓
-SoilHydraulicDefinitionCompiler
+Generated / calibrated properties
+  composition + hydraulic profile
         ↓
-SoilSemanticProfile
+Runtime representation
         ↓
-SoilCompositionCompiler
-        ↓
-SoilCompositionProfile
-  sand / silt / clay / organic matter
-        ↓
-SoilHydraulicCalibrator
-        ↓
-SoilHydraulicProfileBindings
-  porosity
-  field capacity
-  permanent wilting point
-  saturated hydraulic conductivity
-        ↓
-SoilHydraulicRuntimeBinder
-  + PhysicalSpaceScale
-  + SimulationTimeScale
-        ↓
-SoilProperties
-        ↓
-==================== START ====================
-        ↓
-SoilLiquidSystem / precipitation / free-liquid flow
+Runtime state
+  retained and free liquid
 ```
 
-Generation and calibration end before runtime starts. Runtime never interprets authored texture classes and never invokes a pedotransfer model.
+A Definition describes what a material means. It does not contain solver-scale pore capacity,
+per-tick permeability, or world-local random variation. Generation/calibration derives physical
+facts before startup. Simulation consumes those facts and owns only changing state.
 
-## Authoring boundary
+## Authored semantics
 
-Canonical landscape content describes soil in terms that are meaningful without understanding the solver:
+Landscape JSON uses continuous normalized coordinates:
 
 ```json
 "soil": {
-  "texture": "loam",
-  "organicMatter": "rich"
+  "mineralFineness": 0.4,
+  "organicMatter": 0.9
 }
 ```
 
-The author does **not** provide:
+Both values are `NormalizedValue` in `[0,1]`. JSON decimals are compiled to exact fixed-point
+parts-per-million values; runtime does not carry authored floating point.
 
-- runtime pore `capacity`;
-- per-tick `permeability`;
-- saturated hydraulic conductivity;
-- field capacity or wilting point;
-- sand/silt/clay percentages required by the current pedotransfer implementation.
+`mineralFineness` is a monotonic semantic coordinate from coarse to fine mineral character.
+`organicMatter` expresses relative organic-matter tendency. They are not physical percentages and
+there are no hidden `poor / medium / rich` or `sand / loam / clay` thresholds.
 
-Those values are derived. `SoilHydraulicDefinitionCompiler` deliberately rejects unknown low-level fields, so this is a checked architecture boundary rather than a documentation convention.
+`SoilDefinitionCompiler` parses only this semantic aspect and produces
+`SoilSemanticProfileBindings`. It deliberately knows nothing about Saxton-Rawls, conductivity,
+porosity, cell size or tick duration.
 
-The current semantic vocabulary is intentionally small: `sand`, `loam`, `clay` texture and `minimal`, `moderate`, `rich` organic-matter character. It can grow when authored world intent needs more distinctions; simulation complexity alone is not a reason to enlarge JSON.
+## Semantic → physical composition
 
-## Semantic to physical composition
+`SoilCompositionCompiler` is a replaceable preparation model. The current
+`ContinuousSoilCompositionCompiler` projects mineral fineness continuously through a quadratic
+mixture curve and uses an explicit `SoilCompositionCalibration` for the maximum representative
+organic fraction.
 
-`SoilCompositionCompiler` is the replaceable boundary between authored character and physical composition. The current `RepresentativeSoilCompositionCompiler` maps each semantic texture to one model-owned representative point inside that textural region and maps organic-matter character to a representative physical fraction.
+The result, `SoilCompositionProfile`, contains physical sand/silt/clay and organic-matter fractions.
+Those values are generated/model output, not authored content.
 
-These exact fractions are implementation data, not content. A later spatial soil-development compiler can derive composition from parent material, deposition, climate, relief, vegetation and age while keeping the same landscape authoring surface.
+A future soil-development model may derive the same profile from parent geology, deposition,
+weathering, climate, vegetation, compaction and history without changing runtime Soil.
 
-USDA-NRCS uses texture classes as the classification of mineral soil from sand, silt and clay proportions. The current representative projection is therefore an internal bridge from a standard human-readable texture name to the physical inputs required by the hydraulic model; it is not a claim that every loam has one exact composition.
+## Physical hydraulic profile
 
-## Physical hydraulic facts
-
-`SoilCompositionProfile` is algorithm-independent physical composition. Sand, silt and clay close the mineral texture triangle; organic matter is a separate predictor.
-
-`SoilHydraulicProfile` is immutable calibrated physical data containing:
+`SoilHydraulicCalibrator` converts physical composition into an immutable
+`SoilHydraulicProfile` containing:
 
 - porosity / saturated volumetric water content;
 - field capacity;
 - permanent wilting point;
 - saturated hydraulic conductivity as physical water depth per physical time.
 
-`SoilProperties` is **not** authored soil data. It is only the current runtime representation compiled for one physical cell geometry and simulation tick duration.
+The current replaceable implementation is `SaxtonRawls2006SoilHydraulicCalibrator`. Its empirical
+coefficients belong only to that model. They are not Definition constants or runtime rules.
 
-`SoilLiquidSystem` remains the sole authoritative mutable owner of retained liquid during simulation.
+`SoilHydraulicProfileResolver` is the explicit boundary that combines semantic bindings with a
+composition compiler and hydraulic calibrator. Definition loading therefore stops at semantics;
+physical resolution is a separate preparation operation.
 
-## Replaceable hydraulic calibration
+## Runtime boundary
 
-`SoilHydraulicCalibrator` is the narrow physical calibration seam:
+`SoilHydraulicRuntimeBinder` joins calibrated material-key profiles to runtime landscape IDs.
+`SoilHydraulicRuntimeCompiler` converts porosity and conductivity using `PhysicalSpaceScale` and
+`SimulationTimeScale` into the current `SoilProperties` representation.
 
-```java
-SoilHydraulicProfile calibrate(SoilCompositionProfile composition)
-```
+Runtime `SoilLiquidSystem` receives a `SoilPropertiesLookup` and never recalibrates or interprets a
+material key. `TerrainSoilPropertiesLookup` now returns the properties bound to terrain; it does not
+hash `(seed,x,y,z)` or invent local pore capacity during simulation.
 
-The current implementation is `SaxtonRawls2006SoilHydraulicCalibrator`, based on Saxton & Rawls (2006), *Soil Science Society of America Journal* 70:1569-1578, DOI 10.2136/sssaj2005.0117.
+This is intentional: until geology/deposition/history produce a causal spatial property field, a
+truthful homogeneous material is preferable to fake coordinate noise.
 
-Its empirical coefficients belong only to that implementation. A measured-property calibrator, another pedotransfer model or a future soil-development model may replace it without changing runtime Soil or the authored landscape schema.
+## Emergent puddles
 
-Pedotransfer output is an estimate of statistical soil behavior, not a measured property of every real soil with the same texture.
-
-## Stable-key composition
-
-The generic definition pipeline supplies the stable key of each landscape definition. The soil compiler therefore produces `SoilHydraulicProfileBindings` directly under the same keys used by generated `TerrainMaterialKey` values such as `core:topsoil` and `core:sand`.
-
-There is no second worldgen soil-binding JSON and no material-name switch in code:
-
-```text
-core:topsoil.json
-      ↓
-DefinitionLoader
-      ↓
-soil aspect compiler
-      ↓
-"core:topsoil" hydraulic binding
-      ↓
-TerrainMaterialBindings
-      ↓
-runtime LandscapeDefinitionId
-```
-
-A landscape definition without a `soil` aspect is intentionally non-soil from this hydraulic perspective.
-
-## Runtime compilation
-
-`SoilHydraulicRuntimeBinder` joins calibrated stable-key hydraulic facts to runtime landscape IDs. `SoilHydraulicRuntimeCompiler` then converts physical porosity and saturated conductivity using `PhysicalSpaceScale` and `SimulationTimeScale`.
-
-For the current retained-liquid solver:
+There is no Puddle definition, generator or `if raining -> create puddle` rule.
 
 ```text
-available pore storage = compiled porosity - retained liquid
-
-one-step saturated uptake cap
-    = compiled saturated conductivity
-      adjusted by liquid viscosity
+rainfall
+  ↓
+free surface Water
+  ↓
+local infiltration / pore-capacity limit
+  ↓
+absorbed amount + remaining free Water
+  ↓
+ordinary liquid flow / retention
 ```
 
-Rain enters retained Soil up to that storage/rate limit. Excess remains free Water and may form puddles or run off through the ordinary liquid solver. There is no `if raining -> create puddle` rule.
+A puddle is therefore an observed state of free Water. Future spatially varying generated hydraulic
+properties can make apparently identical topsoil respond differently at neighboring cells without
+changing the liquid mechanic.
 
-Field capacity and permanent wilting point remain in the physical profile even though the current runtime does not yet consume them. They are preparation facts needed by future drainage, plant-available water, evaporation and unsaturated-flow models.
+## Exactness
 
-## Current exactness boundary
-
-The current runtime still stores permeability as an integer normalized volume per tick. If a physical conductivity, cell height and tick duration would require a fractional normalized unit, `SoilHydraulicRuntimeCompiler` rejects the combination instead of silently rounding it.
-
-This restriction belongs to the present runtime representation, not to authored content or `SoilHydraulicProfile`. A later rational infiltration accumulator can remove it without changing either boundary.
-
-## Deliberately absent
-
-This slice does not yet model:
-
-- unsaturated hydraulic conductivity as a function of water content;
-- matric potential / capillary suction;
-- Richards-equation or Green-Ampt infiltration;
-- vertical redistribution and deep drainage;
-- groundwater coupling;
-- spatial soil horizons and pedogenesis;
-- compaction, gravel, salinity and structural corrections;
-- root uptake.
-
-Those processes should consume or enrich physical soil facts. They must not reintroduce material-key conditionals or authored per-tick rates.
+Physical conductivity is preserved up to the runtime compilation boundary. The current runtime
+stores permeability as whole normalized volume per tick, so a physical combination requiring a
+fractional unit is rejected rather than silently rounded. Acceptance scenarios must use a physical
+time/space scale that is representable by the current runtime. A later rational infiltration rate
+can remove this representation limit without changing authored semantics or `SoilHydraulicProfile`.
 
 ## Acceptance
 
-`Water / Hydrology -> Soil Hydraulic Contrast` now starts from two semantic profiles under the same generated rain event:
+`Water / Hydrology -> Soil Hydraulic Contrast` compares fineness `0.10` and `0.80` with identical
+organic character under the same generated climate and rainfall process. Composition and hydraulics
+are derived before startup; the scenario then demonstrates different retained/free Water response
+through ordinary Weather, Soil and Water systems.
 
-```text
-sand + moderate organic matter ─┐
-                                ├→ derived composition
-clay + moderate organic matter ─┘
-        ↓
-Saxton-Rawls hydraulic calibration
-        ↓
-pre-start runtime compilation
-        ↓
-identical Weather event
-        ↓
-different infiltration
-        ↓
-different retained/free Water response
-```
+The older `Rain Cycle` acceptance no longer relies on seeded runtime soil variation. It prepares
+explicit low/high hydraulic regions so the test still proves the same causal rule without allowing
+Simulation to manufacture world properties.
 
-The displayed diagnostics expose the derived physical values for inspection, while the scenario input remains at the semantic authoring level.
+## Deferred physics
+
+This slice does not yet implement unsaturated conductivity curves, matric suction, vertical
+redistribution/deep drainage, groundwater coupling, soil horizons, pedogenesis, compaction/gravel
+corrections or root uptake. Those mechanisms should consume or enrich generated physical facts;
+they must not reintroduce material-name switches or authored per-tick values.
