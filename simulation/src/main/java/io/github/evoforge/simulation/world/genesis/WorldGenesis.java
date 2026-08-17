@@ -19,11 +19,16 @@ public record WorldGenesis(
         }
     }
 
+    /**
+     * Current production revision remains V7 until semantic world projection can supply physical
+     * climate and runtime time scales automatically. V8 is available explicitly for physical
+     * climate validation without forcing low-level scale authoring onto ordinary callers.
+     */
     public static WorldGenesis current(WorldSpec spec, long masterSeed) {
         return new WorldGenesis(
                 spec,
                 masterSeed,
-                GenerationRevision.V6,
+                GenerationRevision.V7,
                 RngRevision.V1);
     }
 }
