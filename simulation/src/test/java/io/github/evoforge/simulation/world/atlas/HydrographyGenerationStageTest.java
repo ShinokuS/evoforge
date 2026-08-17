@@ -4,44 +4,124 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
+import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 final class HydrographyGenerationStageTest {
 
     @Test
-    void v6OwnsChannelFootprintThatInitialSurfaceWaterConsumes() {
+    void v7CurrentKeepsDurableChannelsAndBalancedClimateStartsThemWet() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
         ElevationField elevation = constantElevation(bounds, 0);
         DrainageField drainage = syntheticDrainage(bounds);
 
         HydrographyField hydrography = new HydrographyGenerationStage().generate(
-                genesis,
-                elevation,
-                drainage);
+                genesis, elevation, drainage);
         SurfaceHydrologyField initialWater = new SurfaceHydrologyGenerationStage().generate(
-                genesis,
-                elevation,
-                drainage,
-                hydrography);
+                genesis, elevation, drainage, hydrography);
 
-        assertEquals(GenerationRevision.V6, genesis.generationRevision());
+        assertEquals(GenerationRevision.V7, genesis.generationRevision());
         for (int y = 0; y <= 4; y++) {
             assertTrue(hydrography.isChannelAt(2, y));
             assertTrue(initialWater.isInitiallyWet(2, y));
             assertFalse(hydrography.isChannelAt(1, y));
         }
+    }
+
+    @Test
+    void v7DryClimateKeepsChannelFactButStartsItDry() {
+        WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds, legacyClimate(0L, 1L)),
+                17L,
+                GenerationRevision.V7,
+                RngRevision.V1);
+        ElevationField elevation = constantElevation(bounds, 0);
+        DrainageField drainage = syntheticDrainage(bounds);
+        HydrographyField hydrography = new HydrographyGenerationStage().generate(
+                genesis, elevation, drainage);
+        SurfaceHydrologyField initialWater = new SurfaceHydrologyGenerationStage().generate(
+                genesis, elevation, drainage, hydrography);
+
+        for (int y = 0; y <= 4; y++) {
+            assertTrue(hydrography.isChannelAt(2, y));
+            assertFalse(initialWater.isInitiallyWet(2, y));
+        }
+    }
+
+    @Test
+    void v6LegacyInitialWaterFootprintStillMatchesChannels() {
+        WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds, legacyClimate(0L, 1L)),
+                17L,
+                GenerationRevision.V6,
+                RngRevision.V1);
+        ElevationField elevation = constantElevation(bounds, 0);
+        DrainageField drainage = syntheticDrainage(bounds);
+        HydrographyField hydrography = new HydrographyGenerationStage().generate(
+                genesis, elevation, drainage);
+        SurfaceHydrologyField initialWater = new SurfaceHydrologyGenerationStage().generate(
+                genesis, elevation, drainage, hydrography);
+
         for (int y = 0; y <= 4; y++) {
             for (int x = 0; x <= 4; x++) {
                 assertEquals(
                         hydrography.isChannelAt(x, y),
                         initialWater.isInitiallyWet(x, y),
                         "v6 legacy initial-Water footprint drifted from generated channels");
+            }
+        }
+    }
+
+    @Test
+    void v8PhysicalThreeToOneMoistureRatioMatchesEquivalentV7Ratio() {
+        WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
+        ElevationField elevation = constantElevation(bounds, 0);
+        DrainageField drainage = syntheticDrainage(bounds);
+
+        WorldGenesis v7Genesis = new WorldGenesis(
+                new WorldSpec(bounds, legacyClimate(3L, 1L)),
+                17L,
+                GenerationRevision.V7,
+                RngRevision.V1);
+        WorldGenesis v8Genesis = new WorldGenesis(
+                new WorldSpec(
+                        bounds,
+                        ClimateSpec.physical(
+                                ClimateTemperature.ofMilliCelsius(12_000),
+                                250,
+                                WaterDepthRate.ofMillimeters(600L, Duration.ofDays(365L)),
+                                WaterDepthRate.ofMillimeters(200L, Duration.ofDays(365L)))),
+                17L,
+                GenerationRevision.V8,
+                RngRevision.V1);
+
+        HydrographyField v7Channels = new HydrographyGenerationStage().generate(
+                v7Genesis, elevation, drainage);
+        HydrographyField v8Channels = new HydrographyGenerationStage().generate(
+                v8Genesis, elevation, drainage);
+        SurfaceHydrologyField v7Water = new SurfaceHydrologyGenerationStage().generate(
+                v7Genesis, elevation, drainage, v7Channels);
+        SurfaceHydrologyField v8Water = new SurfaceHydrologyGenerationStage().generate(
+                v8Genesis, elevation, drainage, v8Channels);
+
+        for (int y = 0; y <= 4; y++) {
+            for (int x = 0; x <= 4; x++) {
+                assertEquals(v7Channels.isChannelAt(x, y), v8Channels.isChannelAt(x, y));
+                assertEquals(
+                        v7Water.initialWaterVolumeAt(x, y),
+                        v8Water.initialWaterVolumeAt(x, y));
             }
         }
     }
@@ -80,6 +160,14 @@ final class HydrographyGenerationStageTest {
         for (int y = 0; y <= 4; y++) {
             assertFalse(field.isChannelAt(2, y));
         }
+    }
+
+    private static ClimateSpec legacyClimate(long precipitation, long evaporation) {
+        return ClimateSpec.of(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                CellVolumeRate.of(precipitation, 1L),
+                CellVolumeRate.of(evaporation, 1L));
     }
 
     private static ElevationField constantElevation(WorldBounds bounds, int value) {
