@@ -17,16 +17,17 @@ public record ClimateSpec(
         CellVolumeRate evaporativeDemand) {
 
     /**
-     * Minimal baseline climate used when callers do not author one explicitly.
+     * Neutral baseline climate used when callers do not author one explicitly.
      *
-     * <p>The zero water rates are climate values, not a switch that disables runtime atmosphere.
-     * Atmospheric activation belongs to runtime composition.</p>
+     * <p>The equal non-zero hydrologic rates deliberately define a finite moisture ratio without
+     * pretending that one simulation tick has a calibrated real-world duration. Runtime atmosphere
+     * activation remains a separate composition decision.</p>
      */
     public static final ClimateSpec STANDARD_BASELINE = new ClimateSpec(
             ClimateTemperature.ofMilliCelsius(12_000),
             250,
-            CellVolumeRate.ZERO,
-            CellVolumeRate.ZERO);
+            CellVolumeRate.of(1L, 1L),
+            CellVolumeRate.of(1L, 1L));
 
     public ClimateSpec {
         if (datumMeanTemperature == null) {
