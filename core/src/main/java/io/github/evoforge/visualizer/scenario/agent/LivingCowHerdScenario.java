@@ -93,11 +93,11 @@ public final class LivingCowHerdScenario implements VisualizerScenario {
         ObjectDefinitionId clover = assembly.objectDefinition("scenario:herd_clover");
         ObjectDefinitionId dandelion = assembly.objectDefinition("scenario:herd_dandelion");
 
+        // The visual fixture uses explicit meadow/basin materials. Generated-world spatial Soil
+        // differences belong to prepared property fields rather than runtime coordinate hashing.
         assembly.soilProperties(meadow, 6_000, 6_000);
-        assembly.soilPropertiesVariation(meadow, 0xC0A51A7EL, 1_000);
         assembly.surfaceRetention(meadow, 500);
         assembly.soilProperties(basin, 600, 1_000);
-        assembly.soilPropertiesVariation(basin, 0xB451A22L, 200);
         assembly.surfaceRetention(basin, 2_000);
         assembly.surfaceRetention(lakeFloor, 500);
         assembly.precipitation(rainSchedule);

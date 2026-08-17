@@ -4,7 +4,6 @@ import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
@@ -25,7 +24,7 @@ final class SimulationWorldState {
     final LandscapeSystem landscape;
     final WorldGeometryLookup geometry;
     final LiquidSystem liquids;
-    final SoilPropertiesLookup soilProperties;
+    final PreStartSoilPropertiesLookup soilProperties;
     final SoilLiquidSystem soilLiquids;
     final WaterSystem water;
     final NavigationSystem navigation;
@@ -45,9 +44,10 @@ final class SimulationWorldState {
         landscape = LandscapeSystem.create(new SparseTerrainStorage(), definitions.landscape);
         geometry = new WorldGeometryLookup(landscape.geometry());
         liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
-        soilProperties = new TerrainSoilPropertiesLookup(
-                landscape.terrain(),
-                definitions.soilProperties);
+        soilProperties = new PreStartSoilPropertiesLookup(
+                new TerrainSoilPropertiesLookup(
+                        landscape.terrain(),
+                        definitions.soilProperties));
         soilLiquids = new SoilLiquidSystem(
                 new SparseSoilLiquidStorage(),
                 soilProperties,

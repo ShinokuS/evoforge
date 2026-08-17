@@ -80,13 +80,11 @@ public final class LivingCowScenario implements VisualizerScenario {
         ObjectDefinitionId clover = assembly.objectDefinition("scenario:living_clover");
         ObjectDefinitionId dandelion = assembly.objectDefinition("scenario:living_dandelion");
 
-        // Most meadow soil absorbs this light shower completely. Only deterministic shallow
-        // micro-basins saturate early enough to retain visible free Water at standing level.
+        // The scenario authors two explicit hydraulic terrain materials. Local generated-world Soil
+        // variation belongs to preparation fields, not to runtime coordinate noise.
         assembly.soilProperties(meadow, 6_000, 6_000);
-        assembly.soilPropertiesVariation(meadow, 0x51A7E11DL, 1_000);
         assembly.surfaceRetention(meadow, 500);
         assembly.soilProperties(basin, 600, 1_000);
-        assembly.soilPropertiesVariation(basin, 0xB451A11L, 200);
         assembly.surfaceRetention(basin, 2_000);
         assembly.surfaceRetention(lakeFloor, 500);
         assembly.precipitation(rainSchedule);

@@ -18,7 +18,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesVariation;
+import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
@@ -108,15 +108,10 @@ public final class SimulationAssembly {
         return this;
     }
 
-    public SimulationAssembly soilPropertiesVariation(
-            LandscapeDefinitionId definitionId,
-            long seed,
-            int capacityAmplitude) {
+    /** Selects authoritative local Soil properties for this runtime before it starts. */
+    public SimulationAssembly resolvedSoilProperties(SoilPropertiesLookup lookup) {
         requireNotStarted();
-        requireLandscapeDefinition(definitionId);
-        definitions.soilPropertiesVariation.put(
-                definitionId,
-                new SoilPropertiesVariation(seed, capacityAmplitude));
+        world.soilProperties.configure(lookup);
         return this;
     }
 
@@ -525,6 +520,7 @@ public final class SimulationAssembly {
             throw new IllegalStateException(
                     "physical cell volume must be configured before liquid drinking is enabled");
         }
+        world.soilProperties.freeze();
         started = true;
         return SimulationRuntimeStarter.start(
                 definitions,

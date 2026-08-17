@@ -14,7 +14,6 @@ import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefin
 import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.landscape.liquid.SurfaceRetentionDefinitions;
 import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesVariationDefinitions;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinitions;
@@ -30,8 +29,6 @@ final class SimulationDefinitions {
             new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
     final LandscapeTraversalDefinitions landscapeTraversal = new LandscapeTraversalDefinitions();
     final SoilPropertiesDefinitions soilProperties = new SoilPropertiesDefinitions();
-    final SoilPropertiesVariationDefinitions soilPropertiesVariation =
-            new SoilPropertiesVariationDefinitions();
     final SurfaceRetentionDefinitions surfaceRetention = new SurfaceRetentionDefinitions();
     final LiquidTransportDefinitions liquidTransport = new LiquidTransportDefinitions();
     final DefinitionRegistry<ObjectDefinitionId> objects =
@@ -59,7 +56,6 @@ final class SimulationDefinitions {
         landscape.freeze();
         landscapeTraversal.freeze();
         soilProperties.freeze();
-        soilPropertiesVariation.freeze();
         surfaceRetention.freeze();
         liquidTransport.freeze();
         objects.freeze();

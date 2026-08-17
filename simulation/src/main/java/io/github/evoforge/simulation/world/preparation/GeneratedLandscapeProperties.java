@@ -1,39 +1,46 @@
 package io.github.evoforge.simulation.world.preparation;
 
-import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfile;
 import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.Optional;
 
 /** Immutable generated physical landscape properties carried from preparation toward runtime. */
-public record GeneratedLandscapeProperties(SoilHydraulicProfileField soilHydraulics) {
-    public GeneratedLandscapeProperties {
+public final class GeneratedLandscapeProperties {
+    private final WorldBounds bounds;
+    private final Optional<SoilHydraulicProfileField> soilHydraulics;
+
+    public GeneratedLandscapeProperties(SoilHydraulicProfileField soilHydraulics) {
         if (soilHydraulics == null) {
             throw new IllegalArgumentException("generated Soil hydraulics must not be null");
         }
+        this.bounds = soilHydraulics.bounds();
+        this.soilHydraulics = Optional.of(soilHydraulics);
     }
 
-    public WorldBounds bounds() {
-        return soilHydraulics.bounds();
-    }
-
-    public static GeneratedLandscapeProperties empty(WorldBounds bounds) {
+    private GeneratedLandscapeProperties(WorldBounds bounds) {
         if (bounds == null) {
             throw new IllegalArgumentException("generated landscape bounds must not be null");
         }
-        return new GeneratedLandscapeProperties(new EmptySoilHydraulics(bounds));
+        this.bounds = bounds;
+        this.soilHydraulics = Optional.empty();
     }
 
-    private record EmptySoilHydraulics(WorldBounds bounds) implements SoilHydraulicProfileField {
-        private EmptySoilHydraulics {
-            if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
-        }
+    public WorldBounds bounds() {
+        return bounds;
+    }
 
-        @Override
-        public SoilHydraulicProfile find(int x, int y, int z) {
-            if (!bounds.contains(x, y, z)) {
-                throw new IllegalArgumentException("outside generated landscape property bounds");
-            }
-            return null;
-        }
+    /**
+     * Returns the authoritative generated Soil field when preparation produced one.
+     *
+     * <p>Absence means runtime may use its ordinary definition-level fallback. A present field may
+     * itself return {@code null} for a particular coordinate, which authoritatively means that
+     * generated Terrain cell is non-porous and must not fall back to a material-wide Soil value.</p>
+     */
+    public Optional<SoilHydraulicProfileField> soilHydraulics() {
+        return soilHydraulics;
+    }
+
+    public static GeneratedLandscapeProperties empty(WorldBounds bounds) {
+        return new GeneratedLandscapeProperties(bounds);
     }
 }
