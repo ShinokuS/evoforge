@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.preparation;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfile;
 import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileField;
@@ -26,9 +27,11 @@ final class GeneratedLandscapePropertiesTest {
     }
 
     @Test
-    void emptyPropertiesRemainExplicitlyEmpty() {
+    void emptyPropertiesAreBoundedAndExplicitlyEmpty() {
         GeneratedLandscapeProperties properties=GeneratedLandscapeProperties.empty(
                 new WorldBounds(0,0,0,0,0,0));
         assertNull(properties.soilHydraulics().find(0,0,0));
+        assertThrows(IllegalArgumentException.class,
+                () -> properties.soilHydraulics().find(1,0,0));
     }
 }
