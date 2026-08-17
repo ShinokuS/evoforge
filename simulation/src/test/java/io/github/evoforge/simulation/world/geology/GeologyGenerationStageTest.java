@@ -15,19 +15,32 @@ import org.junit.jupiter.api.Test;
 final class GeologyGenerationStageTest {
 
     @Test
-    void v4GeneratesMultipleCoherentProvincesAndUnits() {
+    void v5PreservesV4GeologyWhileProducingMultipleCoherentProvincesAndUnits() {
         WorldBounds bounds = new WorldBounds(-24, 24, -24, 24, -12, 12);
-        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 42L);
-        GeologyField geology = new GeologyGenerationStage().generate(genesis);
+        WorldSpec spec = new WorldSpec(bounds);
+        WorldGenesis v4Genesis = new WorldGenesis(
+                spec,
+                42L,
+                GenerationRevision.V4,
+                RngRevision.V1);
+        WorldGenesis v5Genesis = new WorldGenesis(
+                spec,
+                42L,
+                GenerationRevision.V5,
+                RngRevision.V1);
+        GeologyGenerationStage stage = new GeologyGenerationStage();
+        GeologyField v4 = stage.generate(v4Genesis);
+        GeologyField v5 = stage.generate(v5Genesis);
         Set<Long> provinces = new HashSet<>();
         Set<GeologyUnitKey> units = new HashSet<>();
 
-        assertEquals(GenerationRevision.V4, genesis.generationRevision());
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                provinces.add(geology.provinceIdAt(x, y));
+                assertEquals(v4.provinceIdAt(x, y), v5.provinceIdAt(x, y));
+                provinces.add(v5.provinceIdAt(x, y));
                 for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
-                    units.add(geology.unitAt(x, y, z));
+                    assertEquals(v4.unitAt(x, y, z), v5.unitAt(x, y, z));
+                    units.add(v5.unitAt(x, y, z));
                 }
             }
         }
