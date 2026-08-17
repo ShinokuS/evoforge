@@ -61,8 +61,8 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         return new DenseClimateNormalsField(
                 bounds,
                 temperature,
-                climate.precipitationSupply(),
-                climate.evaporativeDemand());
+                climate.precipitationNormal(),
+                climate.evaporativeDemandNormal());
     }
 
     private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {
