@@ -46,6 +46,33 @@ final class OceanFirstElevationGenerationTest {
     }
 
     @Test
+    void preV9ElevationIgnoresMacroGenerationIntent() {
+        WorldGenerationIntent oneIntent = new WorldGenerationIntent(
+                NormalizedValue.ofPartsPerMillion(100_000),
+                NormalizedValue.ofPartsPerMillion(900_000),
+                NormalizedValue.ofPartsPerMillion(100_000));
+        WorldGenerationIntent anotherIntent = new WorldGenerationIntent(
+                NormalizedValue.ofPartsPerMillion(900_000),
+                NormalizedValue.ofPartsPerMillion(100_000),
+                NormalizedValue.ofPartsPerMillion(900_000));
+
+        WorldGenesis first = new WorldGenesis(
+                new WorldSpec(BOUNDS),
+                17L,
+                GenerationRevision.V8,
+                RngRevision.V1,
+                oneIntent);
+        WorldGenesis second = new WorldGenesis(
+                new WorldSpec(BOUNDS),
+                17L,
+                GenerationRevision.V8,
+                RngRevision.V1,
+                anotherIntent);
+
+        assertArrayEquals(snapshot(generate(first)), snapshot(generate(second)));
+    }
+
+    @Test
     void oceanFirstRequiresBoundsOnBothSidesOfSeaLevel() {
         WorldGenesis invalid = new WorldGenesis(
                 new WorldSpec(new WorldBounds(0, 3, 0, 3, 0, 8)),
@@ -82,7 +109,9 @@ final class OceanFirstElevationGenerationTest {
         int count = 0;
         for (int y = BOUNDS.minY(); y <= BOUNDS.maxY(); y++) {
             for (int x = BOUNDS.minX(); x <= BOUNDS.maxX(); x++) {
-                if (field.elevationSubunitsAt(x, y) > ElevationGenerationStage.SEA_LEVEL_SUBUNITS) count++;
+                if (field.elevationSubunitsAt(x, y) > ElevationGenerationStage.SEA_LEVEL_SUBUNITS) {
+                    count++;
+                }
             }
         }
         return count;
