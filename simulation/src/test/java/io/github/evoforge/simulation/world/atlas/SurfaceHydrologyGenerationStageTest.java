@@ -14,9 +14,13 @@ import org.junit.jupiter.api.Test;
 final class SurfaceHydrologyGenerationStageTest {
 
     @Test
-    void currentV6PreservesFiniteChannelWaterAndAdjacentDryShoreline() {
+    void explicitV6PreservesFiniteChannelWaterAndAdjacentDryShoreline() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
-        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds),
+                17L,
+                GenerationRevision.V6,
+                RngRevision.V1);
         ElevationField elevation = constantElevation(bounds, 0);
         DrainageField drainage = syntheticDrainage(bounds);
 
