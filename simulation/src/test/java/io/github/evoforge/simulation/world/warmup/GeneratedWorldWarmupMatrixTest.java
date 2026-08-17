@@ -24,6 +24,11 @@ final class GeneratedWorldWarmupMatrixTest {
             123_456_789L
     };
     private static final long[] CHECKPOINTS = {0L, 10L, 25L, 50L};
+    private static final ClimateSpec TEST_CLIMATE = ClimateSpec.of(
+            ClimateTemperature.ofMilliCelsius(12_000),
+            250,
+            CellVolumeRate.of(100_001L, 3L),
+            CellVolumeRate.of(20_003L, 4L));
 
     @TestFactory
     Stream<DynamicTest> representativeGeneratedWorldMatrixReplaysExactly() {
@@ -41,12 +46,8 @@ final class GeneratedWorldWarmupMatrixTest {
     private static void verify(
             long seed,
             MatrixProfile profile) {
-        GeneratedWorldRuntime first = GeneratedWorldWarmupFixture.create(
-                seed,
-                profile.climate());
-        GeneratedWorldRuntime replay = GeneratedWorldWarmupFixture.create(
-                seed,
-                profile.climate());
+        GeneratedWorldRuntime first = create(seed, profile);
+        GeneratedWorldRuntime replay = create(seed, profile);
         GeneratedWorldWarmup warmup = new GeneratedWorldWarmup();
 
         List<GeneratedWorldDiagnostics> firstTrace = warmup.run(
@@ -59,6 +60,9 @@ final class GeneratedWorldWarmupMatrixTest {
         assertEquals(firstTrace, replayTrace);
         assertEquals(50L, first.runtime().time().tick());
         assertEquals(50L, replay.runtime().time().tick());
+        assertEquals(
+                TEST_CLIMATE.precipitationSupply(),
+                first.atlas().climateNormals().precipitationSupplyAt(0, 0));
 
         for (GeneratedWorldDiagnostics snapshot : firstTrace) {
             assertEquals(seed, snapshot.masterSeed());
@@ -75,7 +79,7 @@ final class GeneratedWorldWarmupMatrixTest {
         assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
 
         GeneratedWorldDiagnostics finalSnapshot = firstTrace.get(firstTrace.size() - 1);
-        if (profile.hasAtmosphericSupply()) {
+        if (profile.atmosphereEnabled()) {
             assertTrue(finalSnapshot.totalWaterVolume() > initial.totalWaterVolume());
             assertTrue(finalSnapshot.retainedWaterVolume() > 0L);
             assertTrue(finalSnapshot.wetSoilCells() > 0L);
@@ -86,26 +90,25 @@ final class GeneratedWorldWarmupMatrixTest {
         }
     }
 
-    private static List<MatrixProfile> profiles() {
-        return List.of(
-                new MatrixProfile(
-                        "unforced",
-                        ClimateSpec.STANDARD_UNFORCED,
-                        false),
-                new MatrixProfile(
-                        "fractional-net-supply",
-                        ClimateSpec.of(
-                                ClimateTemperature.ofMilliCelsius(12_000),
-                                250,
-                                CellVolumeRate.of(100_001L, 3L),
-                                CellVolumeRate.of(20_003L, 4L)),
-                        true));
+    private static GeneratedWorldRuntime create(long seed, MatrixProfile profile) {
+        if (profile.atmosphereEnabled()) {
+            return GeneratedWorldWarmupFixture.create(seed, TEST_CLIMATE);
+        }
+        return GeneratedWorldWarmupFixture.createWithoutAtmosphericForcing(
+                seed,
+                TEST_CLIMATE,
+                GeneratedWorldWarmupFixture.bounds());
     }
 
-    /** Internal engine-test profile; these exact rates are not user-facing world controls. */
+    private static List<MatrixProfile> profiles() {
+        return List.of(
+                new MatrixProfile("atmosphere-disabled", false),
+                new MatrixProfile("atmosphere-enabled", true));
+    }
+
+    /** Internal engine-test profile; atmosphere activation is not a climate property. */
     private record MatrixProfile(
             String name,
-            ClimateSpec climate,
-            boolean hasAtmosphericSupply) {
+            boolean atmosphereEnabled) {
     }
 }
