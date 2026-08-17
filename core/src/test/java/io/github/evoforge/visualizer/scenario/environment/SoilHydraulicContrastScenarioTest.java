@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 final class SoilHydraulicContrastScenarioTest {
 
     @Test
-    void identicalRainfallProducesDifferentSoilAndSurfaceWaterResponse() {
+    void identicalRainfallProducesDifferentSoilAndSurfaceWaterResponseThenDries() {
         ScenarioSession session = new SoilHydraulicContrastScenario().create();
 
         assertEquals(0L, session.runtime().time().tick());
@@ -42,6 +42,24 @@ final class SoilHydraulicContrastScenarioTest {
         assertTrue(
                 slow.free() > 0L,
                 "slow soil should leave surface water from that same rain pulse");
+
+        boolean driedAfterRain = false;
+        for (int step = 0; step < 200; step++) {
+            session.runtime().stepper().advance();
+            if (session.weather().current().kind() != WeatherPresentationKind.CLEAR) continue;
+            SoilHydraulicContrastScenario.SideWater left = left(session);
+            SoilHydraulicContrastScenario.SideWater right = right(session);
+            if (left.retained() == 0L
+                    && left.free() == 0L
+                    && right.retained() == 0L
+                    && right.free() == 0L) {
+                driedAfterRain = true;
+                break;
+            }
+        }
+        assertTrue(
+                driedAfterRain,
+                "a sustained clear spell must eventually remove all exposed free and retained Water");
     }
 
     private static SoilHydraulicContrastScenario.SideWater left(ScenarioSession session) {
