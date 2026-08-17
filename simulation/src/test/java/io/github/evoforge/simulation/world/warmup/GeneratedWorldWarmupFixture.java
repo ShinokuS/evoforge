@@ -40,6 +40,21 @@ final class GeneratedWorldWarmupFixture {
             long seed,
             ClimateSpec climate,
             WorldBounds bounds) {
+        return create(seed, climate, bounds, true);
+    }
+
+    static GeneratedWorldRuntime createWithoutAtmosphericForcing(
+            long seed,
+            ClimateSpec climate,
+            WorldBounds bounds) {
+        return create(seed, climate, bounds, false);
+    }
+
+    private static GeneratedWorldRuntime create(
+            long seed,
+            ClimateSpec climate,
+            WorldBounds bounds,
+            boolean attachAtmosphericForcing) {
         if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds, climate), seed);
         CompiledTerrainProfile terrainProfile = terrainProfile();
@@ -82,9 +97,16 @@ final class GeneratedWorldWarmupFixture {
         }
         bindings = bindings.withMaterials(geologyBindings);
 
-        return new GeneratedWorldBootstrap(
-                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)))
-                .create(genesis, assembly, terrainProfile, bindings);
+        GeneratedWorldBootstrap bootstrap = new GeneratedWorldBootstrap(
+                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)));
+        if (attachAtmosphericForcing) {
+            return bootstrap.create(genesis, assembly, terrainProfile, bindings);
+        }
+        return bootstrap.createWithoutAtmosphericForcing(
+                genesis,
+                assembly,
+                terrainProfile,
+                bindings);
     }
 
     static CompiledTerrainProfile terrainProfile() {
