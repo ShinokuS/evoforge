@@ -4,19 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.atlas.DrainageGenerationStage;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.atlas.HydroClimateGenerationStage;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
+import io.github.evoforge.simulation.world.climate.ClimateHydroForcingView;
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsProbe;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
@@ -24,6 +23,7 @@ import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinit
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import org.junit.jupiter.api.Test;
 
 final class GeneratedWorldBootstrapIntegrationTest {
 
@@ -31,7 +31,7 @@ final class GeneratedWorldBootstrapIntegrationTest {
     void legacyV2UnforcedGeneratedWorldStillStartsWithoutGeneratedWater() {
         WorldBounds bounds = bounds();
         WorldGenesis legacy = new WorldGenesis(
-                new WorldSpec(bounds, HydroClimateSpec.UNFORCED),
+                new WorldSpec(bounds, ClimateSpec.STANDARD_UNFORCED),
                 71L,
                 GenerationRevision.V2,
                 RngRevision.V1);
@@ -51,13 +51,12 @@ final class GeneratedWorldBootstrapIntegrationTest {
     void currentGeneratedSurfaceWaterMaterializesBeforeRuntimeAndRemainsFinite() {
         WorldBounds bounds = bounds();
         WorldGenesis genesis = WorldGenesis.current(
-                new WorldSpec(bounds, HydroClimateSpec.UNFORCED),
+                new WorldSpec(bounds, ClimateSpec.STANDARD_UNFORCED),
                 71L);
         WorldAtlasGenerator atlasGenerator = new WorldAtlasGenerator(
                 ignored -> constantElevation(bounds, 0),
                 new DrainageGenerationStage(),
-                (requestedGenesis, elevation, drainage) -> oneWetColumn(bounds),
-                new HydroClimateGenerationStage());
+                (requestedGenesis, elevation, drainage) -> oneWetColumn(bounds));
         GeneratedWorldRuntime world = create(genesis, atlasGenerator);
 
         GeneratedWorldDiagnostics initial = audit(world);
@@ -74,8 +73,10 @@ final class GeneratedWorldBootstrapIntegrationTest {
     }
 
     @Test
-    void generatedHydroClimateRunsInsideProductionSchedulerAndReplaysExactly() {
-        HydroClimateSpec climate = HydroClimateSpec.of(
+    void generatedClimateHydroProjectionRunsInsideProductionSchedulerAndReplaysExactly() {
+        ClimateSpec climate = ClimateSpec.of(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
                 CellVolumeRate.of(80_000L, 1L),
                 CellVolumeRate.ZERO);
 
@@ -106,17 +107,20 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 WorldGenesis.current(
                         new WorldSpec(
                                 bounds,
-                                HydroClimateSpec.of(
+                                ClimateSpec.of(
+                                        ClimateTemperature.ofMilliCelsius(12_000),
+                                        250,
                                         CellVolumeRate.of(1L, 2L),
                                         CellVolumeRate.ZERO)),
                         5L));
+        ClimateHydroForcingView forcing = new ClimateHydroForcingView(atlas.climateNormals());
 
         SimulationAssembly generatedFirst = SimulationAssembly.create()
                 .worldBounds(
                         bounds.minX(), bounds.maxX(),
                         bounds.minY(), bounds.maxY(),
                         bounds.minZ(), bounds.maxZ())
-                .generatedHydroClimate(atlas.hydroClimate());
+                .generatedHydroClimate(forcing);
         assertThrows(
                 IllegalStateException.class,
                 () -> generatedFirst.periodicPrecipitation(1, 1L));
@@ -132,7 +136,7 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 .periodicPrecipitation(1, 1L);
         assertThrows(
                 IllegalStateException.class,
-                () -> legacyFirst.generatedHydroClimate(atlas.hydroClimate()));
+                () -> legacyFirst.generatedHydroClimate(forcing));
     }
 
     private static GeneratedWorldRuntime create(
