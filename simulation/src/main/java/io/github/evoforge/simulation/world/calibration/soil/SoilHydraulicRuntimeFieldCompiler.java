@@ -12,10 +12,10 @@ import java.util.Map;
 /**
  * Pre-start bridge from immutable generated hydraulic facts to the runtime Soil lookup contract.
  *
- * <p>The generated field remains authoritative per coordinate. Physical profiles are compiled once
- * per distinct value during preflight; runtime lookup never recalibrates or converts physical
- * units. A {@code null} profile remains an authoritative non-porous cell rather than falling back
- * to material-wide Definition data.</p>
+ * <p>The generated field remains authoritative per solid coordinate. Physical profiles are
+ * compiled once per distinct value during preflight; runtime lookup never recalibrates or converts
+ * physical units. A {@code null} profile remains an authoritative non-porous cell rather than
+ * falling back to material-wide Definition data.</p>
  */
 public final class SoilHydraulicRuntimeFieldCompiler {
     private SoilHydraulicRuntimeFieldCompiler() { }
@@ -60,6 +60,13 @@ public final class SoilHydraulicRuntimeFieldCompiler {
 
         Map<SoilHydraulicProfile, SoilProperties> immutable = Map.copyOf(compiled);
         return (x, y, z) -> {
+            if (!bounds.contains(x, y, z)) {
+                return null;
+            }
+            int surfaceZ = elevation.elevationAt(x, y);
+            if (z > surfaceZ) {
+                return null;
+            }
             SoilHydraulicProfile profile = field.find(x, y, z);
             if (profile == null) {
                 return null;
