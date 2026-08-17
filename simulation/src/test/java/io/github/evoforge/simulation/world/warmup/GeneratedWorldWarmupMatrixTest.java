@@ -3,17 +3,17 @@ package io.github.evoforge.simulation.world.warmup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
+import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
-
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
-
-import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
-import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 
 final class GeneratedWorldWarmupMatrixTest {
 
@@ -44,10 +44,12 @@ final class GeneratedWorldWarmupMatrixTest {
             MatrixProfile profile) {
         GeneratedWorldRuntime first = GeneratedWorldWarmupFixture.create(
                 seed,
-                profile.climate());
+                profile.climate(),
+                profile.atmosphericForcingPolicy());
         GeneratedWorldRuntime replay = GeneratedWorldWarmupFixture.create(
                 seed,
-                profile.climate());
+                profile.climate(),
+                profile.atmosphericForcingPolicy());
         GeneratedWorldWarmup warmup = new GeneratedWorldWarmup();
 
         List<GeneratedWorldDiagnostics> firstTrace = warmup.run(
@@ -69,36 +71,45 @@ final class GeneratedWorldWarmupMatrixTest {
             assertTrue(snapshot.maximumContributingArea() >= 1L);
         }
 
-        assertEquals(0L, firstTrace.get(0).totalWaterVolume());
+        GeneratedWorldDiagnostics initial = firstTrace.get(0);
+        assertTrue(initial.generatedInitialWaterVolume() > 0L);
+        assertTrue(initial.generatedInitialWaterColumns() > 0);
+        assertTrue(initial.generatedShorelineColumns() > 0);
+        assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
+
         GeneratedWorldDiagnostics finalSnapshot = firstTrace.get(firstTrace.size() - 1);
-        if (profile.expectWater()) {
-            assertTrue(finalSnapshot.totalWaterVolume() > 0L);
+        if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(
+                profile.atmosphericForcingPolicy())) {
+            assertTrue(finalSnapshot.totalWaterVolume() > initial.totalWaterVolume());
             assertTrue(finalSnapshot.retainedWaterVolume() > 0L);
             assertTrue(finalSnapshot.wetSoilCells() > 0L);
         } else {
             assertTrue(firstTrace.stream()
-                    .allMatch(snapshot -> snapshot.totalWaterVolume() == 0L));
+                    .allMatch(snapshot -> snapshot.totalWaterVolume()
+                            == initial.totalWaterVolume()));
         }
     }
 
     private static List<MatrixProfile> profiles() {
         return List.of(
                 new MatrixProfile(
-                        "unforced",
-                        HydroClimateSpec.UNFORCED,
-                        false),
+                        "isolated-water-balance",
+                        ClimateSpec.STANDARD,
+                        AtmosphericForcingPolicy.DISABLED),
                 new MatrixProfile(
                         "fractional-net-supply",
-                        HydroClimateSpec.of(
+                        ClimateSpec.of(
+                                ClimateTemperature.ofMilliCelsius(12_000),
+                                250,
                                 CellVolumeRate.of(100_001L, 3L),
                                 CellVolumeRate.of(20_003L, 4L)),
-                        true));
+                        AtmosphericForcingPolicy.CLIMATE_NORMALS));
     }
 
     /** Internal engine-test profile; these exact rates are not user-facing world controls. */
     private record MatrixProfile(
             String name,
-            HydroClimateSpec climate,
-            boolean expectWater) {
+            ClimateSpec climate,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
     }
 }

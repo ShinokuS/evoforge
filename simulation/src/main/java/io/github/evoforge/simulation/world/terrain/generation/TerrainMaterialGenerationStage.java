@@ -2,18 +2,18 @@ package io.github.evoforge.simulation.world.terrain.generation;
 
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
+import io.github.evoforge.simulation.world.geology.GeologyField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
  * First causal material-strata model.
  *
- * <p>Author palettes select reusable process capabilities and material identities only.
- * Numeric slope/deposition policy is generated complexity owned by this versioned algorithm,
- * never a required content-author knob.</p>
+ * <p>Compiled profiles select reusable process capabilities and semantic surface material roles.
+ * Generated Geology owns the deeper rock identity when present. Numeric slope/deposition policy is
+ * generated complexity owned by this versioned algorithm, never a required content-author knob.</p>
  */
-public final class TerrainMaterialGenerationStage
-        implements TerrainMaterialGenerator {
-
+public final class TerrainMaterialGenerationStage implements TerrainMaterialGenerator {
     private static final int MAX_GROUND_DEPTH_CELLS = 4;
     private static final int MAX_DEPOSITION_DEPTH_CELLS = 2;
 
@@ -27,19 +27,58 @@ public final class TerrainMaterialGenerationStage
     public TerrainMaterialField generate(
             ElevationField elevation,
             DrainageField drainage,
-            TerrainPalette palette) {
-        if (elevation == null || drainage == null || palette == null) {
+            CompiledTerrainProfile profile) {
+        return generateInternal(elevation, null, drainage, null, profile);
+    }
+
+    @Override
+    public TerrainMaterialField generate(
+            ElevationField elevation,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
+        if (surfaceHydrology == null) {
+            throw new IllegalArgumentException("surfaceHydrology must not be null");
+        }
+        return generateInternal(elevation, null, drainage, surfaceHydrology, profile);
+    }
+
+    @Override
+    public TerrainMaterialField generate(
+            ElevationField elevation,
+            GeologyField geology,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
+        if (geology == null || surfaceHydrology == null) {
+            throw new IllegalArgumentException("geology and surfaceHydrology must not be null");
+        }
+        return generateInternal(elevation, geology, drainage, surfaceHydrology, profile);
+    }
+
+    private TerrainMaterialField generateInternal(
+            ElevationField elevation,
+            GeologyField geology,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            CompiledTerrainProfile profile) {
+        if (elevation == null || drainage == null || profile == null) {
             throw new IllegalArgumentException(
                     "terrain material generation dependencies must not be null");
         }
         WorldBounds bounds = elevation.bounds();
         if (!bounds.equals(drainage.bounds())) {
+            throw new IllegalArgumentException("elevation and drainage bounds must match");
+        }
+        if (geology != null && !bounds.equals(geology.bounds())) {
+            throw new IllegalArgumentException("geology bounds must match terrain generation bounds");
+        }
+        if (surfaceHydrology != null && !bounds.equals(surfaceHydrology.bounds())) {
             throw new IllegalArgumentException(
-                    "elevation and drainage bounds must match");
+                    "surface hydrology bounds must match terrain generation bounds");
         }
 
-        int width = Math.toIntExact(
-                (long) bounds.maxX() - bounds.minX() + 1L);
+        int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         long height = (long) bounds.maxY() - bounds.minY() + 1L;
         long areaLong = Math.multiplyExact((long) width, height);
         if (areaLong > Integer.MAX_VALUE) {
@@ -52,10 +91,8 @@ public final class TerrainMaterialGenerationStage
         byte[] groundDepth = new byte[area];
         byte[] depositionDepth = new byte[area];
 
-        boolean groundProfile = palette.has(
-                TerrainPresetCapability.GROUND_PROFILE);
-        boolean surfaceDeposition = palette.has(
-                TerrainPresetCapability.SURFACE_DEPOSITION);
+        boolean groundProfile = profile.has(TerrainPresetCapability.GROUND_PROFILE);
+        boolean surfaceDeposition = profile.has(TerrainPresetCapability.SURFACE_DEPOSITION);
 
         int index = 0;
         for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
@@ -80,9 +117,13 @@ public final class TerrainMaterialGenerationStage
                 groundDepth[index] = (byte) (groundProfile
                         ? groundDepthFor(context.maximumSlope())
                         : 0);
-                depositionDepth[index] = (byte) (surfaceDeposition
-                        ? depositionDepthFor(context)
-                        : 0);
+                int deposition = surfaceDeposition ? depositionDepthFor(context) : 0;
+                if (surfaceDeposition
+                        && surfaceHydrology != null
+                        && surfaceHydrology.isShoreline(worldX, worldY)) {
+                    deposition = Math.max(1, deposition);
+                }
+                depositionDepth[index] = (byte) deposition;
                 index++;
             }
         }
@@ -93,35 +134,26 @@ public final class TerrainMaterialGenerationStage
                 surfaceZ,
                 groundDepth,
                 depositionDepth,
-                palette.materials());
+                geology,
+                profile.materials());
     }
 
     private static int groundDepthFor(long slope) {
-        long steps = slope == 0L
-                ? 0L
-                : 1L + (slope - 1L) / SOIL_SLOPE_STEP;
+        long steps = slope == 0L ? 0L : 1L + (slope - 1L) / SOIL_SLOPE_STEP;
         long depth = (long) MAX_GROUND_DEPTH_CELLS - steps;
-        if (depth <= 0L) {
-            return 0;
-        }
+        if (depth <= 0L) return 0;
         return (int) Math.min(depth, MAX_GROUND_DEPTH_CELLS);
     }
 
     private static int depositionDepthFor(LocalSurfaceContext context) {
-        if (context.maximumSlope() > DEPOSITION_MAX_SLOPE) {
-            return 0;
-        }
+        if (context.maximumSlope() > DEPOSITION_MAX_SLOPE) return 0;
 
         long score = Math.addExact(
                 Math.multiplyExact(context.concavity(), 2L),
                 context.drainageInfluence());
         score = Math.subtractExact(score, context.maximumSlope());
-        if (score < DEPOSITION_THRESHOLD) {
-            return 0;
-        }
-        return score >= DEEP_DEPOSITION_THRESHOLD
-                ? MAX_DEPOSITION_DEPTH_CELLS
-                : 1;
+        if (score < DEPOSITION_THRESHOLD) return 0;
+        return score >= DEEP_DEPOSITION_THRESHOLD ? MAX_DEPOSITION_DEPTH_CELLS : 1;
     }
 
     private static LocalSurfaceContext contextAt(
@@ -137,9 +169,7 @@ public final class TerrainMaterialGenerationStage
 
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
-                if (dx == 0 && dy == 0) {
-                    continue;
-                }
+                if (dx == 0 && dy == 0) continue;
                 long nx = (long) x + dx;
                 long ny = (long) y + dy;
                 if (nx < elevation.bounds().minX()
@@ -148,12 +178,8 @@ public final class TerrainMaterialGenerationStage
                         || ny > elevation.bounds().maxY()) {
                     continue;
                 }
-                long neighbor = elevation.elevationSubunitsAt(
-                        (int) nx,
-                        (int) ny);
-                maximumSlope = Math.max(
-                        maximumSlope,
-                        Math.abs(neighbor - center));
+                long neighbor = elevation.elevationSubunitsAt((int) nx, (int) ny);
+                maximumSlope = Math.max(maximumSlope, Math.abs(neighbor - center));
                 neighborSum = Math.addExact(neighborSum, neighbor);
                 neighbors++;
             }
@@ -169,26 +195,22 @@ public final class TerrainMaterialGenerationStage
                 drainage.contributingAreaAt(x, y),
                 ElevationField.SUBUNITS_PER_CELL) / horizontalArea;
 
-        return new LocalSurfaceContext(
-                maximumSlope,
-                concavity,
-                drainageInfluence);
+        return new LocalSurfaceContext(maximumSlope, concavity, drainageInfluence);
     }
 
     private record LocalSurfaceContext(
             long maximumSlope,
             long concavity,
-            long drainageInfluence) {
-    }
+            long drainageInfluence) { }
 
-    private static final class LayeredTerrainMaterialField
-            implements TerrainMaterialField {
+    private static final class LayeredTerrainMaterialField implements TerrainMaterialField {
         private final WorldBounds bounds;
         private final int width;
         private final int[] surfaceZ;
         private final byte[] groundDepth;
         private final byte[] depositionDepth;
-        private final TerrainPaletteMaterials materials;
+        private final GeologyField geology;
+        private final TerrainMaterialSet materials;
 
         private LayeredTerrainMaterialField(
                 WorldBounds bounds,
@@ -196,12 +218,14 @@ public final class TerrainMaterialGenerationStage
                 int[] surfaceZ,
                 byte[] groundDepth,
                 byte[] depositionDepth,
-                TerrainPaletteMaterials materials) {
+                GeologyField geology,
+                TerrainMaterialSet materials) {
             this.bounds = bounds;
             this.width = width;
             this.surfaceZ = surfaceZ;
             this.groundDepth = groundDepth;
             this.depositionDepth = depositionDepth;
+            this.geology = geology;
             this.materials = materials;
         }
 
@@ -215,8 +239,7 @@ public final class TerrainMaterialGenerationStage
             if (x < bounds.minX() || x > bounds.maxX()
                     || y < bounds.minY() || y > bounds.maxY()) {
                 throw new IllegalArgumentException(
-                        "terrain material column outside world bounds: ("
-                                + x + ", " + y + ")");
+                        "terrain material column outside world bounds: (" + x + ", " + y + ")");
             }
             int index = (y - bounds.minY()) * width + (x - bounds.minX());
             int surface = surfaceZ[index];
@@ -229,19 +252,22 @@ public final class TerrainMaterialGenerationStage
             int depth = surface - z;
             int sediment = Byte.toUnsignedInt(depositionDepth[index]);
             if (depth < sediment) {
-                return materials.sand();
+                return materials.require(TerrainMaterialRole.SEDIMENT);
             }
 
             int ground = Byte.toUnsignedInt(groundDepth[index]);
             if (ground > 0) {
                 if (depth == 0) {
-                    return materials.topsoil();
+                    return materials.require(TerrainMaterialRole.SURFACE);
                 }
                 if (depth < ground) {
-                    return materials.soil();
+                    return materials.require(TerrainMaterialRole.SUBSURFACE);
                 }
             }
-            return materials.rock();
+            if (geology != null) {
+                return TerrainMaterialKey.of(geology.materialAt(x, y, z).value());
+            }
+            return materials.require(TerrainMaterialRole.BEDROCK);
         }
     }
 }

@@ -4,9 +4,8 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Explicit catalog of reusable terrain-generation presets available to palette compilation. */
+/** Explicit catalog of reusable terrain-generation presets available to profile compilation. */
 public final class TerrainPresetCatalog {
-
     public static final String NATURAL_GROUND = "core:natural_ground";
     public static final String DEPOSITIONAL_SAND = "core:depositional_sand";
 
@@ -33,10 +32,14 @@ public final class TerrainPresetCatalog {
         return new TerrainPresetCatalog(java.util.List.of(
                 new TerrainPreset(
                         NATURAL_GROUND,
-                        TerrainPresetCapability.GROUND_PROFILE),
+                        TerrainPresetCapability.GROUND_PROFILE,
+                        TerrainMaterialRole.SURFACE,
+                        TerrainMaterialRole.SUBSURFACE,
+                        TerrainMaterialRole.BEDROCK),
                 new TerrainPreset(
                         DEPOSITIONAL_SAND,
-                        TerrainPresetCapability.SURFACE_DEPOSITION)));
+                        TerrainPresetCapability.SURFACE_DEPOSITION,
+                        TerrainMaterialRole.SEDIMENT)));
     }
 
     public TerrainPreset resolve(String key) {

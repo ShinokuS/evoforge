@@ -1,0 +1,8 @@
+{
+    "key": "core:shale",
+    "aspects": {
+        "traversal": {
+            "cost": 1000
+        }
+    }
+}

@@ -4,13 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
-import io.github.evoforge.simulation.world.genesis.HydroClimateSpec;
+import io.github.evoforge.simulation.world.genesis.ClimateSpec;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 final class GeneratedWorldWarmupTest {
 
@@ -18,7 +17,8 @@ final class GeneratedWorldWarmupTest {
     void capturesRequestedAbsoluteCheckpointsThroughOrdinaryRuntimeStepper() {
         GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
                 42L,
-                HydroClimateSpec.UNFORCED);
+                ClimateSpec.STANDARD,
+                AtmosphericForcingPolicy.DISABLED);
 
         List<GeneratedWorldDiagnostics> snapshots =
                 new GeneratedWorldWarmup().run(world, 0L, 3L, 7L);
@@ -29,8 +29,13 @@ final class GeneratedWorldWarmupTest {
         assertEquals(7L, world.runtime().time().tick());
         assertTrue(snapshots.stream()
                 .allMatch(GeneratedWorldDiagnostics::surfaceMatchesAtlas));
+
+        GeneratedWorldDiagnostics initial = snapshots.get(0);
+        assertTrue(initial.generatedInitialWaterVolume() > 0L);
+        assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
         assertTrue(snapshots.stream()
-                .allMatch(snapshot -> snapshot.totalWaterVolume() == 0L));
+                .allMatch(snapshot -> snapshot.totalWaterVolume()
+                        == initial.totalWaterVolume()));
     }
 
     @Test
@@ -40,26 +45,39 @@ final class GeneratedWorldWarmupTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, HydroClimateSpec.UNFORCED)));
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED)));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, HydroClimateSpec.UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         -1L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, HydroClimateSpec.UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         0L, 0L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, HydroClimateSpec.UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         2L, 1L));
 
         GeneratedWorldRuntime advanced = GeneratedWorldWarmupFixture.create(
                 1L,
-                HydroClimateSpec.UNFORCED);
+                ClimateSpec.STANDARD,
+                AtmosphericForcingPolicy.DISABLED);
         advanced.runtime().stepper().advance();
         assertThrows(
                 IllegalArgumentException.class,

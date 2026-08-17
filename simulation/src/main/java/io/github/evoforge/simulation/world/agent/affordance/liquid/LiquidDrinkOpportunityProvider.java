@@ -16,6 +16,7 @@ import io.github.evoforge.simulation.world.agent.opportunity.OpportunitySearchDe
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityTarget;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseActionId;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseCompletion;
+import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseLifecycle;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseResult;
 import io.github.evoforge.simulation.world.agent.opportunity.OpportunityUseStartAttempt;
 import io.github.evoforge.simulation.world.agent.perception.PerceivedCell;
@@ -56,11 +57,8 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
     private final InteractionAccessResolver access;
     private final Runnable liquidChanged;
     private final SimulationTime time;
-    private final Map<ObjectId, ActiveUse> activeByAgent = new HashMap<>();
-    private final Map<Long, ActiveUse> activeByProcess = new HashMap<>();
-    private final Map<ObjectId, OpportunityUseCompletion> lastCompletionByAgent = new HashMap<>();
-    private ProcessScheduler scheduler;
-    private long nextUseId;
+    private final OpportunityUseLifecycle<ActiveUse> useLifecycle =
+            new OpportunityUseLifecycle<>("liquid drinking", "liquid drink use id space exhausted");
 
     public LiquidDrinkOpportunityProvider(
             ObjectLookup objects,
@@ -93,16 +91,11 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
     }
 
     public void bindScheduler(ProcessScheduler scheduler) {
-        if (scheduler == null) throw new IllegalArgumentException("scheduler must not be null");
-        if (this.scheduler != null) throw new IllegalStateException("liquid drinking scheduler is already bound");
-        this.scheduler = scheduler;
+        useLifecycle.bindScheduler(scheduler);
     }
 
     public void resume(long processId) {
-        ActiveUse active = activeByProcess.remove(processId);
-        if (active == null) throw new IllegalStateException("unknown liquid drinking process: " + processId);
-        activeByAgent.remove(active.agentId, active);
-        complete(active);
+        complete(useLifecycle.resume(processId));
     }
 
     @Override
@@ -125,17 +118,29 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         Set<CandidateKey> emitted = new HashSet<>();
         for (PerceivedCell targetCell : perception.cells()) {
             LiquidTypeId resident = liquids.lookup().typeAt(targetCell.x(), targetCell.y(), targetCell.z());
-            if (resident == null || liquids.lookup().amount(targetCell.x(), targetCell.y(), targetCell.z()) <= 0) continue;
-            for (int definitionIndex = 0; definitionIndex < definitions.count(agent.definitionId()); definitionIndex++) {
-                LiquidDrinkDefinition definition = definitions.definitionAt(agent.definitionId(), definitionIndex);
-                if (!definition.liquidType().equals(resident) || !motivated(agent, definition.needId())) continue;
+            if (resident == null
+                    || liquids.lookup().amount(targetCell.x(), targetCell.y(), targetCell.z()) <= 0) {
+                continue;
+            }
+            for (int definitionIndex = 0;
+                    definitionIndex < definitions.count(agent.definitionId());
+                    definitionIndex++) {
+                LiquidDrinkDefinition definition = definitions.definitionAt(
+                        agent.definitionId(),
+                        definitionIndex);
+                if (!definition.liquidType().equals(resident)
+                        || !motivated(agent, definition.needId())) {
+                    continue;
+                }
                 LiquidCellTarget target = new LiquidCellTarget(
                         resident,
                         targetCell.x(),
                         targetCell.y(),
                         targetCell.z(),
                         definitionIndex);
-                for (int patternIndex = 0; patternIndex < definition.reach().count(); patternIndex++) {
+                for (int patternIndex = 0;
+                        patternIndex < definition.reach().count();
+                        patternIndex++) {
                     InteractionReachPattern pattern = definition.reach().patternAt(patternIndex);
                     CellOffset offset = pattern.targetOffset();
                     int siteX = targetCell.x() - offset.x();
@@ -144,9 +149,15 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
                     Integer distance = perceivedDistance.get(new Cell(siteX, siteY, siteZ));
                     if (distance == null) continue;
                     if (!access.allows(
-                            siteX, siteY, siteZ,
-                            targetCell.x(), targetCell.y(), targetCell.z(),
-                            definition.reach())) continue;
+                            siteX,
+                            siteY,
+                            siteZ,
+                            targetCell.x(),
+                            targetCell.y(),
+                            targetCell.z(),
+                            definition.reach())) {
+                        continue;
+                    }
                     CandidateKey key = new CandidateKey(target, siteX, siteY, siteZ);
                     if (!emitted.add(key)) continue;
                     InteractionSite site = new InteractionSite(siteX, siteY, siteZ, distance);
@@ -167,11 +178,16 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         for (int index = 0; index < definitions.count(agent.definitionId()); index++) {
             LiquidDrinkDefinition definition = definitions.definitionAt(agent.definitionId(), index);
             NeedId needId = definition.needId();
-            if (!emitted.add(needId) || !motivated(agent, needId)
-                    || !knowledge.knows(agent.definitionId(), needId)) continue;
+            if (!emitted.add(needId)
+                    || !motivated(agent, needId)
+                    || !knowledge.knows(agent.definitionId(), needId)) {
+                continue;
+            }
             result.add(new OpportunitySearchDemand(
                     needId.value(),
-                    UtilityMath.ratio(needs.level(agentId, needId), needs.maxLevel(agentId, needId))));
+                    UtilityMath.ratio(
+                            needs.level(agentId, needId),
+                            needs.maxLevel(agentId, needId))));
         }
         return List.copyOf(result);
     }
@@ -187,19 +203,32 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         LiquidDrinkDefinition definition = definitionFor(agent, liquidTarget);
         if (definition == null || !motivated(agent, definition.needId())) return null;
         if (!access.allows(
-                site.x(), site.y(), site.z(),
-                liquidTarget.x, liquidTarget.y, liquidTarget.z,
-                definition.reach())) return null;
+                site.x(),
+                site.y(),
+                site.z(),
+                liquidTarget.x,
+                liquidTarget.y,
+                liquidTarget.z,
+                definition.reach())) {
+            return null;
+        }
 
         int available = liquids.lookup().amountOf(
-                liquidTarget.type, liquidTarget.x, liquidTarget.y, liquidTarget.z);
+                liquidTarget.type,
+                liquidTarget.x,
+                liquidTarget.y,
+                liquidTarget.z);
         if (available <= 0) return null;
         long level = needs.level(agentId, definition.needId());
-        int requested = physicalVolume.cellVolumeForMilliliters(definition.requestedMillilitersPerUse());
+        int requested = physicalVolume.cellVolumeForMilliliters(
+                definition.requestedMillilitersPerUse());
         int expectedDraw = Math.min(requested, available);
         long expectedRelief = Math.min(
                 level,
-                proportionalRelief(definition.needReliefPerFullUse(), expectedDraw, requested));
+                proportionalRelief(
+                        definition.needReliefPerFullUse(),
+                        expectedDraw,
+                        requested));
         if (expectedRelief <= 0L) return null;
         return new OpportunityEvaluation(
                 expectedRelief,
@@ -214,8 +243,10 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
             ObjectId agentId,
             OpportunityTarget target,
             InteractionSite site) {
-        if (!(target instanceof LiquidCellTarget liquidTarget) || site == null
-                || activeByAgent.containsKey(agentId) || !atSite(agentId, site)) {
+        if (!(target instanceof LiquidCellTarget liquidTarget)
+                || site == null
+                || useLifecycle.isActive(agentId)
+                || !atSite(agentId, site)) {
             return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
         }
         WorldObject agent = objects.get(agentId);
@@ -223,11 +254,12 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         if (definition == null || evaluate(agentId, target, site) == null) {
             return OpportunityUseStartAttempt.rejected(UNAVAILABLE);
         }
-        if (nextUseId == Long.MAX_VALUE) throw new IllegalStateException("liquid drink use id space exhausted");
 
         long startedTick = time.tick();
-        long expectedCompletionTick = Math.addExact(startedTick, definition.useDurationTicks());
-        OpportunityUseActionId actionId = new OpportunityUseActionId(nextUseId++);
+        long expectedCompletionTick = Math.addExact(
+                startedTick,
+                definition.useDurationTicks());
+        OpportunityUseActionId actionId = useLifecycle.nextActionId();
         ActiveUse active = new ActiveUse(
                 actionId,
                 agentId,
@@ -239,28 +271,33 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         if (definition.useDurationTicks() == 0L) {
             complete(active);
         } else {
-            requireScheduler();
-            activeByAgent.put(agentId, active);
-            activeByProcess.put(actionId.value(), active);
-            scheduler.scheduleAfter(definition.useDurationTicks(), actionId.value());
+            useLifecycle.schedule(
+                    agentId,
+                    actionId,
+                    definition.useDurationTicks(),
+                    active);
         }
         return new OpportunityUseStartAttempt(
-                true, actionId, startedTick, expectedCompletionTick, STARTED);
+                true,
+                actionId,
+                startedTick,
+                expectedCompletionTick,
+                STARTED);
     }
 
     @Override
     public boolean isUseActive(ObjectId agentId) {
-        return agentId != null && activeByAgent.containsKey(agentId);
+        return useLifecycle.isActive(agentId);
     }
 
     @Override
     public OpportunityUseCompletion lastUseCompletion(ObjectId agentId) {
-        return agentId == null ? null : lastCompletionByAgent.get(agentId);
+        return useLifecycle.lastCompletion(agentId);
     }
 
     private void complete(ActiveUse active) {
         OpportunityUseResult result = apply(active);
-        lastCompletionByAgent.put(
+        useLifecycle.recordCompletion(
                 active.agentId,
                 new OpportunityUseCompletion(
                         active.actionId,
@@ -276,8 +313,12 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         if (!(active.target instanceof LiquidCellTarget target)
                 || !atSite(active.agentId, active.site)
                 || !access.allows(
-                        active.site.x(), active.site.y(), active.site.z(),
-                        target.x, target.y, target.z,
+                        active.site.x(),
+                        active.site.y(),
+                        active.site.z(),
+                        target.x,
+                        target.y,
+                        target.z,
                         active.definition.reach())) {
             return new OpportunityUseResult(false, UNAVAILABLE);
         }
@@ -288,25 +329,40 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         long level = needs.level(active.agentId, active.definition.needId());
         if (level <= 0L) return new OpportunityUseResult(false, UNAVAILABLE);
 
-        int requested = physicalVolume.cellVolumeForMilliliters(active.definition.requestedMillilitersPerUse());
-        int removed = liquids.removeAtMost(target.type, target.x, target.y, target.z, requested);
+        int requested = physicalVolume.cellVolumeForMilliliters(
+                active.definition.requestedMillilitersPerUse());
+        int removed = liquids.removeAtMost(
+                target.type,
+                target.x,
+                target.y,
+                target.z,
+                requested);
         if (removed <= CellVolume.EMPTY) return new OpportunityUseResult(false, UNAVAILABLE);
         liquidChanged.run();
 
         long relief = Math.min(
                 level,
-                proportionalRelief(active.definition.needReliefPerFullUse(), removed, requested));
+                proportionalRelief(
+                        active.definition.needReliefPerFullUse(),
+                        removed,
+                        requested));
         long applied = needs.satisfy(active.agentId, active.definition.needId(), relief);
         if (applied <= 0L) {
-            throw new IllegalStateException("removed liquid without applying validated thirst relief: " + active.agentId);
+            throw new IllegalStateException(
+                    "removed liquid without applying validated thirst relief: " + active.agentId);
         }
         return new OpportunityUseResult(true, DRANK);
     }
 
     private LiquidDrinkDefinition definitionFor(WorldObject agent, LiquidCellTarget target) {
-        if (agent == null || target.definitionIndex < 0
-                || target.definitionIndex >= definitions.count(agent.definitionId())) return null;
-        LiquidDrinkDefinition definition = definitions.definitionAt(agent.definitionId(), target.definitionIndex);
+        if (agent == null
+                || target.definitionIndex < 0
+                || target.definitionIndex >= definitions.count(agent.definitionId())) {
+            return null;
+        }
+        LiquidDrinkDefinition definition = definitions.definitionAt(
+                agent.definitionId(),
+                target.definitionIndex);
         return definition.liquidType().equals(target.type) ? definition : null;
     }
 
@@ -333,11 +389,8 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
         return Math.max(1L, scaled.longValueExact());
     }
 
-    private void requireScheduler() {
-        if (scheduler == null) throw new IllegalStateException("liquid drinking scheduler is not bound");
-    }
-
     private record Cell(int x, int y, int z) { }
+
     private record CandidateKey(LiquidCellTarget target, int siteX, int siteY, int siteZ) { }
 
     private record LiquidCellTarget(
@@ -348,7 +401,9 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
             int definitionIndex) implements OpportunityTarget {
         private LiquidCellTarget {
             if (type == null) throw new IllegalArgumentException("liquid type must not be null");
-            if (definitionIndex < 0) throw new IllegalArgumentException("definitionIndex must be >= 0");
+            if (definitionIndex < 0) {
+                throw new IllegalArgumentException("definitionIndex must be >= 0");
+            }
         }
 
         @Override

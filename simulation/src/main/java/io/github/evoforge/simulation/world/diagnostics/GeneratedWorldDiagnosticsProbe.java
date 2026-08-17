@@ -7,21 +7,18 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.HydrographyField;
+import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
+import io.github.evoforge.simulation.world.geology.GeologyField;
+import io.github.evoforge.simulation.world.geology.GeologyUnitKey;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/**
- * Performs an explicit deterministic audit of a generated world and its runtime state.
- *
- * <p>This is intentionally an on-demand diagnostic pass, not a per-tick hot-path
- * observer. It may scan the full finite world volume in order to produce exact totals.</p>
- */
+/** Performs an explicit deterministic audit of a generated world and its runtime state. */
 public final class GeneratedWorldDiagnosticsProbe {
 
-    public GeneratedWorldDiagnostics snapshot(
-            WorldAtlas atlas,
-            SimulationRuntime runtime) {
+    public GeneratedWorldDiagnostics snapshot(WorldAtlas atlas, SimulationRuntime runtime) {
         if (atlas == null || runtime == null) {
             throw new IllegalArgumentException(
                     "generated world diagnostic dependencies must not be null");
@@ -29,18 +26,30 @@ public final class GeneratedWorldDiagnosticsProbe {
 
         WorldBounds bounds = atlas.genesis().spec().bounds();
         ElevationField elevation = atlas.elevation();
+        GeologyField geology = atlas.geology();
         DrainageField drainage = atlas.drainage();
+        HydrographyField hydrography = atlas.hydrography();
+        SurfaceHydrologyField surfaceHydrology = atlas.surfaceHydrology();
         SimulationView view = runtime.view();
 
-        if (!bounds.equals(elevation.bounds()) || !bounds.equals(drainage.bounds())) {
-            throw new IllegalStateException(
-                    "Atlas diagnostic layers must share world bounds");
+        if (!bounds.equals(elevation.bounds())
+                || !bounds.equals(geology.bounds())
+                || !bounds.equals(drainage.bounds())
+                || !bounds.equals(hydrography.bounds())
+                || !bounds.equals(surfaceHydrology.bounds())) {
+            throw new IllegalStateException("Atlas diagnostic layers must share world bounds");
         }
 
         int minimumSurfaceZ = Integer.MAX_VALUE;
         int maximumSurfaceZ = Integer.MIN_VALUE;
         long surfaceMismatches = 0L;
         long maximumContributingArea = 0L;
+        int generatedChannelColumns = 0;
+        long generatedInitialWaterVolume = 0L;
+        int generatedInitialWaterColumns = 0;
+        int generatedShorelineColumns = 0;
+        Set<Long> geologyProvinces = new HashSet<>();
+        Set<GeologyUnitKey> geologyUnits = new HashSet<>();
         Set<Long> terminalBasins = new HashSet<>();
 
         for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
@@ -56,12 +65,21 @@ public final class GeneratedWorldDiagnosticsProbe {
                     surfaceMismatches = Math.addExact(surfaceMismatches, 1L);
                 }
 
+                geologyProvinces.add(geology.provinceIdAt(worldX, worldY));
                 terminalBasins.add(pack(
                         drainage.terminalXAt(worldX, worldY),
                         drainage.terminalYAt(worldX, worldY)));
                 maximumContributingArea = Math.max(
                         maximumContributingArea,
                         drainage.contributingAreaAt(worldX, worldY));
+                if (hydrography.isChannelAt(worldX, worldY)) generatedChannelColumns++;
+
+                int generatedWater = surfaceHydrology.initialWaterVolumeAt(worldX, worldY);
+                generatedInitialWaterVolume = Math.addExact(
+                        generatedInitialWaterVolume,
+                        generatedWater);
+                if (generatedWater > 0) generatedInitialWaterColumns++;
+                if (surfaceHydrology.isShoreline(worldX, worldY)) generatedShorelineColumns++;
             }
         }
 
@@ -87,6 +105,7 @@ public final class GeneratedWorldDiagnosticsProbe {
 
                 for (long z = bounds.minZ(); z <= (long) bounds.maxZ(); z++) {
                     int worldZ = (int) z;
+                    geologyUnits.add(geology.unitAt(worldX, worldY, worldZ));
                     if (view.terrain().contains(worldX, worldY, worldZ)) {
                         terrainCells = Math.addExact(terrainCells, 1L);
                     }
@@ -112,12 +131,8 @@ public final class GeneratedWorldDiagnosticsProbe {
                     }
                 }
 
-                if (columnWetWaterCells > 0) {
-                    wetWaterColumns++;
-                }
-                if (columnWetSoilCells > 0) {
-                    wetSoilColumns++;
-                }
+                if (columnWetWaterCells > 0) wetWaterColumns++;
+                if (columnWetSoilCells > 0) wetSoilColumns++;
                 maximumFreeWaterColumnVolume = Math.max(
                         maximumFreeWaterColumnVolume,
                         columnFreeWater);
@@ -141,8 +156,14 @@ public final class GeneratedWorldDiagnosticsProbe {
                 surfaceMismatches,
                 minimumSurfaceZ,
                 maximumSurfaceZ,
+                geologyProvinces.size(),
+                geologyUnits.size(),
                 terminalBasins.size(),
                 maximumContributingArea,
+                generatedChannelColumns,
+                generatedInitialWaterVolume,
+                generatedInitialWaterColumns,
+                generatedShorelineColumns,
                 freeWaterVolume,
                 retainedWaterVolume,
                 wetWaterCells,

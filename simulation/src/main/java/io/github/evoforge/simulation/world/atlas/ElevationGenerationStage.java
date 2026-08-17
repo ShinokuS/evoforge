@@ -7,7 +7,7 @@ import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Deterministic smooth elevation with legacy v1 and precise v2 output semantics. */
+/** Deterministic smooth elevation with legacy v1 and precise v2+ output semantics. */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
 
@@ -23,7 +23,13 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         }
         GenerationRevision revision = genesis.generationRevision();
         if (!GenerationRevision.V1.equals(revision)
-                && !GenerationRevision.V2.equals(revision)) {
+                && !GenerationRevision.V2.equals(revision)
+                && !GenerationRevision.V3.equals(revision)
+                && !GenerationRevision.V4.equals(revision)
+                && !GenerationRevision.V5.equals(revision)
+                && !GenerationRevision.V6.equals(revision)
+                && !GenerationRevision.V7.equals(revision)
+                && !GenerationRevision.V8.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
@@ -33,7 +39,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         GenerationRandom random = GenerationRandom.from(genesis);
         long width = (long) bounds.maxX() - bounds.minX() + 1L;
         long height = (long) bounds.maxY() - bounds.minY() + 1L;
-        boolean precise = GenerationRevision.V2.equals(revision);
+        boolean precise = !GenerationRevision.V1.equals(revision);
 
         int index = 0;
         for (long localY = 0; localY < height; localY++) {

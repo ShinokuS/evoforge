@@ -15,15 +15,39 @@ import org.junit.jupiter.api.Test;
 final class WorldAtlasGenerationTest {
 
     @Test
-    void currentV2PreservesFrozenDiscreteV1Samples() {
+    void currentV7PreservesFrozenDiscreteElevationSamples() {
         WorldGenesis genesis = WorldGenesis.current(
                 new WorldSpec(new WorldBounds(-32, 31, -32, 31, -32, 32)),
                 123_456_789L);
 
-        assertEquals(GenerationRevision.V2, genesis.generationRevision());
+        assertEquals(GenerationRevision.V7, genesis.generationRevision());
         ElevationField elevation = new WorldAtlasGenerator().generate(genesis).elevation();
 
         assertFrozenDiscreteSamples(elevation);
+    }
+
+    @Test
+    void v6PreservesV5PreciseElevationEverywhere() {
+        WorldBounds bounds = new WorldBounds(-12, 13, -9, 14, -20, 20);
+        WorldSpec spec = new WorldSpec(bounds);
+        ElevationGenerationStage stage = new ElevationGenerationStage();
+        ElevationField v5 = stage.generate(new WorldGenesis(
+                spec,
+                77L,
+                GenerationRevision.V5,
+                RngRevision.V1));
+        ElevationField v6 = stage.generate(new WorldGenesis(
+                spec,
+                77L,
+                GenerationRevision.V6,
+                RngRevision.V1));
+
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                assertEquals(v5.elevationAt(x, y), v6.elevationAt(x, y));
+                assertEquals(v5.elevationSubunitsAt(x, y), v6.elevationSubunitsAt(x, y));
+            }
+        }
     }
 
     @Test
@@ -47,7 +71,7 @@ final class WorldAtlasGenerationTest {
     }
 
     @Test
-    void currentV2PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
+    void currentV7PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
         WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -40, 40);
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(new WorldSpec(bounds), 991L))
@@ -90,9 +114,7 @@ final class WorldAtlasGenerationTest {
         for (int y = -9; y <= 14; y++) {
             for (int x = -12; x <= 13; x++) {
                 assertEquals(first.elevationAt(x, y), second.elevationAt(x, y));
-                assertEquals(
-                        first.elevationSubunitsAt(x, y),
-                        second.elevationSubunitsAt(x, y));
+                assertEquals(first.elevationSubunitsAt(x, y), second.elevationSubunitsAt(x, y));
             }
         }
     }
@@ -112,9 +134,7 @@ final class WorldAtlasGenerationTest {
         for (int y = -10; y <= 10; y++) {
             for (int x = 0; x <= 10; x++) {
                 assertEquals(left.elevationAt(x, y), right.elevationAt(x, y));
-                assertEquals(
-                        left.elevationSubunitsAt(x, y),
-                        right.elevationSubunitsAt(x, y));
+                assertEquals(left.elevationSubunitsAt(x, y), right.elevationSubunitsAt(x, y));
             }
         }
     }
@@ -163,9 +183,7 @@ final class WorldAtlasGenerationTest {
         ElevationField second = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(spec, 2L)).elevation();
 
-        assertNotEquals(
-                first.elevationSubunitsAt(0, 0),
-                second.elevationSubunitsAt(0, 0));
+        assertNotEquals(first.elevationSubunitsAt(0, 0), second.elevationSubunitsAt(0, 0));
     }
 
     @Test
@@ -174,7 +192,7 @@ final class WorldAtlasGenerationTest {
         WorldGenesis unsupported = new WorldGenesis(
                 spec,
                 1L,
-                GenerationRevision.of("test:worldgen-v3"),
+                GenerationRevision.of("test:worldgen-v99"),
                 RngRevision.V1);
 
         assertThrows(IllegalArgumentException.class,
@@ -182,10 +200,8 @@ final class WorldAtlasGenerationTest {
 
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(spec, 1L)).elevation();
-        assertThrows(IllegalArgumentException.class,
-                () -> elevation.elevationAt(4, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> elevation.elevationSubunitsAt(4, 0));
+        assertThrows(IllegalArgumentException.class, () -> elevation.elevationAt(4, 0));
+        assertThrows(IllegalArgumentException.class, () -> elevation.elevationSubunitsAt(4, 0));
     }
 
     private static void assertFrozenDiscreteSamples(ElevationField elevation) {

@@ -1,47 +1,62 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
+import io.github.evoforge.simulation.world.geology.GeologyField;
 
 /** Durable generated world facts that exist before detailed world materialization. */
 public final class WorldAtlas {
     private final WorldGenesis genesis;
     private final ElevationField elevation;
+    private final GeologyField geology;
+    private final ClimateNormalsField climateNormals;
     private final DrainageField drainage;
-    private final HydroClimateField hydroClimate;
+    private final HydrographyField hydrography;
+    private final SurfaceHydrologyField surfaceHydrology;
 
     WorldAtlas(
             WorldGenesis genesis,
             ElevationField elevation,
+            GeologyField geology,
+            ClimateNormalsField climateNormals,
             DrainageField drainage,
-            HydroClimateField hydroClimate) {
-        if (genesis == null) {
-            throw new IllegalArgumentException("genesis must not be null");
-        }
-        if (elevation == null) {
-            throw new IllegalArgumentException("elevation must not be null");
-        }
-        if (drainage == null) {
-            throw new IllegalArgumentException("drainage must not be null");
-        }
-        if (hydroClimate == null) {
-            throw new IllegalArgumentException("hydroClimate must not be null");
+            HydrographyField hydrography,
+            SurfaceHydrologyField surfaceHydrology) {
+        if (genesis == null
+                || elevation == null
+                || geology == null
+                || climateNormals == null
+                || drainage == null
+                || hydrography == null
+                || surfaceHydrology == null) {
+            throw new IllegalArgumentException("Atlas generated facts must not be null");
         }
         if (!genesis.spec().bounds().equals(elevation.bounds())) {
-            throw new IllegalArgumentException(
-                    "elevation bounds must match world genesis bounds");
+            throw new IllegalArgumentException("elevation bounds must match world genesis bounds");
+        }
+        if (!genesis.spec().bounds().equals(geology.bounds())) {
+            throw new IllegalArgumentException("geology bounds must match world genesis bounds");
+        }
+        if (!genesis.spec().bounds().equals(climateNormals.bounds())) {
+            throw new IllegalArgumentException("climate normals bounds must match world genesis bounds");
         }
         if (!genesis.spec().bounds().equals(drainage.bounds())) {
-            throw new IllegalArgumentException(
-                    "drainage bounds must match world genesis bounds");
+            throw new IllegalArgumentException("drainage bounds must match world genesis bounds");
         }
-        if (!genesis.spec().bounds().equals(hydroClimate.bounds())) {
+        if (!genesis.spec().bounds().equals(hydrography.bounds())) {
+            throw new IllegalArgumentException("hydrography bounds must match world genesis bounds");
+        }
+        if (!genesis.spec().bounds().equals(surfaceHydrology.bounds())) {
             throw new IllegalArgumentException(
-                    "hydroClimate bounds must match world genesis bounds");
+                    "surface hydrology bounds must match world genesis bounds");
         }
         this.genesis = genesis;
         this.elevation = elevation;
+        this.geology = geology;
+        this.climateNormals = climateNormals;
         this.drainage = drainage;
-        this.hydroClimate = hydroClimate;
+        this.hydrography = hydrography;
+        this.surfaceHydrology = surfaceHydrology;
     }
 
     public WorldGenesis genesis() {
@@ -52,11 +67,23 @@ public final class WorldAtlas {
         return elevation;
     }
 
+    public GeologyField geology() {
+        return geology;
+    }
+
+    public ClimateNormalsField climateNormals() {
+        return climateNormals;
+    }
+
     public DrainageField drainage() {
         return drainage;
     }
 
-    public HydroClimateField hydroClimate() {
-        return hydroClimate;
+    public HydrographyField hydrography() {
+        return hydrography;
+    }
+
+    public SurfaceHydrologyField surfaceHydrology() {
+        return surfaceHydrology;
     }
 }
