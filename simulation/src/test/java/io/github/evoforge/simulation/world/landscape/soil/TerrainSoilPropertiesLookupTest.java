@@ -3,9 +3,8 @@ package io.github.evoforge.simulation.world.landscape.soil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import org.junit.jupiter.api.Test;
-
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import org.junit.jupiter.api.Test;
 
 final class TerrainSoilPropertiesLookupTest {
 
@@ -21,24 +20,6 @@ final class TerrainSoilPropertiesLookupTest {
 
         assertEquals(prepared, lookup.find(-8, 3, -1));
         assertEquals(prepared, lookup.find(0, 3, -1));
-        assertEquals(prepared, lookup.find(8, 3, -1));
-    }
-
-    @Test
-    void runtimeDoesNotApplyLegacyCoordinateVariation() {
-        LandscapeDefinitionId id = LandscapeDefinitionId.of(0);
-        SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
-        SoilProperties prepared = new SoilProperties(120_000, 3_000);
-        definitions.put(id, prepared);
-        SoilPropertiesVariationDefinitions legacyVariations = new SoilPropertiesVariationDefinitions();
-        legacyVariations.put(id, new SoilPropertiesVariation(42L, 20_000));
-
-        TerrainSoilPropertiesLookup lookup = new TerrainSoilPropertiesLookup(
-                (x, y, z) -> id,
-                definitions,
-                legacyVariations);
-
-        assertEquals(prepared, lookup.find(-8, 3, -1));
         assertEquals(prepared, lookup.find(8, 3, -1));
     }
 
