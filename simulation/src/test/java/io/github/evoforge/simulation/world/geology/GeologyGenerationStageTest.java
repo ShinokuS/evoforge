@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 final class GeologyGenerationStageTest {
 
     @Test
-    void v5AndV6PreserveV4GeologyWhileProducingMultipleCoherentProvincesAndUnits() {
+    void v5ThroughV7PreserveV4GeologyWhileProducingMultipleCoherentProvincesAndUnits() {
         WorldBounds bounds = new WorldBounds(-24, 24, -24, 24, -12, 12);
         WorldSpec spec = new WorldSpec(bounds);
         WorldGenesis v4Genesis = new WorldGenesis(
@@ -33,10 +33,16 @@ final class GeologyGenerationStageTest {
                 42L,
                 GenerationRevision.V6,
                 RngRevision.V1);
+        WorldGenesis v7Genesis = new WorldGenesis(
+                spec,
+                42L,
+                GenerationRevision.V7,
+                RngRevision.V1);
         GeologyGenerationStage stage = new GeologyGenerationStage();
         GeologyField v4 = stage.generate(v4Genesis);
         GeologyField v5 = stage.generate(v5Genesis);
         GeologyField v6 = stage.generate(v6Genesis);
+        GeologyField v7 = stage.generate(v7Genesis);
         Set<Long> provinces = new HashSet<>();
         Set<GeologyUnitKey> units = new HashSet<>();
 
@@ -44,11 +50,13 @@ final class GeologyGenerationStageTest {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 assertEquals(v4.provinceIdAt(x, y), v5.provinceIdAt(x, y));
                 assertEquals(v5.provinceIdAt(x, y), v6.provinceIdAt(x, y));
-                provinces.add(v6.provinceIdAt(x, y));
+                assertEquals(v6.provinceIdAt(x, y), v7.provinceIdAt(x, y));
+                provinces.add(v7.provinceIdAt(x, y));
                 for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
                     assertEquals(v4.unitAt(x, y, z), v5.unitAt(x, y, z));
                     assertEquals(v5.unitAt(x, y, z), v6.unitAt(x, y, z));
-                    units.add(v6.unitAt(x, y, z));
+                    assertEquals(v6.unitAt(x, y, z), v7.unitAt(x, y, z));
+                    units.add(v7.unitAt(x, y, z));
                 }
             }
         }
