@@ -3,6 +3,7 @@ package io.github.evoforge.simulation.world.warmup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
@@ -43,10 +44,12 @@ final class GeneratedWorldWarmupMatrixTest {
             MatrixProfile profile) {
         GeneratedWorldRuntime first = GeneratedWorldWarmupFixture.create(
                 seed,
-                profile.climate());
+                profile.climate(),
+                profile.atmosphericForcingPolicy());
         GeneratedWorldRuntime replay = GeneratedWorldWarmupFixture.create(
                 seed,
-                profile.climate());
+                profile.climate(),
+                profile.atmosphericForcingPolicy());
         GeneratedWorldWarmup warmup = new GeneratedWorldWarmup();
 
         List<GeneratedWorldDiagnostics> firstTrace = warmup.run(
@@ -75,7 +78,8 @@ final class GeneratedWorldWarmupMatrixTest {
         assertEquals(initial.generatedInitialWaterVolume(), initial.totalWaterVolume());
 
         GeneratedWorldDiagnostics finalSnapshot = firstTrace.get(firstTrace.size() - 1);
-        if (profile.hasAtmosphericSupply()) {
+        if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(
+                profile.atmosphericForcingPolicy())) {
             assertTrue(finalSnapshot.totalWaterVolume() > initial.totalWaterVolume());
             assertTrue(finalSnapshot.retainedWaterVolume() > 0L);
             assertTrue(finalSnapshot.wetSoilCells() > 0L);
@@ -89,9 +93,9 @@ final class GeneratedWorldWarmupMatrixTest {
     private static List<MatrixProfile> profiles() {
         return List.of(
                 new MatrixProfile(
-                        "unforced",
-                        ClimateSpec.STANDARD_UNFORCED,
-                        false),
+                        "isolated-water-balance",
+                        ClimateSpec.STANDARD,
+                        AtmosphericForcingPolicy.DISABLED),
                 new MatrixProfile(
                         "fractional-net-supply",
                         ClimateSpec.of(
@@ -99,13 +103,13 @@ final class GeneratedWorldWarmupMatrixTest {
                                 250,
                                 CellVolumeRate.of(100_001L, 3L),
                                 CellVolumeRate.of(20_003L, 4L)),
-                        true));
+                        AtmosphericForcingPolicy.CLIMATE_NORMALS));
     }
 
     /** Internal engine-test profile; these exact rates are not user-facing world controls. */
     private record MatrixProfile(
             String name,
             ClimateSpec climate,
-            boolean hasAtmosphericSupply) {
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
     }
 }
