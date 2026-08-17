@@ -5,7 +5,8 @@ public record WorldGenesis(
         WorldSpec spec,
         long masterSeed,
         GenerationRevision generationRevision,
-        RngRevision rngRevision) {
+        RngRevision rngRevision,
+        WorldGenerationIntent generationIntent) {
 
     public WorldGenesis {
         if (spec == null) {
@@ -17,18 +18,31 @@ public record WorldGenesis(
         if (rngRevision == null) {
             throw new IllegalArgumentException("rngRevision must not be null");
         }
+        if (generationIntent == null) {
+            throw new IllegalArgumentException("generationIntent must not be null");
+        }
+    }
+
+    /** Compatibility constructor. V1-V8 ignore macro generation intent. */
+    public WorldGenesis(
+            WorldSpec spec,
+            long masterSeed,
+            GenerationRevision generationRevision,
+            RngRevision rngRevision) {
+        this(spec, masterSeed, generationRevision, rngRevision, WorldGenerationIntent.balanced());
     }
 
     /**
      * Current production revision remains V7 until semantic world projection can supply physical
-     * climate and runtime time scales automatically. V8 is available explicitly for physical
-     * climate validation without forcing low-level scale authoring onto ordinary callers.
+     * climate and runtime time scales automatically. Newer revisions remain explicit validation
+     * targets until their complete generation contracts are promoted together.
      */
     public static WorldGenesis current(WorldSpec spec, long masterSeed) {
         return new WorldGenesis(
                 spec,
                 masterSeed,
                 GenerationRevision.V7,
-                RngRevision.V1);
+                RngRevision.V1,
+                WorldGenerationIntent.balanced());
     }
 }

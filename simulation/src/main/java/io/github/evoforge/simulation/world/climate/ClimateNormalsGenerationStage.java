@@ -11,7 +11,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  *
  * <p>V1-V4 predate thermal climate and retain a uniform datum-temperature fallback. V5+ apply the
  * authored elevation cooling rate. V1-V7 preserve historical cell-relative atmospheric-water
- * normals; V8 requires physical water-depth-per-time normals. Spatial precipitation gradients,
+ * normals; V8+ require physical water-depth-per-time normals. Spatial precipitation gradients,
  * seasonality and weather remain later causal layers.</p>
  */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
@@ -36,7 +36,8 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         } else if (GenerationRevision.V5.equals(revision)
                 || GenerationRevision.V6.equals(revision)
                 || GenerationRevision.V7.equals(revision)
-                || GenerationRevision.V8.equals(revision)) {
+                || GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)) {
             elevationAware = true;
         } else {
             throw new IllegalArgumentException(
@@ -44,7 +45,9 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         }
 
         ClimateSpec climate = genesis.spec().climate();
-        ClimateWaterNormal.Kind expectedWaterKind = GenerationRevision.V8.equals(revision)
+        boolean physicalWater = GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision);
+        ClimateWaterNormal.Kind expectedWaterKind = physicalWater
                 ? ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME
                 : ClimateWaterNormal.Kind.LEGACY_CELL_VOLUME_PER_TICK;
         if (!expectedWaterKind.equals(climate.precipitationWaterNormal().kind())

@@ -3,6 +3,7 @@ package io.github.evoforge;
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.Version;
 import com.badlogic.gdx.graphics.GL20;
@@ -11,6 +12,7 @@ import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
+import io.github.evoforge.visualizer.screen.WorldGenerationPreviewScreen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +41,15 @@ public final class Main extends Game {
 
         scenarios = ScenarioCatalog.standard();
         showScenarioMenuNow();
+    }
+
+    @Override
+    public void render() {
+        if (getScreen() instanceof ScenarioMenuScreen
+                && Gdx.input.isKeyJustPressed(Input.Keys.F9)) {
+            showWorldPreviewNow();
+        }
+        super.render();
     }
 
     @Override
@@ -71,6 +82,10 @@ public final class Main extends Game {
                 scenario,
                 () -> requestScenario(scenario),
                 this::requestScenarioMenu));
+    }
+
+    private void showWorldPreviewNow() {
+        replaceScreen(new WorldGenerationPreviewScreen(this::requestScenarioMenu));
     }
 
     private void replaceScreen(Screen next) {

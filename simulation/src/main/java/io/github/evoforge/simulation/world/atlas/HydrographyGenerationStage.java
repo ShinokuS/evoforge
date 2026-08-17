@@ -41,7 +41,8 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
                 && !GenerationRevision.V5.equals(revision)
                 && !GenerationRevision.V6.equals(revision)
                 && !GenerationRevision.V7.equals(revision)
-                && !GenerationRevision.V8.equals(revision)) {
+                && !GenerationRevision.V8.equals(revision)
+                && !GenerationRevision.V9.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
