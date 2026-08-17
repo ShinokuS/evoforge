@@ -11,32 +11,33 @@ import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipit
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 
 /**
- * Realizes generated hydrologic climate normals through existing atmospheric Water mechanics.
+ * Realizes a hydrologic projection of generated Climate Normals through existing Water mechanics.
  *
- * <p>This adapter owns no Water, Soil or weather state. It converts immutable Atlas rates into
- * exact per-tick source/sink requests and delegates all mutation to the existing evaporation and
- * precipitation systems.
+ * <p>This runtime adapter owns no climate facts, Water, Soil or weather state. Generated worlds
+ * provide a narrow {@link HydroClimateField} view of their authoritative ClimateNormalsField; this
+ * system turns those rates into exact per-tick source/sink requests and delegates all mutation to
+ * the existing evaporation and precipitation systems.</p>
  *
  * <p>Potential evaporation is evaluated against state present at the start of the interval; the
  * precipitation supply for that interval is then added at its boundary. This deterministic
  * discretization prevents newly supplied rain from being immediately removed by the same
- * baseline-climate tick. Eventful weather remains a separate future concern.
+ * baseline-climate tick. Eventful weather remains a separate future concern.</p>
  */
 public final class HydroClimateForcingSystem {
 
-    private final HydroClimateField climate;
+    private final HydroClimateField forcing;
     private final EvaporationSystem evaporation;
     private final SkyPrecipitationSystem precipitation;
 
     public HydroClimateForcingSystem(
-            HydroClimateField climate,
+            HydroClimateField forcing,
             EvaporationSystem evaporation,
             SkyPrecipitationSystem precipitation) {
-        if (climate == null || evaporation == null || precipitation == null) {
+        if (forcing == null || evaporation == null || precipitation == null) {
             throw new IllegalArgumentException(
                     "hydro-climate forcing dependencies must not be null");
         }
-        this.climate = climate;
+        this.forcing = forcing;
         this.evaporation = evaporation;
         this.precipitation = precipitation;
     }
@@ -57,13 +58,13 @@ public final class HydroClimateForcingSystem {
 
         EvaporationBatchResult evaporationResult = evaporation.applyByColumn(
                 (x, y) -> due(
-                        climate.evaporativeDemandAt(x, y),
+                        forcing.evaporativeDemandAt(x, y),
                         tick,
                         dueByRate));
 
         PrecipitationBatchResult precipitationResult = precipitation.applyByColumn(
                 (x, y) -> due(
-                        climate.precipitationSupplyAt(x, y),
+                        forcing.precipitationSupplyAt(x, y),
                         tick,
                         dueByRate));
 
