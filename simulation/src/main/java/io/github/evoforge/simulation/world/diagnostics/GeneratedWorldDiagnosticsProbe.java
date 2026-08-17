@@ -7,6 +7,7 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.HydrographyField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.geology.GeologyField;
@@ -27,12 +28,14 @@ public final class GeneratedWorldDiagnosticsProbe {
         ElevationField elevation = atlas.elevation();
         GeologyField geology = atlas.geology();
         DrainageField drainage = atlas.drainage();
+        HydrographyField hydrography = atlas.hydrography();
         SurfaceHydrologyField surfaceHydrology = atlas.surfaceHydrology();
         SimulationView view = runtime.view();
 
         if (!bounds.equals(elevation.bounds())
                 || !bounds.equals(geology.bounds())
                 || !bounds.equals(drainage.bounds())
+                || !bounds.equals(hydrography.bounds())
                 || !bounds.equals(surfaceHydrology.bounds())) {
             throw new IllegalStateException("Atlas diagnostic layers must share world bounds");
         }
@@ -41,6 +44,7 @@ public final class GeneratedWorldDiagnosticsProbe {
         int maximumSurfaceZ = Integer.MIN_VALUE;
         long surfaceMismatches = 0L;
         long maximumContributingArea = 0L;
+        int generatedChannelColumns = 0;
         long generatedInitialWaterVolume = 0L;
         int generatedInitialWaterColumns = 0;
         int generatedShorelineColumns = 0;
@@ -68,6 +72,7 @@ public final class GeneratedWorldDiagnosticsProbe {
                 maximumContributingArea = Math.max(
                         maximumContributingArea,
                         drainage.contributingAreaAt(worldX, worldY));
+                if (hydrography.isChannelAt(worldX, worldY)) generatedChannelColumns++;
 
                 int generatedWater = surfaceHydrology.initialWaterVolumeAt(worldX, worldY);
                 generatedInitialWaterVolume = Math.addExact(
@@ -155,6 +160,7 @@ public final class GeneratedWorldDiagnosticsProbe {
                 geologyUnits.size(),
                 terminalBasins.size(),
                 maximumContributingArea,
+                generatedChannelColumns,
                 generatedInitialWaterVolume,
                 generatedInitialWaterColumns,
                 generatedShorelineColumns,
