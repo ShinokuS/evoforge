@@ -3,6 +3,7 @@ package io.github.evoforge.simulation.world.warmup;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
@@ -39,7 +40,8 @@ final class GeneratedWorldAuditProfileTest {
                 GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
                         seed,
                         profile.climate(),
-                        bounds);
+                        bounds,
+                        profile.atmosphericForcingPolicy());
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
@@ -72,7 +74,8 @@ final class GeneratedWorldAuditProfileTest {
                 }
 
                 GeneratedWorldDiagnostics end = trace.get(trace.size() - 1);
-                if (profile.hasAtmosphericSupply()) {
+                if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(
+                        profile.atmosphericForcingPolicy())) {
                     assertTrue(end.totalWaterVolume() > initial.totalWaterVolume());
                     assertTrue(end.retainedWaterVolume() > 0L);
                 } else {
@@ -92,7 +95,10 @@ final class GeneratedWorldAuditProfileTest {
 
     private static List<AuditProfile> profiles() {
         return List.of(
-                new AuditProfile("unforced", ClimateSpec.STANDARD_UNFORCED, false),
+                new AuditProfile(
+                        "isolated-water-balance",
+                        ClimateSpec.STANDARD,
+                        AtmosphericForcingPolicy.DISABLED),
                 new AuditProfile(
                         "fractional-net-supply",
                         ClimateSpec.of(
@@ -100,12 +106,12 @@ final class GeneratedWorldAuditProfileTest {
                                 250,
                                 CellVolumeRate.of(100_001L, 3L),
                                 CellVolumeRate.of(20_003L, 4L)),
-                        true));
+                        AtmosphericForcingPolicy.CLIMATE_NORMALS));
     }
 
     /** Developer audit inputs, not a user-facing climate preset contract. */
     private record AuditProfile(
             String name,
             ClimateSpec climate,
-            boolean hasAtmosphericSupply) { }
+            AtmosphericForcingPolicy atmosphericForcingPolicy) { }
 }
