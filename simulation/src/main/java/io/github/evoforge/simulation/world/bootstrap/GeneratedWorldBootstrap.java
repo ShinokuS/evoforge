@@ -24,27 +24,60 @@ import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGen
  * explicit runtime bindings map those stable identities into Landscape ids at materialization.
  * Specialized callers may still provide a raw resolver. This bootstrap owns neither authored-data
  * parsing nor runtime world state.</p>
+ *
+ * <p>Generated climate is always part of the Atlas. Whether its current direct hydrologic
+ * projection participates in runtime is selected independently through
+ * {@link AtmosphericForcingPolicy}; the default production path installs it.</p>
  */
 public final class GeneratedWorldBootstrap {
     private final WorldAtlasGenerator atlasGenerator;
     private final TerrainMaterialGenerator terrainMaterialGenerator;
+    private final AtmosphericForcingPolicy atmosphericForcingPolicy;
 
     public GeneratedWorldBootstrap() {
-        this(new WorldAtlasGenerator(), new TerrainMaterialGenerationStage());
+        this(
+                new WorldAtlasGenerator(),
+                new TerrainMaterialGenerationStage(),
+                AtmosphericForcingPolicy.CLIMATE_NORMALS);
     }
 
     public GeneratedWorldBootstrap(WorldAtlasGenerator atlasGenerator) {
-        this(atlasGenerator, new TerrainMaterialGenerationStage());
+        this(
+                atlasGenerator,
+                new TerrainMaterialGenerationStage(),
+                AtmosphericForcingPolicy.CLIMATE_NORMALS);
+    }
+
+    public GeneratedWorldBootstrap(
+            WorldAtlasGenerator atlasGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
+        this(
+                atlasGenerator,
+                new TerrainMaterialGenerationStage(),
+                atmosphericForcingPolicy);
     }
 
     public GeneratedWorldBootstrap(
             WorldAtlasGenerator atlasGenerator,
             TerrainMaterialGenerator terrainMaterialGenerator) {
-        if (atlasGenerator == null || terrainMaterialGenerator == null) {
-            throw new IllegalArgumentException("generated world generators must not be null");
+        this(
+                atlasGenerator,
+                terrainMaterialGenerator,
+                AtmosphericForcingPolicy.CLIMATE_NORMALS);
+    }
+
+    public GeneratedWorldBootstrap(
+            WorldAtlasGenerator atlasGenerator,
+            TerrainMaterialGenerator terrainMaterialGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
+        if (atlasGenerator == null
+                || terrainMaterialGenerator == null
+                || atmosphericForcingPolicy == null) {
+            throw new IllegalArgumentException("generated world bootstrap dependencies must not be null");
         }
         this.atlasGenerator = atlasGenerator;
         this.terrainMaterialGenerator = terrainMaterialGenerator;
+        this.atmosphericForcingPolicy = atmosphericForcingPolicy;
     }
 
     /** Production path from compiled terrain semantics into authoritative runtime Landscape. */
@@ -97,7 +130,9 @@ public final class GeneratedWorldBootstrap {
                 atlas.elevation(),
                 materials);
         materializeInitialSurfaceWater(atlas, assembly);
-        assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
+        if (AtmosphericForcingPolicy.CLIMATE_NORMALS.equals(atmosphericForcingPolicy)) {
+            assembly.generatedHydroClimate(new ClimateHydroForcingView(atlas.climateNormals()));
+        }
 
         SimulationRuntime runtime = assembly.start();
         return new GeneratedWorldRuntime(atlas, materialization, runtime);
