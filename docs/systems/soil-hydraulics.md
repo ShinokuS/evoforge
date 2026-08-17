@@ -54,25 +54,34 @@ porosity, cell size, tick duration or where a material appears in one particular
 from generated world facts. The first implementation, `SoilFormationGenerationStage`, consumes:
 
 - `TerrainMaterialField` — which authored archetype exists in a generated solid cell;
-- `SurfaceMorphologyField` — local maximum slope and positive concavity derived from precise
-  elevation;
+- `SurfaceMorphologyField` — exact local maximum slope plus positive convexity and concavity derived
+  from precise elevation;
 - `DrainageField` — contributing-area accumulation across the closed generated world;
 - `SoilSemanticProfileBindings` — immutable authored material meaning.
 
 `GeneratedWorldPreparation` derives surface morphology once and passes that same immutable field to
 both Terrain material generation and Soil formation. Terrain and Soil therefore cannot quietly use
-two different definitions of local slope/concavity.
+two different definitions of local morphology.
 
 The first formation model is deliberately narrow. It adjusts only `mineralFineness`:
 
-- topographic exposure/steepness moves the local developed profile toward coarser mineral character;
-- concavity moves it toward finer accumulated material;
-- drainage accumulation continuously strengthens the concavity response.
+- positive convexity represents exposed local topographic position and moves the developed profile
+  toward coarser mineral character;
+- positive concavity represents local accumulation and moves it toward finer mineral character;
+- drainage accumulation continuously strengthens the concavity response while remaining bounded.
 
-All responses are continuous fixed-point transformations. Morphology uses smooth saturating
-responses and drainage uses relative contributing area; there are no texture categories, named
-terrain switches or gameplay threshold bands. `SoilFormationCalibration` owns the explicit model
-response scales and maximum allowed shift away from the authored archetype.
+Absolute neighbor slope remains a geometric fact used by Terrain. Soil does **not** interpret a
+large absolute slope as erosion by itself: a basin bottom can have a large elevation difference to
+its neighbors while still being an accumulation site. Convexity and concavity preserve that causal
+distinction explicitly.
+
+Morphology responses are smooth saturating fixed-point transforms. Drainage uses normalized
+contributing area. Concavity already contributes its own accumulation response; drainage can only
+fill the remaining normalized response through the bounded form `c + c*d*(1-c)`. This avoids a
+hidden weighting coefficient while keeping the response continuous and monotonic. There are no
+texture categories, named terrain switches or gameplay threshold bands.
+`SoilFormationCalibration` owns the explicit convexity/concavity response scales and maximum allowed
+shift away from the authored archetype.
 
 `organicMatter` is intentionally left unchanged by this first geomorphic model. Changing it without
 vegetation, climate history and pedogenesis would only replace coordinate noise with another
@@ -191,9 +200,13 @@ representation limit without changing authored semantics, generated fields or
 
 ## Acceptance
 
+`SurfaceMorphologyGenerationStageTest` protects the geometric distinction between a convex local
+high point and a concave local low point, including vertical-translation invariance.
+
 `SoilFormationGenerationStageTest` fixes an exact causal example in which three cells share one Soil
-material archetype but receive exposed, neutral and depositional morphology/drainage contexts. The
-resulting developed mineral-fineness coordinates are distinct while authored organic character is
+material archetype but receive convex, neutral and concave/drainage contexts. It also proves that a
+large absolute neighbor slope cannot turn an explicitly concave accumulation site into an exposed
+one. The developed mineral-fineness coordinates differ while authored organic character is
 preserved.
 
 `CausalSoilFormationBootstrapIntegrationTest` carries that distinction through the full boundary:
@@ -201,9 +214,16 @@ Definition semantics -> generated formation -> physical hydraulic field -> runti
 `SoilPropertiesLookup`. This supplements the lower-level #88 acceptance that already proves a
 prepared spatial field overrides material fallback authoritatively.
 
-`Water / Hydrology -> Soil Hydraulic Contrast` still verifies the liquid-side physical consequence
-of contrasting hydraulics under the same rainfall process. The older `Rain Cycle` and Cow visual
-fixtures use explicit hydraulic terrain materials and no seeded runtime variation.
+`Water / Hydrology -> Causal Soil Formation` is the visual acceptance for this slice. Both marked
+cells use one Soil Definition and the same runtime Terrain material identity, and both materialize on
+the same discrete Z level. Their precise generated elevation forms a convex site and a concave site;
+normal drainage and Soil formation derive different hydraulics before one identical 10 mm rain pulse
+reaches Simulation. The scenario test verifies that the faster convex site absorbs more of the first
+pulse while the slower concave site leaves more ordinary free Water — with no Puddle generator.
+
+`Water / Hydrology -> Soil Hydraulic Contrast` remains the lower-level visual comparison of two
+authored points on the continuous Soil scale. The older `Rain Cycle` and Cow visual fixtures use
+explicit hydraulic terrain materials and no seeded runtime variation.
 
 ## Deferred physics
 
