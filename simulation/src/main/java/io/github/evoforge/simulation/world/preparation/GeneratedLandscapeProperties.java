@@ -30,6 +30,9 @@ public record GeneratedLandscapeProperties(SoilHydraulicProfileField soilHydraul
 
         @Override
         public SoilHydraulicProfile find(int x, int y, int z) {
+            if (!bounds.contains(x, y, z)) {
+                throw new IllegalArgumentException("outside generated landscape property bounds");
+            }
             return null;
         }
     }
