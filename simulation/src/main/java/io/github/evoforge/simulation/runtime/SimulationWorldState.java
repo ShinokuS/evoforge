@@ -47,8 +47,7 @@ final class SimulationWorldState {
         liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
         soilProperties = new TerrainSoilPropertiesLookup(
                 landscape.terrain(),
-                definitions.soilProperties,
-                definitions.soilPropertiesVariation);
+                definitions.soilProperties);
         soilLiquids = new SoilLiquidSystem(
                 new SparseSoilLiquidStorage(),
                 soilProperties,

@@ -1,67 +1,57 @@
 package io.github.evoforge.simulation.world.landscape.soil;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.util.HashSet;
-import java.util.Set;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 
 final class TerrainSoilPropertiesLookupTest {
 
     @Test
-    void sameSeedAndCoordinatesResolveIdenticalCapacityWithoutChangingPermeability() {
+    void samePreparedMaterialKeepsExactPropertiesAcrossCoordinates() {
         LandscapeDefinitionId id = LandscapeDefinitionId.of(0);
         SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
-        definitions.put(id, new SoilProperties(120_000, 3_000));
-        SoilPropertiesVariationDefinitions variations =
-                new SoilPropertiesVariationDefinitions();
-        variations.put(id, new SoilPropertiesVariation(42L, 20_000));
-        TerrainLookup terrain = (x, y, z) -> id;
+        SoilProperties prepared = new SoilProperties(120_000, 3_000);
+        definitions.put(id, prepared);
 
-        TerrainSoilPropertiesLookup first =
-                new TerrainSoilPropertiesLookup(
-                        terrain,
-                        definitions,
-                        variations);
-        TerrainSoilPropertiesLookup second =
-                new TerrainSoilPropertiesLookup(
-                        terrain,
-                        definitions,
-                        variations);
+        TerrainSoilPropertiesLookup lookup =
+                new TerrainSoilPropertiesLookup((x, y, z) -> id, definitions);
 
-        Set<Integer> observed = new HashSet<>();
-        for (int x = -8; x <= 8; x++) {
-            SoilProperties a = first.find(x, 3, -1);
-            SoilProperties b = second.find(x, 3, -1);
-            assertEquals(a, b);
-            assertTrue(a.capacity() >= 100_000);
-            assertTrue(a.capacity() <= 140_000);
-            assertEquals(3_000, a.permeability());
-            observed.add(a.capacity());
-        }
-
-        assertTrue(
-                observed.size() > 1,
-                "coordinate-local pore capacity variation should not collapse to one value");
+        assertEquals(prepared, lookup.find(-8, 3, -1));
+        assertEquals(prepared, lookup.find(0, 3, -1));
+        assertEquals(prepared, lookup.find(8, 3, -1));
     }
 
     @Test
-    void missingVariationKeepsMaterialPropertiesExact() {
+    void runtimeDoesNotApplyLegacyCoordinateVariation() {
         LandscapeDefinitionId id = LandscapeDefinitionId.of(0);
         SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
-        SoilProperties base = new SoilProperties(80_000, 800);
-        definitions.put(id, base);
+        SoilProperties prepared = new SoilProperties(120_000, 3_000);
+        definitions.put(id, prepared);
+        SoilPropertiesVariationDefinitions legacyVariations = new SoilPropertiesVariationDefinitions();
+        legacyVariations.put(id, new SoilPropertiesVariation(42L, 20_000));
+
+        TerrainSoilPropertiesLookup lookup = new TerrainSoilPropertiesLookup(
+                (x, y, z) -> id,
+                definitions,
+                legacyVariations);
+
+        assertEquals(prepared, lookup.find(-8, 3, -1));
+        assertEquals(prepared, lookup.find(8, 3, -1));
+    }
+
+    @Test
+    void nonSoilTerrainHasNoSoilProperties() {
+        LandscapeDefinitionId soil = LandscapeDefinitionId.of(0);
+        LandscapeDefinitionId rock = LandscapeDefinitionId.of(1);
+        SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
+        definitions.put(soil, new SoilProperties(80_000, 800));
 
         TerrainSoilPropertiesLookup lookup =
-                new TerrainSoilPropertiesLookup(
-                        (x, y, z) -> id,
-                        definitions);
+                new TerrainSoilPropertiesLookup((x, y, z) -> rock, definitions);
 
-        assertEquals(base, lookup.find(17, -4, 2));
+        assertNull(lookup.find(0, 0, 0));
     }
 }

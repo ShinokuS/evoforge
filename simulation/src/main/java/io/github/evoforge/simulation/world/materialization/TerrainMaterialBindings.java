@@ -15,6 +15,22 @@ public final class TerrainMaterialBindings {
         this.ids = Map.copyOf(ids);
     }
 
+    /** Creates an explicit typed binding set without requiring a particular terrain-profile shape. */
+    public static TerrainMaterialBindings of(
+            Map<TerrainMaterialKey, LandscapeDefinitionId> bindings) {
+        if (bindings == null) {
+            throw new IllegalArgumentException("terrain material bindings must not be null");
+        }
+        Map<TerrainMaterialKey, LandscapeDefinitionId> ids = new LinkedHashMap<>();
+        for (Map.Entry<TerrainMaterialKey, LandscapeDefinitionId> entry : bindings.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                throw new IllegalArgumentException("terrain material bindings must not contain nulls");
+            }
+            bind(ids, entry.getKey(), entry.getValue());
+        }
+        return new TerrainMaterialBindings(ids);
+    }
+
     /** Binds exactly the semantic terrain-profile roles that this compiled profile can generate. */
     public static TerrainMaterialBindings forProfile(
             CompiledTerrainProfile profile,

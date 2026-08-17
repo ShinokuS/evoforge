@@ -5,8 +5,8 @@
             "cost": 1050
         },
         "soil": {
-            "capacity": 550000,
-            "permeability": 100000
+            "mineralFineness": 0.4,
+            "organicMatter": 0.9
         }
     }
 }

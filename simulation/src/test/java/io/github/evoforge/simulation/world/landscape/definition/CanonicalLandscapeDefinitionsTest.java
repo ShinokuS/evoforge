@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.landscape.definition;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -10,78 +10,86 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitionCompiler;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.calibration.soil.SoilDefinitionCompiler;
+import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfile;
+import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileBindings;
+import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileResolver;
+import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfileBindings;
+import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitionCompiler;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
 import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
 
 final class CanonicalLandscapeDefinitionsTest {
 
     @Test
-    void canonicalMaterialsLoadThroughGenericDefinitionPipeline() {
-        SoilPropertiesDefinitions soil = new SoilPropertiesDefinitions();
+    void canonicalMaterialsKeepSemanticDefinitionsSeparateFromPhysicalResolution() {
+        SoilDefinitionCompiler soil = new SoilDefinitionCompiler();
         LandscapeTraversalDefinitions traversal = new LandscapeTraversalDefinitions();
 
         DefinitionRegistry<LandscapeDefinitionId> definitions =
                 new LandscapeDefinitionBootstrap(
                         new LandscapeTraversalDefinitionCompiler(traversal),
-                        new SoilPropertiesDefinitionCompiler(soil))
+                        soil)
                         .load(canonicalLandscapeDirectory());
+        SoilSemanticProfileBindings semantics = soil.bindings();
+        SoilHydraulicProfileBindings hydraulics =
+                SoilHydraulicProfileResolver.standard().resolve(semantics);
 
-        assertMaterial(
-                definitions,
-                soil,
-                traversal,
-                "core:topsoil",
-                1_050,
-                new SoilProperties(550_000, 100_000));
-        assertMaterial(
-                definitions,
-                soil,
-                traversal,
-                "core:soil",
-                1_100,
-                new SoilProperties(450_000, 60_000));
-        assertMaterial(
-                definitions,
-                soil,
-                traversal,
-                "core:sand",
-                1_300,
-                new SoilProperties(350_000, 250_000));
+        assertTraversal(definitions, traversal, "core:topsoil", 1_050);
+        assertTraversal(definitions, traversal, "core:soil", 1_100);
+        assertTraversal(definitions, traversal, "core:sand", 1_300);
 
-        assertBedrock(definitions, soil, traversal, "core:granite");
-        assertBedrock(definitions, soil, traversal, "core:basalt");
-        assertBedrock(definitions, soil, traversal, "core:limestone");
-        assertBedrock(definitions, soil, traversal, "core:shale");
+        SoilHydraulicProfile topsoil = hydraulics.require(TerrainMaterialKey.of("core:topsoil"));
+        SoilHydraulicProfile subsoil = hydraulics.require(TerrainMaterialKey.of("core:soil"));
+        SoilHydraulicProfile sand = hydraulics.require(TerrainMaterialKey.of("core:sand"));
+
+        assertTrue(
+                topsoil.fieldCapacityPartsPerMillion() > subsoil.fieldCapacityPartsPerMillion(),
+                "higher authored organic-matter tendency should derive higher field capacity");
+        assertTrue(
+                compareRates(
+                        sand.saturatedHydraulicConductivity(),
+                        subsoil.saturatedHydraulicConductivity()) > 0,
+                "coarser mineral character should derive higher saturated conductivity");
+
+        assertNonSoil(definitions, semantics, hydraulics, traversal, "core:granite");
+        assertNonSoil(definitions, semantics, hydraulics, traversal, "core:basalt");
+        assertNonSoil(definitions, semantics, hydraulics, traversal, "core:limestone");
+        assertNonSoil(definitions, semantics, hydraulics, traversal, "core:shale");
 
         assertTrue(definitions.isFrozen());
-        assertTrue(soil.isFrozen());
         assertTrue(traversal.isFrozen());
     }
 
-    private static void assertMaterial(
+    private static void assertTraversal(
             DefinitionRegistry<LandscapeDefinitionId> definitions,
-            SoilPropertiesDefinitions soil,
             LandscapeTraversalDefinitions traversal,
             String key,
-            long traversalCost,
-            SoilProperties expectedSoil) {
+            long traversalCost) {
         LandscapeDefinitionId id = definitions.resolve(key);
         assertEquals(SurfaceTraversalCost.of(traversalCost), traversal.cost(id));
-        assertEquals(expectedSoil, soil.get(id));
     }
 
-    private static void assertBedrock(
+    private static void assertNonSoil(
             DefinitionRegistry<LandscapeDefinitionId> definitions,
-            SoilPropertiesDefinitions soil,
+            SoilSemanticProfileBindings semantics,
+            SoilHydraulicProfileBindings hydraulics,
             LandscapeTraversalDefinitions traversal,
             String key) {
         LandscapeDefinitionId id = definitions.resolve(key);
         assertEquals(SurfaceTraversalCost.neutral(), traversal.cost(id));
-        assertFalse(soil.has(id));
+        TerrainMaterialKey materialKey = TerrainMaterialKey.of(key);
+        assertNull(semantics.find(materialKey));
+        assertNull(hydraulics.find(materialKey));
+    }
+
+    private static int compareRates(WaterDepthRate left, WaterDepthRate right) {
+        return left.depthNanometersNumerator()
+                .multiply(right.durationNanosecondsDenominator())
+                .compareTo(right.depthNanometersNumerator()
+                        .multiply(left.durationNanosecondsDenominator()));
     }
 
     private static Path canonicalLandscapeDirectory() {
