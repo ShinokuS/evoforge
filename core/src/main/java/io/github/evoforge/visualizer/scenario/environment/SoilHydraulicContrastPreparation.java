@@ -68,8 +68,9 @@ final class SoilHydraulicContrastPreparation {
     }
 
     private static WorldAtlas atlas(WorldBounds bounds) {
+        WaterDepthRate annualWater = WaterDepthRate.ofMillimeters(1_200L, Duration.ofDays(365L));
         ClimateSpec climate=ClimateSpec.physical(ClimateTemperature.ofMilliCelsius(12_000),250,
-                WaterDepthRate.ofMillimeters(1_200L,Duration.ofDays(365L)),WaterDepthRate.ZERO);
+                annualWater,annualWater);
         WorldGenesis genesis=new WorldGenesis(new WorldSpec(bounds,climate,SPACE),4_204_212L,
                 GenerationRevision.V8,RngRevision.V1);
         WorldGenerationAlgorithms algorithms=WorldGenerationAlgorithms.standard()
