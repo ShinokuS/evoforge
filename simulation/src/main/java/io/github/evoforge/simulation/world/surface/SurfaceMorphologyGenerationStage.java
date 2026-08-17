@@ -4,8 +4,9 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /** Deterministically derives reusable local topographic facts from generated elevation. */
-public final class SurfaceMorphologyGenerationStage {
+public final class SurfaceMorphologyGenerationStage implements SurfaceMorphologyGenerator {
 
+    @Override
     public SurfaceMorphologyField generate(ElevationField elevation) {
         if (elevation == null) {
             throw new IllegalArgumentException("elevation must not be null");
