@@ -6,11 +6,12 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Deterministic first surface-hydrology model derived from drainage accumulation.
+ * Deterministic finite surface-water initial conditions derived from durable hydrography.
  *
  * <p>V1/V2 predate generated surface Water and therefore intentionally produce an empty field.
- * V3+ retain the same finite initial channel-Water algorithm plus a derived one-cell shoreline
- * relation. The runtime Liquid system remains the sole owner of subsequent redistribution.</p>
+ * V3+ retain the same finite initial channel-Water volume law plus a derived one-cell shoreline
+ * relation. Channel membership itself is owned by {@link HydrographyField}; the runtime Liquid
+ * system remains the sole owner of subsequent redistribution.</p>
  */
 public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGenerator {
     private static final int[] DX = {-1, 0, 1, -1, 1, -1, 0, 1};
@@ -27,8 +28,27 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
             throw new IllegalArgumentException(
                     "surface hydrology generation dependencies must not be null");
         }
+        HydrographyField hydrography = new HydrographyGenerationStage().generate(
+                genesis,
+                elevation,
+                drainage);
+        return generate(genesis, elevation, drainage, hydrography);
+    }
+
+    @Override
+    public SurfaceHydrologyField generate(
+            WorldGenesis genesis,
+            ElevationField elevation,
+            DrainageField drainage,
+            HydrographyField hydrography) {
+        if (genesis == null || elevation == null || drainage == null || hydrography == null) {
+            throw new IllegalArgumentException(
+                    "surface hydrology generation dependencies must not be null");
+        }
         WorldBounds bounds = genesis.spec().bounds();
-        if (!bounds.equals(elevation.bounds()) || !bounds.equals(drainage.bounds())) {
+        if (!bounds.equals(elevation.bounds())
+                || !bounds.equals(drainage.bounds())
+                || !bounds.equals(hydrography.bounds())) {
             throw new IllegalArgumentException(
                     "surface hydrology inputs must share genesis world bounds");
         }
@@ -45,22 +65,23 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         }
         if (!GenerationRevision.V3.equals(revision)
                 && !GenerationRevision.V4.equals(revision)
-                && !GenerationRevision.V5.equals(revision)) {
+                && !GenerationRevision.V5.equals(revision)
+                && !GenerationRevision.V6.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
 
-        long threshold = channelThreshold(area);
+        long threshold = HydrographyGenerationStage.channelThreshold(area);
         for (int localY = 0; localY < height; localY++) {
             int y = bounds.minY() + localY;
             for (int localX = 0; localX < width; localX++) {
                 int x = bounds.minX() + localX;
                 int index = localY * width + localX;
-                long contributing = drainage.contributingAreaAt(x, y);
-                if (contributing < threshold || elevation.elevationAt(x, y) >= bounds.maxZ()) {
-                    continue;
-                }
-                initialWater[index] = initialVolume(contributing, threshold, area);
+                if (!hydrography.isChannelAt(x, y)) continue;
+                initialWater[index] = initialVolume(
+                        drainage.contributingAreaAt(x, y),
+                        threshold,
+                        area);
             }
         }
 
@@ -73,13 +94,6 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         }
 
         return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
-    }
-
-    private static long channelThreshold(int area) {
-        long root = (long) StrictMath.sqrt(area);
-        while (root * root < area) root++;
-        while (root > 0L && (root - 1L) * (root - 1L) >= area) root--;
-        return Math.max(4L, root);
     }
 
     private static int initialVolume(long contributing, long threshold, int area) {
