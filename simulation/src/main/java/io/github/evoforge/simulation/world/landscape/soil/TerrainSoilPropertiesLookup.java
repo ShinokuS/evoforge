@@ -26,23 +26,6 @@ public final class TerrainSoilPropertiesLookup implements SoilPropertiesLookup {
         this.definitions = definitions;
     }
 
-    /**
-     * Compatibility constructor for callers that still carry the obsolete variation registry.
-     *
-     * @deprecated runtime no longer invents spatial soil variation; prepare a spatial lookup
-     *     upstream instead.
-     */
-    @Deprecated(forRemoval = true)
-    public TerrainSoilPropertiesLookup(
-            TerrainLookup terrain,
-            SoilPropertiesDefinitions definitions,
-            SoilPropertiesVariationDefinitions ignoredVariations) {
-        this(terrain, definitions);
-        if (ignoredVariations == null) {
-            throw new IllegalArgumentException("soil property variation definitions must not be null");
-        }
-    }
-
     @Override
     public SoilProperties find(int x, int y, int z) {
         LandscapeDefinitionId id = terrain.find(x, y, z);
