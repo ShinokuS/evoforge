@@ -8,19 +8,34 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
     private final WorldBounds bounds;
     private final int width;
     private final int[] meanTemperatureMilliCelsius;
-    private final CellVolumeRate precipitationNormal;
-    private final CellVolumeRate evaporativeDemandNormal;
+    private final ClimateWaterNormal precipitationNormal;
+    private final ClimateWaterNormal evaporativeDemandNormal;
 
     public DenseClimateNormalsField(
             WorldBounds bounds,
             int[] meanTemperatureMilliCelsius,
             CellVolumeRate precipitationNormal,
             CellVolumeRate evaporativeDemandNormal) {
+        this(
+                bounds,
+                meanTemperatureMilliCelsius,
+                ClimateWaterNormal.legacy(precipitationNormal),
+                ClimateWaterNormal.legacy(evaporativeDemandNormal));
+    }
+
+    public DenseClimateNormalsField(
+            WorldBounds bounds,
+            int[] meanTemperatureMilliCelsius,
+            ClimateWaterNormal precipitationNormal,
+            ClimateWaterNormal evaporativeDemandNormal) {
         if (bounds == null
                 || meanTemperatureMilliCelsius == null
                 || precipitationNormal == null
                 || evaporativeDemandNormal == null) {
             throw new IllegalArgumentException("climate normals field inputs must not be null");
+        }
+        if (!precipitationNormal.kind().equals(evaporativeDemandNormal.kind())) {
+            throw new IllegalArgumentException("climate water normals must use one shared dimension");
         }
         this.bounds = bounds;
         width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -48,13 +63,18 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
     }
 
     @Override
-    public CellVolumeRate precipitationNormalAt(int x, int y) {
+    public ClimateWaterNormal.Kind waterNormalKind() {
+        return precipitationNormal.kind();
+    }
+
+    @Override
+    public ClimateWaterNormal precipitationWaterNormalAt(int x, int y) {
         requireContains(x, y);
         return precipitationNormal;
     }
 
     @Override
-    public CellVolumeRate evaporativeDemandNormalAt(int x, int y) {
+    public ClimateWaterNormal evaporativeDemandWaterNormalAt(int x, int y) {
         requireContains(x, y);
         return evaporativeDemandNormal;
     }
