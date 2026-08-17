@@ -14,6 +14,7 @@ public final class WorldAtlasGenerator {
     private final GeologyGenerator geologyGenerator;
     private final ClimateNormalsGenerator climateGenerator;
     private final DrainageGenerator drainageGenerator;
+    private final HydrographyGenerator hydrographyGenerator;
     private final SurfaceHydrologyGenerator surfaceHydrologyGenerator;
 
     public WorldAtlasGenerator() {
@@ -22,6 +23,7 @@ public final class WorldAtlasGenerator {
                 new GeologyGenerationStage(),
                 new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
+                new HydrographyGenerationStage(),
                 new SurfaceHydrologyGenerationStage());
     }
 
@@ -31,6 +33,7 @@ public final class WorldAtlasGenerator {
                 new GeologyGenerationStage(),
                 new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
+                new HydrographyGenerationStage(),
                 new SurfaceHydrologyGenerationStage());
     }
 
@@ -41,6 +44,7 @@ public final class WorldAtlasGenerator {
                 geologyGenerator,
                 new ClimateNormalsGenerationStage(),
                 new DrainageGenerationStage(),
+                new HydrographyGenerationStage(),
                 new SurfaceHydrologyGenerationStage());
     }
 
@@ -51,6 +55,18 @@ public final class WorldAtlasGenerator {
                 new GeologyGenerationStage(),
                 climateGenerator,
                 new DrainageGenerationStage(),
+                new HydrographyGenerationStage(),
+                new SurfaceHydrologyGenerationStage());
+    }
+
+    /** Named injection seam for custom durable hydrography generation. */
+    public static WorldAtlasGenerator withHydrography(HydrographyGenerator hydrographyGenerator) {
+        return new WorldAtlasGenerator(
+                new ElevationGenerationStage(),
+                new GeologyGenerationStage(),
+                new ClimateNormalsGenerationStage(),
+                new DrainageGenerationStage(),
+                hydrographyGenerator,
                 new SurfaceHydrologyGenerationStage());
     }
 
@@ -62,6 +78,7 @@ public final class WorldAtlasGenerator {
                 new GeologyGenerationStage(),
                 new ClimateNormalsGenerationStage(),
                 drainageGenerator,
+                new HydrographyGenerationStage(),
                 new SurfaceHydrologyGenerationStage());
     }
 
@@ -74,6 +91,23 @@ public final class WorldAtlasGenerator {
                 new GeologyGenerationStage(),
                 new ClimateNormalsGenerationStage(),
                 drainageGenerator,
+                new HydrographyGenerationStage(),
+                surfaceHydrologyGenerator);
+    }
+
+    /** Compatibility constructor retaining the pre-hydrography explicit algorithm surface. */
+    public WorldAtlasGenerator(
+            ElevationGenerator elevationGenerator,
+            GeologyGenerator geologyGenerator,
+            ClimateNormalsGenerator climateGenerator,
+            DrainageGenerator drainageGenerator,
+            SurfaceHydrologyGenerator surfaceHydrologyGenerator) {
+        this(
+                elevationGenerator,
+                geologyGenerator,
+                climateGenerator,
+                drainageGenerator,
+                new HydrographyGenerationStage(),
                 surfaceHydrologyGenerator);
     }
 
@@ -82,11 +116,13 @@ public final class WorldAtlasGenerator {
             GeologyGenerator geologyGenerator,
             ClimateNormalsGenerator climateGenerator,
             DrainageGenerator drainageGenerator,
+            HydrographyGenerator hydrographyGenerator,
             SurfaceHydrologyGenerator surfaceHydrologyGenerator) {
         if (elevationGenerator == null
                 || geologyGenerator == null
                 || climateGenerator == null
                 || drainageGenerator == null
+                || hydrographyGenerator == null
                 || surfaceHydrologyGenerator == null) {
             throw new IllegalArgumentException("WorldAtlas generators must not be null");
         }
@@ -94,6 +130,7 @@ public final class WorldAtlasGenerator {
         this.geologyGenerator = geologyGenerator;
         this.climateGenerator = climateGenerator;
         this.drainageGenerator = drainageGenerator;
+        this.hydrographyGenerator = hydrographyGenerator;
         this.surfaceHydrologyGenerator = surfaceHydrologyGenerator;
     }
 
@@ -112,10 +149,14 @@ public final class WorldAtlasGenerator {
         DrainageField drainage = drainageGenerator.generate(elevation);
         if (drainage == null) throw new IllegalStateException("drainageGenerator returned null");
 
+        HydrographyField hydrography = hydrographyGenerator.generate(genesis, elevation, drainage);
+        if (hydrography == null) throw new IllegalStateException("hydrographyGenerator returned null");
+
         SurfaceHydrologyField surfaceHydrology = surfaceHydrologyGenerator.generate(
                 genesis,
                 elevation,
-                drainage);
+                drainage,
+                hydrography);
         if (surfaceHydrology == null) {
             throw new IllegalStateException("surfaceHydrologyGenerator returned null");
         }
@@ -126,6 +167,7 @@ public final class WorldAtlasGenerator {
                 geology,
                 climate,
                 drainage,
+                hydrography,
                 surfaceHydrology);
     }
 }
