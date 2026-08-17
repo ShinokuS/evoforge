@@ -5,6 +5,8 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.geology.GeologyField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
+import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
 
 /**
  * First causal material-strata model.
@@ -78,6 +80,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                     "surface hydrology bounds must match terrain generation bounds");
         }
 
+        SurfaceMorphologyField morphology = new SurfaceMorphologyGenerationStage().generate(elevation);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         long height = (long) bounds.maxY() - bounds.minY() + 1L;
         long areaLong = Math.multiplyExact((long) width, height);
@@ -108,7 +111,7 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                 surfaceZ[index] = surface;
 
                 LocalSurfaceContext context = contextAt(
-                        elevation,
+                        morphology,
                         drainage,
                         areaLong,
                         worldX,
@@ -157,45 +160,18 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
     }
 
     private static LocalSurfaceContext contextAt(
-            ElevationField elevation,
+            SurfaceMorphologyField morphology,
             DrainageField drainage,
             long horizontalArea,
             int x,
             int y) {
-        long center = elevation.elevationSubunitsAt(x, y);
-        long maximumSlope = 0L;
-        long neighborSum = 0L;
-        int neighbors = 0;
-
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                if (dx == 0 && dy == 0) continue;
-                long nx = (long) x + dx;
-                long ny = (long) y + dy;
-                if (nx < elevation.bounds().minX()
-                        || nx > elevation.bounds().maxX()
-                        || ny < elevation.bounds().minY()
-                        || ny > elevation.bounds().maxY()) {
-                    continue;
-                }
-                long neighbor = elevation.elevationSubunitsAt((int) nx, (int) ny);
-                maximumSlope = Math.max(maximumSlope, Math.abs(neighbor - center));
-                neighborSum = Math.addExact(neighborSum, neighbor);
-                neighbors++;
-            }
-        }
-
-        long concavity = 0L;
-        if (neighbors > 0) {
-            long averageNeighbor = neighborSum / neighbors;
-            concavity = Math.max(0L, averageNeighbor - center);
-        }
-
         long drainageInfluence = Math.multiplyExact(
                 drainage.contributingAreaAt(x, y),
                 ElevationField.SUBUNITS_PER_CELL) / horizontalArea;
-
-        return new LocalSurfaceContext(maximumSlope, concavity, drainageInfluence);
+        return new LocalSurfaceContext(
+                morphology.maximumNeighborSlopeSubunitsAt(x, y),
+                morphology.concavitySubunitsAt(x, y),
+                drainageInfluence);
     }
 
     private record LocalSurfaceContext(
