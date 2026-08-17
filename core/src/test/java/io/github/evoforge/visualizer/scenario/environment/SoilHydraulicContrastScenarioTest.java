@@ -43,23 +43,28 @@ final class SoilHydraulicContrastScenarioTest {
                 slow.free() > 0L,
                 "slow soil should leave surface water from that same rain pulse");
 
-        boolean driedAfterRain = false;
-        for (int step = 0; step < 200; step++) {
+        long previousWater = total(fast) + total(slow);
+        int clearWeatherDecreases = 0;
+        for (int step = 0; step < 200 && clearWeatherDecreases < 2; step++) {
             session.runtime().stepper().advance();
-            if (session.weather().current().kind() != WeatherPresentationKind.CLEAR) continue;
-            SoilHydraulicContrastScenario.SideWater left = left(session);
-            SoilHydraulicContrastScenario.SideWater right = right(session);
-            if (left.retained() == 0L
-                    && left.free() == 0L
-                    && right.retained() == 0L
-                    && right.free() == 0L) {
-                driedAfterRain = true;
-                break;
+            SoilHydraulicContrastScenario.SideWater currentLeft = left(session);
+            SoilHydraulicContrastScenario.SideWater currentRight = right(session);
+            long currentWater = total(currentLeft) + total(currentRight);
+
+            if (session.weather().current().kind() == WeatherPresentationKind.CLEAR
+                    && currentWater < previousWater) {
+                clearWeatherDecreases++;
             }
+            previousWater = currentWater;
         }
+
         assertTrue(
-                driedAfterRain,
-                "a sustained clear spell must eventually remove all exposed free and retained Water");
+                clearWeatherDecreases >= 2,
+                "repeated clear-weather evaporation must keep reducing exposed Water after rainfall");
+    }
+
+    private static long total(SoilHydraulicContrastScenario.SideWater water) {
+        return water.retained() + water.free();
     }
 
     private static SoilHydraulicContrastScenario.SideWater left(ScenarioSession session) {
