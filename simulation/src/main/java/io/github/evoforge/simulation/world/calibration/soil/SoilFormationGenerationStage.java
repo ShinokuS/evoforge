@@ -124,9 +124,9 @@ public final class SoilFormationGenerationStage implements SoilFormationGenerato
                 drainage.contributingAreaAt(x, y),
                 horizontalArea);
 
-        int accumulationResponse = Math.toIntExact(roundDivide(
-                (long) concavityResponse * (NormalizedValue.SCALE + (long) drainageResponse),
-                2L * NormalizedValue.SCALE));
+        int accumulationResponse = accumulationResponse(
+                concavityResponse,
+                drainageResponse);
         int netGeomorphicResponse = accumulationResponse - exposureResponse;
         int maximumShift = formationCalibration.maximumMineralFinenessShift().partsPerMillion();
         int finenessShift = Math.toIntExact(roundDivideSigned(
@@ -138,6 +138,23 @@ public final class SoilFormationGenerationStage implements SoilFormationGenerato
         return new SoilSemanticProfile(
                 NormalizedValue.ofPartsPerMillion(developedFineness),
                 base.organicMatter());
+    }
+
+    /**
+     * Concavity is already an accumulation cause. Drainage may only fill the remaining normalized
+     * response, so amplification is smooth, monotonic and bounded without an extra weighting
+     * constant: c + c*d*(1-c).
+     */
+    private static int accumulationResponse(int concavityResponse, int drainageResponse) {
+        long remaining = NormalizedValue.SCALE - (long) concavityResponse;
+        long coupled = Math.multiplyExact(
+                Math.multiplyExact((long) concavityResponse, drainageResponse),
+                remaining);
+        long scaleSquared = Math.multiplyExact(
+                (long) NormalizedValue.SCALE,
+                NormalizedValue.SCALE);
+        long amplification = roundDivide(coupled, scaleSquared);
+        return Math.toIntExact(Math.addExact(concavityResponse, amplification));
     }
 
     private static int smoothResponse(long value, long characteristicScale) {
