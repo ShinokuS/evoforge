@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
@@ -34,7 +33,7 @@ final class ClimateNormalsGenerationTest {
 
         assertEquals(GenerationRevision.V7, atlas.genesis().generationRevision());
         ClimateNormalsField normals = atlas.climateNormals();
-        HydroClimateField forcing = new ClimateHydroForcingView(normals);
+        ClimateHydroForcingView forcing = new ClimateHydroForcingView(normals);
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 assertEquals(climate.precipitationNormal(), normals.precipitationNormalAt(x, y));
@@ -43,10 +42,10 @@ final class ClimateNormalsGenerationTest {
                         normals.evaporativeDemandNormalAt(x, y));
                 assertEquals(
                         normals.precipitationNormalAt(x, y),
-                        forcing.precipitationSupplyAt(x, y));
+                        forcing.precipitationRateAt(x, y));
                 assertEquals(
                         normals.evaporativeDemandNormalAt(x, y),
-                        forcing.evaporativeDemandAt(x, y));
+                        forcing.evaporativeDemandRateAt(x, y));
             }
         }
     }
