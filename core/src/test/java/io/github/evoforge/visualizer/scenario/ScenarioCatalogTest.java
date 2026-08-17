@@ -18,7 +18,7 @@ final class ScenarioCatalogTest {
                         "movement-patrol", "movement-click-to-move",
                         "occupancy-contention",
                         "rain-hydrology", "generated-rainfall-regime",
-                        "soil-hydraulic-contrast",
+                        "soil-hydraulic-contrast", "causal-soil-formation",
                         "water-z-flow", "water-geometry-stress",
                         "agent-living-cow", "agent-living-cow-herd",
                         "agent-cow-foraging", "agent-cow-visual-search",
