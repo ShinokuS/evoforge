@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
@@ -16,7 +17,8 @@ final class GeneratedWorldWarmupTest {
     void capturesRequestedAbsoluteCheckpointsThroughOrdinaryRuntimeStepper() {
         GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
                 42L,
-                ClimateSpec.STANDARD_UNFORCED);
+                ClimateSpec.STANDARD,
+                AtmosphericForcingPolicy.DISABLED);
 
         List<GeneratedWorldDiagnostics> snapshots =
                 new GeneratedWorldWarmup().run(world, 0L, 3L, 7L);
@@ -43,26 +45,39 @@ final class GeneratedWorldWarmupTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED)));
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED)));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         -1L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         0L, 0L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(
+                                1L,
+                                ClimateSpec.STANDARD,
+                                AtmosphericForcingPolicy.DISABLED),
                         2L, 1L));
 
         GeneratedWorldRuntime advanced = GeneratedWorldWarmupFixture.create(
                 1L,
-                ClimateSpec.STANDARD_UNFORCED);
+                ClimateSpec.STANDARD,
+                AtmosphericForcingPolicy.DISABLED);
         advanced.runtime().stepper().advance();
         assertThrows(
                 IllegalArgumentException.class,
