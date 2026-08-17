@@ -4,7 +4,9 @@
 
 Observe and interact with authoritative simulation state during development without creating a second world model.
 
-The visualizer is scenario-driven: one generic renderer/interaction shell is reused across small deterministic worlds that demonstrate focused mechanics or cross-system behavior. Scenarios complement headless tests; they do not replace them.
+The main visualizer is scenario-driven: one generic renderer/interaction shell is reused across small deterministic worlds that demonstrate focused mechanics or cross-system behavior. Scenarios complement headless tests; they do not replace them.
+
+The application also contains focused pre-runtime developer tools when the thing being inspected is an immutable generated fact rather than a started `SimulationRuntime`. Those tools must still consume production generation contracts instead of maintaining a second model.
 
 ## Runtime boundary
 
@@ -51,6 +53,42 @@ ZLevelVisualizer
 Scenario packages currently include `geometry`, `movement`, `occupancy`, `pathfinding`, `water`, `environment` and `agent`. Package ownership and browser grouping need not be one-to-one: `RainHydrologyScenario`, for example, is environment composition shown under **Water / Hydrology**.
 
 `R` recreates the scenario by discarding the old session and calling `create()` again. Simulation systems therefore need no debug-only global reset API.
+
+## World-generation preview
+
+From the scenario browser, `F9` opens `WorldGenerationPreviewScreen`, a focused 3D inspection tool for the explicit V9 ocean-first elevation slice.
+
+It is deliberately **not** a second simulation runtime and not a new generic rendering framework. It constructs normal production `WorldGenesis` + `WorldGenerationIntent`, calls the production `ElevationGenerationStage`, and renders the resulting immutable `ElevationField` together with a translucent presentation-only sea-level plane at `z = 0`.
+
+```text
+seed + WorldGenerationIntent
+        ↓
+WorldGenesis(V9)
+        ↓
+ElevationGenerationStage
+        ↓
+ElevationField
+        ↓
+GPU surface mesh + sea-level plane
+```
+
+The surface mesh is rebuilt only when the generated world changes, not every frame. Camera orbit/zoom are presentation state and do not feed back into generation.
+
+Current preview controls are:
+
+```text
+mouse drag       orbit
+mouse wheel      zoom
+R                increment seed and regenerate
+Left / Right     decrease / increase landCoverage
+Down / Up        decrease / increase landmassScale
+PgDn / PgUp      decrease / increase fragmentation
+T                toggle generated surface
+O                toggle ocean plane
+Esc              return to scenario browser
+```
+
+The preview exists to answer visual acceptance questions that headless tests cannot: whether a given seed/intent produces readable macro land/ocean form and whether parameter changes have the expected qualitative effect. Determinism, coverage calibration and full-Atlas compatibility remain headless test responsibilities.
 
 ## Presentation perspectives
 
@@ -247,6 +285,10 @@ This is presentation infrastructure only. Font generation/atlas representation m
 
 ## Controls
 
+Scenario browser:
+
+- `F9` — open the ocean-first V9 3D world-generation preview.
+
 Application/session:
 
 - `R` — recreate current scenario;
@@ -269,12 +311,16 @@ The compact status HUD reports run state, tick, FPS and zoom. View state is show
 
 World rendering is camera-local. Water optical depth is bounded, rain particle budget is fixed, Move preview is active only while targeting and expansion-budgeted, and UI is immediate-mode.
 
+The world-generation preview uploads a compact generated surface mesh only when the seed or intent changes; orbit/zoom reuse that mesh. It is a development inspection path, not runtime Terrain rendering.
+
 `VisualizerPerformanceTelemetry` separates observed frame interval from CPU work inside major renderer stages. Optimize only measured hot paths and keep presentation optimizations semantically invisible to simulation.
 
 ## Testing boundary
 
 Headless simulation tests own semantic correctness. Visualizer tests cover deterministic presentation math/resolution, interaction state, route preview boundaries, debug-panel layout, Water motion/opacity mapping, rain density and scenario setup.
 
+The world-generation preview is manually inspected for macro visual quality; its underlying generation invariants remain covered by headless worldgen tests.
+
 Aesthetic readability and real desktop performance remain manual acceptance where automated tests would only imitate a human judgement.
 
-See [Debug Scenarios Guide](../guides/debug-scenarios.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Water](water.md) and [Movement](movement.md).
+See [Debug Scenarios Guide](../guides/debug-scenarios.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Water](water.md) and [Movement](movement.md).
