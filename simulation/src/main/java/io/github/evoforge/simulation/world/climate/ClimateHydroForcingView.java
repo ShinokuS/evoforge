@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.climate;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRateCellVolumeCompiler;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
@@ -14,14 +14,12 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * for the currently requested runtime interval. It owns no weather state and exists so historical
  * climate-direct runs can use the same atmospheric consumer as eventful WeatherState.</p>
  */
-@SuppressWarnings("removal")
-public final class ClimateHydroForcingView implements HydroClimateField {
+public final class ClimateHydroForcingView implements AtmosphericWaterForcing {
     private final ClimateNormalsField climate;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
     private long currentTick;
 
-    /** Legacy V1-V7 projection retaining historical tick-relative semantics. */
     public ClimateHydroForcingView(ClimateNormalsField climate) {
         this(climate, null, null);
         if (ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME.equals(climate.waterNormalKind())) {
@@ -30,7 +28,6 @@ public final class ClimateHydroForcingView implements HydroClimateField {
         }
     }
 
-    /** Physical V8+ projection from depth/time normals into CellVolume/tick runtime forcing. */
     public ClimateHydroForcingView(
             ClimateNormalsField climate,
             PhysicalSpaceScale spaceScale,
@@ -71,12 +68,10 @@ public final class ClimateHydroForcingView implements HydroClimateField {
         return evaporativeDemandRateAt(x, y).volumeDueAtTick(requireCurrentTick());
     }
 
-    /** Compatibility/query helper exposing the compiled static rate itself. */
     public CellVolumeRate precipitationRateAt(int x, int y) {
         return compile(climate.precipitationWaterNormalAt(x, y));
     }
 
-    /** Compatibility/query helper exposing the compiled static rate itself. */
     public CellVolumeRate evaporativeDemandRateAt(int x, int y) {
         return compile(climate.evaporativeDemandWaterNormalAt(x, y));
     }

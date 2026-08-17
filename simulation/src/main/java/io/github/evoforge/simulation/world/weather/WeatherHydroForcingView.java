@@ -1,22 +1,15 @@
 package io.github.evoforge.simulation.world.weather;
 
 import io.github.evoforge.simulation.time.SimulationTimeScale;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRateIntegrator;
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRateCellVolumeCompiler;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/**
- * Runtime atmospheric-water projection of authoritative current WeatherState.
- *
- * <p>Weather owns current physical rates. This adapter advances the injected WeatherDriver first,
- * converts current rates into CellVolume/tick second, and integrates only that one actual interval.
- * Fractional CellVolume carry is preserved across weather transitions.</p>
- */
-@SuppressWarnings("removal")
-public final class WeatherHydroForcingView implements HydroClimateField {
+/** Runtime atmospheric-water projection of authoritative current WeatherState. */
+public final class WeatherHydroForcingView implements AtmosphericWaterForcing {
     private final WeatherState weather;
     private final PhysicalSpaceScale spaceScale;
     private final SimulationTimeScale timeScale;
@@ -62,20 +55,14 @@ public final class WeatherHydroForcingView implements HydroClimateField {
         return weather.bounds();
     }
 
-    /** Query helper exposing the currently compiled precipitation rate. */
     public CellVolumeRate precipitationRateAt(int x, int y) {
         return WaterDepthRateCellVolumeCompiler.compile(
-                weather.at(x, y).precipitationRate(),
-                spaceScale,
-                timeScale);
+                weather.at(x, y).precipitationRate(), spaceScale, timeScale);
     }
 
-    /** Query helper exposing the currently compiled evaporative-demand rate. */
     public CellVolumeRate evaporativeDemandRateAt(int x, int y) {
         return WaterDepthRateCellVolumeCompiler.compile(
-                weather.at(x, y).evaporativeDemandRate(),
-                spaceScale,
-                timeScale);
+                weather.at(x, y).evaporativeDemandRate(), spaceScale, timeScale);
     }
 
     @Override
@@ -89,7 +76,6 @@ public final class WeatherHydroForcingView implements HydroClimateField {
                     "dynamic weather forcing must advance sequentially: expected="
                             + expected + ", actual=" + tick);
         }
-
         driver.update(tick);
         WorldBounds bounds = bounds();
         for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {

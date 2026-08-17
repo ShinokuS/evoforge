@@ -29,55 +29,35 @@ final class EnvironmentRuntimeAssembly {
             SimulationStartupConfig config,
             RuntimeKernel kernel) {
         LiquidSurfaceRetentionLookup surfaceRetention = new TerrainSurfaceRetentionLookup(
-                world.landscape.terrain(),
-                definitions.surfaceRetention);
+                world.landscape.terrain(), definitions.surfaceRetention);
         LiquidFlowSystem liquidFlow = new LiquidFlowSystem(
-                world.liquids,
-                world.geometry,
-                surfaceRetention,
-                definitions.liquidTransport);
+                world.liquids, world.geometry, surfaceRetention, definitions.liquidTransport);
         SoilLiquidInfiltrationSystem infiltration = new SoilLiquidInfiltrationSystem(
-                world.liquids,
-                world.landscape.terrain(),
-                world.soilLiquids);
-        LiquidFlowProcess liquidFlowProcess = new LiquidFlowProcess(
-                liquidFlow,
-                infiltration::update);
+                world.liquids, world.landscape.terrain(), world.soilLiquids);
+        LiquidFlowProcess liquidFlowProcess = new LiquidFlowProcess(liquidFlow, infiltration::update);
         HandlerId liquidFlowHandlerId = kernel.handlers.register(liquidFlowProcess::resume);
         ProcessScheduler liquidFlowScheduler = new BoundProcessScheduler(
-                kernel.clock,
-                kernel.scheduler,
-                liquidFlowHandlerId);
+                kernel.clock, kernel.scheduler, liquidFlowHandlerId);
         liquidFlowProcess.bindScheduler(liquidFlowScheduler);
         liquidFlowProcess.activate();
 
         VerticalSkySurfaceSystem skySurfaces = new VerticalSkySurfaceSystem(
-                world.landscape.terrainSurfaces(),
-                world.water.surfaces());
+                world.landscape.terrainSurfaces(), world.water.surfaces());
         PrecipitationEventLookup precipitationEvents = tick -> false;
 
         if (config.precipitation() != null) {
             PrecipitationSystem precipitation = new PrecipitationSystem(
-                    world.landscape.terrain(),
-                    world.geometry,
-                    world.soilLiquids,
-                    world.water);
-            SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
-                    skySurfaces,
-                    precipitation);
+                    world.landscape.terrain(), world.geometry, world.soilLiquids, world.water);
+            SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(skySurfaces, precipitation);
             PeriodicPrecipitationSystem periodicPrecipitation = new PeriodicPrecipitationSystem(
-                    skyPrecipitation,
-                    config.precipitation(),
-                    kernel.clock);
+                    skyPrecipitation, config.precipitation(), kernel.clock);
             precipitationEvents = periodicPrecipitation;
             HandlerId precipitationHandlerId = kernel.handlers.register(processId -> {
                 periodicPrecipitation.resume(processId);
                 liquidFlowProcess.activate();
             });
             ProcessScheduler precipitationScheduler = new BoundProcessScheduler(
-                    kernel.clock,
-                    kernel.scheduler,
-                    precipitationHandlerId);
+                    kernel.clock, kernel.scheduler, precipitationHandlerId);
             periodicPrecipitation.bindScheduler(precipitationScheduler);
             periodicPrecipitation.start();
         }
@@ -91,10 +71,7 @@ final class EnvironmentRuntimeAssembly {
                     world.water,
                     world.soilLiquids);
             PeriodicEvaporationSystem periodicEvaporation = new PeriodicEvaporationSystem(
-                    evaporation,
-                    config.evaporation(),
-                    kernel.clock,
-                    precipitationEvents);
+                    evaporation, config.evaporation(), kernel.clock, precipitationEvents);
             HandlerId evaporationHandlerId = kernel.handlers.register(processId -> {
                 periodicEvaporation.resume(processId);
                 if (periodicEvaporation.lastResult().surfaceWaterRemoved() > 0L) {
@@ -102,22 +79,15 @@ final class EnvironmentRuntimeAssembly {
                 }
             });
             ProcessScheduler evaporationScheduler = new BoundProcessScheduler(
-                    kernel.clock,
-                    kernel.scheduler,
-                    evaporationHandlerId);
+                    kernel.clock, kernel.scheduler, evaporationHandlerId);
             periodicEvaporation.bindScheduler(evaporationScheduler);
             periodicEvaporation.start();
         }
 
-        if (config.hydroClimate() != null) {
+        if (config.atmosphericWaterForcing() != null) {
             PrecipitationSystem precipitation = new PrecipitationSystem(
-                    world.landscape.terrain(),
-                    world.geometry,
-                    world.soilLiquids,
-                    world.water);
-            SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(
-                    skySurfaces,
-                    precipitation);
+                    world.landscape.terrain(), world.geometry, world.soilLiquids, world.water);
+            SkyPrecipitationSystem skyPrecipitation = new SkyPrecipitationSystem(skySurfaces, precipitation);
             EvaporationSystem evaporation = new EvaporationSystem(
                     skySurfaces,
                     world.water.surfaces(),
@@ -126,12 +96,8 @@ final class EnvironmentRuntimeAssembly {
                     world.water,
                     world.soilLiquids);
             HydroClimateForcingSystem forcing = new HydroClimateForcingSystem(
-                    config.hydroClimate(),
-                    evaporation,
-                    skyPrecipitation);
-            HydroClimateForcingProcess forcingProcess = new HydroClimateForcingProcess(
-                    forcing,
-                    kernel.clock);
+                    config.atmosphericWaterForcing(), evaporation, skyPrecipitation);
+            HydroClimateForcingProcess forcingProcess = new HydroClimateForcingProcess(forcing, kernel.clock);
             HandlerId forcingHandlerId = kernel.handlers.register(processId -> {
                 forcingProcess.resume(processId);
                 HydroClimateForcingResult result = forcingProcess.lastResult();
@@ -141,9 +107,7 @@ final class EnvironmentRuntimeAssembly {
                 }
             });
             ProcessScheduler forcingScheduler = new BoundProcessScheduler(
-                    kernel.clock,
-                    kernel.scheduler,
-                    forcingHandlerId);
+                    kernel.clock, kernel.scheduler, forcingHandlerId);
             forcingProcess.bindScheduler(forcingScheduler);
             forcingProcess.start();
         }

@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.atlas.HydroClimateField;
+import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSystem;
 import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipitationSystem;
@@ -111,10 +111,9 @@ final class HydroClimateForcingSystemTest {
         assertThrows(IllegalArgumentException.class, () -> forcing.update(0L));
     }
 
-    @SuppressWarnings("removal")
-    private static HydroClimateField field(ColumnRate precipitation, ColumnRate evaporation) {
+    private static AtmosphericWaterForcing field(ColumnRate precipitation, ColumnRate evaporation) {
         WorldBounds bounds = new WorldBounds(-4, 4, -4, 4, -4, 8);
-        return new HydroClimateField() {
+        return new AtmosphericWaterForcing() {
             private long currentTick;
             @Override public WorldBounds bounds() { return bounds; }
             @Override public void advanceToTick(long tick) {
@@ -159,8 +158,8 @@ final class HydroClimateForcingSystemTest {
 
         private void placeGround(int x, int y) { landscape.placeTerrain(x, y, 0, ground); }
         private int waterAt(int x, int y, int z) { return water.lookup().amount(x, y, z); }
-        private HydroClimateForcingSystem forcing(HydroClimateField climate) {
-            return new HydroClimateForcingSystem(climate, evaporation, precipitation);
+        private HydroClimateForcingSystem forcing(AtmosphericWaterForcing forcing) {
+            return new HydroClimateForcingSystem(forcing, evaporation, precipitation);
         }
     }
 }
