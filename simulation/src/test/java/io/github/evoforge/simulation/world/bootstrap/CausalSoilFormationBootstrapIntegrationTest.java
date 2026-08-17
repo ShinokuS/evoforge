@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.time.SimulationTimeScale;
+import io.github.evoforge.simulation.world.atlas.DrainageField;
+import io.github.evoforge.simulation.world.atlas.DrainageGenerator;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
+import io.github.evoforge.simulation.world.atlas.WorldGenerationAlgorithms;
 import io.github.evoforge.simulation.world.calibration.soil.SoilCompositionCompiler;
 import io.github.evoforge.simulation.world.calibration.soil.SoilCompositionProfile;
 import io.github.evoforge.simulation.world.calibration.soil.SoilFormationCalibration;
@@ -52,6 +55,20 @@ final class CausalSoilFormationBootstrapIntegrationTest {
                         PhysicalSpaceScale.cubicMillimeters(1_000L)),
                 42L);
 
+        DrainageGenerator drainage = elevation -> new DrainageField() {
+            @Override public WorldBounds bounds() { return BOUNDS; }
+            @Override public boolean hasDownstream(int x, int y) { return false; }
+            @Override public int downstreamXAt(int x, int y) { return x; }
+            @Override public int downstreamYAt(int x, int y) { return y; }
+            @Override public long contributingAreaAt(int x, int y) {
+                return x == 2 ? 3L : 1L;
+            }
+            @Override public int terminalXAt(int x, int y) { return x; }
+            @Override public int terminalYAt(int x, int y) { return y; }
+        };
+        WorldAtlasGenerator atlasGenerator = new WorldAtlasGenerator(
+                WorldGenerationAlgorithms.standard().withDrainage(drainage));
+
         SurfaceMorphologyGenerator morphology = elevation -> new SurfaceMorphologyField() {
             @Override public WorldBounds bounds() { return BOUNDS; }
             @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) {
@@ -61,7 +78,7 @@ final class CausalSoilFormationBootstrapIntegrationTest {
                 return x == 2 ? 1_000_000L : 0L;
             }
         };
-        TerrainMaterialGenerator terrain = (elevation, drainage, profile) ->
+        TerrainMaterialGenerator terrain = (elevation, generatedDrainage, profile) ->
                 new TerrainMaterialField() {
                     @Override public WorldBounds bounds() { return BOUNDS; }
                     @Override public TerrainMaterialKey materialAt(int x, int y, int z) {
@@ -91,7 +108,7 @@ final class CausalSoilFormationBootstrapIntegrationTest {
                 hydraulics);
 
         GeneratedWorldPreparation preparation = new GeneratedWorldPreparation(
-                new WorldAtlasGenerator(),
+                atlasGenerator,
                 morphology,
                 terrain,
                 formation);
