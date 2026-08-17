@@ -4,13 +4,13 @@ import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
+import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfileBindings;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.preparation.GeneratedWorldPreparation;
 import io.github.evoforge.simulation.world.preparation.PreparedGeneratedWorld;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
 
 /**
@@ -112,6 +112,26 @@ public final class GeneratedWorldBootstrap {
             throw new IllegalArgumentException("generated world bootstrap inputs must not be null");
         }
         PreparedGeneratedWorld prepared = preparation.prepare(genesis, profile);
+        return runtimeBootstrap.start(prepared, assembly, bindings);
+    }
+
+    /**
+     * One-call path that develops authored Soil semantics into spatial generated physical facts.
+     */
+    public GeneratedWorldRuntime create(
+            WorldGenesis genesis,
+            SimulationAssembly assembly,
+            CompiledTerrainProfile profile,
+            SoilSemanticProfileBindings soilSemantics,
+            TerrainMaterialBindings bindings) {
+        if (genesis == null
+                || assembly == null
+                || profile == null
+                || soilSemantics == null
+                || bindings == null) {
+            throw new IllegalArgumentException("generated world bootstrap inputs must not be null");
+        }
+        PreparedGeneratedWorld prepared = preparation.prepare(genesis, profile, soilSemantics);
         return runtimeBootstrap.start(prepared, assembly, bindings);
     }
 
