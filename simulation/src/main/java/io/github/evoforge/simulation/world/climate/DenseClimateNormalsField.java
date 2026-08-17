@@ -3,19 +3,19 @@ package io.github.evoforge.simulation.world.climate;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Dense immutable generated climate facts over one finite world XY area. */
+/** Immutable V5 climate facts: spatial temperature plus compact uniform water normals. */
 public final class DenseClimateNormalsField implements ClimateNormalsField {
     private final WorldBounds bounds;
     private final int width;
     private final int[] meanTemperatureMilliCelsius;
-    private final CellVolumeRate[] precipitationSupply;
-    private final CellVolumeRate[] evaporativeDemand;
+    private final CellVolumeRate precipitationSupply;
+    private final CellVolumeRate evaporativeDemand;
 
     public DenseClimateNormalsField(
             WorldBounds bounds,
             int[] meanTemperatureMilliCelsius,
-            CellVolumeRate[] precipitationSupply,
-            CellVolumeRate[] evaporativeDemand) {
+            CellVolumeRate precipitationSupply,
+            CellVolumeRate evaporativeDemand) {
         if (bounds == null
                 || meanTemperatureMilliCelsius == null
                 || precipitationSupply == null
@@ -26,20 +26,15 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
         width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
-        if (meanTemperatureMilliCelsius.length != area
-                || precipitationSupply.length != area
-                || evaporativeDemand.length != area) {
-            throw new IllegalArgumentException("climate normals arrays must match world XY area");
+        if (meanTemperatureMilliCelsius.length != area) {
+            throw new IllegalArgumentException("temperature array must match world XY area");
         }
         this.meanTemperatureMilliCelsius = meanTemperatureMilliCelsius.clone();
-        this.precipitationSupply = precipitationSupply.clone();
-        this.evaporativeDemand = evaporativeDemand.clone();
-        for (int index = 0; index < area; index++) {
-            ClimateTemperature.ofMilliCelsius(this.meanTemperatureMilliCelsius[index]);
-            if (this.precipitationSupply[index] == null || this.evaporativeDemand[index] == null) {
-                throw new IllegalArgumentException("climate hydrologic rates must not be null");
-            }
+        for (int value : this.meanTemperatureMilliCelsius) {
+            ClimateTemperature.ofMilliCelsius(value);
         }
+        this.precipitationSupply = precipitationSupply;
+        this.evaporativeDemand = evaporativeDemand;
     }
 
     @Override
@@ -54,21 +49,27 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
 
     @Override
     public CellVolumeRate precipitationSupplyAt(int x, int y) {
-        return precipitationSupply[indexOf(x, y)];
+        requireContains(x, y);
+        return precipitationSupply;
     }
 
     @Override
     public CellVolumeRate evaporativeDemandAt(int x, int y) {
-        return evaporativeDemand[indexOf(x, y)];
+        requireContains(x, y);
+        return evaporativeDemand;
     }
 
     private int indexOf(int x, int y) {
+        requireContains(x, y);
+        int localX = x - bounds.minX();
+        int localY = y - bounds.minY();
+        return Math.addExact(Math.multiplyExact(localY, width), localX);
+    }
+
+    private void requireContains(int x, int y) {
         if (!contains(x, y)) {
             throw new IllegalArgumentException(
                     "position outside climate normals field: (" + x + ", " + y + ")");
         }
-        int localX = x - bounds.minX();
-        int localY = y - bounds.minY();
-        return Math.addExact(Math.multiplyExact(localY, width), localX);
     }
 }
