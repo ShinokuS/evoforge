@@ -57,7 +57,9 @@ public final class GeologyGenerationStage implements GeologyGenerator {
             java.util.Arrays.fill(unitOrdinals, (char) granite);
             return new DenseGeologyField(bounds, profile, unitOrdinals, provinceIds);
         }
-        if (!GenerationRevision.V4.equals(revision) && !GenerationRevision.V5.equals(revision)) {
+        if (!GenerationRevision.V4.equals(revision)
+                && !GenerationRevision.V5.equals(revision)
+                && !GenerationRevision.V6.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
