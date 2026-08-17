@@ -3,23 +3,23 @@ package io.github.evoforge.simulation.world.climate;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Immutable V5 climate facts: spatial temperature plus compact uniform water normals. */
+/** Immutable V5+ climate facts: spatial temperature plus compact uniform water normals. */
 public final class DenseClimateNormalsField implements ClimateNormalsField {
     private final WorldBounds bounds;
     private final int width;
     private final int[] meanTemperatureMilliCelsius;
-    private final CellVolumeRate precipitationSupply;
-    private final CellVolumeRate evaporativeDemand;
+    private final CellVolumeRate precipitationNormal;
+    private final CellVolumeRate evaporativeDemandNormal;
 
     public DenseClimateNormalsField(
             WorldBounds bounds,
             int[] meanTemperatureMilliCelsius,
-            CellVolumeRate precipitationSupply,
-            CellVolumeRate evaporativeDemand) {
+            CellVolumeRate precipitationNormal,
+            CellVolumeRate evaporativeDemandNormal) {
         if (bounds == null
                 || meanTemperatureMilliCelsius == null
-                || precipitationSupply == null
-                || evaporativeDemand == null) {
+                || precipitationNormal == null
+                || evaporativeDemandNormal == null) {
             throw new IllegalArgumentException("climate normals field inputs must not be null");
         }
         this.bounds = bounds;
@@ -33,8 +33,8 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
         for (int value : this.meanTemperatureMilliCelsius) {
             ClimateTemperature.ofMilliCelsius(value);
         }
-        this.precipitationSupply = precipitationSupply;
-        this.evaporativeDemand = evaporativeDemand;
+        this.precipitationNormal = precipitationNormal;
+        this.evaporativeDemandNormal = evaporativeDemandNormal;
     }
 
     @Override
@@ -48,15 +48,15 @@ public final class DenseClimateNormalsField implements ClimateNormalsField {
     }
 
     @Override
-    public CellVolumeRate precipitationSupplyAt(int x, int y) {
+    public CellVolumeRate precipitationNormalAt(int x, int y) {
         requireContains(x, y);
-        return precipitationSupply;
+        return precipitationNormal;
     }
 
     @Override
-    public CellVolumeRate evaporativeDemandAt(int x, int y) {
+    public CellVolumeRate evaporativeDemandNormalAt(int x, int y) {
         requireContains(x, y);
-        return evaporativeDemand;
+        return evaporativeDemandNormal;
     }
 
     private int indexOf(int x, int y) {
