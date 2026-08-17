@@ -36,7 +36,7 @@ final class SoilFormationGenerationStageTest {
 
         assertEquals(400_000, field.find(0, 0, 0).porosityPartsPerMillion());
         assertEquals(500_000, field.find(1, 0, 0).porosityPartsPerMillion());
-        assertEquals(600_000, field.find(2, 0, 0).porosityPartsPerMillion());
+        assertEquals(650_000, field.find(2, 0, 0).porosityPartsPerMillion());
     }
 
     @Test
@@ -62,7 +62,7 @@ final class SoilFormationGenerationStageTest {
                 drainage(new long[] {1L, 1L, 3L}),
                 SoilSemanticProfileBindings.of(Map.of(SOIL, base)));
 
-        assertEquals(600_000, field.find(2, 0, 0).porosityPartsPerMillion());
+        assertEquals(650_000, field.find(2, 0, 0).porosityPartsPerMillion());
     }
 
     @Test
