@@ -35,7 +35,9 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 71L,
                 GenerationRevision.V2,
                 RngRevision.V1);
-        GeneratedWorldRuntime world = create(legacy, new WorldAtlasGenerator());
+        GeneratedWorldRuntime world = createWithoutAtmosphericForcing(
+                legacy,
+                new WorldAtlasGenerator());
 
         advance(world, 24L);
         GeneratedWorldDiagnostics diagnostics = audit(world);
@@ -57,7 +59,7 @@ final class GeneratedWorldBootstrapIntegrationTest {
                 ignored -> constantElevation(bounds, 0),
                 new DrainageGenerationStage(),
                 (requestedGenesis, elevation, drainage) -> oneWetColumn(bounds));
-        GeneratedWorldRuntime world = create(genesis, atlasGenerator);
+        GeneratedWorldRuntime world = createWithoutAtmosphericForcing(genesis, atlasGenerator);
 
         GeneratedWorldDiagnostics initial = audit(world);
         assertEquals(0L, initial.tick());
