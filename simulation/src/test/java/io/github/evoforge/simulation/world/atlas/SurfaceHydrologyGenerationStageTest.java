@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 final class SurfaceHydrologyGenerationStageTest {
 
     @Test
-    void currentV5PreservesFiniteChannelWaterAndAdjacentDryShoreline() {
+    void currentV6PreservesFiniteChannelWaterAndAdjacentDryShoreline() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 4, -4, 4);
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 17L);
         ElevationField elevation = constantElevation(bounds, 0);
@@ -25,7 +25,7 @@ final class SurfaceHydrologyGenerationStageTest {
                 elevation,
                 drainage);
 
-        assertEquals(GenerationRevision.V5, genesis.generationRevision());
+        assertEquals(GenerationRevision.V6, genesis.generationRevision());
         for (int y = 0; y <= 4; y++) {
             assertTrue(field.isInitiallyWet(2, y));
             assertFalse(field.isShoreline(2, y));
