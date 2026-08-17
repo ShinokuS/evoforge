@@ -58,7 +58,9 @@ public final class Main extends Game {
                 .addKeyValue("event", "app.dispose")
                 .log("Disposing EvoForge application");
         Screen current = getScreen();
-        if (current != null) current.dispose();
+        if (current != null) {
+            current.dispose();
+        }
     }
 
     private void requestScenario(VisualizerScenario scenario) {
@@ -70,7 +72,9 @@ public final class Main extends Game {
     }
 
     private void showScenarioMenuNow() {
-        replaceScreen(new ScenarioMenuScreen(scenarios, this::requestScenario));
+        replaceScreen(new ScenarioMenuScreen(
+                scenarios,
+                this::requestScenario));
     }
 
     private void showScenarioNow(VisualizerScenario scenario) {
@@ -87,6 +91,8 @@ public final class Main extends Game {
     private void replaceScreen(Screen next) {
         Screen previous = getScreen();
         setScreen(next);
-        if (previous != null) previous.dispose();
+        if (previous != null) {
+            previous.dispose();
+        }
     }
 }
