@@ -40,6 +40,32 @@ final class SoilFormationGenerationStageTest {
     }
 
     @Test
+    void absoluteSlopeDoesNotTurnConcaveAccumulationIntoExposure() {
+        SoilFormationGenerationStage stage = exactTestStage();
+        SoilSemanticProfile base = new SoilSemanticProfile(
+                NormalizedValue.ofPartsPerMillion(500_000),
+                NormalizedValue.ofPartsPerMillion(700_000));
+        SurfaceMorphologyField morphology = new SurfaceMorphologyField() {
+            @Override public WorldBounds bounds() { return BOUNDS; }
+            @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) {
+                return x == 2 ? 4_000_000L : 0L;
+            }
+            @Override public long convexitySubunitsAt(int x, int y) { return 0L; }
+            @Override public long concavitySubunitsAt(int x, int y) {
+                return x == 2 ? 1_000_000L : 0L;
+            }
+        };
+
+        SoilHydraulicProfileField field = stage.generate(
+                uniformMaterial(SOIL),
+                morphology,
+                drainage(new long[] {1L, 1L, 3L}),
+                SoilSemanticProfileBindings.of(Map.of(SOIL, base)));
+
+        assertEquals(600_000, field.find(2, 0, 0).porosityPartsPerMillion());
+    }
+
+    @Test
     void materialWithoutAuthoredSoilSemanticsRemainsNonSoil() {
         SoilFormationGenerationStage stage = exactTestStage();
         TerrainMaterialField materials = new TerrainMaterialField() {
@@ -68,6 +94,7 @@ final class SoilFormationGenerationStageTest {
         SurfaceMorphologyField wrongMorphology = new SurfaceMorphologyField() {
             @Override public WorldBounds bounds() { return other; }
             @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) { return 0L; }
+            @Override public long convexitySubunitsAt(int x, int y) { return 0L; }
             @Override public long concavitySubunitsAt(int x, int y) { return 0L; }
         };
 
@@ -113,10 +140,13 @@ final class SoilFormationGenerationStageTest {
         };
     }
 
-    private static SurfaceMorphologyField morphology(long[] slope, long[] concavity) {
+    private static SurfaceMorphologyField morphology(long[] convexity, long[] concavity) {
         return new SurfaceMorphologyField() {
             @Override public WorldBounds bounds() { return BOUNDS; }
-            @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) { return slope[x]; }
+            @Override public long maximumNeighborSlopeSubunitsAt(int x, int y) {
+                return Math.max(convexity[x], concavity[x]);
+            }
+            @Override public long convexitySubunitsAt(int x, int y) { return convexity[x]; }
             @Override public long concavitySubunitsAt(int x, int y) { return concavity[x]; }
         };
     }
