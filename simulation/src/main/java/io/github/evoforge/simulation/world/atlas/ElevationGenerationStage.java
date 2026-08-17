@@ -104,7 +104,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         int upperRight = sample(random, purpose, latticeX + 1L, latticeY + 1L);
 
         int lower = interpolate(lowerLeft, lowerRight, offsetX, scale);
-        int upper = interpolate(upperLeft, upperRight, offsetY, scale);
+        int upper = interpolate(upperLeft, upperRight, offsetX, scale);
         return interpolate(lower, upper, offsetY, scale);
     }
 
