@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.warmup;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
+import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldBootstrap;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
@@ -33,14 +34,32 @@ final class GeneratedWorldWarmupFixture {
     private GeneratedWorldWarmupFixture() { }
 
     static GeneratedWorldRuntime create(long seed, ClimateSpec climate) {
-        return create(seed, climate, bounds());
+        return create(seed, climate, bounds(), AtmosphericForcingPolicy.CLIMATE_NORMALS);
+    }
+
+    static GeneratedWorldRuntime create(
+            long seed,
+            ClimateSpec climate,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
+        return create(seed, climate, bounds(), atmosphericForcingPolicy);
     }
 
     static GeneratedWorldRuntime create(
             long seed,
             ClimateSpec climate,
             WorldBounds bounds) {
+        return create(seed, climate, bounds, AtmosphericForcingPolicy.CLIMATE_NORMALS);
+    }
+
+    static GeneratedWorldRuntime create(
+            long seed,
+            ClimateSpec climate,
+            WorldBounds bounds,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
         if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
+        if (atmosphericForcingPolicy == null) {
+            throw new IllegalArgumentException("atmospheric forcing policy must not be null");
+        }
         WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds, climate), seed);
         CompiledTerrainProfile terrainProfile = terrainProfile();
         CompiledGeologyProfile geologyProfile = geologyProfile();
@@ -83,7 +102,8 @@ final class GeneratedWorldWarmupFixture {
         bindings = bindings.withMaterials(geologyBindings);
 
         return new GeneratedWorldBootstrap(
-                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)))
+                WorldAtlasGenerator.withGeology(new GeologyGenerationStage(geologyProfile)),
+                atmosphericForcingPolicy)
                 .create(genesis, assembly, terrainProfile, bindings);
     }
 
