@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * First durable climate model.
  *
  * <p>V1-V4 predate thermal climate and therefore retain a uniform datum-temperature fallback.
- * V5 applies the authored elevation cooling rate to precise generated elevation. Precipitation and
+ * V5+ apply the authored elevation cooling rate to precise generated elevation. Precipitation and
  * evaporative-demand normals remain spatially uniform in this slice, so they are stored once rather
  * than materialized into per-column arrays. Weather variability and temperature-driven evaporation
  * are deliberately deferred.</p>
@@ -34,7 +34,8 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 || GenerationRevision.V3.equals(revision)
                 || GenerationRevision.V4.equals(revision)) {
             elevationAware = false;
-        } else if (GenerationRevision.V5.equals(revision)) {
+        } else if (GenerationRevision.V5.equals(revision)
+                || GenerationRevision.V6.equals(revision)) {
             elevationAware = true;
         } else {
             throw new IllegalArgumentException(
