@@ -5,10 +5,14 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.time.SimulationTimeScale;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
+import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileField;
+import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicRuntimeFieldCompiler;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
+import io.github.evoforge.simulation.world.preparation.GeneratedLandscapeProperties;
 import io.github.evoforge.simulation.world.preparation.PreparedGeneratedWorld;
+import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Optional;
 
@@ -16,8 +20,8 @@ import java.util.Optional;
  * Starts simulation from already prepared immutable world data.
  *
  * <p>This class never invokes world generation or calibration. Its responsibilities are one-way
- * materialization of prepared facts into runtime stores, runtime-only atmosphere composition, and
- * starting SimulationAssembly.</p>
+ * materialization of prepared facts into runtime stores, physical-to-runtime compilation of already
+ * generated properties, runtime-only atmosphere composition, and starting SimulationAssembly.</p>
  */
 public final class GeneratedWorldRuntimeBootstrap {
     private final AtmosphericRuntimePlan atmospherePlan;
@@ -65,7 +69,8 @@ public final class GeneratedWorldRuntimeBootstrap {
         return start(
                 prepared.atlas(),
                 assembly,
-                TerrainMaterialResolver.resolved(prepared.terrainMaterials(), bindings));
+                TerrainMaterialResolver.resolved(prepared.terrainMaterials(), bindings),
+                prepared.landscapeProperties());
     }
 
     /** Specialized path for callers that intentionally own stable-material resolution. */
@@ -76,8 +81,24 @@ public final class GeneratedWorldRuntimeBootstrap {
         if (atlas == null || assembly == null || materials == null) {
             throw new IllegalArgumentException("runtime bootstrap inputs must not be null");
         }
+        return start(atlas, assembly, materials, GeneratedLandscapeProperties.empty(
+                atlas.genesis().spec().bounds()));
+    }
+
+    private GeneratedWorldRuntime start(
+            WorldAtlas atlas,
+            SimulationAssembly assembly,
+            TerrainMaterialResolver materials,
+            GeneratedLandscapeProperties landscapeProperties) {
+        if (atlas == null || assembly == null || materials == null || landscapeProperties == null) {
+            throw new IllegalArgumentException("runtime bootstrap inputs must not be null");
+        }
 
         WorldBounds bounds = atlas.genesis().spec().bounds();
+        if (!bounds.equals(landscapeProperties.bounds())) {
+            throw new IllegalArgumentException(
+                    "generated landscape property bounds must match runtime world bounds");
+        }
         assembly.worldBounds(
                 bounds.minX(), bounds.maxX(),
                 bounds.minY(), bounds.maxY(),
@@ -86,6 +107,9 @@ public final class GeneratedWorldRuntimeBootstrap {
         atlas.genesis().spec().physicalSpaceScale().ifPresent(scale ->
                 assembly.physicalCellVolumeMilliliters(
                         scale.physicalCellVolumeExact().millilitersPerFullCell()));
+
+        landscapeProperties.soilHydraulics().ifPresent(field ->
+                configureGeneratedSoil(atlas, assembly, field));
 
         TerrainMaterializationResult materialization = assembly.materializeGeneratedTerrain(
                 atlas.elevation(), materials);
@@ -101,6 +125,23 @@ public final class GeneratedWorldRuntimeBootstrap {
                 runtime,
                 timeScale,
                 atmosphere.weather());
+    }
+
+    private void configureGeneratedSoil(
+            WorldAtlas atlas,
+            SimulationAssembly assembly,
+            SoilHydraulicProfileField field) {
+        PhysicalSpaceScale spaceScale = atlas.genesis().spec().physicalSpaceScale()
+                .orElseThrow(() -> new IllegalStateException(
+                        "generated Soil hydraulics require a physical world scale"));
+        SimulationTimeScale resolvedTimeScale = timeScale.orElseThrow(() ->
+                new IllegalStateException(
+                        "generated Soil hydraulics require a simulation time scale"));
+        assembly.resolvedSoilProperties(SoilHydraulicRuntimeFieldCompiler.compile(
+                field,
+                atlas.elevation(),
+                spaceScale,
+                resolvedTimeScale));
     }
 
     private static void materializeInitialSurfaceWater(
