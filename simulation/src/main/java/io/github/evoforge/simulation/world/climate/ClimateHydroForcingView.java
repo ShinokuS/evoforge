@@ -7,9 +7,10 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 /**
  * Narrow runtime-facing hydrologic projection of authoritative climate normals.
  *
- * <p>This view owns no generated state. Rain and evaporation use it only to consume the water
- * forcing dimensions they understand today, while the full climate field remains the durable
- * generated fact.</p>
+ * <p>This view owns no generated state. It deliberately translates durable long-term normals into
+ * the existing per-tick forcing protocol only when runtime composition chooses to install it. A
+ * future WeatherState may replace this direct projection without changing ClimateNormals ownership.
+ * </p>
  */
 public final class ClimateHydroForcingView implements HydroClimateField {
     private final ClimateNormalsField climate;
@@ -28,11 +29,11 @@ public final class ClimateHydroForcingView implements HydroClimateField {
 
     @Override
     public CellVolumeRate precipitationSupplyAt(int x, int y) {
-        return climate.precipitationSupplyAt(x, y);
+        return climate.precipitationNormalAt(x, y);
     }
 
     @Override
     public CellVolumeRate evaporativeDemandAt(int x, int y) {
-        return climate.evaporativeDemandAt(x, y);
+        return climate.evaporativeDemandNormalAt(x, y);
     }
 }
