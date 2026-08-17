@@ -40,6 +40,9 @@ This page tracks milestone state and deliberately deferred work. Detailed curren
 - Hydrology visual acceptance: Rain Cycle, stacked Z flow, Geometry/Ramp stress, actual-flow diagnostics, calm-water fixed point checks and hydrology-aware inspector values.
 - Surface-first visualizer presentation with explicit `SURFACE`, `INTERIOR` and `DEBUG_SLICE` perspectives, cell-centric interaction and bounded debug overlays.
 - Optional explicit finite `WorldBounds` through shared `WorldGeometryLookup`; outside a configured runtime box is physically closed without per-domain map-edge rules.
+- Deterministic World Genesis provenance, stable RNG sampling, typed `WorldAtlas` layers, replaceable generation algorithms and explicit generated-world preparation/runtime bootstrap boundaries.
+- Physical V8 climate-water generation contract, weather-state runtime boundary, rainfall-regime calibration and semantic Soil hydraulics preparation.
+- Ocean-first V9 macro elevation driven by `WorldGenerationIntent` (`landCoverage`, `landmassScale`, `fragmentation`) with global sea-level datum and dedicated 3D generation preview.
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal.
 
 ## Accepted baseline
@@ -66,11 +69,11 @@ Surface / Interior developer observation
 
 Water, SoilMoisture, Geometry, Navigation and Movement keep separate authoritative contracts/owners. Presentation is observer-only: the visualizer reads those facts and does not create an alternate surface-world simulation.
 
-The repository now treats accepted `main` states as release/milestone baselines and performs ongoing integration on `develop`. See [Development Workflow](guides/development-workflow.md).
+The repository treats accepted `main` states as release/milestone baselines and performs ongoing integration on `develop`. See [Development Workflow](guides/development-workflow.md).
 
 ## Current living-world sequence
 
-The first real multi-motivation vertical slice is now implemented on the integration branch:
+The first real multi-motivation vertical slice is implemented on the integration line:
 
 ```text
 Hunger + Thirst
@@ -86,11 +89,31 @@ plants / edge lake / rain-created puddles
 
 Thirst/Drink consumes the existing finite Water and generic opportunity/use boundaries rather than adding a Water-specific AI path. A Cow can use adjacent Water on the same standing level or one level below through the shared interaction-access model; perception remains ordinary 3D Vision rather than privileged liquid discovery.
 
-The next mandatory engineering step is **representative scale profiling**. Scheduling frequency, perception indexes, candidate allocation, source lookup, memory layout and other specialized representations must be justified by measured workloads rather than anticipation.
+Representative scale profiling remains mandatory before introducing speculative scheduling, indexing, memory-layout or concurrency work. Scheduling frequency, perception indexes, candidate allocation, source lookup and specialized representations must be justified by measured workloads rather than anticipation.
 
 A richer interruption/preemption policy is deliberately not automatic next work. The current committed intent remains stable while valid; if representative gameplay demonstrates that a newly urgent motivation must interrupt a still-valid action, that concrete case will define the interruption contract.
 
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
+
+## Current world-generation sequence
+
+The active world-generation direction now has a usable first visual vertical slice:
+
+```text
+WorldSpec + seed + WorldGenerationIntent
+                ↓
+          WorldGenesis V9
+                ↓
+     ocean-first ElevationField
+                ↓
+       complete typed WorldAtlas
+                ↓
+        3D macro preview
+```
+
+The current contract intentionally stops at macro land/ocean form. `landCoverage` is calibrated to the nearest representable column count; `landmassScale` and `fragmentation` shape the deterministic spatial field without changing the requested coverage.
+
+The next morphology work should be justified by a visible deficiency in this generated surface. Mountains, tectonic provinces, erosion/weathering history, richer ocean-basin morphology and later hydrology/ecology are **not** pre-created as generic frameworks. Each enters when its first concrete generated fact and acceptance criterion are defined.
 
 ## Separate research / large future milestones
 
@@ -99,7 +122,7 @@ The following remain outside the mandatory immediate sequence and require their 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
 - richer fluid mechanics beyond the baseline deterministic local solver, including richer boundary profiles, derived water-body identity, detailed pressure/inertia/viscosity and erosion;
-- deterministic World Generation and authoritative RNG-stream policy;
+- richer macro world morphology beyond the V9 ocean-first landmass slice: mountain systems, causal geology/deposition history, erosion/weathering and later biome/ecology outcomes;
 - broader plant lifecycle semantics such as age, reproduction, withering and death.
 
 ## Deferred presentation work
@@ -111,6 +134,7 @@ The following remain outside the mandatory immediate sequence and require their 
 - additional terrain materials and material transitions;
 - larger creature/tree/building/equipment art beyond active vertical slices;
 - richer shadows/compositing;
+- broader world-generation preview layers only when a concrete generated fact needs visual inspection;
 - generated-atlas/export tooling if asset authoring demonstrates the need;
 - broader visual chunk/dirty caches only when profiling requires them.
 
@@ -134,14 +158,13 @@ The following remain outside the mandatory immediate sequence and require their 
 
 ## Deferred world/storage work
 
-- generation algorithm and authoritative RNG stream policy;
 - chunk/region dimensions and loaded/unloaded/generated state;
-- generated or streamed world-bound policy beyond the current optional explicit finite runtime box;
+- generated or streamed world-bound policy beyond the current explicit finite runtime box;
 - packed coordinate representation;
 - persistence/network boundaries;
 - authoritative multithreaded mutation.
 
-A future loaded-state model must not silently treat `UNLOADED/UNKNOWN` as ordinary empty geometry. The current explicit `WorldBounds` is a finite runtime containment mechanism, not a world-generation or streaming design.
+A future loaded-state model must not silently treat `UNLOADED/UNKNOWN` as ordinary empty geometry. The current explicit `WorldBounds` is a finite runtime containment mechanism, not a streaming design.
 
 ## Activation rule
 
