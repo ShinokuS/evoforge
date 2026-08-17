@@ -39,6 +39,22 @@ final class SoilHydraulicRuntimeFieldCompilerTest {
     }
 
     @Test
+    void runtimeLookupDoesNotAskGeneratedFieldAboutOpenAir() {
+        WorldBounds bounds = new WorldBounds(0, 0, 0, 0, 0, 1);
+        SoilHydraulicProfile profile = profile(450_000, 8L);
+        SoilHydraulicProfileField field = field(bounds, (x, y, z) -> {
+            if (z > 0) throw new AssertionError("generated Soil field queried above terrain");
+            return profile;
+        });
+
+        SoilPropertiesLookup runtime = SoilHydraulicRuntimeFieldCompiler.compile(
+                field, flat(bounds, 0), ONE_METER_CELL, ONE_HOUR_TICK);
+
+        assertNull(runtime.find(0, 0, 1));
+        assertNull(runtime.find(1, 0, 0));
+    }
+
+    @Test
     void rejectsFieldWhoseBoundsDoNotMatchGeneratedTerrain() {
         ElevationField elevation = flat(new WorldBounds(0, 0, 0, 0, 0, 0), 0);
         SoilHydraulicProfileField field = field(
