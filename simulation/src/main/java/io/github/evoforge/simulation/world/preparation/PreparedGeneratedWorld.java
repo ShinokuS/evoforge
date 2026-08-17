@@ -6,19 +6,37 @@ import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialFie
 /**
  * Immutable generated preparation output consumed later by runtime materialization.
  *
- * <p>This object contains only durable generated facts and stable material identities. It owns no
- * runtime stores, schedulers, mutable WeatherState, or simulation process.</p>
+ * <p>The product contains durable generated facts, stable material identities and generated
+ * physical landscape properties. It owns no runtime stores, schedulers, mutable WeatherState, or
+ * simulation process.</p>
  */
 public record PreparedGeneratedWorld(
         WorldAtlas atlas,
-        TerrainMaterialField terrainMaterials) {
+        TerrainMaterialField terrainMaterials,
+        GeneratedLandscapeProperties landscapeProperties) {
+
+    /** Compatibility baseline for generation stages that have not resolved physical properties. */
+    public PreparedGeneratedWorld(WorldAtlas atlas, TerrainMaterialField terrainMaterials) {
+        this(
+                atlas,
+                terrainMaterials,
+                GeneratedLandscapeProperties.empty(atlas.genesis().spec().bounds()));
+    }
 
     public PreparedGeneratedWorld {
-        if (atlas == null || terrainMaterials == null) {
+        if (atlas == null || terrainMaterials == null || landscapeProperties == null) {
             throw new IllegalArgumentException("prepared generated world components must not be null");
         }
-        if (!atlas.genesis().spec().bounds().equals(terrainMaterials.bounds())) {
+        var bounds = atlas.genesis().spec().bounds();
+        if (!bounds.equals(terrainMaterials.bounds())) {
             throw new IllegalArgumentException("prepared terrain materials must match atlas bounds");
         }
+        if (!bounds.equals(landscapeProperties.bounds())) {
+            throw new IllegalArgumentException("generated landscape properties must match atlas bounds");
+        }
+    }
+
+    public PreparedGeneratedWorld withLandscapeProperties(GeneratedLandscapeProperties properties) {
+        return new PreparedGeneratedWorld(atlas, terrainMaterials, properties);
     }
 }
