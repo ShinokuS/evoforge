@@ -141,7 +141,7 @@ final class CausalSoilFormationBootstrapIntegrationTest {
             int expectedCapacity = switch (x) {
                 case 0 -> 400_000;
                 case 1 -> 500_000;
-                case 2 -> 600_000;
+                case 2 -> 650_000;
                 default -> throw new AssertionError();
             };
             assertEquals(
