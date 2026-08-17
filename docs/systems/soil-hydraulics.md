@@ -9,7 +9,9 @@ Definition
   normalized semantic character
         ↓
 Generated / calibrated properties
-  composition + hydraulic profile
+  composition + physical hydraulic profile
+        ↓
+Generated spatial property field
         ↓
 Runtime representation
         ↓
@@ -73,18 +75,47 @@ coefficients belong only to that model. They are not Definition constants or run
 composition compiler and hydraulic calibrator. Definition loading therefore stops at semantics;
 physical resolution is a separate preparation operation.
 
+## Generated spatial properties
+
+`SoilHydraulicProfileField` is the immutable spatial preparation contract. Material identity is not
+part of that interface: the same `TerrainMaterialKey` may eventually resolve to different hydraulic
+profiles at neighboring coordinates because of parent geology, deposition, compaction, drainage,
+vegetation or soil-development history.
+
+`MaterialSoilHydraulicProfileField` is only the current deterministic baseline. It projects a
+prepared material identity to its calibrated profile and deliberately adds no coordinate noise.
+Later causal soil generators can replace that implementation without changing runtime mechanics.
+
+`GeneratedLandscapeProperties` distinguishes two cases that must not be conflated:
+
+- no generated Soil field was prepared: legacy definition-backed runtime Soil remains available;
+- a generated Soil field exists: it is authoritative per coordinate, including a local `null`
+  meaning that generated Terrain cell is non-porous.
+
+This prevents a spatially resolved non-soil cell from silently falling back to a material-wide Soil
+Definition.
+
 ## Runtime boundary
 
-`SoilHydraulicRuntimeBinder` joins calibrated material-key profiles to runtime landscape IDs.
-`SoilHydraulicRuntimeCompiler` converts porosity and conductivity using `PhysicalSpaceScale` and
-`SimulationTimeScale` into the current `SoilProperties` representation.
+`SoilHydraulicRuntimeCompiler` converts one physical hydraulic profile using `PhysicalSpaceScale`
+and `SimulationTimeScale` into the current `SoilProperties` representation.
 
-Runtime `SoilLiquidSystem` receives a `SoilPropertiesLookup` and never recalibrates or interprets a
-material key. `TerrainSoilPropertiesLookup` now returns the properties bound to terrain; it does not
-hash `(seed,x,y,z)` or invent local pore capacity during simulation.
+`SoilHydraulicRuntimeFieldCompiler` performs that conversion before runtime starts. It preflights the
+solid generated Terrain domain and compiles each distinct physical profile once. The resulting
+`SoilPropertiesLookup` is read-only; runtime lookup does not calibrate, perform unit conversion, or
+invent world properties.
 
-This is intentional: until geology/deposition/history produce a causal spatial property field, a
-truthful homogeneous material is preferable to fake coordinate noise.
+`GeneratedWorldRuntimeBootstrap` injects that lookup into `SimulationAssembly` before `start()`.
+The assembly exposes one pre-start selection seam and freezes it at startup. `SoilLiquidSystem`
+continues to depend only on `SoilPropertiesLookup` and therefore knows nothing about world
+generation, material keys, pedotransfer models or preparation algorithms.
+
+If a prepared generated Soil field is present, explicit physical space and physical tick duration
+are required because physical conductivity cannot be converted honestly without both. If no field
+is present, existing definition-backed Soil behavior is preserved for legacy/manual scenarios.
+
+The obsolete `SoilPropertiesVariation` coordinate-hash path has been removed. Spatial physical
+differences must now arrive as prepared generated facts.
 
 ## Emergent puddles
 
@@ -102,7 +133,7 @@ absorbed amount + remaining free Water
 ordinary liquid flow / retention
 ```
 
-A puddle is therefore an observed state of free Water. Future spatially varying generated hydraulic
+A puddle is therefore an observed state of free Water. Spatially varying generated hydraulic
 properties can make apparently identical topsoil respond differently at neighboring cells without
 changing the liquid mechanic.
 
@@ -112,7 +143,8 @@ Physical conductivity is preserved up to the runtime compilation boundary. The c
 stores permeability as whole normalized volume per tick, so a physical combination requiring a
 fractional unit is rejected rather than silently rounded. Acceptance scenarios must use a physical
 time/space scale that is representable by the current runtime. A later rational infiltration rate
-can remove this representation limit without changing authored semantics or `SoilHydraulicProfile`.
+can remove this representation limit without changing authored semantics, generated fields, or
+`SoilHydraulicProfile`.
 
 ## Acceptance
 
@@ -121,9 +153,12 @@ organic character under the same generated climate and rainfall process. Composi
 are derived before startup; the scenario then demonstrates different retained/free Water response
 through ordinary Weather, Soil and Water systems.
 
-The older `Rain Cycle` acceptance no longer relies on seeded runtime soil variation. It prepares
-explicit low/high hydraulic regions so the test still proves the same causal rule without allowing
-Simulation to manufacture world properties.
+Generated-world integration tests additionally prove that one runtime may expose different
+`SoilProperties` at different coordinates even when all Terrain cells share the same material
+identity, and that an authoritative generated `null` does not fall back to material-wide Soil.
+
+The older `Rain Cycle` and Cow visual fixtures use explicit hydraulic terrain materials. They no
+longer rely on seeded runtime soil variation.
 
 ## Deferred physics
 
