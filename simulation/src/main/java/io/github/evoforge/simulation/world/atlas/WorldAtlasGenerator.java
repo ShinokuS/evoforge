@@ -156,7 +156,8 @@ public final class WorldAtlasGenerator {
                 genesis,
                 elevation,
                 drainage,
-                hydrography);
+                hydrography,
+                climate);
         if (surfaceHydrology == null) {
             throw new IllegalStateException("surfaceHydrologyGenerator returned null");
         }
