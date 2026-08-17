@@ -4,18 +4,16 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import java.util.Arrays;
 
 /**
  * First durable climate model.
  *
  * <p>V1-V4 predate thermal climate and therefore retain a uniform datum-temperature fallback.
  * V5 applies the authored elevation cooling rate to precise generated elevation. Precipitation and
- * evaporative-demand normals are authored once in {@link ClimateSpec} and remain spatially uniform
- * in this slice; weather variability and temperature-driven evaporation are deliberately deferred.
- * </p>
+ * evaporative-demand normals remain spatially uniform in this slice, so they are stored once rather
+ * than materialized into per-column arrays. Weather variability and temperature-driven evaporation
+ * are deliberately deferred.</p>
  */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
 
@@ -47,12 +45,7 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
         int[] temperature = new int[area];
-        CellVolumeRate[] precipitation = new CellVolumeRate[area];
-        CellVolumeRate[] evaporation = new CellVolumeRate[area];
-
         ClimateSpec climate = genesis.spec().climate();
-        Arrays.fill(precipitation, climate.precipitationSupply());
-        Arrays.fill(evaporation, climate.evaporativeDemand());
 
         int index = 0;
         for (long y = bounds.minY(); y <= (long) bounds.maxY(); y++) {
@@ -64,7 +57,11 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                         : climate.datumMeanTemperature().milliCelsius();
             }
         }
-        return new DenseClimateNormalsField(bounds, temperature, precipitation, evaporation);
+        return new DenseClimateNormalsField(
+                bounds,
+                temperature,
+                climate.precipitationSupply(),
+                climate.evaporativeDemand());
     }
 
     private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {
