@@ -26,7 +26,8 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                 && !GenerationRevision.V2.equals(revision)
                 && !GenerationRevision.V3.equals(revision)
                 && !GenerationRevision.V4.equals(revision)
-                && !GenerationRevision.V5.equals(revision)) {
+                && !GenerationRevision.V5.equals(revision)
+                && !GenerationRevision.V6.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
@@ -103,7 +104,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         int upperRight = sample(random, purpose, latticeX + 1L, latticeY + 1L);
 
         int lower = interpolate(lowerLeft, lowerRight, offsetX, scale);
-        int upper = interpolate(upperLeft, upperRight, offsetX, scale);
+        int upper = interpolate(upperLeft, upperRight, offsetY, scale);
         return interpolate(lower, upper, offsetY, scale);
     }
 
