@@ -4,6 +4,7 @@ import io.github.evoforge.visualizer.scenario.agent.CowForagingScenario;
 import io.github.evoforge.visualizer.scenario.agent.CowVisualSearchScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowHerdScenario;
 import io.github.evoforge.visualizer.scenario.agent.LivingCowScenario;
+import io.github.evoforge.visualizer.scenario.environment.GeneratedRainfallRegimeScenario;
 import io.github.evoforge.visualizer.scenario.environment.RainHydrologyScenario;
 import io.github.evoforge.visualizer.scenario.geometry.CutawayScenario;
 import io.github.evoforge.visualizer.scenario.geometry.RampNavigationScenario;
@@ -70,6 +71,7 @@ public final class ScenarioCatalog {
                 ScenarioGroup.of("occupancy", "Occupancy", new OccupancyContentionScenario()),
                 ScenarioGroup.of("water", "Water / Hydrology",
                         new RainHydrologyScenario(),
+                        new GeneratedRainfallRegimeScenario(),
                         new WaterZStackScenario(),
                         new WaterRampGatesScenario()),
                 ScenarioGroup.of("agents", "Agents",
