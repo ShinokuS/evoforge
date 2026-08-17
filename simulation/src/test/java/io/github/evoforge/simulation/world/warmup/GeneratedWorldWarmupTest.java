@@ -16,7 +16,7 @@ final class GeneratedWorldWarmupTest {
     void capturesRequestedAbsoluteCheckpointsThroughOrdinaryRuntimeStepper() {
         GeneratedWorldRuntime world = GeneratedWorldWarmupFixture.create(
                 42L,
-                ClimateSpec.STANDARD_UNFORCED);
+                ClimateSpec.STANDARD_BASELINE);
 
         List<GeneratedWorldDiagnostics> snapshots =
                 new GeneratedWorldWarmup().run(world, 0L, 3L, 7L);
@@ -43,26 +43,26 @@ final class GeneratedWorldWarmupTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED)));
+                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_BASELINE)));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_BASELINE),
                         -1L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_BASELINE),
                         0L, 0L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> warmup.run(
-                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_UNFORCED),
+                        GeneratedWorldWarmupFixture.create(1L, ClimateSpec.STANDARD_BASELINE),
                         2L, 1L));
 
         GeneratedWorldRuntime advanced = GeneratedWorldWarmupFixture.create(
                 1L,
-                ClimateSpec.STANDARD_UNFORCED);
+                ClimateSpec.STANDARD_BASELINE);
         advanced.runtime().stepper().advance();
         assertThrows(
                 IllegalArgumentException.class,
