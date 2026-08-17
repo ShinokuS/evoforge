@@ -28,7 +28,8 @@ import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
+import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialRole;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialSetDefinition;
@@ -52,10 +53,11 @@ import java.util.Map;
 /**
  * Visual proof that one authored Soil material develops different hydraulics from world causes.
  *
- * <p>Both acceptance patches materialize as the same discrete flat Terrain and share exactly one
+ * <p>Both acceptance sites materialize as the same discrete flat Terrain and share exactly one
  * semantic Definition. Only precise generated elevation differs: the left center is convex and the
  * right center is concave. Normal drainage and Soil formation turn those facts into different
- * hydraulics before the same rain reaches Simulation.</p>
+ * hydraulics before the same rain reaches Simulation. Terrain material identity is intentionally
+ * uniform so unrelated geology materialization cannot become a second experimental variable.</p>
  */
 public final class CausalSoilFormationScenario implements VisualizerScenario {
     static final WorldBounds BOUNDS = new WorldBounds(-8, 8, -5, 5, -3, 4);
@@ -92,7 +94,7 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
         GeneratedWorldPreparation preparation = new GeneratedWorldPreparation(
                 new WorldAtlasGenerator(algorithms),
                 new SurfaceMorphologyGenerationStage(),
-                new TerrainMaterialGenerationStage(),
+                uniformTerrainGenerator(),
                 SoilFormationGenerationStage.standard());
         GeneratedWorldBootstrap bootstrap = new GeneratedWorldBootstrap(
                 preparation,
@@ -173,6 +175,22 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
         return new CellWater(retained, free);
     }
 
+    private static TerrainMaterialGenerator uniformTerrainGenerator() {
+        return (elevation, drainage, profile) -> new TerrainMaterialField() {
+            @Override public WorldBounds bounds() { return BOUNDS; }
+
+            @Override
+            public TerrainMaterialKey materialAt(int x, int y, int z) {
+                requireColumn(x, y);
+                if (z < BOUNDS.minZ() || z > SURFACE_Z) {
+                    throw new IllegalArgumentException(
+                            "acceptance material lookup outside generated solid column");
+                }
+                return GROUND;
+            }
+        };
+    }
+
     private static ElevationField acceptanceElevation() {
         return new ElevationField() {
             @Override public WorldBounds bounds() { return BOUNDS; }
@@ -202,7 +220,7 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
     private static void requireColumn(int x, int y) {
         if (x < BOUNDS.minX() || x > BOUNDS.maxX()
                 || y < BOUNDS.minY() || y > BOUNDS.maxY()) {
-            throw new IllegalArgumentException("acceptance elevation outside world bounds");
+            throw new IllegalArgumentException("acceptance coordinate outside world bounds");
         }
     }
 
@@ -224,9 +242,7 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
         return new TerrainProfileCompiler().compile(
                 new TerrainProfileDefinition(
                         "scenario:causal-soil-profile",
-                        List.of(
-                                TerrainPresetCatalog.NATURAL_GROUND,
-                                TerrainPresetCatalog.DEPOSITIONAL_SAND),
+                        List.of(TerrainPresetCatalog.NATURAL_GROUND),
                         "scenario:causal-soil-materials"),
                 new TerrainMaterialSetDefinition(
                         "scenario:causal-soil-materials",
