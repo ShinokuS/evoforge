@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
 final class GeneratedWorldBootstrapIntegrationTest {
 
     @Test
-    void legacyV2UnforcedGeneratedWorldStillStartsWithoutGeneratedWater() {
+    void legacyV2GeneratedWorldStillStartsWithoutGeneratedWater() {
         WorldBounds bounds = bounds();
         WorldGenesis legacy = new WorldGenesis(
-                new WorldSpec(bounds, ClimateSpec.STANDARD_UNFORCED),
+                new WorldSpec(bounds, ClimateSpec.STANDARD),
                 71L,
                 GenerationRevision.V2,
                 RngRevision.V1);
@@ -51,7 +51,7 @@ final class GeneratedWorldBootstrapIntegrationTest {
     void currentGeneratedSurfaceWaterMaterializesBeforeRuntimeAndRemainsFinite() {
         WorldBounds bounds = bounds();
         WorldGenesis genesis = WorldGenesis.current(
-                new WorldSpec(bounds, ClimateSpec.STANDARD_UNFORCED),
+                new WorldSpec(bounds, ClimateSpec.STANDARD),
                 71L);
         WorldAtlasGenerator atlasGenerator = new WorldAtlasGenerator(
                 ignored -> constantElevation(bounds, 0),
@@ -101,6 +101,33 @@ final class GeneratedWorldBootstrapIntegrationTest {
     }
 
     @Test
+    void nonZeroClimateNormalsDoNotForceWaterWhenRuntimeAtmosphereIsDisabled() {
+        ClimateSpec climate = ClimateSpec.of(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                CellVolumeRate.of(80_000L, 1L),
+                CellVolumeRate.of(20_000L, 1L));
+        GeneratedWorldRuntime world = create(
+                WorldGenesis.current(new WorldSpec(bounds(), climate), 991L),
+                new WorldAtlasGenerator(),
+                AtmosphericForcingPolicy.DISABLED);
+
+        assertEquals(
+                climate.precipitationNormal(),
+                world.atlas().climateNormals().precipitationNormalAt(0, 0));
+        assertEquals(
+                climate.evaporativeDemandNormal(),
+                world.atlas().climateNormals().evaporativeDemandNormalAt(0, 0));
+
+        GeneratedWorldDiagnostics initial = audit(world);
+        advance(world, 12L);
+        GeneratedWorldDiagnostics after = audit(world);
+
+        assertTrue(after.surfaceMatchesAtlas());
+        assertEquals(initial.totalWaterVolume(), after.totalWaterVolume());
+    }
+
+    @Test
     void generatedAndLegacyAtmosphericForcingCannotBeCombined() {
         WorldBounds bounds = bounds();
         WorldAtlas atlas = new WorldAtlasGenerator().generate(
@@ -142,12 +169,19 @@ final class GeneratedWorldBootstrapIntegrationTest {
     private static GeneratedWorldRuntime create(
             WorldGenesis genesis,
             WorldAtlasGenerator atlasGenerator) {
+        return create(genesis, atlasGenerator, AtmosphericForcingPolicy.CLIMATE_NORMALS);
+    }
+
+    private static GeneratedWorldRuntime create(
+            WorldGenesis genesis,
+            WorldAtlasGenerator atlasGenerator,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground = assembly.landscapeDefinition(
                 "test:generated-porous-ground");
         assembly.soilProperties(ground, 550_000, 100_000);
 
-        return new GeneratedWorldBootstrap(atlasGenerator).create(
+        return new GeneratedWorldBootstrap(atlasGenerator, atmosphericForcingPolicy).create(
                 genesis,
                 assembly,
                 TerrainMaterialResolver.uniform(ground));
