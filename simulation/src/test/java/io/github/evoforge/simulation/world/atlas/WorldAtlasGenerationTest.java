@@ -15,15 +15,39 @@ import org.junit.jupiter.api.Test;
 final class WorldAtlasGenerationTest {
 
     @Test
-    void currentV5PreservesFrozenDiscreteElevationSamples() {
+    void currentV6PreservesFrozenDiscreteElevationSamples() {
         WorldGenesis genesis = WorldGenesis.current(
                 new WorldSpec(new WorldBounds(-32, 31, -32, 31, -32, 32)),
                 123_456_789L);
 
-        assertEquals(GenerationRevision.V5, genesis.generationRevision());
+        assertEquals(GenerationRevision.V6, genesis.generationRevision());
         ElevationField elevation = new WorldAtlasGenerator().generate(genesis).elevation();
 
         assertFrozenDiscreteSamples(elevation);
+    }
+
+    @Test
+    void v6PreservesV5PreciseElevationEverywhere() {
+        WorldBounds bounds = new WorldBounds(-12, 13, -9, 14, -20, 20);
+        WorldSpec spec = new WorldSpec(bounds);
+        ElevationGenerationStage stage = new ElevationGenerationStage();
+        ElevationField v5 = stage.generate(new WorldGenesis(
+                spec,
+                77L,
+                GenerationRevision.V5,
+                RngRevision.V1));
+        ElevationField v6 = stage.generate(new WorldGenesis(
+                spec,
+                77L,
+                GenerationRevision.V6,
+                RngRevision.V1));
+
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                assertEquals(v5.elevationAt(x, y), v6.elevationAt(x, y));
+                assertEquals(v5.elevationSubunitsAt(x, y), v6.elevationSubunitsAt(x, y));
+            }
+        }
     }
 
     @Test
@@ -47,7 +71,7 @@ final class WorldAtlasGenerationTest {
     }
 
     @Test
-    void currentV5PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
+    void currentV6PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
         WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -40, 40);
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(new WorldSpec(bounds), 991L))
@@ -168,7 +192,7 @@ final class WorldAtlasGenerationTest {
         WorldGenesis unsupported = new WorldGenesis(
                 spec,
                 1L,
-                GenerationRevision.of("test:worldgen-v6"),
+                GenerationRevision.of("test:worldgen-v99"),
                 RngRevision.V1);
 
         assertThrows(IllegalArgumentException.class,
