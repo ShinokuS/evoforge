@@ -30,7 +30,13 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
             ElevationField elevation,
             DrainageField drainage,
             CompiledTerrainProfile profile) {
-        return generateInternal(elevation, null, drainage, null, profile);
+        return generateInternal(
+                elevation,
+                null,
+                drainage,
+                null,
+                new SurfaceMorphologyGenerationStage().generate(elevation),
+                profile);
     }
 
     @Override
@@ -42,7 +48,13 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         if (surfaceHydrology == null) {
             throw new IllegalArgumentException("surfaceHydrology must not be null");
         }
-        return generateInternal(elevation, null, drainage, surfaceHydrology, profile);
+        return generateInternal(
+                elevation,
+                null,
+                drainage,
+                surfaceHydrology,
+                new SurfaceMorphologyGenerationStage().generate(elevation),
+                profile);
     }
 
     @Override
@@ -55,7 +67,34 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
         if (geology == null || surfaceHydrology == null) {
             throw new IllegalArgumentException("geology and surfaceHydrology must not be null");
         }
-        return generateInternal(elevation, geology, drainage, surfaceHydrology, profile);
+        return generateInternal(
+                elevation,
+                geology,
+                drainage,
+                surfaceHydrology,
+                new SurfaceMorphologyGenerationStage().generate(elevation),
+                profile);
+    }
+
+    @Override
+    public TerrainMaterialField generate(
+            ElevationField elevation,
+            GeologyField geology,
+            DrainageField drainage,
+            SurfaceHydrologyField surfaceHydrology,
+            SurfaceMorphologyField morphology,
+            CompiledTerrainProfile profile) {
+        if (geology == null || surfaceHydrology == null || morphology == null) {
+            throw new IllegalArgumentException(
+                    "geology, surface hydrology and morphology must not be null");
+        }
+        return generateInternal(
+                elevation,
+                geology,
+                drainage,
+                surfaceHydrology,
+                morphology,
+                profile);
     }
 
     private TerrainMaterialField generateInternal(
@@ -63,14 +102,18 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
             GeologyField geology,
             DrainageField drainage,
             SurfaceHydrologyField surfaceHydrology,
+            SurfaceMorphologyField morphology,
             CompiledTerrainProfile profile) {
-        if (elevation == null || drainage == null || profile == null) {
+        if (elevation == null || drainage == null || morphology == null || profile == null) {
             throw new IllegalArgumentException(
                     "terrain material generation dependencies must not be null");
         }
         WorldBounds bounds = elevation.bounds();
         if (!bounds.equals(drainage.bounds())) {
             throw new IllegalArgumentException("elevation and drainage bounds must match");
+        }
+        if (!bounds.equals(morphology.bounds())) {
+            throw new IllegalArgumentException("elevation and surface morphology bounds must match");
         }
         if (geology != null && !bounds.equals(geology.bounds())) {
             throw new IllegalArgumentException("geology bounds must match terrain generation bounds");
@@ -80,7 +123,6 @@ public final class TerrainMaterialGenerationStage implements TerrainMaterialGene
                     "surface hydrology bounds must match terrain generation bounds");
         }
 
-        SurfaceMorphologyField morphology = new SurfaceMorphologyGenerationStage().generate(elevation);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         long height = (long) bounds.maxY() - bounds.minY() + 1L;
         long areaLong = Math.multiplyExact((long) width, height);
