@@ -15,12 +15,12 @@ import org.junit.jupiter.api.Test;
 final class WorldAtlasGenerationTest {
 
     @Test
-    void currentV6PreservesFrozenDiscreteElevationSamples() {
+    void currentV7PreservesFrozenDiscreteElevationSamples() {
         WorldGenesis genesis = WorldGenesis.current(
                 new WorldSpec(new WorldBounds(-32, 31, -32, 31, -32, 32)),
                 123_456_789L);
 
-        assertEquals(GenerationRevision.V6, genesis.generationRevision());
+        assertEquals(GenerationRevision.V7, genesis.generationRevision());
         ElevationField elevation = new WorldAtlasGenerator().generate(genesis).elevation();
 
         assertFrozenDiscreteSamples(elevation);
@@ -71,7 +71,7 @@ final class WorldAtlasGenerationTest {
     }
 
     @Test
-    void currentV6PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
+    void currentV7PreservesSubCellPrecisionIncludingRefinedDiscreteFlats() {
         WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -40, 40);
         ElevationField elevation = new WorldAtlasGenerator()
                 .generate(WorldGenesis.current(new WorldSpec(bounds), 991L))
