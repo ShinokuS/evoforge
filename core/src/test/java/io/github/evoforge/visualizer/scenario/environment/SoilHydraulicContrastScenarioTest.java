@@ -20,14 +20,14 @@ final class SoilHydraulicContrastScenarioTest {
         assertEquals(0L, left(session).free());
         assertEquals(0L, right(session).free());
 
-        for (int tick = 1; tick <= 9; tick++) {
+        for (int tick = 1; tick <= 4; tick++) {
             session.runtime().stepper().advance();
         }
-        assertEquals(9L, session.runtime().time().tick());
+        assertEquals(4L, session.runtime().time().tick());
         assertEquals(WeatherPresentationKind.CLEAR, session.weather().current().kind());
 
         session.runtime().stepper().advance();
-        assertEquals(10L, session.runtime().time().tick());
+        assertEquals(5L, session.runtime().time().tick());
         assertEquals(WeatherPresentationKind.RAIN, session.weather().current().kind());
 
         SoilHydraulicContrastScenario.SideWater fast = left(session);
