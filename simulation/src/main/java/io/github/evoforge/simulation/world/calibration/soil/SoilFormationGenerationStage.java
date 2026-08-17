@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * First causal spatial Soil-formation model.
  *
- * <p>The authored material profile remains an immutable archetype. Local topographic exposure,
+ * <p>The authored material profile remains an immutable archetype. Local convex exposure,
  * concavity and drainage accumulation continuously shift only the mineral-fineness coordinate
  * before physical composition and hydraulic calibration. There are no texture classes, coordinate
  * hashes or material-name switches. Organic character is intentionally preserved until vegetation,
@@ -107,16 +107,16 @@ public final class SoilFormationGenerationStage implements SoilFormationGenerato
             long horizontalArea,
             int x,
             int y) {
-        long slope = requireNonNegative(
-                morphology.maximumNeighborSlopeSubunitsAt(x, y),
-                "surface slope");
+        long convexity = requireNonNegative(
+                morphology.convexitySubunitsAt(x, y),
+                "surface convexity");
         long concavity = requireNonNegative(
                 morphology.concavitySubunitsAt(x, y),
                 "surface concavity");
 
-        int slopeResponse = smoothResponse(
-                slope,
-                formationCalibration.slopeCharacteristicSubunits());
+        int exposureResponse = smoothResponse(
+                convexity,
+                formationCalibration.convexityCharacteristicSubunits());
         int concavityResponse = smoothResponse(
                 concavity,
                 formationCalibration.concavityCharacteristicSubunits());
@@ -124,10 +124,10 @@ public final class SoilFormationGenerationStage implements SoilFormationGenerato
                 drainage.contributingAreaAt(x, y),
                 horizontalArea);
 
-        int depositionResponse = Math.toIntExact(roundDivide(
+        int accumulationResponse = Math.toIntExact(roundDivide(
                 (long) concavityResponse * (NormalizedValue.SCALE + (long) drainageResponse),
                 2L * NormalizedValue.SCALE));
-        int netGeomorphicResponse = depositionResponse - slopeResponse;
+        int netGeomorphicResponse = accumulationResponse - exposureResponse;
         int maximumShift = formationCalibration.maximumMineralFinenessShift().partsPerMillion();
         int finenessShift = Math.toIntExact(roundDivideSigned(
                 (long) netGeomorphicResponse * maximumShift,
