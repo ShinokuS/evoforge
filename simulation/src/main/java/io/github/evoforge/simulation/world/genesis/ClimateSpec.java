@@ -7,8 +7,8 @@ import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
  * Requested long-term climate intent before world generation begins.
  *
  * <p>This is the single authored climate source. Generation turns it into spatial
- * {@code ClimateNormalsField} facts; runtime rain/evaporation consume only a derived hydrologic
- * projection of those facts.</p>
+ * {@code ClimateNormalsField} facts. Whether runtime atmospheric processes consume those facts is
+ * a simulation-composition decision and is deliberately not encoded in this world specification.</p>
  */
 public record ClimateSpec(
         ClimateTemperature datumMeanTemperature,
@@ -16,7 +16,13 @@ public record ClimateSpec(
         CellVolumeRate precipitationSupply,
         CellVolumeRate evaporativeDemand) {
 
-    public static final ClimateSpec STANDARD_UNFORCED = new ClimateSpec(
+    /**
+     * Minimal baseline climate used when callers do not author one explicitly.
+     *
+     * <p>The zero water rates are climate values, not a switch that disables runtime atmosphere.
+     * Atmospheric activation belongs to runtime composition.</p>
+     */
+    public static final ClimateSpec STANDARD_BASELINE = new ClimateSpec(
             ClimateTemperature.ofMilliCelsius(12_000),
             250,
             CellVolumeRate.ZERO,
