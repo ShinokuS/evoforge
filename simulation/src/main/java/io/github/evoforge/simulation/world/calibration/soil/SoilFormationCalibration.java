@@ -12,12 +12,12 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
  * its authored archetype.</p>
  */
 public record SoilFormationCalibration(
-        long slopeCharacteristicSubunits,
+        long convexityCharacteristicSubunits,
         long concavityCharacteristicSubunits,
         NormalizedValue maximumMineralFinenessShift) {
 
     public SoilFormationCalibration {
-        if (slopeCharacteristicSubunits <= 0L || concavityCharacteristicSubunits <= 0L) {
+        if (convexityCharacteristicSubunits <= 0L || concavityCharacteristicSubunits <= 0L) {
             throw new IllegalArgumentException(
                     "soil formation characteristic morphology scales must be positive");
         }
