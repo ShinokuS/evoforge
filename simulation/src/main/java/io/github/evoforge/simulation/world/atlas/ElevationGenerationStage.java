@@ -27,7 +27,9 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                 && !GenerationRevision.V3.equals(revision)
                 && !GenerationRevision.V4.equals(revision)
                 && !GenerationRevision.V5.equals(revision)
-                && !GenerationRevision.V6.equals(revision)) {
+                && !GenerationRevision.V6.equals(revision)
+                && !GenerationRevision.V7.equals(revision)
+                && !GenerationRevision.V8.equals(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
