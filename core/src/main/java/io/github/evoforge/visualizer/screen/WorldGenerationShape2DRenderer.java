@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -34,6 +35,8 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             new Color(0.02f, 0.025f, 0.022f, 0.94f);
     private static final Color SHAPE_DIRECTION =
             new Color(1f, 0.78f, 0.08f, 1f);
+    private static final Color OVERVIEW_CONTOUR =
+            new Color(0.12f, 0.17f, 0.09f, 0.32f);
 
     private final VisualizerCamera camera = new VisualizerCamera();
     private final SpriteBatch batch = new SpriteBatch();
@@ -191,6 +194,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         }
         batch.end();
 
+        if (showSurface && stride > 1) {
+            drawOverviewContours(elevation, visible, stride);
+        }
         if (showSurface && showShapeDirections && stride == 1) {
             drawShapeDirections(terrainShapes, visible);
         }
@@ -273,6 +279,69 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         blockLength);
             }
         }
+    }
+
+    /**
+     * Keeps coarse overview readable without reinstating the expensive exact per-cell relief pass.
+     * Lines follow Z changes between the same representative blocks that the LOD terrain renderer
+     * already submits, so cost remains proportional to the bounded overview sample count.
+     */
+    private void drawOverviewContours(
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        diagnostics.setProjectionMatrix(camera.projection());
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        diagnostics.begin(ShapeRenderer.ShapeType.Filled);
+        diagnostics.setColor(OVERVIEW_CONTOUR);
+
+        float thickness = Math.min(
+                camera.worldUnitsPerPixel() * 1.15f,
+                stride * 0.10f);
+        for (int x = visible.minX(); x <= visible.maxX(); x += stride) {
+            int blockWidth = Math.min(stride, visible.maxX() - x + 1);
+            int sampleX = x + blockWidth / 2;
+            for (int y = visible.minY(); y <= visible.maxY(); y += stride) {
+                int blockLength = Math.min(stride, visible.maxY() - y + 1);
+                int sampleY = y + blockLength / 2;
+                long sampleElevation = elevation.elevationSubunitsAt(sampleX, sampleY);
+                if (sampleElevation < 0L) continue;
+                int sampleZ = elevation.elevationAt(sampleX, sampleY);
+
+                int eastX = x + blockWidth;
+                if (eastX <= visible.maxX()) {
+                    int eastWidth = Math.min(stride, visible.maxX() - eastX + 1);
+                    int eastSampleX = eastX + eastWidth / 2;
+                    long eastElevation = elevation.elevationSubunitsAt(eastSampleX, sampleY);
+                    if (eastElevation >= 0L && elevation.elevationAt(eastSampleX, sampleY) != sampleZ) {
+                        diagnostics.rectLine(
+                                eastX,
+                                y,
+                                eastX,
+                                y + blockLength,
+                                thickness);
+                    }
+                }
+
+                int northY = y + blockLength;
+                if (northY <= visible.maxY()) {
+                    int northLength = Math.min(stride, visible.maxY() - northY + 1);
+                    int northSampleY = northY + northLength / 2;
+                    long northElevation = elevation.elevationSubunitsAt(sampleX, northSampleY);
+                    if (northElevation >= 0L && elevation.elevationAt(sampleX, northSampleY) != sampleZ) {
+                        diagnostics.rectLine(
+                                x,
+                                northY,
+                                x + blockWidth,
+                                northY,
+                                thickness);
+                    }
+                }
+            }
+        }
+        diagnostics.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
     private void drawRelief(
