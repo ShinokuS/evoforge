@@ -39,14 +39,18 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final int V12_UPLIFT_SCALE = 112;
     private static final int V12_RIDGE_SCALE = 56;
     private static final int V12_BASIN_SCALE = 144;
-    private static final int V12_LOCAL_RELIEF_PRIMARY_SCALE = 40;
-    private static final int V12_LOCAL_RELIEF_DETAIL_SCALE = 18;
-    private static final int V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM = 650_000;
+    private static final int V12_LOCAL_RELIEF_PRIMARY_SCALE = 32;
+    private static final int V12_LOCAL_RELIEF_DETAIL_SCALE = 14;
+    private static final int V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM = 700_000;
     private static final int V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM =
             NormalizedValue.SCALE - V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM;
     private static final int V12_COASTAL_TRANSITION_CELLS = 12;
     private static final long V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS =
-            8L * ElevationField.SUBUNITS_PER_CELL;
+            7L * ElevationField.SUBUNITS_PER_CELL;
+    private static final long V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS =
+            ElevationField.SUBUNITS_PER_CELL / 8L;
+    private static final long V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS =
+            ElevationField.SUBUNITS_PER_CELL * 3L / 4L;
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
@@ -288,6 +292,9 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         int reliefPpm = intent.relief().partsPerMillion();
         int localReliefPpm = intent.localRelief().partsPerMillion();
 
+        // First build the macro surface only. Local relief is applied in a second pass so its
+        // strength can respond to the actual local macro slope instead of blindly adding noise to
+        // already-busy compact terrain.
         for (int rank = 0; rank < area; rank++) {
             int cell = (int) rankKeys[rank];
             if (!land[cell]) {
@@ -323,42 +330,107 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                     / NormalizedValue.SCALE);
             int heightPpm = lowlandPpm + (int) (((long) (structuredPpm - lowlandPpm)
                     * reliefPpm) / NormalizedValue.SCALE);
+            elevations[cell] = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
+        }
 
-            long elevation = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
-            if (localReliefPpm > 0) {
-                elevation = addV12LocalRelief(
-                        elevation,
+        if (localReliefPpm == 0) {
+            return new DenseElevationField(bounds, elevations);
+        }
+
+        long[] macroElevations = elevations;
+        long[] locallyVaried = Arrays.copyOf(macroElevations, macroElevations.length);
+        for (int localY = 0; localY < height; localY++) {
+            for (int localX = 0; localX < width; localX++) {
+                int cell = localY * width + localX;
+                if (!land[cell]) continue;
+
+                int calmnessPpm = localReliefCalmnessPpm(
+                        macroElevations,
+                        land,
+                        width,
+                        height,
+                        localX,
+                        localY);
+                if (calmnessPpm == 0) continue;
+
+                int x = bounds.minX() + localX;
+                int y = bounds.minY() + localY;
+                locallyVaried[cell] = addV12LocalRelief(
+                        macroElevations[cell],
                         landAmplitude,
                         random,
                         x,
                         y,
-                        localReliefPpm);
+                        localReliefPpm,
+                        calmnessPpm);
             }
-            elevations[cell] = elevation;
         }
-        return new DenseElevationField(bounds, elevations);
+        return new DenseElevationField(bounds, locallyVaried);
     }
 
     /**
-     * Two smooth cell-space bands make local relief read as rolling terrain rather than one broad
-     * quantized shelf. The smaller band is deliberately subordinate: it breaks long plateaus but
-     * cannot turn a compact world back into per-cell noise. There is no exact dead zone; calm areas
-     * emerge from small gradients instead of a hard flat band in the authored field.
+     * Local relief is strongest on genuinely broad macro shelves and fades out on already-steep
+     * terrain. This makes the authored control solve the original problem directly: large plateaus
+     * gain rolling hills, while a small high-relief world does not become noisy everywhere.
      */
+    private static int localReliefCalmnessPpm(
+            long[] macroElevations,
+            boolean[] land,
+            int width,
+            int height,
+            int x,
+            int y) {
+        int cell = y * width + x;
+        long center = macroElevations[cell];
+        long maximumStep = 0L;
+        int neighbours = 0;
+
+        if (x > 0 && land[cell - 1]) {
+            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell - 1]));
+            neighbours++;
+        }
+        if (x + 1 < width && land[cell + 1]) {
+            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell + 1]));
+            neighbours++;
+        }
+        if (y > 0 && land[cell - width]) {
+            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell - width]));
+            neighbours++;
+        }
+        if (y + 1 < height && land[cell + width]) {
+            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell + width]));
+            neighbours++;
+        }
+        if (neighbours == 0) return 0;
+        if (maximumStep <= V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS) {
+            return NormalizedValue.SCALE;
+        }
+        if (maximumStep >= V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS) return 0;
+
+        long coordinate = (maximumStep - V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS)
+                * NormalizedValue.SCALE
+                / (V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS
+                        - V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS);
+        return NormalizedValue.SCALE - smoothStepPpm(coordinate);
+    }
+
     private static long addV12LocalRelief(
             long baseElevation,
             long landAmplitude,
             GenerationRandom random,
             int x,
             int y,
-            int localReliefPpm) {
-        long primaryPpm = centeredPpm(organicValueNoise(
+            int localReliefPpm,
+            int calmnessPpm) {
+        // No domain warp here: local relief must stay spatially calm and predictable. The smaller
+        // secondary band breaks very long quantized shelves without introducing cell-scale noise.
+        long primaryPpm = centeredPpm(smoothValueNoise(
                 random,
                 LOCAL_RELIEF,
                 x,
                 y,
                 V12_LOCAL_RELIEF_PRIMARY_SCALE));
-        long detailPpm = centeredPpm(organicValueNoise(
+        long detailPpm = centeredPpm(smoothValueNoise(
                 random,
                 LOCAL_RELIEF_DETAIL,
                 x,
@@ -367,15 +439,34 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         long combinedPpm = (primaryPpm * V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM
                 + detailPpm * V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM)
                 / NormalizedValue.SCALE;
+        long shapedPpm = boostLocalReliefSignal(combinedPpm);
 
-        long fullStrengthOffset = combinedPpm * V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
+        long fullStrengthOffset = shapedPpm * V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
                 / NormalizedValue.SCALE;
-        long offset = fullStrengthOffset * localReliefPpm / NormalizedValue.SCALE;
+        long authoredOffset = fullStrengthOffset * localReliefPpm / NormalizedValue.SCALE;
+        long offset = authoredOffset * calmnessPpm / NormalizedValue.SCALE;
         return Math.max(1L, Math.min(landAmplitude, baseElevation + offset));
+    }
+
+    /** Boosts mid-strength hills/valleys while preserving zero and the authored maximum. */
+    private static long boostLocalReliefSignal(long centeredPpm) {
+        long magnitude = Math.min((long) NormalizedValue.SCALE, Math.abs(centeredPpm));
+        long multiplierPpm = 1_300_000L - magnitude * 300_000L / NormalizedValue.SCALE;
+        long boosted = centeredPpm * multiplierPpm / NormalizedValue.SCALE;
+        return Math.max(-(long) NormalizedValue.SCALE,
+                Math.min((long) NormalizedValue.SCALE, boosted));
     }
 
     private static long centeredPpm(int sample) {
         return (long) sampleToPpm(sample) * 2L - NormalizedValue.SCALE;
+    }
+
+    private static long absoluteDifference(long first, long second) {
+        long difference = first - second;
+        if (difference == Long.MIN_VALUE) {
+            throw new ArithmeticException("elevation difference exceeds signed range");
+        }
+        return Math.abs(difference);
     }
 
     /**
