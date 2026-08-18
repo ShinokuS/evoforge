@@ -93,8 +93,8 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);
-        addVisibilityControl(content, "Surface mesh", showSurface, surfaceVisibility);
-        addVisibilityControl(content, "Ocean plane", showOcean, oceanVisibility);
+        addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
+        addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
 
         TextButton generate = new TextButton("GENERATE", skin);
         generate.addListener(new ChangeListener() {
@@ -143,6 +143,10 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
     float previewRightEdge() {
         return Gdx.graphics.getWidth() - PANEL_MARGIN - PANEL_WIDTH - PANEL_MARGIN;
+    }
+
+    boolean keyboardInputActive() {
+        return stage.getKeyboardFocus() != null;
     }
 
     void render(float delta) {
