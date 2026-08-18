@@ -66,6 +66,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private int coveragePpm = 350_000;
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
+    private int reliefPpm = 600_000;
     private boolean showSurface = true;
     private boolean showOcean = true;
     private float yaw = 45f;
@@ -146,9 +147,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         WorldGenerationIntent intent = new WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(coveragePpm),
                 NormalizedValue.ofPartsPerMillion(scalePpm),
-                NormalizedValue.ofPartsPerMillion(fragmentationPpm));
+                NormalizedValue.ofPartsPerMillion(fragmentationPpm),
+                NormalizedValue.ofPartsPerMillion(reliefPpm));
         WorldGenesis genesis = new WorldGenesis(
-                new WorldSpec(bounds), seed, GenerationRevision.V9, RngRevision.V1, intent);
+                new WorldSpec(bounds), seed, GenerationRevision.V10, RngRevision.V1, intent);
 
         long started = System.nanoTime();
         ElevationField elevation = new ElevationGenerationStage().generate(genesis);
@@ -262,22 +264,26 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private void drawOverlay() {
         batch.begin();
         font.setColor(Color.WHITE);
-        font.draw(batch, "WORLD GENERATION / OCEAN-FIRST V9", 24f, Gdx.graphics.getHeight() - 24f);
+        font.draw(batch, "WORLD GENERATION / MACRO MORPHOLOGY V10", 24f, Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
                 "world %dx%d columns (%,d)   z %d..%d   preview %dx%d   generation %.1f ms",
                 settings.width(), settings.height(), settings.columnCount(), bounds.minZ(), bounds.maxZ(),
                 previewWidth, previewHeight, generationMillis),
                 24f, Gdx.graphics.getHeight() - 48f);
         font.draw(batch, String.format(
-                "seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%",
-                seed, coveragePpm / 10_000f, scalePpm / 10_000f, fragmentationPpm / 10_000f),
+                "seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   relief %.0f%%",
+                seed,
+                coveragePpm / 10_000f,
+                scalePpm / 10_000f,
+                fragmentationPpm / 10_000f,
+                reliefPpm / 10_000f),
                 24f, Gdx.graphics.getHeight() - 72f);
         font.setColor(Color.LIGHT_GRAY);
         font.draw(batch,
-                "A/D: width -/+ | S/W: height -/+ | R: new seed | arrows: land/scale | PgUp/PgDn: fragmentation",
+                "A/D: width -/+ | S/W: height -/+ | Q/E: relief -/+ | arrows: land/scale | PgUp/PgDn: fragmentation",
                 24f, 46f);
         font.draw(batch,
-                "drag: orbit | wheel: zoom | T: surface | O: ocean | Esc: development tools",
+                "R: new seed | drag: orbit | wheel: zoom | T: surface | O: ocean | Esc: development tools",
                 24f, 24f);
         batch.end();
     }
@@ -298,6 +304,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             case COVERAGE -> coveragePpm = clampPpm(coveragePpm + delta);
             case SCALE -> scalePpm = clampPpm(scalePpm + delta);
             case FRAGMENTATION -> fragmentationPpm = clampPpm(fragmentationPpm + delta);
+            case RELIEF -> reliefPpm = clampPpm(reliefPpm + delta);
         }
         regenerate();
     }
@@ -332,7 +339,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         return Math.toIntExact(min + span * sampleIndex / (sampleCount - 1L));
     }
 
-    private enum IntentAxis { COVERAGE, SCALE, FRAGMENTATION }
+    private enum IntentAxis { COVERAGE, SCALE, FRAGMENTATION, RELIEF }
 
     private final class PreviewInput extends InputAdapter {
         @Override
@@ -349,6 +356,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 case Input.Keys.D -> adjustWidth(1);
                 case Input.Keys.S -> adjustHeight(-1);
                 case Input.Keys.W -> adjustHeight(1);
+                case Input.Keys.Q -> adjust(IntentAxis.RELIEF, -STEP_PPM);
+                case Input.Keys.E -> adjust(IntentAxis.RELIEF, STEP_PPM);
                 case Input.Keys.LEFT -> adjust(IntentAxis.COVERAGE, -STEP_PPM);
                 case Input.Keys.RIGHT -> adjust(IntentAxis.COVERAGE, STEP_PPM);
                 case Input.Keys.DOWN -> adjust(IntentAxis.SCALE, -STEP_PPM);
