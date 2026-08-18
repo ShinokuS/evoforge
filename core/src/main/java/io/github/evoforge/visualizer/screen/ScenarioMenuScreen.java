@@ -19,18 +19,12 @@ import java.util.function.Consumer;
 /** Searchable grouped browser for deterministic development scenarios. */
 public final class ScenarioMenuScreen extends ScreenAdapter {
 
-    private static final Color BACKGROUND =
-            new Color(0.035f, 0.045f, 0.052f, 1f);
-    private static final Color PANEL =
-            new Color(0.065f, 0.078f, 0.088f, 1f);
-    private static final Color PANEL_ALT =
-            new Color(0.085f, 0.10f, 0.11f, 1f);
-    private static final Color SELECTED =
-            new Color(0.12f, 0.28f, 0.32f, 1f);
-    private static final Color ACCENT =
-            new Color(0.38f, 0.90f, 0.94f, 1f);
-    private static final Color MUTED =
-            new Color(0.66f, 0.70f, 0.72f, 1f);
+    private static final Color BACKGROUND = new Color(0.035f, 0.045f, 0.052f, 1f);
+    private static final Color PANEL = new Color(0.065f, 0.078f, 0.088f, 1f);
+    private static final Color PANEL_ALT = new Color(0.085f, 0.10f, 0.11f, 1f);
+    private static final Color SELECTED = new Color(0.12f, 0.28f, 0.32f, 1f);
+    private static final Color ACCENT = new Color(0.38f, 0.90f, 0.94f, 1f);
+    private static final Color MUTED = new Color(0.66f, 0.70f, 0.72f, 1f);
 
     private static final float MARGIN = 42f;
     private static final float HEADER_HEIGHT = 126f;
@@ -41,10 +35,10 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     private final ScenarioCatalog catalog;
     private final ScenarioMenuModel model;
     private final Consumer<VisualizerScenario> openScenario;
+    private final Runnable returnToWorkspace;
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer shapes = new ShapeRenderer();
-    private final Skin skin = new Skin(
-            Gdx.files.internal("ui/uiskin.json"));
+    private final Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
     private final BitmapFont font = skin.getFont("window");
     private final Matrix4 projection = new Matrix4();
     private final InputAdapter input = new MenuInput();
@@ -55,19 +49,17 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
     public ScenarioMenuScreen(
             ScenarioCatalog catalog,
-            Consumer<VisualizerScenario> openScenario) {
-
-        if (catalog == null) {
-            throw new IllegalArgumentException(
-                    "catalog must not be null");
-        }
-        if (openScenario == null) {
-            throw new IllegalArgumentException(
-                    "openScenario must not be null");
+            Consumer<VisualizerScenario> openScenario,
+            Runnable returnToWorkspace) {
+        if (catalog == null) throw new IllegalArgumentException("catalog must not be null");
+        if (openScenario == null) throw new IllegalArgumentException("openScenario must not be null");
+        if (returnToWorkspace == null) {
+            throw new IllegalArgumentException("returnToWorkspace must not be null");
         }
         this.catalog = catalog;
         this.model = new ScenarioMenuModel(catalog);
         this.openScenario = openScenario;
+        this.returnToWorkspace = returnToWorkspace;
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
@@ -78,13 +70,8 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(
-                BACKGROUND.r,
-                BACKGROUND.g,
-                BACKGROUND.b,
-                BACKGROUND.a);
+        Gdx.gl.glClearColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b, BACKGROUND.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
         ensureSelectionVisible();
         drawPanels();
         drawText();
@@ -92,9 +79,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
     @Override
     public void resize(int width, int height) {
-        if (width <= 0 || height <= 0) {
-            return;
-        }
+        if (width <= 0 || height <= 0) return;
         this.width = width;
         this.height = height;
         projection.setToOrtho2D(0f, 0f, width, height);
@@ -103,9 +88,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
     @Override
     public void hide() {
-        if (Gdx.input.getInputProcessor() == input) {
-            Gdx.input.setInputProcessor(null);
-        }
+        if (Gdx.input.getInputProcessor() == input) Gdx.input.setInputProcessor(null);
     }
 
     @Override
@@ -123,45 +106,27 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         float listWidth = listWidth();
         float listTop = listTop();
         shapes.setColor(PANEL);
-        shapes.rect(
-                MARGIN,
-                LIST_BOTTOM,
-                listWidth,
-                listTop - LIST_BOTTOM);
+        shapes.rect(MARGIN, LIST_BOTTOM, listWidth, listTop - LIST_BOTTOM);
 
         float detailX = detailX();
         float detailWidth = Math.max(0f, width - detailX - MARGIN);
         if (detailWidth > 180f) {
             shapes.setColor(PANEL);
-            shapes.rect(
-                    detailX,
-                    LIST_BOTTOM,
-                    detailWidth,
-                    listTop - LIST_BOTTOM);
+            shapes.rect(detailX, LIST_BOTTOM, detailWidth, listTop - LIST_BOTTOM);
         }
 
         int capacity = visibleCapacity();
-        int end = Math.min(
-                model.rowCount(),
-                scrollOffset + capacity);
+        int end = Math.min(model.rowCount(), scrollOffset + capacity);
         for (int index = scrollOffset; index < end; index++) {
             float bottom = rowBottom(index - scrollOffset);
             ScenarioMenuModel.Row row = model.row(index);
             if (row.isGroup()) {
                 shapes.setColor(PANEL_ALT);
-                shapes.rect(
-                        MARGIN,
-                        bottom,
-                        listWidth,
-                        ROW_HEIGHT);
+                shapes.rect(MARGIN, bottom, listWidth, ROW_HEIGHT);
             }
             if (index == model.selectedIndex()) {
                 shapes.setColor(SELECTED);
-                shapes.rect(
-                        MARGIN + 3f,
-                        bottom + 2f,
-                        listWidth - 6f,
-                        ROW_HEIGHT - 4f);
+                shapes.rect(MARGIN + 3f, bottom + 2f, listWidth - 6f, ROW_HEIGHT - 4f);
             }
         }
         shapes.end();
@@ -173,18 +138,12 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
         font.getData().setScale(1.18f);
         font.setColor(Color.WHITE);
-        font.draw(
-                batch,
-                "EVOFORGE DEBUG SCENARIOS",
-                MARGIN,
-                height - 38f);
+        font.draw(batch, "EVOFORGE / SCENARIOS", MARGIN, height - 38f);
 
         font.getData().setScale(0.88f);
         font.setColor(MUTED);
-        font.draw(
-                batch,
-                catalog.size() + " scenarios / "
-                        + catalog.groups().size() + " groups",
+        font.draw(batch,
+                catalog.size() + " scenarios / " + catalog.groups().size() + " groups",
                 MARGIN,
                 height - 74f);
 
@@ -197,15 +156,12 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
         drawRows();
         drawDetails();
-
         batch.end();
     }
 
     private void drawRows() {
         int capacity = visibleCapacity();
-        int end = Math.min(
-                model.rowCount(),
-                scrollOffset + capacity);
+        int end = Math.min(model.rowCount(), scrollOffset + capacity);
         float x = MARGIN + 18f;
 
         for (int index = scrollOffset; index < end; index++) {
@@ -214,16 +170,10 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
             if (row.isGroup()) {
                 font.getData().setScale(0.98f);
-                font.setColor(index == model.selectedIndex()
-                        ? ACCENT
-                        : Color.WHITE);
-                String arrow = model.isExpanded(row.group())
-                        ? "v  "
-                        : ">  ";
-                font.draw(
-                        batch,
-                        arrow + row.group().title()
-                                + "  [" + row.group().scenarios().size() + "]",
+                font.setColor(index == model.selectedIndex() ? ACCENT : Color.WHITE);
+                String arrow = model.isExpanded(row.group()) ? "v  " : ">  ";
+                font.draw(batch,
+                        arrow + row.group().title() + "  [" + row.group().scenarios().size() + "]",
                         x,
                         baseline);
             } else {
@@ -231,35 +181,23 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
                 font.setColor(index == model.selectedIndex()
                         ? Color.WHITE
                         : new Color(0.88f, 0.90f, 0.91f, 1f));
-                font.draw(
-                        batch,
-                        "    " + row.scenario().title(),
-                        x + 12f,
-                        baseline);
+                font.draw(batch, "    " + row.scenario().title(), x + 12f, baseline);
             }
         }
 
         if (model.rowCount() == 0) {
             font.getData().setScale(0.92f);
             font.setColor(MUTED);
-            font.draw(
-                    batch,
-                    "No scenarios match this search.",
-                    x,
-                    listTop() - 34f);
+            font.draw(batch, "No scenarios match this search.", x, listTop() - 34f);
         }
     }
 
     private void drawDetails() {
         float x = detailX() + 22f;
         float available = width - x - MARGIN - 20f;
-        if (available <= 160f) {
-            return;
-        }
+        if (available <= 160f) return;
 
-        ScenarioMenuModel.Row row = model.rowCount() == 0
-                ? null
-                : model.selectedRow();
+        ScenarioMenuModel.Row row = model.rowCount() == 0 ? null : model.selectedRow();
         float y = listTop() - 28f;
 
         if (row == null) {
@@ -276,16 +214,13 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
             font.getData().setScale(0.90f);
             font.setColor(Color.WHITE);
-            font.draw(
-                    batch,
-                    row.group().scenarios().size()
-                            + " focused development scenarios",
+            font.draw(batch,
+                    row.group().scenarios().size() + " focused development scenarios",
                     x,
                     y - 42f);
 
             font.setColor(MUTED);
-            font.draw(
-                    batch,
+            font.draw(batch,
                     "Enter/click toggles this group. Type anywhere to search across all groups.",
                     x,
                     y - 88f,
@@ -303,8 +238,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
             font.getData().setScale(0.90f);
             font.setColor(new Color(0.88f, 0.90f, 0.91f, 1f));
-            font.draw(
-                    batch,
+            font.draw(batch,
                     row.scenario().description(),
                     x,
                     y - 86f,
@@ -313,18 +247,13 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
                     true);
 
             font.setColor(MUTED);
-            font.draw(
-                    batch,
-                    "id: " + row.scenario().id(),
-                    x,
-                    LIST_BOTTOM + 86f);
+            font.draw(batch, "id: " + row.scenario().id(), x, LIST_BOTTOM + 86f);
         }
 
         font.getData().setScale(0.78f);
         font.setColor(MUTED);
-        font.draw(
-                batch,
-                "Up/Down select | Left/Right collapse/expand | Enter open | mouse wheel scroll | Backspace edit search | Esc clear",
+        font.draw(batch,
+                "Up/Down select | Left/Right collapse/expand | Enter open | mouse wheel scroll | Backspace edit search | Esc clear/back",
                 x,
                 LIST_BOTTOM + 34f,
                 available,
@@ -333,15 +262,11 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     }
 
     private void activateSelected() {
-        if (model.rowCount() == 0) {
-            return;
-        }
+        if (model.rowCount() == 0) return;
         VisualizerScenario scenario = model.activateSelected();
         clampScroll();
         ensureSelectionVisible();
-        if (scenario != null) {
-            openScenario.accept(scenario);
-        }
+        if (scenario != null) openScenario.accept(scenario);
     }
 
     private void selectRow(int index) {
@@ -375,9 +300,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     }
 
     private int visibleCapacity() {
-        return Math.max(
-                1,
-                (int) ((listTop() - LIST_BOTTOM) / ROW_HEIGHT));
+        return Math.max(1, (int) ((listTop() - LIST_BOTTOM) / ROW_HEIGHT));
     }
 
     private float rowBottom(int visibleIndex) {
@@ -389,9 +312,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     }
 
     private float listWidth() {
-        return Math.max(
-                330f,
-                Math.min(610f, width * 0.48f));
+        return Math.max(330f, Math.min(610f, width * 0.48f));
     }
 
     private float detailX() {
@@ -401,14 +322,10 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     private int rowAt(int screenY) {
         float y = height - screenY;
         float listTop = listTop();
-        if (y < LIST_BOTTOM || y > listTop) {
-            return -1;
-        }
+        if (y < LIST_BOTTOM || y > listTop) return -1;
         int visibleIndex = (int) ((listTop - y) / ROW_HEIGHT);
         int index = scrollOffset + visibleIndex;
-        return index >= 0 && index < model.rowCount()
-                ? index
-                : -1;
+        return index >= 0 && index < model.rowCount() ? index : -1;
     }
 
     private final class MenuInput extends InputAdapter {
@@ -454,9 +371,10 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
                         model.clearQuery();
                         scrollOffset = 0;
                         ensureSelectionVisible();
-                        return true;
+                    } else {
+                        returnToWorkspace.run();
                     }
-                    return false;
+                    return true;
                 }
                 default -> {
                     return false;
@@ -466,9 +384,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
 
         @Override
         public boolean keyTyped(char character) {
-            if (character < 32 || character == 127) {
-                return false;
-            }
+            if (character < 32 || character == 127) return false;
             model.appendQuery(character);
             scrollOffset = 0;
             ensureSelectionVisible();
@@ -476,12 +392,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         }
 
         @Override
-        public boolean touchDown(
-                int screenX,
-                int screenY,
-                int pointer,
-                int button) {
-
+        public boolean touchDown(int screenX, int screenY, int pointer, int button) {
             if (button != Input.Buttons.LEFT
                     || screenX < MARGIN
                     || screenX > MARGIN + listWidth()) {
@@ -489,9 +400,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
             }
 
             int index = rowAt(screenY);
-            if (index < 0) {
-                return false;
-            }
+            if (index < 0) return false;
 
             selectRow(index);
             ScenarioMenuModel.Row row = model.row(index);
@@ -506,13 +415,9 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         }
 
         @Override
-        public boolean scrolled(
-                float amountX,
-                float amountY) {
+        public boolean scrolled(float amountX, float amountY) {
             int direction = amountY > 0f ? 1 : amountY < 0f ? -1 : 0;
-            if (direction != 0) {
-                scrollBy(direction * 3);
-            }
+            if (direction != 0) scrollBy(direction * 3);
             return direction != 0;
         }
     }
