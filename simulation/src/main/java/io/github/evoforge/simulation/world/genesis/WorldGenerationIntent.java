@@ -8,7 +8,8 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  * <p>The values describe desired outcomes and spatial character, not implementation thresholds or
  * physical constants. Generation stages are responsible for calibrating their algorithms to these
  * coordinates. {@code relief} controls macro elevation structure, while {@code localRelief}
- * controls smaller rolling variation inside that macro surface.</p>
+ * controls the strength of smaller regional hills and depressions without directly selecting a
+ * noise frequency or vertical amplitude.</p>
  */
 public record WorldGenerationIntent(
         NormalizedValue landCoverage,
@@ -61,6 +62,6 @@ public record WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
-                NormalizedValue.ofPartsPerMillion(350_000));
+                NormalizedValue.ofPartsPerMillion(250_000));
     }
 }
