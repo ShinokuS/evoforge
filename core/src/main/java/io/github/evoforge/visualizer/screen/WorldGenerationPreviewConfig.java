@@ -7,7 +7,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 /** Immutable generator inputs captured when a world preview is generated. */
 record WorldGenerationPreviewConfig(
         int width,
-        int height,
+        int length,
         long seed,
         int coveragePpm,
         int scalePpm,
@@ -15,8 +15,8 @@ record WorldGenerationPreviewConfig(
         int reliefPpm) {
 
     WorldGenerationPreviewConfig {
-        if (width <= 0 || height <= 0) {
-            throw new IllegalArgumentException("preview dimensions must be positive");
+        if (width <= 0 || length <= 0) {
+            throw new IllegalArgumentException("preview width and length must be positive");
         }
         requirePpm(coveragePpm, "coveragePpm");
         requirePpm(scalePpm, "scalePpm");
@@ -26,12 +26,12 @@ record WorldGenerationPreviewConfig(
 
     WorldBounds bounds() {
         int minX = -width / 2;
-        int minY = -height / 2;
+        int minY = -length / 2;
         return new WorldBounds(
                 minX,
                 minX + width - 1,
                 minY,
-                minY + height - 1,
+                minY + length - 1,
                 -12,
                 12);
     }
@@ -45,11 +45,11 @@ record WorldGenerationPreviewConfig(
     }
 
     long columnCount() {
-        return (long) width * height;
+        return (long) width * length;
     }
 
     int maxHorizontalDimension() {
-        return Math.max(width, height);
+        return Math.max(width, length);
     }
 
     private static void requirePpm(int value, String name) {
