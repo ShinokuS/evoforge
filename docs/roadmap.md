@@ -41,8 +41,8 @@ This page tracks milestone state and deliberately deferred work. Detailed curren
 - Surface-first visualizer presentation with explicit `SURFACE`, `INTERIOR` and `DEBUG_SLICE` perspectives, cell-centric interaction and bounded debug overlays.
 - Optional explicit finite `WorldBounds` through shared `WorldGeometryLookup`; outside a configured runtime box is physically closed without per-domain map-edge rules.
 - Deterministic World Genesis provenance, stable RNG sampling, typed `WorldAtlas` layers, replaceable generation algorithms and explicit generated-world preparation/runtime bootstrap boundaries.
-- Physical V8 climate-water generation contract, weather-state runtime boundary, rainfall-regime calibration and semantic Soil hydraulics preparation.
-- Ocean-first V9 macro elevation driven by `WorldGenerationIntent` (`landCoverage`, `landmassScale`, `fragmentation`) with global sea-level datum and dedicated 3D generation preview.
+- Physical climate-water generation contract, weather-state runtime boundary, rainfall-regime calibration and semantic Soil hydraulics preparation.
+- Accepted V12 ocean-first balanced terrain: calibrated land coverage, coherent landmasses/coasts, broad uplift, explicit hills/depressions, rolling relief and rugged ridges, with deterministic 2D/3D preview and tunable presentation performance.
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal.
 
 ## Accepted baseline
@@ -97,23 +97,41 @@ The internal design of a future milestone is introduced by its first real consum
 
 ## Current world-generation sequence
 
-The active world-generation direction now has a usable first visual vertical slice:
+The accepted world-generation baseline is V12. It provides a high-quality **base surface fabric**, not yet a complete geological/hydrological/ecological world:
 
 ```text
 WorldSpec + seed + WorldGenerationIntent
                 ↓
-          WorldGenesis V9
+          WorldGenesis V12
                 ↓
-     ocean-first ElevationField
+ accepted ocean-first base ElevationField
                 ↓
-       complete typed WorldAtlas
+      complete typed WorldAtlas
                 ↓
-        3D macro preview
+ generated-world preparation / materialization
+                ↓
+       2D + 3D developer preview
 ```
 
-The current contract intentionally stops at macro land/ocean form. `landCoverage` is calibrated to the nearest representable column count; `landmassScale` and `fragmentation` shape the deterministic spatial field without changing the requested coverage.
+The current V12 terrain intentionally remains the protected ordinary-landscape baseline. It already supplies coherent landmasses, coastlines, hills, depressions and rugged relief, but its vertical scale is still modest and its existing hydrography is analytical rather than terrain-carving. Future work extends this baseline through explicit later stages instead of silently retuning the accepted V12 landform algorithm.
 
-The next morphology work should be justified by a visible deficiency in this generated surface. Mountains, tectonic provinces, erosion/weathering history, richer ocean-basin morphology and later hydrology/ecology are **not** pre-created as generic frameworks. Each enters when its first concrete generated fact and acceptance criterion are defined.
+The locked sequence is:
+
+1. deep vertical world;
+2. sparse mountain provinces/ranges over V12;
+3. watersheds, basins, outlets and river hierarchy;
+4. river-valley/channel/lake-bowl terrain carving;
+5. finite generated-water handoff into runtime hydrology;
+6. generic coherent Spatial Formation primitives only when the first geology consumer requires them;
+7. coherent geology/strata and authored rock palettes;
+8. caves driven by geology/water causes;
+9. coherent soil identity/formation;
+10. ecological potential;
+11. vegetation communities with controlled mixing and transitions;
+12. derived biome classification;
+13. resources and natural sites.
+
+The canonical contract, current stage ownership and audit findings are documented in [World Generation](systems/world-generation.md) and the [August 2026 pipeline audit](notes/world-generation-pipeline-audit-2026-08.md).
 
 ## Separate research / large future milestones
 
@@ -122,7 +140,7 @@ The following remain outside the mandatory immediate sequence and require their 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
 - richer fluid mechanics beyond the baseline deterministic local solver, including richer boundary profiles, derived water-body identity, detailed pressure/inertia/viscosity and erosion;
-- richer macro world morphology beyond the V9 ocean-first landmass slice: mountain systems, causal geology/deposition history, erosion/weathering and later biome/ecology outcomes;
+- tectonic/depositional history beyond the first coherent geology consumer when it proves necessary for accepted formations;
 - broader plant lifecycle semantics such as age, reproduction, withering and death.
 
 ## Deferred presentation work
