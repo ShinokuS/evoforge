@@ -21,10 +21,13 @@ import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
 import io.github.evoforge.visualizer.visual.SurfaceReliefEdgeArt;
+import io.github.evoforge.visualizer.visual.TerrainElevationTintShader;
 
 /** Scenario-style top-down inspection of generated terrain surface geometry. */
 final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float FIT_PADDING = 1.08f;
+    private static final float MIN_CAMERA_MARGIN = 2f;
+    private static final float CAMERA_MARGIN_FRACTION = 0.03f;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -39,17 +42,22 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private final ProceduralSliceArt sliceArt = new ProceduralSliceArt();
     private final ProceduralWaterArt waterArt = new ProceduralWaterArt();
     private final SurfaceReliefEdgeArt reliefEdges = new SurfaceReliefEdgeArt();
+    private final TerrainElevationTintShader elevationShader = new TerrainElevationTintShader();
     private final ShapePresentationRegistry shapePresentations =
             ProceduralShapePresentations.create(landscapePack, sliceArt);
     private final Color elevationColor = new Color();
 
     private WorldBounds bounds;
+    private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
     private int viewportWidth = 1;
     private int viewportHeight = 1;
     private int elevationTintPpm = WorldGenerationElevationTint.DEFAULT_STRENGTH_PPM;
     private boolean smoothSampling;
     private boolean showShapeDirections = true;
     private float presentationSeconds;
+    private long lastVisibleColumns;
+    private long lastRenderedSamples;
+    private int lastLodStride = 1;
 
     void resize(int width, int height) {
         if (width <= 0 || height <= 0) return;
@@ -65,6 +73,11 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         fitToWorld();
     }
 
+    void setElevationRange(WorldGenerationElevationRange range) {
+        if (range == null) throw new IllegalArgumentException("elevation range must not be null");
+        elevationRange = range;
+    }
+
     void setElevationTintPpm(int strengthPpm) {
         if (strengthPpm < 0 || strengthPpm > WorldGenerationElevationTint.SCALE) {
             throw new IllegalArgumentException("elevation color sensitivity must be normalized ppm");
@@ -74,23 +87,27 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
     void update(float delta, boolean keyboardNavigation) {
         presentationSeconds += Math.min(Math.max(delta, 0f), 0.1f);
-        if (!keyboardNavigation) return;
-        int x = 0;
-        int y = 0;
-        if (Gdx.input.isKeyPressed(Input.Keys.A)) x--;
-        if (Gdx.input.isKeyPressed(Input.Keys.D)) x++;
-        if (Gdx.input.isKeyPressed(Input.Keys.S)) y--;
-        if (Gdx.input.isKeyPressed(Input.Keys.W)) y++;
-        if (x != 0 || y != 0) camera.pan(x, y, delta);
+        if (keyboardNavigation) {
+            int x = 0;
+            int y = 0;
+            if (Gdx.input.isKeyPressed(Input.Keys.A)) x--;
+            if (Gdx.input.isKeyPressed(Input.Keys.D)) x++;
+            if (Gdx.input.isKeyPressed(Input.Keys.S)) y--;
+            if (Gdx.input.isKeyPressed(Input.Keys.W)) y++;
+            if (x != 0 || y != 0) camera.pan(x, y, delta);
+        }
+        constrainCamera();
     }
 
     void zoom(float amountY) {
         camera.zoom(amountY);
+        constrainCamera();
     }
 
     void panByPixels(float deltaX, float deltaY) {
         float worldPerPixel = camera.worldUnitsPerPixel();
         camera.panBy(-deltaX * worldPerPixel, deltaY * worldPerPixel);
+        constrainCamera();
     }
 
     void fitToWorld() {
@@ -101,6 +118,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 bounds.minY(),
                 (float) bounds.maxY() + 1f,
                 FIT_PADDING);
+        constrainCamera();
     }
 
     void toggleShapeDirections() {
@@ -111,6 +129,18 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         return camera.zoomLabel();
     }
 
+    int lodStride() {
+        return lastLodStride;
+    }
+
+    long visibleColumns() {
+        return lastVisibleColumns;
+    }
+
+    long renderedSamples() {
+        return lastRenderedSamples;
+    }
+
     void render(
             ElevationField elevation,
             TerrainShapeField terrainShapes,
@@ -118,26 +148,51 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             boolean showOcean) {
         if (elevation == null || terrainShapes == null || bounds == null) return;
 
+        constrainCamera();
         camera.update();
         updateSampling();
         Gdx.gl.glViewport(0, 0, viewportWidth, viewportHeight);
 
         VisualizerCamera.VisibleRange visible = clipped(camera.visibleRange());
-        if (visible != null) {
-            batch.setProjectionMatrix(camera.projection());
-            batch.begin();
-            if (showSurface) {
-                drawTerrain(batch, elevation, terrainShapes, visible);
-                drawRelief(batch, elevation, visible);
-            }
-            if (showOcean) {
-                drawOcean(batch, elevation, visible);
-            }
-            batch.end();
+        if (visible == null) {
+            lastVisibleColumns = 0L;
+            lastRenderedSamples = 0L;
+            lastLodStride = 1;
+            Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+            return;
+        }
 
-            if (showSurface && showShapeDirections) {
-                drawShapeDirections(terrainShapes, visible);
+        int width = visible.maxX() - visible.minX() + 1;
+        int length = visible.maxY() - visible.minY() + 1;
+        int stride = WorldGeneration2DLod.stride(width, length);
+        lastVisibleColumns = Math.multiplyExact((long) width, (long) length);
+        lastRenderedSamples = WorldGeneration2DLod.sampledCells(width, length, stride);
+        lastLodStride = stride;
+
+        batch.setProjectionMatrix(camera.projection());
+        batch.begin();
+        if (showSurface) {
+            elevationShader.apply(batch);
+            if (stride == 1) {
+                drawTerrainDetailed(batch, elevation, terrainShapes, visible);
+            } else {
+                drawTerrainOverview(batch, elevation, visible, stride);
             }
+            elevationShader.clear(batch);
+            batch.setColor(Color.WHITE);
+            if (stride == 1) drawRelief(batch, elevation, visible);
+        }
+        if (showOcean) {
+            if (stride == 1) {
+                drawOceanDetailed(batch, elevation, visible);
+            } else {
+                drawOceanOverview(batch, elevation, visible, stride);
+            }
+        }
+        batch.end();
+
+        if (showSurface && showShapeDirections && stride == 1) {
+            drawShapeDirections(terrainShapes, visible);
         }
 
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -145,6 +200,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
     @Override
     public void dispose() {
+        elevationShader.dispose();
         diagnostics.dispose();
         reliefEdges.dispose();
         waterArt.dispose();
@@ -153,7 +209,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         batch.dispose();
     }
 
-    private void drawTerrain(
+    private void drawTerrainDetailed(
             SpriteBatch batch,
             ElevationField elevation,
             TerrainShapeField terrainShapes,
@@ -168,9 +224,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         y,
                         z,
                         ProceduralLandscapePack.SURFACE_VARIANTS);
-                batch.setColor(WorldGenerationElevationTint.color(
+                batch.setColor(WorldGenerationElevationTint.shaderColor(
                         elevation.elevationSubunitsAt(x, y),
-                        bounds,
+                        elevationRange,
                         elevationTintPpm,
                         elevationColor));
                 batch.draw(
@@ -185,7 +241,38 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         1f);
             }
         }
-        batch.setColor(Color.WHITE);
+    }
+
+    private void drawTerrainOverview(
+            SpriteBatch batch,
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        for (int x = visible.minX(); x <= visible.maxX(); x += stride) {
+            int blockWidth = Math.min(stride, visible.maxX() - x + 1);
+            int sampleX = x + blockWidth / 2;
+            for (int y = visible.minY(); y <= visible.maxY(); y += stride) {
+                int blockLength = Math.min(stride, visible.maxY() - y + 1);
+                int sampleY = y + blockLength / 2;
+                int z = elevation.elevationAt(sampleX, sampleY);
+                int variant = LandscapeTopology.variant(
+                        sampleX,
+                        sampleY,
+                        z,
+                        ProceduralLandscapePack.SURFACE_VARIANTS);
+                batch.setColor(WorldGenerationElevationTint.shaderColor(
+                        elevation.elevationSubunitsAt(sampleX, sampleY),
+                        elevationRange,
+                        elevationTintPpm,
+                        elevationColor));
+                batch.draw(
+                        landscapePack.surface(0xFF, variant),
+                        x,
+                        y,
+                        blockWidth,
+                        blockLength);
+            }
+        }
     }
 
     private void drawRelief(
@@ -218,7 +305,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
 
-    private void drawOcean(
+    private void drawOceanDetailed(
             SpriteBatch batch,
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible) {
@@ -227,6 +314,24 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 if (elevation.elevationSubunitsAt(x, y) >= 0L) continue;
                 batch.draw(waterArt.frame(frame), x, y, 1f, 1f);
+            }
+        }
+    }
+
+    private void drawOceanOverview(
+            SpriteBatch batch,
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        int frame = (int) (presentationSeconds * 5f);
+        for (int x = visible.minX(); x <= visible.maxX(); x += stride) {
+            int blockWidth = Math.min(stride, visible.maxX() - x + 1);
+            int sampleX = x + blockWidth / 2;
+            for (int y = visible.minY(); y <= visible.maxY(); y += stride) {
+                int blockLength = Math.min(stride, visible.maxY() - y + 1);
+                int sampleY = y + blockLength / 2;
+                if (elevation.elevationSubunitsAt(sampleX, sampleY) >= 0L) continue;
+                batch.draw(waterArt.frame(frame), x, y, blockWidth, blockLength);
             }
         }
     }
@@ -303,6 +408,22 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         return minX > maxX || minY > maxY
                 ? null
                 : new VisualizerCamera.VisibleRange(minX, maxX, minY, maxY);
+    }
+
+    private void constrainCamera() {
+        if (bounds == null) return;
+        float width = bounds.maxX() - bounds.minX() + 1f;
+        float length = bounds.maxY() - bounds.minY() + 1f;
+        float margin = Math.max(
+                MIN_CAMERA_MARGIN,
+                Math.min(width, length) * CAMERA_MARGIN_FRACTION);
+        camera.constrainToBounds(
+                bounds.minX(),
+                bounds.maxX() + 1f,
+                bounds.minY(),
+                bounds.maxY() + 1f,
+                margin);
+        camera.update();
     }
 
     private void updateSampling() {
