@@ -2,17 +2,14 @@ package io.github.evoforge.simulation.world.preparation;
 
 import io.github.evoforge.simulation.world.atlas.WorldAtlas;
 import io.github.evoforge.simulation.world.atlas.WorldAtlasGenerator;
-import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerationStage;
 import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerator;
 import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileField;
 import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfileBindings;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
 import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerator;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
-import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationStage;
@@ -25,30 +22,20 @@ import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerator;
  * world facts, stable generated material identities, surface geometry and optional generated
  * physical landscape properties. It never creates or starts a SimulationRuntime and never mutates
  * runtime Water, Soil, WeatherState, schedulers, or object stores.</p>
+ *
+ * <p>Algorithm wiring is owned by {@link WorldPreparationAlgorithms}. This class orchestrates the
+ * dependency order only; individual preparation algorithms remain independently replaceable.</p>
  */
 public final class GeneratedWorldPreparation {
     private final WorldAtlasGenerator atlasGenerator;
-    private final SurfaceMorphologyGenerator surfaceMorphologyGenerator;
-    private final TerrainShapeGenerator terrainShapeGenerator;
-    private final TerrainMaterialGenerator terrainMaterialGenerator;
-    private final SoilFormationGenerator soilFormationGenerator;
+    private final WorldPreparationAlgorithms algorithms;
 
     public GeneratedWorldPreparation() {
-        this(
-                new WorldAtlasGenerator(),
-                new SurfaceMorphologyGenerationStage(),
-                TerrainShapeGenerationStage.standard(),
-                new TerrainMaterialGenerationStage(),
-                SoilFormationGenerationStage.standard());
+        this(new WorldAtlasGenerator(), WorldPreparationAlgorithms.standard());
     }
 
     public GeneratedWorldPreparation(WorldAtlasGenerator atlasGenerator) {
-        this(
-                atlasGenerator,
-                new SurfaceMorphologyGenerationStage(),
-                TerrainShapeGenerationStage.standard(),
-                new TerrainMaterialGenerationStage(),
-                SoilFormationGenerationStage.standard());
+        this(atlasGenerator, WorldPreparationAlgorithms.standard());
     }
 
     public GeneratedWorldPreparation(
@@ -56,10 +43,7 @@ public final class GeneratedWorldPreparation {
             TerrainMaterialGenerator terrainMaterialGenerator) {
         this(
                 atlasGenerator,
-                new SurfaceMorphologyGenerationStage(),
-                TerrainShapeGenerationStage.standard(),
-                terrainMaterialGenerator,
-                SoilFormationGenerationStage.standard());
+                WorldPreparationAlgorithms.standard().withTerrainMaterial(terrainMaterialGenerator));
     }
 
     /** Compatibility injection seam retaining the standard surface-geometry compiler. */
@@ -70,31 +54,38 @@ public final class GeneratedWorldPreparation {
             SoilFormationGenerator soilFormationGenerator) {
         this(
                 atlasGenerator,
-                surfaceMorphologyGenerator,
-                TerrainShapeGenerationStage.standard(),
-                terrainMaterialGenerator,
-                soilFormationGenerator);
+                new WorldPreparationAlgorithms(
+                        surfaceMorphologyGenerator,
+                        TerrainShapeGenerationStage.standard(),
+                        terrainMaterialGenerator,
+                        soilFormationGenerator));
     }
 
-    /** Canonical injection seam for replaceable landscape-preparation algorithms. */
+    /** Compatibility seam for callers that already inject each preparation algorithm separately. */
     public GeneratedWorldPreparation(
             WorldAtlasGenerator atlasGenerator,
             SurfaceMorphologyGenerator surfaceMorphologyGenerator,
             TerrainShapeGenerator terrainShapeGenerator,
             TerrainMaterialGenerator terrainMaterialGenerator,
             SoilFormationGenerator soilFormationGenerator) {
-        if (atlasGenerator == null
-                || surfaceMorphologyGenerator == null
-                || terrainShapeGenerator == null
-                || terrainMaterialGenerator == null
-                || soilFormationGenerator == null) {
-            throw new IllegalArgumentException("world preparation algorithms must not be null");
+        this(
+                atlasGenerator,
+                new WorldPreparationAlgorithms(
+                        surfaceMorphologyGenerator,
+                        terrainShapeGenerator,
+                        terrainMaterialGenerator,
+                        soilFormationGenerator));
+    }
+
+    /** Canonical composition seam for generated-world preparation. */
+    public GeneratedWorldPreparation(
+            WorldAtlasGenerator atlasGenerator,
+            WorldPreparationAlgorithms algorithms) {
+        if (atlasGenerator == null || algorithms == null) {
+            throw new IllegalArgumentException("world preparation dependencies must not be null");
         }
         this.atlasGenerator = atlasGenerator;
-        this.surfaceMorphologyGenerator = surfaceMorphologyGenerator;
-        this.terrainShapeGenerator = terrainShapeGenerator;
-        this.terrainMaterialGenerator = terrainMaterialGenerator;
-        this.soilFormationGenerator = soilFormationGenerator;
+        this.algorithms = algorithms;
     }
 
     /** Generates durable facts only, for specialized materialization paths. */
@@ -132,7 +123,7 @@ public final class GeneratedWorldPreparation {
             throw new IllegalArgumentException("soil semantic bindings must not be null");
         }
         PreparedTerrain prepared = prepareTerrain(genesis, profile);
-        SoilHydraulicProfileField soilHydraulics = soilFormationGenerator.generate(
+        SoilHydraulicProfileField soilHydraulics = algorithms.soilFormation().generate(
                 prepared.materials(),
                 prepared.morphology(),
                 prepared.atlas().drainage(),
@@ -154,7 +145,7 @@ public final class GeneratedWorldPreparation {
             throw new IllegalArgumentException("compiled terrain profile must not be null");
         }
         WorldAtlas atlas = generateFacts(genesis);
-        SurfaceMorphologyField morphology = surfaceMorphologyGenerator.generate(atlas.elevation());
+        SurfaceMorphologyField morphology = algorithms.surfaceMorphology().generate(atlas.elevation());
         if (morphology == null) {
             throw new IllegalStateException("surface morphology generator returned null");
         }
@@ -162,7 +153,7 @@ public final class GeneratedWorldPreparation {
             throw new IllegalStateException(
                     "generated surface morphology must match world genesis bounds");
         }
-        TerrainShapeField shapes = terrainShapeGenerator.generate(
+        TerrainShapeField shapes = algorithms.terrainShape().generate(
                 atlas.genesis().generationRevision(),
                 atlas.elevation());
         if (shapes == null) {
@@ -171,7 +162,7 @@ public final class GeneratedWorldPreparation {
         if (!atlas.genesis().spec().bounds().equals(shapes.bounds())) {
             throw new IllegalStateException("generated terrain shapes must match world genesis bounds");
         }
-        TerrainMaterialField materials = terrainMaterialGenerator.generate(
+        TerrainMaterialField materials = algorithms.terrainMaterial().generate(
                 atlas.elevation(),
                 atlas.geology(),
                 atlas.drainage(),
