@@ -20,7 +20,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(750_000, snapshot.scalePpm());
         assertEquals(250_000, snapshot.fragmentationPpm());
         assertEquals(600_000, snapshot.reliefPpm());
-        assertEquals(350_000, snapshot.localReliefPpm());
+        assertEquals(250_000, snapshot.localReliefPpm());
         assertEquals(4_096L, snapshot.columnCount());
         assertEquals(new WorldBounds(-32, 31, -32, 31, -12, 12), snapshot.bounds());
     }
@@ -55,7 +55,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(64, generated.length());
         assertEquals(350_000, generated.coveragePpm());
         assertEquals(600_000, generated.reliefPpm());
-        assertEquals(350_000, generated.localReliefPpm());
+        assertEquals(250_000, generated.localReliefPpm());
         assertEquals(1L, generated.seed());
 
         WorldGenerationPreviewConfig next = settings.snapshot();
