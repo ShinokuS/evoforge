@@ -41,6 +41,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private final SurfaceReliefEdgeArt reliefEdges = new SurfaceReliefEdgeArt();
     private final ShapePresentationRegistry shapePresentations =
             ProceduralShapePresentations.create(landscapePack, sliceArt);
+    private final Color elevationColor = new Color();
 
     private WorldBounds bounds;
     private int viewportWidth = 1;
@@ -66,7 +67,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
     void setElevationTintPpm(int strengthPpm) {
         if (strengthPpm < 0 || strengthPpm > WorldGenerationElevationTint.SCALE) {
-            throw new IllegalArgumentException("elevation tint must be normalized ppm");
+            throw new IllegalArgumentException("elevation color sensitivity must be normalized ppm");
         }
         elevationTintPpm = strengthPpm;
     }
@@ -167,11 +168,11 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         y,
                         z,
                         ProceduralLandscapePack.SURFACE_VARIANTS);
-                float brightness = WorldGenerationElevationTint.brightness(
+                batch.setColor(WorldGenerationElevationTint.color(
                         elevation.elevationSubunitsAt(x, y),
                         bounds,
-                        elevationTintPpm);
-                batch.setColor(brightness, brightness, brightness, 1f);
+                        elevationTintPpm,
+                        elevationColor));
                 batch.draw(
                         shapePresentations.terrainRegion(
                                 shape,

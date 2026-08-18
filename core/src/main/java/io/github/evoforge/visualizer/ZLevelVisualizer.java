@@ -110,7 +110,7 @@ public final class ZLevelVisualizer {
         shapePresentations = ProceduralShapePresentations.create(landscapePack, sliceArt);
         landscapeRenderer = new LandscapeRenderer(view, shapePresentations, sliceResolver);
         surfaceLandscapeRenderer = new SurfaceLandscapeRenderer(
-                view, shapePresentations, surfaceResolver);
+                view, state, shapePresentations, surfaceResolver);
         surfaceCliffs = new SurfaceCliffRenderer(view, state, camera);
         worldGrid = new WorldGridRenderer(state, camera);
         waterRenderer = new WaterRenderer(view, waterArt);

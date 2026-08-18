@@ -91,6 +91,10 @@ public final class VisualizerDebugPanel {
             @Override public boolean checked(VisualizerState state) { return state.showHeightContours(); }
             @Override public void toggle(VisualizerState state) { state.toggleHeightContours(); }
         },
+        ELEVATION_GRADIENT("Elevation gradient") {
+            @Override public boolean checked(VisualizerState state) { return state.showElevationGradient(); }
+            @Override public void toggle(VisualizerState state) { state.toggleElevationGradient(); }
+        },
         ROUTE("Move route") {
             @Override public boolean checked(VisualizerState state) { return state.showRoute(); }
             @Override public void toggle(VisualizerState state) { state.toggleRoute(); }

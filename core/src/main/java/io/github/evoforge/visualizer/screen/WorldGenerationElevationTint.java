@@ -1,34 +1,36 @@
 package io.github.evoforge.visualizer.screen;
 
-import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.graphics.Color;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.visualizer.visual.TerrainElevationColorRamp;
 
-/** Pure presentation mapping from generated elevation to terrain brightness. */
+/** Generated-world adapter for the shared terrain elevation color ramp. */
 final class WorldGenerationElevationTint {
-    static final int DEFAULT_STRENGTH_PPM = 450_000;
-    static final int SCALE = 1_000_000;
-    private static final float LOW_BRIGHTNESS = 0.62f;
+    static final int DEFAULT_STRENGTH_PPM =
+            TerrainElevationColorRamp.DEFAULT_PREVIEW_SENSITIVITY_PPM;
+    static final int SCALE = TerrainElevationColorRamp.SCALE;
 
     private WorldGenerationElevationTint() {
     }
 
-    static float brightness(long elevationSubunits, WorldBounds bounds, int strengthPpm) {
+    static Color color(
+            long elevationSubunits,
+            WorldBounds bounds,
+            int sensitivityPpm,
+            Color out) {
         if (bounds == null) throw new IllegalArgumentException("world bounds must not be null");
-        if (strengthPpm < 0 || strengthPpm > SCALE) {
-            throw new IllegalArgumentException("tint strength must be normalized ppm");
-        }
-        if (strengthPpm == 0) return 1f;
 
-        long maxLandSubunits = Math.max(
+        long maximum = Math.max(
                 ElevationField.SUBUNITS_PER_CELL,
-                Math.multiplyExact((long) Math.max(1, bounds.maxZ()), ElevationField.SUBUNITS_PER_CELL));
-        float normalized = MathUtils.clamp(
-                (float) Math.max(0L, elevationSubunits) / (float) maxLandSubunits,
-                0f,
-                1f);
-        float fullTint = LOW_BRIGHTNESS + (1f - LOW_BRIGHTNESS) * normalized;
-        float strength = strengthPpm / (float) SCALE;
-        return 1f + (fullTint - 1f) * strength;
+                Math.multiplyExact(
+                        (long) Math.max(1, bounds.maxZ()),
+                        ElevationField.SUBUNITS_PER_CELL));
+        return TerrainElevationColorRamp.color(
+                Math.max(0L, elevationSubunits),
+                0L,
+                maximum,
+                sensitivityPpm,
+                out);
     }
 }
