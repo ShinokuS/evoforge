@@ -12,7 +12,7 @@ import java.util.Arrays;
 
 /**
  * Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology,
- * and V12 separates scale-aware local relief from macro relief.
+ * and V12 adds independently controlled local terrain variation on top of the V11 macro surface.
  */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
@@ -31,9 +31,14 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final GenerationPurposeId WARP_X = GenerationPurposeId.of("world:morphology-warp-x");
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:morphology-warp-y");
     private static final int SAMPLE_MAX = 65_535;
-    private static final int LOCAL_RELIEF_MIN_SCALE = 20;
-    private static final int LOCAL_RELIEF_MAX_SCALE = 48;
-    private static final int LOCAL_RELIEF_MAX_AMPLITUDE_PPM = 140_000;
+
+    // Local relief is calibrated in cell space, not as a percentage of the world's total Z span.
+    // That keeps detailed hills visible on large worlds without making compact worlds noisy.
+    private static final int LOCAL_RELIEF_MIN_SCALE = 24;
+    private static final int LOCAL_RELIEF_MAX_SCALE = 32;
+    private static final int LOCAL_RELIEF_DEAD_ZONE_PPM = 300_000;
+    private static final long LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS =
+            3L * ElevationField.SUBUNITS_PER_CELL;
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
@@ -140,9 +145,9 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     }
 
     /**
-     * V12 decomposes morphology into macro relief plus a bounded local relief band. Macro structures
-     * no longer collapse to very small wavelengths on compact worlds, while local wavelengths stop
-     * growing once they are large enough to remain useful at detailed zoom on large worlds.
+     * V12 deliberately leaves V11 macro morphology untouched when local relief is zero. Local relief
+     * is a separate smooth cell-space layer with quiet bands around its zero crossings, so plateaus
+     * keep calm regions while large worlds retain visible hills and depressions at detailed zoom.
      */
     private static ElevationField generateScaleAwareMorphology(WorldGenesis genesis) {
         return generateStructuredMorphology(genesis, true, true);
@@ -151,7 +156,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static ElevationField generateStructuredMorphology(
             WorldGenesis genesis,
             boolean organic,
-            boolean scaleAwareLocalRelief) {
+            boolean localReliefEnabled) {
         WorldBounds bounds = genesis.spec().bounds();
         validateOceanFirstBounds(bounds);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -187,18 +192,14 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                 (long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
         long oceanAmplitude = Math.multiplyExact(
                 -(long) bounds.minZ(), ElevationField.SUBUNITS_PER_CELL);
-        int upliftScale = scaleAwareLocalRelief
-                ? Math.max(24, maxDimension / 3)
-                : Math.max(8, maxDimension / 3);
-        int ridgeScale = scaleAwareLocalRelief
-                ? Math.max(16, maxDimension / 10)
-                : Math.max(4, maxDimension / 10);
-        int basinScale = scaleAwareLocalRelief
-                ? Math.max(24, maxDimension / 4)
-                : Math.max(8, maxDimension / 4);
-        int localScale = scaleAwareLocalRelief ? localReliefScale(maxDimension) : 0;
+
+        // V12 uses the exact V11 macro calibration. Only the separate local layer differs.
+        int upliftScale = Math.max(8, maxDimension / 3);
+        int ridgeScale = Math.max(4, maxDimension / 10);
+        int basinScale = Math.max(8, maxDimension / 4);
+        int localScale = localReliefEnabled ? localReliefScale(maxDimension) : 0;
         int reliefPpm = intent.relief().partsPerMillion();
-        int localReliefPpm = scaleAwareLocalRelief
+        int localReliefPpm = localReliefEnabled
                 ? intent.localRelief().partsPerMillion()
                 : 0;
 
@@ -238,22 +239,26 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                     / NormalizedValue.SCALE);
             int heightPpm = lowlandPpm + (int) (((long) (structuredPpm - lowlandPpm)
                     * reliefPpm) / NormalizedValue.SCALE);
+
+            long elevation = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
             if (localReliefPpm > 0) {
-                heightPpm = addLocalRelief(
-                        heightPpm,
+                elevation = addLocalRelief(
+                        elevation,
+                        landAmplitude,
                         random,
                         x,
                         y,
                         localScale,
                         localReliefPpm);
             }
-            elevations[cell] = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
+            elevations[cell] = elevation;
         }
         return new DenseElevationField(bounds, elevations);
     }
 
-    private static int addLocalRelief(
-            int heightPpm,
+    private static long addLocalRelief(
+            long baseElevation,
+            long landAmplitude,
             GenerationRandom random,
             int x,
             int y,
@@ -261,13 +266,32 @@ public final class ElevationGenerationStage implements ElevationGenerator {
             int localReliefPpm) {
         int samplePpm = sampleToPpm(smoothValueNoise(random, LOCAL_RELIEF, x, y, scale));
         long centeredPpm = (long) samplePpm * 2L - NormalizedValue.SCALE;
-        long offsetPpm = centeredPpm * localReliefPpm / NormalizedValue.SCALE;
-        offsetPpm = offsetPpm * LOCAL_RELIEF_MAX_AMPLITUDE_PPM / NormalizedValue.SCALE;
-        return clampPpm((long) heightPpm + offsetPpm);
+        long shapedPpm = localReliefShapePpm(centeredPpm);
+        long fullStrengthOffset = shapedPpm * LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
+                / NormalizedValue.SCALE;
+        long offset = fullStrengthOffset * localReliefPpm / NormalizedValue.SCALE;
+        return Math.max(1L, Math.min(landAmplitude, baseElevation + offset));
+    }
+
+    /**
+     * Creates broad exact-zero bands between local hills and depressions. The smoothstep shoulder
+     * avoids introducing a derivative jump at the edge of those calm regions.
+     */
+    private static long localReliefShapePpm(long centeredPpm) {
+        long magnitude = Math.abs(centeredPpm);
+        if (magnitude <= LOCAL_RELIEF_DEAD_ZONE_PPM) return 0L;
+
+        long coordinate = (magnitude - LOCAL_RELIEF_DEAD_ZONE_PPM) * NormalizedValue.SCALE
+                / (NormalizedValue.SCALE - LOCAL_RELIEF_DEAD_ZONE_PPM);
+        long coordinateSquared = coordinate * coordinate;
+        long smooth = coordinateSquared
+                * (3L * NormalizedValue.SCALE - 2L * coordinate)
+                / ((long) NormalizedValue.SCALE * NormalizedValue.SCALE);
+        return centeredPpm < 0L ? -smooth : smooth;
     }
 
     private static int localReliefScale(int maxDimension) {
-        int proposed = Math.max(1, maxDimension / 3);
+        int proposed = Math.max(1, maxDimension / 16);
         return Math.max(LOCAL_RELIEF_MIN_SCALE, Math.min(LOCAL_RELIEF_MAX_SCALE, proposed));
     }
 
