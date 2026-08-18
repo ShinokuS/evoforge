@@ -270,8 +270,11 @@ final class ProceduralRampArt {
         pixel(pixmap, ox, oy, x, y, color);
     }
 
-    private static boolean positiveSideIsLowCross(int direction) {
-        return direction == 0 || direction == 1;
+    static boolean positiveSideIsLowCross(int direction) {
+        // +side = (-riseY, riseX). In the local raster, cross=0 is west for +Y,
+        // south for +X, east for -Y and north for -X. Therefore the positive
+        // geometric side maps to cross=0 only for +Y and -Y (directions 0 and 2).
+        return direction == 0 || direction == 2;
     }
 
     private static int sideState(int direction, int topologyMask) {
