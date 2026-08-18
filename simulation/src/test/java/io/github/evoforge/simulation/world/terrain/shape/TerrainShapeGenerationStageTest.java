@@ -4,8 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.ElevationGenerationStage;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
+import io.github.evoforge.simulation.world.genesis.RngRevision;
+import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
+import io.github.evoforge.simulation.world.genesis.WorldGenesis;
+import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.List;
@@ -77,6 +85,31 @@ final class TerrainShapeGenerationStageTest {
                 assertSame(first.shapeOverrideAt(x, y), second.shapeOverrideAt(x, y));
             }
         }
+    }
+
+    @Test
+    void representativeV10WorldActuallyUsesSupportedSurfaceGeometry() {
+        WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -12, 12);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds),
+                42L,
+                GenerationRevision.V10,
+                RngRevision.V1,
+                new WorldGenerationIntent(
+                        NormalizedValue.ofPartsPerMillion(350_000),
+                        NormalizedValue.ofPartsPerMillion(750_000),
+                        NormalizedValue.ofPartsPerMillion(250_000),
+                        NormalizedValue.ofPartsPerMillion(600_000)));
+        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
+
+        TerrainShapeField shapes = TerrainShapeGenerationStage.standard().generate(elevation);
+
+        assertTrue(
+                shapes.overrideCount() > 0L,
+                "representative macro terrain should expose some naturally fitting surface shapes");
+        assertTrue(
+                shapes.overrideCount() < 64L * 64L,
+                "shape compilation must preserve ordinary full-cell terrain where no candidate fits");
     }
 
     private static ElevationField field(IntBinaryOperator heights) {
