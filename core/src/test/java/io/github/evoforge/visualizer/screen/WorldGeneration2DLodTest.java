@@ -13,6 +13,16 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
+    void detailedModeStepsToX2BeforeTheOldHighCostFringe() {
+        int stride = WorldGeneration2DLod.stride(129, 128);
+        long sampled = WorldGeneration2DLod.sampledCells(129, 128, stride);
+
+        assertEquals(2, stride);
+        assertEquals(4_160L, sampled);
+        assertTrue(WorldGeneration2DLod.MAX_DETAILED_CELLS < WorldGeneration2DLod.MAX_SAMPLES);
+    }
+
+    @Test
     void mediumOverviewAlreadyReducesSubmissionWork() {
         int stride = WorldGeneration2DLod.stride(300, 300);
         long sampled = WorldGeneration2DLod.sampledCells(300, 300, stride);
