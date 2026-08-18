@@ -1,7 +1,9 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(64, snapshot.width());
         assertEquals(64, snapshot.length());
         assertEquals(1L, snapshot.seed());
+        assertFalse(settings.randomSeedOnGenerate());
         assertEquals(350_000, snapshot.coveragePpm());
         assertEquals(750_000, snapshot.scalePpm());
         assertEquals(250_000, snapshot.fragmentationPpm());
@@ -73,6 +76,31 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(250_000, next.landformScalePpm());
         assertEquals(900_000, next.ruggednessPpm());
         assertEquals(44L, next.seed());
+    }
+
+    @Test
+    void randomSeedModeChangesOnlyTheSeedUsedForTheNextSnapshot() {
+        WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
+        settings.seed(17L);
+
+        assertEquals(17L, settings.prepareSeedForGeneration(() -> 99L));
+        assertEquals(17L, settings.seed());
+
+        settings.randomSeedOnGenerate(true);
+        assertTrue(settings.randomSeedOnGenerate());
+        assertEquals(-4_321L, settings.prepareSeedForGeneration(() -> -4_321L));
+        assertEquals(-4_321L, settings.seed());
+        assertEquals(-4_321L, settings.snapshot().seed());
+
+        settings.randomSeedOnGenerate(false);
+        assertEquals(-4_321L, settings.prepareSeedForGeneration(() -> 123L));
+        assertEquals(-4_321L, settings.seed());
+    }
+
+    @Test
+    void randomSeedResolutionRejectsMissingSource() {
+        WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
+        assertThrows(IllegalArgumentException.class, () -> settings.prepareSeedForGeneration(null));
     }
 
     @Test
