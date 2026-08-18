@@ -122,7 +122,10 @@ public final class PathfindingInvalidationScenario implements VisualizerScenario
                     query, initialVisibleSearch, mutationMarkers());
             ScenarioCellMarker[] cells = new ScenarioCellMarker[previous.cellCount()];
             for (int index = 0; index < cells.length; index++) cells[index] = previous.cell(index);
-            return new ScenarioDiagnostics(cells, "status=STALE | showing pre-change route | solid x8 | slow x14");
+            return new ScenarioDiagnostics(
+                    cells,
+                    previous.route(),
+                    "status=STALE | showing pre-change route | solid x8 | slow x14");
         }
     }
 
