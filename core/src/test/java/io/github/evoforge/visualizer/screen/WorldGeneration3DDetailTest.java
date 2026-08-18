@@ -21,9 +21,16 @@ final class WorldGeneration3DDetailTest {
 
     @Test
     void higherSettingKeepsMoreMeshSamplesOnLargeWorlds() {
-        WorldGeneration3DDetail.maxAxisSamples(240);
+        WorldGeneration3DDetail.maxAxisSamples(384);
 
-        assertEquals(240, WorldGeneration3DDetail.sampleCount(2_000));
+        assertEquals(384, WorldGeneration3DDetail.sampleCount(2_000));
+    }
+
+    @Test
+    void highQualityLimitSupportsLargePreviewMeshes() {
+        WorldGeneration3DDetail.maxAxisSamples(512);
+
+        assertEquals(512, WorldGeneration3DDetail.sampleCount(2_000));
     }
 
     @Test
@@ -33,6 +40,6 @@ final class WorldGeneration3DDetailTest {
                 () -> WorldGeneration3DDetail.maxAxisSamples(63));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> WorldGeneration3DDetail.maxAxisSamples(256));
+                () -> WorldGeneration3DDetail.maxAxisSamples(513));
     }
 }
