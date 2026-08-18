@@ -44,15 +44,18 @@ final class WorldGenerationSettingsPanel implements Disposable {
             boolean showSurface,
             boolean showOcean,
             boolean twoDimensional,
+            int elevationTintPpm,
             Consumer<Boolean> surfaceVisibility,
             Consumer<Boolean> oceanVisibility,
-            Consumer<Boolean> viewMode) {
+            Consumer<Boolean> viewMode,
+            IntConsumer elevationTint) {
 
         if (settings == null
                 || generateAction == null
                 || surfaceVisibility == null
                 || oceanVisibility == null
-                || viewMode == null) {
+                || viewMode == null
+                || elevationTint == null) {
             throw new IllegalArgumentException("world-generation panel dependencies must not be null");
         }
         this.settings = settings;
@@ -93,6 +96,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);
+        addLivePercentControl(content, "Elevation tint", elevationTintPpm, elevationTint);
         addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
         addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
 
@@ -208,6 +212,23 @@ final class WorldGenerationSettingsPanel implements Disposable {
             String name,
             int initialPpm,
             IntConsumer setter) {
+        addPercentControl(content, name, initialPpm, setter, true);
+    }
+
+    private void addLivePercentControl(
+            Table content,
+            String name,
+            int initialPpm,
+            IntConsumer setter) {
+        addPercentControl(content, name, initialPpm, setter, false);
+    }
+
+    private void addPercentControl(
+            Table content,
+            String name,
+            int initialPpm,
+            IntConsumer setter,
+            boolean marksGenerationDirty) {
 
         Slider slider = new Slider(0f, 100f, 1f, false, skin);
         slider.setValue(initialPpm / 10_000f);
@@ -218,7 +239,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 int ppm = Math.round(slider.getValue()) * 10_000;
                 setter.accept(ppm);
                 value.setText(formatPercent(ppm));
-                markDirty();
+                if (marksGenerationDirty) markDirty();
             }
         });
 
