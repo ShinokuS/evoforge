@@ -12,6 +12,7 @@ public final class VisualizerState {
     private int gridMode;
     private int lowerDepthIndex = 3;
     private boolean showHeightContours;
+    private boolean showElevationGradient = true;
     private boolean showRoute = true;
     private boolean showTransitions;
     private boolean showShapeDirections;
@@ -34,6 +35,7 @@ public final class VisualizerState {
     public boolean gridEnabled() { return gridMode != 0; }
     public int lowerDepth() { return LOWER_DEPTH_OPTIONS[lowerDepthIndex]; }
     public boolean showHeightContours() { return showHeightContours; }
+    public boolean showElevationGradient() { return showElevationGradient; }
     public boolean showRoute() { return showRoute; }
     public boolean showTransitions() { return showTransitions; }
     public boolean showShapeDirections() { return showShapeDirections; }
@@ -92,6 +94,7 @@ public final class VisualizerState {
     public void cycleGridMode() { gridMode = (gridMode + 1) % 3; }
     public void toggleGridEnabled() { gridMode = gridMode == 0 ? 1 : 0; }
     public void toggleHeightContours() { showHeightContours = !showHeightContours; }
+    public void toggleElevationGradient() { showElevationGradient = !showElevationGradient; }
     public void toggleRoute() { showRoute = !showRoute; }
     public void toggleTransitions() { showTransitions = !showTransitions; }
     public void toggleShapeDirections() { showShapeDirections = !showShapeDirections; }
