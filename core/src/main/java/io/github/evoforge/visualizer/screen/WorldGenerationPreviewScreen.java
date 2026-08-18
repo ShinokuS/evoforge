@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -15,19 +16,16 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
-import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.ElevationGenerationStage;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
-import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /** Interactive 3D inspection workspace for the current ocean-first macro world slice. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final int STEP_PPM = 50_000;
     private static final int MAX_PREVIEW_AXIS = 160;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
 
@@ -58,15 +56,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private final BitmapFont font = new BitmapFont();
     private final ShaderProgram shader = new ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     private final PreviewInput input = new PreviewInput();
+    private final WorldGenerationSettingsPanel settingsPanel;
+    private final InputMultiplexer inputMultiplexer;
 
-    private WorldBounds bounds = settings.bounds();
+    private WorldGenerationPreviewConfig generatedConfig;
+    private WorldBounds bounds;
     private Mesh surfaceMesh;
     private Mesh oceanMesh;
-    private long seed = 1L;
-    private int coveragePpm = 350_000;
-    private int scalePpm = 750_000;
-    private int fragmentationPpm = 250_000;
-    private int reliefPpm = 600_000;
     private boolean showSurface = true;
     private boolean showOcean = true;
     private float yaw = 45f;
@@ -86,14 +82,21 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             throw new IllegalStateException("world preview shader failed: " + shader.getLog());
         }
         this.returnToWorkspace = returnToWorkspace;
+        this.settingsPanel = new WorldGenerationSettingsPanel(
+                settings,
+                this::regenerate,
+                showSurface,
+                showOcean,
+                visible -> showSurface = visible,
+                visible -> showOcean = visible);
+        this.inputMultiplexer = new InputMultiplexer(settingsPanel.inputProcessor(), input);
         regenerate();
-        fitCameraToWorld();
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
     @Override
     public void show() {
-        Gdx.input.setInputProcessor(input);
+        Gdx.input.setInputProcessor(inputMultiplexer);
     }
 
     @Override
@@ -114,6 +117,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         }
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         drawOverlay();
+        settingsPanel.render(delta);
     }
 
     @Override
@@ -123,45 +127,56 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         camera.viewportWidth = width;
         camera.viewportHeight = height;
         camera.near = 0.1f;
-        camera.far = Math.max(500f, settings.maxHorizontalDimension() * 8f);
+        camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
         camera.update();
         batch.getProjectionMatrix().setToOrtho2D(0f, 0f, width, height);
+        settingsPanel.resize(width, height);
     }
 
     @Override
     public void hide() {
-        if (Gdx.input.getInputProcessor() == input) Gdx.input.setInputProcessor(null);
+        if (Gdx.input.getInputProcessor() == inputMultiplexer) {
+            Gdx.input.setInputProcessor(null);
+        }
     }
 
     @Override
     public void dispose() {
         hide();
         disposeMeshes();
+        settingsPanel.dispose();
         shader.dispose();
         batch.dispose();
         font.dispose();
     }
 
     private void regenerate() {
-        bounds = settings.bounds();
-        WorldGenerationIntent intent = new WorldGenerationIntent(
-                NormalizedValue.ofPartsPerMillion(coveragePpm),
-                NormalizedValue.ofPartsPerMillion(scalePpm),
-                NormalizedValue.ofPartsPerMillion(fragmentationPpm),
-                NormalizedValue.ofPartsPerMillion(reliefPpm));
+        WorldGenerationPreviewConfig previous = generatedConfig;
+        generatedConfig = settings.snapshot();
+        bounds = generatedConfig.bounds();
         WorldGenesis genesis = new WorldGenesis(
-                new WorldSpec(bounds), seed, GenerationRevision.V10, RngRevision.V1, intent);
+                new WorldSpec(bounds),
+                generatedConfig.seed(),
+                GenerationRevision.V10,
+                RngRevision.V1,
+                generatedConfig.intent());
 
         long started = System.nanoTime();
         ElevationField elevation = new ElevationGenerationStage().generate(genesis);
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
-        previewWidth = sampleCount(settings.width());
-        previewHeight = sampleCount(settings.height());
+        previewWidth = sampleCount(generatedConfig.width());
+        previewHeight = sampleCount(generatedConfig.height());
         surfaceMesh = buildSurface(elevation, bounds, previewWidth, previewHeight);
         oceanMesh = buildOcean(bounds);
-        camera.far = Math.max(500f, settings.maxHorizontalDimension() * 8f);
+        camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
+
+        if (previous == null
+                || previous.width() != generatedConfig.width()
+                || previous.height() != generatedConfig.height()) {
+            fitCameraToWorld();
+        }
     }
 
     private static Mesh buildSurface(
@@ -258,7 +273,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     }
 
     private void fitCameraToWorld() {
-        distance = Math.max(50f, settings.maxHorizontalDimension() * 1.4f);
+        distance = Math.max(50f, generatedConfig.maxHorizontalDimension() * 1.4f);
     }
 
     private void drawOverlay() {
@@ -266,25 +281,31 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.setColor(Color.WHITE);
         font.draw(batch, "WORLD GENERATION / MACRO MORPHOLOGY V10", 24f, Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
-                "world %dx%d columns (%,d)   z %d..%d   preview %dx%d   generation %.1f ms",
-                settings.width(), settings.height(), settings.columnCount(), bounds.minZ(), bounds.maxZ(),
-                previewWidth, previewHeight, generationMillis),
-                24f, Gdx.graphics.getHeight() - 48f);
+                "active %dx%d (%,d columns)   z %d..%d   preview %dx%d   generation %.1f ms",
+                generatedConfig.width(),
+                generatedConfig.height(),
+                generatedConfig.columnCount(),
+                bounds.minZ(),
+                bounds.maxZ(),
+                previewWidth,
+                previewHeight,
+                generationMillis),
+                24f,
+                Gdx.graphics.getHeight() - 48f);
         font.draw(batch, String.format(
-                "seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   relief %.0f%%",
-                seed,
-                coveragePpm / 10_000f,
-                scalePpm / 10_000f,
-                fragmentationPpm / 10_000f,
-                reliefPpm / 10_000f),
-                24f, Gdx.graphics.getHeight() - 72f);
+                "active seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   relief %.0f%%",
+                generatedConfig.seed(),
+                generatedConfig.coveragePpm() / 10_000f,
+                generatedConfig.scalePpm() / 10_000f,
+                generatedConfig.fragmentationPpm() / 10_000f,
+                generatedConfig.reliefPpm() / 10_000f),
+                24f,
+                Gdx.graphics.getHeight() - 72f);
         font.setColor(Color.LIGHT_GRAY);
         font.draw(batch,
-                "A/D: width -/+ | S/W: height -/+ | Q/E: relief -/+ | arrows: land/scale | PgUp/PgDn: fragmentation",
-                24f, 46f);
-        font.draw(batch,
-                "R: new seed | drag: orbit | wheel: zoom | T: surface | O: ocean | Esc: development tools",
-                24f, 24f);
+                "drag: orbit | wheel: zoom | Esc: development tools | edit generation settings in the right panel",
+                24f,
+                24f);
         batch.end();
     }
 
@@ -299,36 +320,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         }
     }
 
-    private void adjust(IntentAxis axis, int delta) {
-        switch (axis) {
-            case COVERAGE -> coveragePpm = clampPpm(coveragePpm + delta);
-            case SCALE -> scalePpm = clampPpm(scalePpm + delta);
-            case FRAGMENTATION -> fragmentationPpm = clampPpm(fragmentationPpm + delta);
-            case RELIEF -> reliefPpm = clampPpm(reliefPpm + delta);
-        }
-        regenerate();
-    }
-
-    private void adjustWidth(int direction) {
-        int before = settings.width();
-        settings.adjustWidth(direction);
-        if (settings.width() == before) return;
-        regenerate();
-        fitCameraToWorld();
-    }
-
-    private void adjustHeight(int direction) {
-        int before = settings.height();
-        settings.adjustHeight(direction);
-        if (settings.height() == before) return;
-        regenerate();
-        fitCameraToWorld();
-    }
-
-    private static int clampPpm(int value) {
-        return Math.max(0, Math.min(NormalizedValue.SCALE, value));
-    }
-
     private static int sampleCount(int dimension) {
         return Math.min(dimension, MAX_PREVIEW_AXIS);
     }
@@ -339,33 +330,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         return Math.toIntExact(min + span * sampleIndex / (sampleCount - 1L));
     }
 
-    private enum IntentAxis { COVERAGE, SCALE, FRAGMENTATION, RELIEF }
-
     private final class PreviewInput extends InputAdapter {
         @Override
         public boolean keyDown(int keycode) {
-            switch (keycode) {
-                case Input.Keys.ESCAPE -> returnToWorkspace.run();
-                case Input.Keys.R -> {
-                    seed++;
-                    regenerate();
-                }
-                case Input.Keys.T -> showSurface = !showSurface;
-                case Input.Keys.O -> showOcean = !showOcean;
-                case Input.Keys.A -> adjustWidth(-1);
-                case Input.Keys.D -> adjustWidth(1);
-                case Input.Keys.S -> adjustHeight(-1);
-                case Input.Keys.W -> adjustHeight(1);
-                case Input.Keys.Q -> adjust(IntentAxis.RELIEF, -STEP_PPM);
-                case Input.Keys.E -> adjust(IntentAxis.RELIEF, STEP_PPM);
-                case Input.Keys.LEFT -> adjust(IntentAxis.COVERAGE, -STEP_PPM);
-                case Input.Keys.RIGHT -> adjust(IntentAxis.COVERAGE, STEP_PPM);
-                case Input.Keys.DOWN -> adjust(IntentAxis.SCALE, -STEP_PPM);
-                case Input.Keys.UP -> adjust(IntentAxis.SCALE, STEP_PPM);
-                case Input.Keys.PAGE_DOWN -> adjust(IntentAxis.FRAGMENTATION, -STEP_PPM);
-                case Input.Keys.PAGE_UP -> adjust(IntentAxis.FRAGMENTATION, STEP_PPM);
-                default -> { return false; }
-            }
+            if (keycode != Input.Keys.ESCAPE) return false;
+            returnToWorkspace.run();
             return true;
         }
 
@@ -388,8 +357,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
-            float minDistance = Math.max(24f, settings.maxHorizontalDimension() * 0.35f);
-            float maxDistance = Math.max(180f, settings.maxHorizontalDimension() * 4f);
+            float minDistance = Math.max(24f, generatedConfig.maxHorizontalDimension() * 0.35f);
+            float maxDistance = Math.max(180f, generatedConfig.maxHorizontalDimension() * 4f);
             distance = MathUtils.clamp(distance * (1f + amountY * 0.08f), minDistance, maxDistance);
             return true;
         }
