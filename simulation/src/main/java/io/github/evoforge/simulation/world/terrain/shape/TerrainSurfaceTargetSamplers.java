@@ -34,17 +34,17 @@ final class TerrainSurfaceTargetSamplers {
      * V12 rejects one-cell turns and locally rotating contour fragments. A smooth voxel-transition
      * candidate is promoted only when the local gradient has a clear cardinal direction and a
      * lateral neighbour supports that same direction. If a cell is recognizably part of a smooth
-     * voxel transition but fails the coherence rule, it deliberately falls back to the flat
-     * baseline target rather than allowing the precise patch to select a stray shaped template.
-     * Shape identity never participates in this decision.
+     * voxel transition but fails the coherence rule, it deliberately falls back to the neutral flat
+     * target rather than allowing the precise patch to select a stray shaped template. Shape
+     * identity never participates in this decision.
      */
     static TerrainSurfacePatch coherentVoxelTransitionPatch(ElevationField elevation, int x, int y) {
         requireElevation(elevation);
         TerrainSurfacePatch precise = precisePatch(elevation, x, y);
 
-        // First distinguish "not a smooth voxel transition at all" from "a transition candidate
-        // that is locally incoherent". The former keeps literal geometry; the latter is explicitly
-        // denied a shaped target so isolated/turning artifacts cannot leak through the fallback.
+        // Distinguish "not a smooth voxel transition" from "a transition candidate that is locally
+        // incoherent". Literal non-transition geometry is preserved; an incoherent transition is
+        // explicitly denied a shaped target so isolated/turning artifacts cannot leak through.
         TransitionIntent rawIntent = transitionIntent(elevation, x, y, false);
         if (rawIntent == null) return precise;
 
