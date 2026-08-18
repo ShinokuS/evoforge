@@ -291,7 +291,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
         addSection(content, "3D MESH QUALITY");
         Label meshExplanation = new Label(
-                "3D mesh axis is the maximum number of terrain samples along each world axis. Large worlds currently use 160 by default; increasing it preserves much more relief shape.",
+                "3D mesh axis is the maximum number of terrain samples along each world axis. Large worlds use 160 by default; increasing it preserves much more relief shape.",
                 skin,
                 "subtitle");
         meshExplanation.setWrap(true);
@@ -303,11 +303,12 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 "3D mesh axis",
                 WorldGeneration3DDetail.MIN_AXIS_SAMPLES,
                 WorldGeneration3DDetail.MAX_AXIS_SAMPLES,
+                16,
                 WorldGeneration3DDetail.maxAxisSamples(),
                 meshDetail);
 
         Label meshHint = new Label(
-                "160 = fast default. Try 200-240 for a more organic large-world mesh. Changes rebuild only the preview mesh; the generated world is untouched.",
+                "160 = fast default. Try 256-384 for a much more organic large-world mesh; 512 is the high-quality inspection limit. Changes rebuild only preview mesh chunks.",
                 skin,
                 "subtitle");
         meshHint.setWrap(true);
@@ -489,9 +490,10 @@ final class WorldGenerationSettingsPanel implements Disposable {
             String name,
             int minimum,
             int maximum,
+            int step,
             int initial,
             IntConsumer setter) {
-        Slider slider = new Slider(minimum, maximum, 1f, false, skin);
+        Slider slider = new Slider(minimum, maximum, step, false, skin);
         slider.setValue(initial);
         Label value = new Label(Integer.toString(initial), skin);
         slider.addListener(new ChangeListener() {
