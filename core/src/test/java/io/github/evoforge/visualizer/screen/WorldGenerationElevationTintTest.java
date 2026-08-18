@@ -24,6 +24,28 @@ final class WorldGenerationElevationTintTest {
     }
 
     @Test
+    void halfControlRangeAlreadyUsesTheFormerFullPaletteSpread() {
+        Color low = WorldGenerationElevationTint.shaderColor(
+                0L, RANGE, 500_000, new Color());
+        Color high = WorldGenerationElevationTint.shaderColor(
+                RANGE.maximumSubunits(), RANGE, 500_000, new Color());
+
+        assertEquals(0f, low.r, 0.0001f);
+        assertEquals(1f, high.r, 0.0001f);
+    }
+
+    @Test
+    void upperHalfOfControlRangeIncreasesContrastForIntermediateHeights() {
+        long quarterHeight = RANGE.maximumSubunits() / 4L;
+        Color half = WorldGenerationElevationTint.shaderColor(
+                quarterHeight, RANGE, 500_000, new Color());
+        Color full = WorldGenerationElevationTint.shaderColor(
+                quarterHeight, RANGE, 1_000_000, new Color());
+
+        assertTrue(full.r < half.r, "100% must push low-intermediate terrain darker than 50%");
+    }
+
+    @Test
     void maximumSensitivityMapsLowAndHighLandToClearlyDifferentGreenShades() {
         Color low = WorldGenerationElevationTint.color(
                 0L,
