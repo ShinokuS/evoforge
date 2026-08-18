@@ -24,7 +24,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
     private static final float PANEL_WIDTH = 360f;
     private static final float PANEL_MARGIN = 12f;
     private static final float CONTENT_PADDING = 18f;
-    private static final float LABEL_WIDTH = 98f;
+    private static final float LABEL_WIDTH = 122f;
     private static final float VALUE_WIDTH = 46f;
     private static final float DIMENSION_FIELD_WIDTH = 92f;
 
@@ -75,7 +75,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         content.add(title).left().padBottom(4f);
         content.row();
-        Label subtitle = new Label("V12 scale-aware macro + local relief", skin, "subtitle");
+        Label subtitle = new Label("V12 balanced multi-scale landforms", skin, "subtitle");
         content.add(subtitle).left().padBottom(14f);
         content.row();
 
@@ -86,18 +86,28 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
         addSection(content, "LAND SHAPE");
         addPercentControl(content, "Land", settings.coveragePpm(), settings::coveragePpm);
-        addPercentControl(content, "Scale", settings.scalePpm(), settings::scalePpm);
+        addPercentControl(content, "Continent scale", settings.scalePpm(), settings::scalePpm);
         addPercentControl(
                 content,
                 "Fragmentation",
                 settings.fragmentationPpm(),
                 settings::fragmentationPpm);
-        addPercentControl(content, "Macro relief", settings.reliefPpm(), settings::reliefPpm);
+        addPercentControl(content, "Macro height", settings.reliefPpm(), settings::reliefPpm);
         addPercentControl(
                 content,
-                "Local relief",
+                "Rolling hills",
                 settings.localReliefPpm(),
                 settings::localReliefPpm);
+        addPercentControl(
+                content,
+                "Landform size",
+                settings.landformScalePpm(),
+                settings::landformScalePpm);
+        addPercentControl(
+                content,
+                "Ruggedness",
+                settings.ruggednessPpm(),
+                settings::ruggednessPpm);
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);
