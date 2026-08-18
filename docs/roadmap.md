@@ -41,8 +41,8 @@ This page tracks milestone state and deliberately deferred work. Detailed curren
 - Surface-first visualizer presentation with explicit `SURFACE`, `INTERIOR` and `DEBUG_SLICE` perspectives, cell-centric interaction and bounded debug overlays.
 - Optional explicit finite `WorldBounds` through shared `WorldGeometryLookup`; outside a configured runtime box is physically closed without per-domain map-edge rules.
 - Deterministic World Genesis provenance, stable RNG sampling, typed `WorldAtlas` layers, replaceable generation algorithms and explicit generated-world preparation/runtime bootstrap boundaries.
-- Physical V8 climate-water generation contract, weather-state runtime boundary, rainfall-regime calibration and semantic Soil hydraulics preparation.
-- Ocean-first V9 macro elevation driven by `WorldGenerationIntent` (`landCoverage`, `landmassScale`, `fragmentation`) with global sea-level datum and dedicated 3D generation preview.
+- Physical climate-water generation contract, weather-state runtime boundary, rainfall-regime calibration and semantic Soil hydraulics preparation.
+- Accepted V12 ocean-first balanced terrain: calibrated land coverage, coherent landmasses/coasts, broad uplift, explicit hills/depressions, rolling relief and rugged ridges, with deterministic 2D/3D preview and tunable presentation performance.
 - Documentation v2: English-only canonical Markdown + VitePress + Development Journal.
 
 ## Accepted baseline
@@ -95,35 +95,54 @@ A richer interruption/preemption policy is deliberately not automatic next work.
 
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
 
-## Current world-generation sequence
+## Current world-generation milestone
 
-The active world-generation direction now has a usable first visual vertical slice:
+The accepted V12 surface appearance is now the protected base for a disciplined world-generation rebuild. The canonical contract and detailed stage acceptance criteria live in [World Generation](systems/world-generation.md). This roadmap intentionally does not duplicate those details.
+
+The current stage is:
 
 ```text
-WorldSpec + seed + WorldGenerationIntent
-                ↓
-          WorldGenesis V9
-                ↓
-     ocean-first ElevationField
-                ↓
-       complete typed WorldAtlas
-                ↓
-        3D macro preview
+Stage 0 — architecture stabilization
+semantic intent
+    ↓
+calibration
+    ↓
+versioned algorithm recipe
+    ↓
+replaceable spatial algorithm
+    ↓
+typed generated facts
 ```
 
-The current contract intentionally stops at macro land/ocean form. `landCoverage` is calibrated to the nearest representable column count; `landmassScale` and `fragmentation` shape the deterministic spatial field without changing the requested coverage.
+The locked milestone sequence is:
 
-The next morphology work should be justified by a visible deficiency in this generated surface. Mountains, tectonic provinces, erosion/weathering history, richer ocean-basin morphology and later hydrology/ecology are **not** pre-created as generic frameworks. Each enters when its first concrete generated fact and acceptance criterion are defined.
+1. **Stage 0 — architecture stabilization and V12 normalization** (active);
+2. **Stage 1 — mountain systems** over the accepted base morphology;
+3. **Stage 2 — dry hydrography and carving**: watersheds, basins, river hierarchy, channels, valleys and lake bowls, still without Water;
+4. **Stage 3 — coherent geology**: authored/calibrated rock definitions, formations, strata and required deposits;
+5. **Stage 4 — caves** as coherent underground volumes;
+6. **Stage 5 — surface layers/material synthesis** from morphology + hydrographic/depositional facts + geology + calibrated definitions;
+7. **Stage 6 — dry-world visual/test acceptance**;
+8. **Stage 7 — finite initial Water fill** into already prepared oceans/lakes/channels;
+9. **Stage 8 — runtime handoff audit and world-generation milestone close**.
+
+One world-generation stage uses one PR. If implementation changes this sequence, the canonical World Generation document and the stage report change in the same PR before work continues.
+
+The current generated-water/hydrography and provisional geology code remains useful compatibility/typed infrastructure, but its historical ordering does not override the canonical dry-world-first pipeline.
 
 ## Separate research / large future milestones
 
-The following remain outside the mandatory immediate sequence and require their own design work when a real consumer appears:
+The following remain outside the mandatory current world-generation milestone and require their own design work when a real consumer appears:
 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
 - richer fluid mechanics beyond the baseline deterministic local solver, including richer boundary profiles, derived water-body identity, detailed pressure/inertia/viscosity and erosion;
-- richer macro world morphology beyond the V9 ocean-first landmass slice: mountain systems, causal geology/deposition history, erosion/weathering and later biome/ecology outcomes;
-- broader plant lifecycle semantics such as age, reproduction, withering and death.
+- tectonic/depositional history beyond the first coherent geology model when accepted formations prove it necessary;
+- ecology/biome potential derived from the completed physical world;
+- coherent vegetation communities and plant populations;
+- broader plant lifecycle semantics such as age, reproduction, withering and death;
+- natural resources/sites beyond the deposits required by the geology milestone;
+- settlements, societies, economy and other world-population generation.
 
 ## Deferred presentation work
 

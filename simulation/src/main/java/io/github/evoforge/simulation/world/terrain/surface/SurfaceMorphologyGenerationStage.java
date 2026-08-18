@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.surface;
+package io.github.evoforge.simulation.world.terrain.surface;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;

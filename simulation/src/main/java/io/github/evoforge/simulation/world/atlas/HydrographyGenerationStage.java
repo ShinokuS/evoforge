@@ -5,12 +5,15 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Deterministic generated channel network derived from drainage accumulation and available surface
- * headroom.
+ * Deterministic analytical channel footprint derived from drainage accumulation and available
+ * surface headroom.
  *
- * <p>V1/V2 predate generated surface Water and expose no channels. V3+ revisions currently share
- * the same durable channel-footprint rule. Climate may affect initial water but never whether this
- * generated channel fact exists, so dry climates can retain dry channels.</p>
+ * <p>This stage does not carve terrain, fill lake basins, resolve outlets, size river valleys or
+ * otherwise claim to be the final hydrographic morphology model. It preserves a useful durable
+ * channel fact for generated-water initialisation until the later basin/river/carving stage replaces
+ * or enriches that fact. V1/V2 predate generated surface Water and expose no channels. V3+
+ * revisions currently share the same threshold footprint rule. Climate may affect initial water but
+ * never whether this generated channel fact exists, so dry climates can retain dry channels.</p>
  */
 public final class HydrographyGenerationStage implements HydrographyGenerator {
 

@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.atlas;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -11,6 +12,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class WorldAtlasAlgorithmContractTest {
+
+    @Test
+    void standardPipelineProducesEveryAuthoritativeAtlasFieldOnSharedBounds() {
+        WorldBounds bounds = new WorldBounds(-4, 4, -4, 4, -12, 12);
+        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds), 91L);
+
+        WorldAtlas atlas = new WorldAtlasGenerator().generate(genesis);
+
+        assertSame(genesis, atlas.genesis());
+        assertNotNull(atlas.elevation());
+        assertNotNull(atlas.geology());
+        assertNotNull(atlas.climateNormals());
+        assertNotNull(atlas.drainage());
+        assertNotNull(atlas.hydrography());
+        assertNotNull(atlas.surfaceHydrology());
+        assertEquals(bounds, atlas.elevation().bounds());
+        assertEquals(bounds, atlas.geology().bounds());
+        assertEquals(bounds, atlas.climateNormals().bounds());
+        assertEquals(bounds, atlas.drainage().bounds());
+        assertEquals(bounds, atlas.hydrography().bounds());
+        assertEquals(bounds, atlas.surfaceHydrology().bounds());
+    }
 
     @Test
     void atlasOrchestrationComposesTypedElevationThenDrainageContracts() {

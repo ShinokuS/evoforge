@@ -5,8 +5,8 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.geology.GeologyField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyField;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyGenerationStage;
 
 /**
  * First causal material-strata model.

@@ -26,7 +26,7 @@ import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindin
 import io.github.evoforge.simulation.world.preparation.GeneratedWorldPreparation;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;

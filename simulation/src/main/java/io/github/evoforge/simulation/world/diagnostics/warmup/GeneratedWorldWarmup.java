@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.warmup;
+package io.github.evoforge.simulation.world.diagnostics.warmup;
 
 import java.util.ArrayList;
 import java.util.List;

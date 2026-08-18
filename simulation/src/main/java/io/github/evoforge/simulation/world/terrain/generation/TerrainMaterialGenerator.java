@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.SurfaceHydrologyField;
 import io.github.evoforge.simulation.world.geology.GeologyField;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyField;
 
 /** Replaceable deterministic algorithm that derives material strata from generated causal facts. */
 @FunctionalInterface
