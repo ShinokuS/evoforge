@@ -121,6 +121,30 @@ Material composition is derived from local differences and drainage, not absolut
 
 If an otherwise identical world shape is translated vertically, its relative material layering must remain identical. Tests lock this invariant so absolute-height hardcoding cannot enter unnoticed.
 
+## Generated surface geometry
+
+Precise elevation is also compiled into the discrete surface geometry that runtime Terrain can currently represent:
+
+```text
+ElevationField
+      ↓
+cardinal edge surface patch
+      ↓
+TerrainShapeGenerationStage
+      ↓ geometry fit against TerrainShapePalette
+TerrainShapeField
+      ↓
+pre-start runtime Shape override
+```
+
+The fitting algorithm does not know `RampShape`, `FullShape`, or any future concrete Shape type. It compares only material-agnostic `TerrainSurfacePatch` geometry. `TerrainShapePalette` is the single adapter that binds available runtime Shapes to the surface templates they represent.
+
+The first palette contains the implicit full-cell baseline plus the four existing cardinal ramps. Adding another supported Shape adds another template to that palette; it does not add Shape-type branches to the compiler.
+
+A candidate is accepted only when its edge fit, local relief and improvement over the baseline are within one explicit `TerrainShapeCalibration`. Abrupt cliffs, diagonal surfaces that the current vocabulary cannot represent accurately, and other poor fits remain ordinary full-cell geometry. Generation never adds ramps to repair Navigation connectivity and does not promise that all terrain is traversable.
+
+`TerrainShapeField` is immutable preparation output. Runtime bootstrap only applies its opaque Shape overrides after ordinary generated Terrain has been materialized; Navigation, Movement and Water then consume the same authoritative Geometry contracts they already use.
+
 ## Generated identity vs runtime identity
 
 `TerrainMaterialField` returns `TerrainMaterialKey`, a validated stable semantic Landscape key such as `core:soil`.
@@ -143,13 +167,15 @@ Content composition owns the bindings. The generator therefore does not register
 
 ## Memory boundary
 
-The first implementation stores only a compact generated profile per XY column:
+The first material implementation stores only a compact generated profile per XY column:
 
 - discrete generated surface;
 - ground-profile depth;
 - depositional-layer depth.
 
 It does not allocate a material entry for every solid 3D cell. `materialAt(x,y,z)` derives the material from that column profile on demand.
+
+Generated surface geometry is likewise column-compact: the current dense field stores one palette index per XY column rather than a concrete Shape object per solid cell.
 
 ## Diagnostics
 
@@ -166,6 +192,8 @@ event=world.generated.terrain-materials ...
 
 using stable material keys. These counts are evidence for tuning and regression analysis; no current percentage is classified as healthy, rocky, sandy or invalid.
 
+World Generation additionally exposes a 2D surface-shape inspection mode. Generated non-default geometry is marked by an uphill arrow derived from `TerrainSurfacePatch`, not from concrete Shape identity. The existing 3D macro view remains available through the same 2D/3D toggle.
+
 ## Deferred
 
 This slice intentionally does not yet add:
@@ -175,7 +203,8 @@ This slice intentionally does not yet add:
 - caves / open underground volume;
 - erosion as runtime Terrain mutation;
 - biome authority over Terrain;
-- user-facing technical terrain parameters.
+- user-facing technical terrain parameters;
+- connectivity repair or a requirement that generated terrain be globally traversable.
 
 Future geology can replace the single palette `rock` role with generated strata. Future caves should introduce an independent solid/open shape fact rather than abusing material identity.
 
