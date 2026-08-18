@@ -17,10 +17,10 @@ final class TerrainSurfaceTargetSamplers {
         long center = elevation.elevationSubunitsAt(x, y);
         long base = Math.multiplyExact(Math.floorDiv(center, CELL), CELL);
         return new TerrainSurfacePatch(
-                boundaryHeight(elevation, x, y, x - 1L, y, center) - base,
-                boundaryHeight(elevation, x, y, x + 1L, y, center) - base,
-                boundaryHeight(elevation, x, y, x, y - 1L, center) - base,
-                boundaryHeight(elevation, x, y, x, y + 1L, center) - base);
+                boundaryHeight(elevation, x - 1L, y, center) - base,
+                boundaryHeight(elevation, x + 1L, y, center) - base,
+                boundaryHeight(elevation, x, y - 1L, center) - base,
+                boundaryHeight(elevation, x, y + 1L, center) - base);
     }
 
     static TerrainSurfacePatch smoothVoxelTransitionPatch(ElevationField elevation, int x, int y) {
@@ -35,7 +35,12 @@ final class TerrainSurfaceTargetSamplers {
         long dominantGradient = Math.max(absolute(gradientX), absolute(gradientY));
         if (dominantGradient == 0L) return precise;
 
-        if (!isSmoothNeighborhood(elevation, x, y, center, layer)) return precise;
+        if (!smoothNeighbor(elevation, x - 1, y, center, layer)
+                || !smoothNeighbor(elevation, x + 1, y, center, layer)
+                || !smoothNeighbor(elevation, x, y - 1, center, layer)
+                || !smoothNeighbor(elevation, x, y + 1, center, layer)) {
+            return precise;
+        }
         if (!crossesAscendingBoundary(elevation, x, y, layer, gradientX, gradientY)) return precise;
 
         return normalizedPlane(gradientX, gradientY, dominantGradient);
@@ -55,23 +60,16 @@ final class TerrainSurfaceTargetSamplers {
                 half + scaledY / 2L);
     }
 
-    private static boolean isSmoothNeighborhood(
+    private static boolean smoothNeighbor(
             ElevationField elevation,
             int x,
             int y,
             long center,
             long centerLayer) {
-        int[][] offsets = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-        for (int[] offset : offsets) {
-            int nx = x + offset[0];
-            int ny = y + offset[1];
-            if (!elevation.contains(nx, ny)) continue;
-            long neighbor = elevation.elevationSubunitsAt(nx, ny);
-            if (absolute(neighbor - center) > MAX_TRANSITION_NEIGHBOR_DELTA) return false;
-            long layerDifference = Math.floorDiv(neighbor, CELL) - centerLayer;
-            if (absolute(layerDifference) > 1L) return false;
-        }
-        return true;
+        if (!elevation.contains(x, y)) return true;
+        long neighbor = elevation.elevationSubunitsAt(x, y);
+        if (absolute(neighbor - center) > MAX_TRANSITION_NEIGHBOR_DELTA) return false;
+        return absolute(Math.floorDiv(neighbor, CELL) - centerLayer) <= 1L;
     }
 
     private static boolean crossesAscendingBoundary(
@@ -95,8 +93,6 @@ final class TerrainSurfaceTargetSamplers {
 
     private static long boundaryHeight(
             ElevationField elevation,
-            int x,
-            int y,
             long neighborX,
             long neighborY,
             long center) {
