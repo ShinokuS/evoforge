@@ -4,24 +4,21 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.visualizer.visual.EvoForgePalette;
-import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 
-/** Procedural full-cell ramp art with topology-aware seamless boundary variants. */
+/** Procedural full-cell ramp art with boundary-free surface presentation. */
 final class ProceduralRampArt {
     private static final int TILE = ProceduralLandscapePack.TILE_PIXELS;
     private static final int DIRECTIONS = 4;
     private static final int VARIANTS = ProceduralLandscapePack.SURFACE_VARIANTS;
-    private static final int JOINS = 16;
     private static final int PADDING = 1;
     private static final int STRIDE = TILE + PADDING * 2;
-    private static final int COLUMNS = 32;
-    private static final int TILE_COUNT = DIRECTIONS * VARIANTS * JOINS;
+    private static final int COLUMNS = 16;
+    private static final int TILE_COUNT = DIRECTIONS * VARIANTS;
     private static final int ROWS = (TILE_COUNT + COLUMNS - 1) / COLUMNS;
 
     private final Texture texture;
-    private final TextureRegion[][][] regions =
-            new TextureRegion[DIRECTIONS][VARIANTS][JOINS];
+    private final TextureRegion[][] regions = new TextureRegion[DIRECTIONS][VARIANTS];
 
     ProceduralRampArt() {
         Pixmap atlas = new Pixmap(
@@ -33,13 +30,11 @@ final class ProceduralRampArt {
 
         for (int direction = 0; direction < DIRECTIONS; direction++) {
             for (int variant = 0; variant < VARIANTS; variant++) {
-                for (int joins = 0; joins < JOINS; joins++) {
-                    int index = index(direction, variant, joins);
-                    int ox = (index % COLUMNS) * STRIDE + PADDING;
-                    int oy = (index / COLUMNS) * STRIDE + PADDING;
-                    draw(atlas, ox, oy, direction, variant, joins);
-                    bleed(atlas, ox, oy);
-                }
+                int index = index(direction, variant);
+                int ox = (index % COLUMNS) * STRIDE + PADDING;
+                int oy = (index / COLUMNS) * STRIDE + PADDING;
+                draw(atlas, ox, oy, direction, variant);
+                bleed(atlas, ox, oy);
             }
         }
 
@@ -49,23 +44,19 @@ final class ProceduralRampArt {
 
         for (int direction = 0; direction < DIRECTIONS; direction++) {
             for (int variant = 0; variant < VARIANTS; variant++) {
-                for (int joins = 0; joins < JOINS; joins++) {
-                    int index = index(direction, variant, joins);
-                    regions[direction][variant][joins] = new TextureRegion(
-                            texture,
-                            (index % COLUMNS) * STRIDE + PADDING,
-                            (index / COLUMNS) * STRIDE + PADDING,
-                            TILE,
-                            TILE);
-                }
+                int index = index(direction, variant);
+                regions[direction][variant] = new TextureRegion(
+                        texture,
+                        (index % COLUMNS) * STRIDE + PADDING,
+                        (index / COLUMNS) * STRIDE + PADDING,
+                        TILE,
+                        TILE);
             }
         }
     }
 
     TextureRegion region(int riseX, int riseY, int topologyMask, int variant) {
-        return regions[direction(riseX, riseY)]
-                [Math.floorMod(variant, VARIANTS)]
-                [joinIndex(topologyMask)];
+        return regions[direction(riseX, riseY)][Math.floorMod(variant, VARIANTS)];
     }
 
     void dispose() {
@@ -77,46 +68,24 @@ final class ProceduralRampArt {
             int ox,
             int oy,
             int direction,
-            int variant,
-            int joins) {
+            int variant) {
         fill(pixmap, ox, oy, 0, 0, TILE, TILE, EvoForgePalette.GRASS_BASE);
 
-        // Interior shading follows the slope but keeps the outer pixel neutral so
-        // compatible neighbouring tiles meet without a colour discontinuity.
+        // A ramp is one continuous terrain surface, not a bordered object. Keep all four
+        // outer pixels neutral. True discontinuities are owned by SurfaceReliefEdgeArt,
+        // which already uses objective Shape boundary continuity to decide where a cliff exists.
         for (int y = 1; y < TILE - 1; y++) {
             for (int x = 1; x < TILE - 1; x++) {
                 float highness = highness(direction, x, y);
-                if (highness < 0.22f) {
+                if (highness < 0.20f && ((x + y) & 1) == 0) {
                     pixel(pixmap, ox, oy, x, y, EvoForgePalette.GRASS_DARK);
-                } else if (highness > 0.82f && ((x + y) & 1) == 0) {
+                } else if (highness > 0.80f && ((x + y) & 1) == 0) {
                     pixel(pixmap, ox, oy, x, y, EvoForgePalette.GRASS_LIGHT);
                 }
             }
         }
 
-        drawContours(pixmap, ox, oy, direction);
         addTexture(pixmap, ox, oy, direction, variant);
-
-        if ((joins & 1) == 0) drawNorthBank(pixmap, ox, oy);
-        if ((joins & 2) == 0) drawEastBank(pixmap, ox, oy);
-        if ((joins & 4) == 0) drawSouthBank(pixmap, ox, oy);
-        if ((joins & 8) == 0) drawWestBank(pixmap, ox, oy);
-    }
-
-    private static void drawContours(Pixmap pixmap, int ox, int oy, int direction) {
-        for (int band : new int[] {4, 8, 12}) {
-            if (direction == 0 || direction == 2) {
-                int y = direction == 0 ? TILE - 1 - band : band;
-                for (int x = 2; x < TILE - 2; x++) {
-                    pixel(pixmap, ox, oy, x, y, EvoForgePalette.GRASS_DEEP);
-                }
-            } else {
-                int x = direction == 1 ? band : TILE - 1 - band;
-                for (int y = 2; y < TILE - 2; y++) {
-                    pixel(pixmap, ox, oy, x, y, EvoForgePalette.GRASS_DEEP);
-                }
-            }
-        }
     }
 
     private static void addTexture(
@@ -126,7 +95,7 @@ final class ProceduralRampArt {
             int direction,
             int variant) {
         int state = 0x4F1BBCDC ^ direction * 193 ^ variant * 811;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 6; i++) {
             state = mix(state + i * 73);
             int x = 2 + Math.floorMod(state, 12);
             state = mix(state ^ 0x27D4EB2D);
@@ -139,35 +108,6 @@ final class ProceduralRampArt {
                     y,
                     i % 3 == 0 ? EvoForgePalette.GRASS_LIGHT : EvoForgePalette.GRASS_DEEP);
         }
-    }
-
-    private static void drawNorthBank(Pixmap p, int ox, int oy) {
-        fill(p, ox, oy, 0, 0, TILE, 1, EvoForgePalette.EARTH_DARK);
-        fill(p, ox, oy, 0, 1, TILE, 1, EvoForgePalette.EARTH_BASE);
-    }
-
-    private static void drawEastBank(Pixmap p, int ox, int oy) {
-        fill(p, ox, oy, TILE - 2, 0, 1, TILE, EvoForgePalette.EARTH_BASE);
-        fill(p, ox, oy, TILE - 1, 0, 1, TILE, EvoForgePalette.EARTH_SHADOW);
-    }
-
-    private static void drawSouthBank(Pixmap p, int ox, int oy) {
-        fill(p, ox, oy, 0, TILE - 2, TILE, 1, EvoForgePalette.EARTH_BASE);
-        fill(p, ox, oy, 0, TILE - 1, TILE, 1, EvoForgePalette.EARTH_SHADOW);
-    }
-
-    private static void drawWestBank(Pixmap p, int ox, int oy) {
-        fill(p, ox, oy, 0, 0, 1, TILE, EvoForgePalette.EARTH_DARK);
-        fill(p, ox, oy, 1, 0, 1, TILE, EvoForgePalette.EARTH_BASE);
-    }
-
-    private static int joinIndex(int topologyMask) {
-        int joins = 0;
-        if (LandscapeTopology.contains(topologyMask, LandscapeTopology.N)) joins |= 1;
-        if (LandscapeTopology.contains(topologyMask, LandscapeTopology.E)) joins |= 2;
-        if (LandscapeTopology.contains(topologyMask, LandscapeTopology.S)) joins |= 4;
-        if (LandscapeTopology.contains(topologyMask, LandscapeTopology.W)) joins |= 8;
-        return joins;
     }
 
     private static float highness(int direction, int x, int y) {
@@ -189,8 +129,8 @@ final class ProceduralRampArt {
                 "unsupported ramp rise vector " + riseX + "," + riseY);
     }
 
-    private static int index(int direction, int variant, int joins) {
-        return (direction * VARIANTS + variant) * JOINS + joins;
+    private static int index(int direction, int variant) {
+        return direction * VARIANTS + variant;
     }
 
     private static void bleed(Pixmap p, int ox, int oy) {
