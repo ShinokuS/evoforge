@@ -62,6 +62,6 @@ public record WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
-                NormalizedValue.ofPartsPerMillion(250_000));
+                NormalizedValue.ofPartsPerMillion(350_000));
     }
 }
