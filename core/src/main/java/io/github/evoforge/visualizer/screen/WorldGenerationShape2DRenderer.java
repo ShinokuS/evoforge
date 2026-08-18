@@ -380,11 +380,14 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             CellFace face,
             SurfaceReliefEdgeArt.Side side) {
         boolean neighbourPresent = elevation.contains(neighbourX, neighbourY);
+        boolean aligned = false;
         if (neighbourPresent) {
             int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
             Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
-            if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
+            aligned = SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
         }
+        if (!shapePresentations.reliefEdgeVisible(shape, face, aligned)) return;
+
         boolean raised = !neighbourPresent || z > elevation.elevationAt(neighbourX, neighbourY);
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
