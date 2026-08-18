@@ -30,7 +30,6 @@ import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V12;
-    private static final int MAX_PREVIEW_AXIS = 160;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
 
     private static final String VERTEX_SHADER = """
@@ -110,7 +109,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     orbiting = false;
                     panning2D = false;
                 },
-                this::setElevationTintPpm);
+                this::setElevationTintPpm,
+                this::set3DMeshAxis);
         this.inputMultiplexer = new InputMultiplexer(input, settingsPanel.inputProcessor());
         shape2DRenderer.setElevationTintPpm(elevationTintPpm);
         regenerate();
@@ -233,15 +233,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
-        previewWidth = sampleCount(generatedConfig.width());
-        previewLength = sampleCount(generatedConfig.length());
-        surfaceMesh = buildSurface(
-                generatedElevation,
-                bounds,
-                elevationRange,
-                previewWidth,
-                previewLength,
-                elevationTintPpm);
+        rebuildSurfaceMesh();
         oceanMesh = buildOcean(bounds);
         shape2DRenderer.setWorldBounds(bounds);
         shape2DRenderer.setElevationRange(elevationRange);
@@ -263,8 +255,23 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         if (elevationTintPpm == strengthPpm) return;
         elevationTintPpm = strengthPpm;
         shape2DRenderer.setElevationTintPpm(strengthPpm);
-        if (generatedElevation == null || bounds == null) return;
-        if (surfaceMesh != null) surfaceMesh.dispose();
+        rebuildSurfaceMesh();
+    }
+
+    private void set3DMeshAxis(int samples) {
+        if (WorldGeneration3DDetail.maxAxisSamples() == samples) return;
+        WorldGeneration3DDetail.maxAxisSamples(samples);
+        rebuildSurfaceMesh();
+    }
+
+    private void rebuildSurfaceMesh() {
+        if (generatedElevation == null || bounds == null || generatedConfig == null) return;
+        previewWidth = WorldGeneration3DDetail.sampleCount(generatedConfig.width());
+        previewLength = WorldGeneration3DDetail.sampleCount(generatedConfig.length());
+        if (surfaceMesh != null) {
+            surfaceMesh.dispose();
+            surfaceMesh = null;
+        }
         surfaceMesh = buildSurface(
                 generatedElevation,
                 bounds,
@@ -422,12 +429,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     Gdx.graphics.getHeight() - 96f);
         } else {
             font.draw(batch, String.format(
-                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d",
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   axis cap %d",
                     Gdx.graphics.getFramesPerSecond(),
                     Gdx.graphics.getDeltaTime() * 1000f,
                     lastCpuMillis,
                     previewWidth,
-                    previewLength),
+                    previewLength,
+                    WorldGeneration3DDetail.maxAxisSamples()),
                     24f,
                     Gdx.graphics.getHeight() - 96f);
         }
@@ -459,10 +467,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             oceanMesh.dispose();
             oceanMesh = null;
         }
-    }
-
-    private static int sampleCount(int dimension) {
-        return Math.min(dimension, MAX_PREVIEW_AXIS);
     }
 
     private static int sampleCoordinate(int min, int max, int sampleIndex, int sampleCount) {
