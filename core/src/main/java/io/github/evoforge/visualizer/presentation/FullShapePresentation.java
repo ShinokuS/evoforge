@@ -2,6 +2,7 @@ package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
+import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 
@@ -29,7 +30,7 @@ final class FullShapePresentation
 
         return solidBody
                 ? sliceArt.solid(topologyMask, variant)
-                : surfaceArt.surface(topologyMask, variant);
+                : surfaceArt.surface(LandscapeTopology.normalizeSurfaceArt(topologyMask), variant);
     }
 
     @Override
