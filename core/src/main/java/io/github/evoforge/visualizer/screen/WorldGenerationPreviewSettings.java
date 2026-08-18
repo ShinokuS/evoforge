@@ -2,11 +2,11 @@ package io.github.evoforge.visualizer.screen;
 
 /** Mutable draft settings edited by the world-generation development UI. */
 final class WorldGenerationPreviewSettings {
-    private static final Integer[] HORIZONTAL_PRESETS = {32, 64, 128, 256, 512, 1024, 2048};
-    private static final int DEFAULT_PRESET_INDEX = 1;
+    static final int MIN_HORIZONTAL_DIMENSION = 32;
+    static final int MAX_HORIZONTAL_DIMENSION = 2_048;
 
-    private int widthIndex = DEFAULT_PRESET_INDEX;
-    private int heightIndex = DEFAULT_PRESET_INDEX;
+    private int width = 64;
+    private int length = 64;
     private long seed = 1L;
     private int coveragePpm = 350_000;
     private int scalePpm = 750_000;
@@ -14,31 +14,19 @@ final class WorldGenerationPreviewSettings {
     private int reliefPpm = 600_000;
 
     int width() {
-        return HORIZONTAL_PRESETS[widthIndex];
+        return width;
     }
 
-    int height() {
-        return HORIZONTAL_PRESETS[heightIndex];
-    }
-
-    Integer[] horizontalPresets() {
-        return HORIZONTAL_PRESETS.clone();
+    int length() {
+        return length;
     }
 
     void width(int value) {
-        widthIndex = presetIndex(value);
+        width = requireDimension(value, "width");
     }
 
-    void height(int value) {
-        heightIndex = presetIndex(value);
-    }
-
-    void adjustWidth(int direction) {
-        widthIndex = clampIndex(widthIndex + Integer.signum(direction));
-    }
-
-    void adjustHeight(int direction) {
-        heightIndex = clampIndex(heightIndex + Integer.signum(direction));
+    void length(int value) {
+        length = requireDimension(value, "length");
     }
 
     long seed() {
@@ -86,17 +74,17 @@ final class WorldGenerationPreviewSettings {
     }
 
     long columnCount() {
-        return (long) width() * height();
+        return (long) width * length;
     }
 
     int maxHorizontalDimension() {
-        return Math.max(width(), height());
+        return Math.max(width, length);
     }
 
     WorldGenerationPreviewConfig snapshot() {
         return new WorldGenerationPreviewConfig(
-                width(),
-                height(),
+                width,
+                length,
                 seed,
                 coveragePpm,
                 scalePpm,
@@ -104,17 +92,12 @@ final class WorldGenerationPreviewSettings {
                 reliefPpm);
     }
 
-    private static int presetIndex(int value) {
-        for (int index = 0; index < HORIZONTAL_PRESETS.length; index++) {
-            if (HORIZONTAL_PRESETS[index] == value) {
-                return index;
-            }
+    private static int requireDimension(int value, String name) {
+        if (value < MIN_HORIZONTAL_DIMENSION || value > MAX_HORIZONTAL_DIMENSION) {
+            throw new IllegalArgumentException(
+                    name + " must be in [" + MIN_HORIZONTAL_DIMENSION + ", " + MAX_HORIZONTAL_DIMENSION + "]");
         }
-        throw new IllegalArgumentException("unsupported preview dimension: " + value);
-    }
-
-    private static int clampIndex(int index) {
-        return Math.max(0, Math.min(HORIZONTAL_PRESETS.length - 1, index));
+        return value;
     }
 
     private static int requirePpm(int value, String name) {
