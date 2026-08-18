@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
 
-/** Deterministic elevation generation; V9 introduces ocean-first landmasses and V10 macro relief. */
+/** Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology. */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
     public static final long SEA_LEVEL_SUBUNITS = 0L;
@@ -24,12 +24,15 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:ridge-b");
     private static final GenerationPurposeId BASIN = GenerationPurposeId.of("world:basin");
+    private static final GenerationPurposeId WARP_X = GenerationPurposeId.of("world:morphology-warp-x");
+    private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:morphology-warp-y");
     private static final int SAMPLE_MAX = 65_535;
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         GenerationRevision revision = genesis.generationRevision();
+        if (GenerationRevision.V11.equals(revision)) return generateOrganicMorphology(genesis);
         if (GenerationRevision.V10.equals(revision)) return generateMacroMorphology(genesis);
         if (GenerationRevision.V9.equals(revision)) return generateOceanFirst(genesis);
         if (!GenerationRevision.V1.equals(revision)
@@ -113,11 +116,22 @@ public final class ElevationGenerationStage implements ElevationGenerator {
 
     /**
      * V10 preserves the calibrated V9 land/ocean mask and adds continent-scale relief inside land.
-     * Smooth uplift and basin fields create broad regions; intersections between two smooth fields
-     * form elongated ridge belts. Relief blends those structures against a lowland baseline without
-     * changing which columns are above sea level.
+     * This method stays isolated because its exact output is a stable revision contract.
      */
     private static ElevationField generateMacroMorphology(WorldGenesis genesis) {
+        return generateStructuredMorphology(genesis, false);
+    }
+
+    /**
+     * V11 keeps the same authored intent but removes the piecewise-linear signature of V10.
+     * Smooth interpolation and low-frequency domain warping produce rounded coastlines, basins and
+     * relief belts while exact coverage calibration still chooses the requested number of land cells.
+     */
+    private static ElevationField generateOrganicMorphology(WorldGenesis genesis) {
+        return generateStructuredMorphology(genesis, true);
+    }
+
+    private static ElevationField generateStructuredMorphology(WorldGenesis genesis, boolean organic) {
         WorldBounds bounds = genesis.spec().bounds();
         validateOceanFirstBounds(bounds);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -137,8 +151,8 @@ public final class ElevationGenerationStage implements ElevationGenerator {
             int y = bounds.minY() + localY;
             for (int localX = 0; localX < width; localX++) {
                 int x = bounds.minX() + localX;
-                int coherent = valueNoise(random, LANDMASS, x, y, coherentScale);
-                int fragmented = valueNoise(random, FRAGMENT, x, y, fragmentedScale);
+                int coherent = morphologyNoise(random, LANDMASS, x, y, coherentScale, organic);
+                int fragmented = morphologyNoise(random, FRAGMENT, x, y, fragmentedScale, organic);
                 int potential = (int) (((long) coherent * (NormalizedValue.SCALE - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / NormalizedValue.SCALE);
                 rankKeys[index] = rankKey(potential, index);
@@ -175,9 +189,9 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                     : (int) (((long) (landCount - 1 - rank) * NormalizedValue.SCALE)
                             / (landCount - 1L));
 
-            int upliftPpm = sampleToPpm(valueNoise(random, UPLIFT, x, y, upliftScale));
-            int ridgePpm = ridgeStrengthPpm(random, x, y, ridgeScale);
-            int basinPpm = sampleToPpm(valueNoise(random, BASIN, x, y, basinScale));
+            int upliftPpm = sampleToPpm(morphologyNoise(random, UPLIFT, x, y, upliftScale, organic));
+            int ridgePpm = ridgeStrengthPpm(random, x, y, ridgeScale, organic);
+            int basinPpm = sampleToPpm(morphologyNoise(random, BASIN, x, y, basinScale, organic));
 
             long macroPpm = 250_000L
                     + ((long) (upliftPpm - NormalizedValue.SCALE / 2) * 45L) / 100L
@@ -229,11 +243,44 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return 1L + ((amplitude - 1L) * heightPpm) / NormalizedValue.SCALE;
     }
 
-    private static int ridgeStrengthPpm(GenerationRandom random, int x, int y, int scale) {
-        int first = valueNoise(random, RIDGE_A, x, y, scale);
-        int second = valueNoise(random, RIDGE_B, x, y, scale);
+    private static int ridgeStrengthPpm(
+            GenerationRandom random, int x, int y, int scale, boolean organic) {
+        int first = morphologyNoise(random, RIDGE_A, x, y, scale, organic);
+        int second = morphologyNoise(random, RIDGE_B, x, y, scale, organic);
         long differencePpm = (long) Math.abs(first - second) * NormalizedValue.SCALE / SAMPLE_MAX;
         return clampPpm(NormalizedValue.SCALE - differencePpm * 2L);
+    }
+
+    private static int morphologyNoise(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            int x,
+            int y,
+            int scale,
+            boolean organic) {
+        return organic
+                ? organicValueNoise(random, purpose, x, y, scale)
+                : valueNoise(random, purpose, x, y, scale);
+    }
+
+    private static int organicValueNoise(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            int x,
+            int y,
+            int scale) {
+        int warpScale = Math.max(8, scale * 2);
+        int warpAmplitude = Math.max(1, scale / 5);
+        int warpXSample = smoothValueNoise(random, WARP_X, x, y, warpScale);
+        int warpYSample = smoothValueNoise(random, WARP_Y, x, y, warpScale);
+        int warpedX = x + centeredSampleOffset(warpXSample, warpAmplitude);
+        int warpedY = y + centeredSampleOffset(warpYSample, warpAmplitude);
+        return smoothValueNoise(random, purpose, warpedX, warpedY, scale);
+    }
+
+    private static int centeredSampleOffset(int sample, int amplitude) {
+        long centered = (long) sample * 2L - SAMPLE_MAX;
+        return (int) ((centered * amplitude) / SAMPLE_MAX);
     }
 
     private static int sampleToPpm(int sample) {
@@ -289,6 +336,25 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return interpolate(lower, upper, offsetY, scale);
     }
 
+    private static int smoothValueNoise(
+            GenerationRandom random,
+            GenerationPurposeId purpose,
+            int x,
+            int y,
+            int scale) {
+        long latticeX = Math.floorDiv((long) x, scale);
+        long latticeY = Math.floorDiv((long) y, scale);
+        int offsetX = (int) Math.floorMod((long) x, scale);
+        int offsetY = (int) Math.floorMod((long) y, scale);
+        int lowerLeft = sample(random, purpose, latticeX, latticeY);
+        int lowerRight = sample(random, purpose, latticeX + 1L, latticeY);
+        int upperLeft = sample(random, purpose, latticeX, latticeY + 1L);
+        int upperRight = sample(random, purpose, latticeX + 1L, latticeY + 1L);
+        int lower = smoothInterpolate(lowerLeft, lowerRight, offsetX, scale);
+        int upper = smoothInterpolate(upperLeft, upperRight, offsetX, scale);
+        return smoothInterpolate(lower, upper, offsetY, scale);
+    }
+
     private static int sample(
             GenerationRandom random,
             GenerationPurposeId purpose,
@@ -300,5 +366,15 @@ public final class ElevationGenerationStage implements ElevationGenerator {
 
     private static int interpolate(int from, int to, int offset, int scale) {
         return (int) (((long) from * (scale - offset) + (long) to * offset) / scale);
+    }
+
+    private static int smoothInterpolate(int from, int to, int offset, int scale) {
+        long coordinate = ((long) offset * NormalizedValue.SCALE) / scale;
+        long coordinateSquared = coordinate * coordinate;
+        long fade = coordinateSquared
+                * (3L * NormalizedValue.SCALE - 2L * coordinate)
+                / ((long) NormalizedValue.SCALE * NormalizedValue.SCALE);
+        return (int) (((long) from * (NormalizedValue.SCALE - fade) + (long) to * fade)
+                / NormalizedValue.SCALE);
     }
 }
