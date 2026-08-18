@@ -13,13 +13,22 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void largeOverviewReducesSamplingWork() {
+    void mediumOverviewAlreadyReducesSubmissionWork() {
+        int stride = WorldGeneration2DLod.stride(300, 300);
+        long sampled = WorldGeneration2DLod.sampledCells(300, 300, stride);
+
+        assertEquals(3, stride);
+        assertEquals(10_000L, sampled);
+    }
+
+    @Test
+    void largeOverviewReducesSamplingWorkAggressively() {
         int stride = WorldGeneration2DLod.stride(600, 600);
         long sampled = WorldGeneration2DLod.sampledCells(600, 600, stride);
 
-        assertTrue(stride > 1);
+        assertEquals(5, stride);
+        assertEquals(14_400L, sampled);
         assertTrue(sampled <= WorldGeneration2DLod.MAX_SAMPLES);
-        assertTrue(sampled < 360_000L);
     }
 
     @Test
@@ -27,7 +36,7 @@ final class WorldGeneration2DLodTest {
         int stride = WorldGeneration2DLod.stride(2048, 2048);
         long sampled = WorldGeneration2DLod.sampledCells(2048, 2048, stride);
 
-        assertTrue(stride >= 6);
+        assertTrue(stride >= 15);
         assertTrue(sampled <= WorldGeneration2DLod.MAX_SAMPLES);
     }
 }
