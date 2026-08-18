@@ -14,7 +14,7 @@ final class WorldGenerationPreviewSettingsTest {
         WorldGenerationPreviewConfig snapshot = settings.snapshot();
 
         assertEquals(64, snapshot.width());
-        assertEquals(64, snapshot.height());
+        assertEquals(64, snapshot.length());
         assertEquals(1L, snapshot.seed());
         assertEquals(350_000, snapshot.coveragePpm());
         assertEquals(750_000, snapshot.scalePpm());
@@ -25,17 +25,17 @@ final class WorldGenerationPreviewSettingsTest {
     }
 
     @Test
-    void widthAndHeightRemainIndependentStressPresets() {
+    void widthAndLengthAcceptArbitraryManualValuesWithinStressRange() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
 
-        settings.width(256);
-        settings.height(32);
+        settings.width(300);
+        settings.length(175);
 
         WorldGenerationPreviewConfig snapshot = settings.snapshot();
-        assertEquals(256, snapshot.width());
-        assertEquals(32, snapshot.height());
-        assertEquals(8_192L, snapshot.columnCount());
-        assertEquals(new WorldBounds(-128, 127, -16, 15, -12, 12), snapshot.bounds());
+        assertEquals(300, snapshot.width());
+        assertEquals(175, snapshot.length());
+        assertEquals(52_500L, snapshot.columnCount());
+        assertEquals(new WorldBounds(-150, 149, -87, 87, -12, 12), snapshot.bounds());
     }
 
     @Test
@@ -43,42 +43,44 @@ final class WorldGenerationPreviewSettingsTest {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
         WorldGenerationPreviewConfig generated = settings.snapshot();
 
-        settings.width(1024);
+        settings.width(1_023);
+        settings.length(777);
         settings.coveragePpm(650_000);
         settings.reliefPpm(900_000);
         settings.seed(44L);
 
         assertEquals(64, generated.width());
+        assertEquals(64, generated.length());
         assertEquals(350_000, generated.coveragePpm());
         assertEquals(600_000, generated.reliefPpm());
         assertEquals(1L, generated.seed());
 
         WorldGenerationPreviewConfig next = settings.snapshot();
-        assertEquals(1024, next.width());
+        assertEquals(1_023, next.width());
+        assertEquals(777, next.length());
         assertEquals(650_000, next.coveragePpm());
         assertEquals(900_000, next.reliefPpm());
         assertEquals(44L, next.seed());
     }
 
     @Test
-    void legacyDimensionSteppingStillClampsToStressRange() {
+    void dimensionsAcceptInclusiveInteractiveStressRange() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
 
-        for (int i = 0; i < 20; i++) {
-            settings.adjustWidth(1);
-            settings.adjustHeight(-1);
-        }
+        settings.width(WorldGenerationPreviewSettings.MIN_HORIZONTAL_DIMENSION);
+        settings.length(WorldGenerationPreviewSettings.MAX_HORIZONTAL_DIMENSION);
 
-        assertEquals(2_048, settings.width());
-        assertEquals(32, settings.height());
+        assertEquals(32, settings.width());
+        assertEquals(2_048, settings.length());
         assertEquals(2_048, settings.maxHorizontalDimension());
     }
 
     @Test
-    void settingsRejectUnsupportedDimensionsAndOutOfRangeIntent() {
+    void settingsRejectOutOfRangeDimensionsAndIntent() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
 
-        assertThrows(IllegalArgumentException.class, () -> settings.width(100));
+        assertThrows(IllegalArgumentException.class, () -> settings.width(31));
+        assertThrows(IllegalArgumentException.class, () -> settings.length(2_049));
         assertThrows(IllegalArgumentException.class, () -> settings.coveragePpm(-1));
         assertThrows(IllegalArgumentException.class, () -> settings.reliefPpm(1_000_001));
     }
