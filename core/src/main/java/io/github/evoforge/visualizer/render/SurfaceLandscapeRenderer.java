@@ -12,6 +12,7 @@ import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
 import io.github.evoforge.visualizer.visual.SurfaceReliefEdgeArt;
 import io.github.evoforge.visualizer.visual.TerrainElevationColorRamp;
+import io.github.evoforge.visualizer.visual.TerrainElevationTintShader;
 
 /** Default open-world renderer: one highest terrain surface per visible XY column. */
 public final class SurfaceLandscapeRenderer {
@@ -21,6 +22,7 @@ public final class SurfaceLandscapeRenderer {
     private final ShapePresentationRegistry shapePresentations;
     private final SurfaceProjectionResolver surfaces;
     private final SurfaceReliefEdgeArt reliefEdges = new SurfaceReliefEdgeArt();
+    private final TerrainElevationTintShader elevationShader = new TerrainElevationTintShader();
     private final Color elevationColor = new Color();
     private final int minimumSurfaceZ;
     private final int maximumSurfaceZ;
@@ -55,12 +57,16 @@ public final class SurfaceLandscapeRenderer {
             int maxY) {
         if (batch == null) throw new IllegalArgumentException("batch must not be null");
 
-        // Keep the canonical terrain atlas together so SpriteBatch does not flush per cell.
+        // Terrain elevation uses a dedicated shader so low ground can darken and high ground can
+        // genuinely brighten without multiplying the whole atlas by a muddy absolute color.
+        if (state.showElevationGradient()) elevationShader.apply(batch);
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 drawTerrainCell(batch, x, y);
             }
         }
+        if (state.showElevationGradient()) elevationShader.clear(batch);
+        batch.setColor(Color.WHITE);
 
         // Relief edges share one tiny atlas and are drawn as one second texture pass.
         for (int x = minX; x <= maxX; x++) {
@@ -76,6 +82,7 @@ public final class SurfaceLandscapeRenderer {
     }
 
     public void dispose() {
+        elevationShader.dispose();
         reliefEdges.dispose();
     }
 
@@ -96,7 +103,7 @@ public final class SurfaceLandscapeRenderer {
                 variant,
                 false);
         if (state.showElevationGradient()) {
-            batch.setColor(TerrainElevationColorRamp.color(
+            batch.setColor(TerrainElevationColorRamp.shaderColor(
                     z,
                     minimumSurfaceZ,
                     maximumSurfaceZ,

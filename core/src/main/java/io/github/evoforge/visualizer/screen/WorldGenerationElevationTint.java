@@ -1,11 +1,9 @@
 package io.github.evoforge.visualizer.screen;
 
 import com.badlogic.gdx.graphics.Color;
-import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.visualizer.visual.TerrainElevationColorRamp;
 
-/** Generated-world adapter for the shared terrain elevation color ramp. */
+/** Generated-world adapter for the shared terrain elevation palette. */
 final class WorldGenerationElevationTint {
     static final int DEFAULT_STRENGTH_PPM =
             TerrainElevationColorRamp.DEFAULT_PREVIEW_SENSITIVITY_PPM;
@@ -16,20 +14,28 @@ final class WorldGenerationElevationTint {
 
     static Color color(
             long elevationSubunits,
-            WorldBounds bounds,
+            WorldGenerationElevationRange range,
             int sensitivityPpm,
             Color out) {
-        if (bounds == null) throw new IllegalArgumentException("world bounds must not be null");
-
-        long maximum = Math.max(
-                ElevationField.SUBUNITS_PER_CELL,
-                Math.multiplyExact(
-                        (long) Math.max(1, bounds.maxZ()),
-                        ElevationField.SUBUNITS_PER_CELL));
+        if (range == null) throw new IllegalArgumentException("elevation range must not be null");
         return TerrainElevationColorRamp.color(
-                Math.max(0L, elevationSubunits),
-                0L,
-                maximum,
+                Math.max(range.minimumSubunits(), elevationSubunits),
+                range.minimumSubunits(),
+                range.maximumSubunits(),
+                sensitivityPpm,
+                out);
+    }
+
+    static Color shaderColor(
+            long elevationSubunits,
+            WorldGenerationElevationRange range,
+            int sensitivityPpm,
+            Color out) {
+        if (range == null) throw new IllegalArgumentException("elevation range must not be null");
+        return TerrainElevationColorRamp.shaderColor(
+                Math.max(range.minimumSubunits(), elevationSubunits),
+                range.minimumSubunits(),
+                range.maximumSubunits(),
                 sensitivityPpm,
                 out);
     }
