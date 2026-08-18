@@ -120,6 +120,35 @@ public final class VisualizerCamera {
         targetY += deltaY;
     }
 
+    /**
+     * Keeps the visible viewport tied to a finite world rectangle.
+     *
+     * <p>When the current viewport is larger than the allowed rectangle on one axis, that axis is
+     * centered instead of allowing the entire world to be panned off-screen.</p>
+     */
+    public void constrainToBounds(
+            float minX,
+            float maxX,
+            float minY,
+            float maxY,
+            float margin) {
+        if (!Float.isFinite(minX)
+                || !Float.isFinite(maxX)
+                || !Float.isFinite(minY)
+                || !Float.isFinite(maxY)
+                || !Float.isFinite(margin)
+                || maxX <= minX
+                || maxY <= minY
+                || margin < 0f) {
+            throw new IllegalArgumentException("camera bounds must be finite and non-empty");
+        }
+
+        float halfWidth = camera.viewportWidth * camera.zoom * 0.5f;
+        float halfHeight = camera.viewportHeight * camera.zoom * 0.5f;
+        targetX = constrainedCenter(targetX, minX, maxX, halfWidth, margin);
+        targetY = constrainedCenter(targetY, minY, maxY, halfHeight, margin);
+    }
+
     public void zoom(
             float amountY) {
 
@@ -183,6 +212,18 @@ public final class VisualizerCamera {
 
     public String zoomLabel() {
         return (Math.round(camera.zoom * 100f) / 100f) + "x";
+    }
+
+    private static float constrainedCenter(
+            float center,
+            float minimum,
+            float maximum,
+            float halfViewport,
+            float margin) {
+        float lower = minimum - margin + halfViewport;
+        float upper = maximum + margin - halfViewport;
+        if (lower > upper) return (minimum + maximum) * 0.5f;
+        return MathUtils.clamp(center, lower, upper);
     }
 
     public record VisibleRange(
