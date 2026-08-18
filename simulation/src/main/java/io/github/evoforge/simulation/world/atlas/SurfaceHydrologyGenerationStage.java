@@ -135,7 +135,8 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
                 || GenerationRevision.V8.equals(revision)
                 || GenerationRevision.V9.equals(revision)
                 || GenerationRevision.V10.equals(revision)
-                || GenerationRevision.V11.equals(revision);
+                || GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     private static int initialVolume(long contributing, long threshold, int area) {

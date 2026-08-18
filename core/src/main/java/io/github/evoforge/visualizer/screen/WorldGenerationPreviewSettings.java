@@ -1,5 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
+import java.util.function.LongSupplier;
+
 /** Mutable draft settings edited by the world-generation development UI. */
 final class WorldGenerationPreviewSettings {
     static final int MIN_HORIZONTAL_DIMENSION = 32;
@@ -8,10 +10,14 @@ final class WorldGenerationPreviewSettings {
     private int width = 64;
     private int length = 64;
     private long seed = 1L;
+    private boolean randomSeedOnGenerate;
     private int coveragePpm = 350_000;
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
     private int reliefPpm = 600_000;
+    private int localReliefPpm = 450_000;
+    private int landformScalePpm = 500_000;
+    private int ruggednessPpm = 350_000;
 
     int width() {
         return width;
@@ -35,6 +41,24 @@ final class WorldGenerationPreviewSettings {
 
     void seed(long value) {
         seed = value;
+    }
+
+    boolean randomSeedOnGenerate() {
+        return randomSeedOnGenerate;
+    }
+
+    void randomSeedOnGenerate(boolean value) {
+        randomSeedOnGenerate = value;
+    }
+
+    long prepareSeedForGeneration(LongSupplier randomSeedSource) {
+        if (randomSeedSource == null) {
+            throw new IllegalArgumentException("random seed source must not be null");
+        }
+        if (randomSeedOnGenerate) {
+            seed = randomSeedSource.getAsLong();
+        }
+        return seed;
     }
 
     void nextSeed() {
@@ -73,6 +97,30 @@ final class WorldGenerationPreviewSettings {
         reliefPpm = requirePpm(value, "reliefPpm");
     }
 
+    int localReliefPpm() {
+        return localReliefPpm;
+    }
+
+    void localReliefPpm(int value) {
+        localReliefPpm = requirePpm(value, "localReliefPpm");
+    }
+
+    int landformScalePpm() {
+        return landformScalePpm;
+    }
+
+    void landformScalePpm(int value) {
+        landformScalePpm = requirePpm(value, "landformScalePpm");
+    }
+
+    int ruggednessPpm() {
+        return ruggednessPpm;
+    }
+
+    void ruggednessPpm(int value) {
+        ruggednessPpm = requirePpm(value, "ruggednessPpm");
+    }
+
     long columnCount() {
         return (long) width * length;
     }
@@ -89,7 +137,10 @@ final class WorldGenerationPreviewSettings {
                 coveragePpm,
                 scalePpm,
                 fragmentationPpm,
-                reliefPpm);
+                reliefPpm,
+                localReliefPpm,
+                landformScalePpm,
+                ruggednessPpm);
     }
 
     private static int requireDimension(int value, String name) {

@@ -47,22 +47,17 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
     /** Revision-aware generated-world compiler policy; Shape identity never participates. */
     public static TerrainShapeGenerationStage forRevision(GenerationRevision revision) {
         if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
-        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
-                ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
-                : TerrainSurfaceTargetSampler.precise();
         return new TerrainShapeGenerationStage(
                 TerrainShapePalette.standard(),
                 TerrainShapeCalibration.representative(),
-                targets);
+                targetsForRevision(revision, TerrainSurfaceTargetSampler.precise()));
     }
 
     /** Uses this stage's palette/calibration while selecting only the revision-specific target law. */
     @Override
     public TerrainShapeField generate(GenerationRevision revision, ElevationField elevation) {
         if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
-        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
-                ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
-                : targetSampler;
+        TerrainSurfaceTargetSampler targets = targetsForRevision(revision, targetSampler);
         if (targets == targetSampler) return generate(elevation);
         return new TerrainShapeGenerationStage(palette, calibration, targets).generate(elevation);
     }
@@ -115,9 +110,23 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         return best;
     }
 
+    private static TerrainSurfaceTargetSampler targetsForRevision(
+            GenerationRevision revision,
+            TerrainSurfaceTargetSampler fallback) {
+        if (GenerationRevision.V12.equals(revision)) {
+            return TerrainSurfaceTargetSampler.coherentVoxelTransitions();
+        }
+        if (GenerationRevision.V11.equals(revision)) {
+            return TerrainSurfaceTargetSampler.smoothVoxelTransitions();
+        }
+        return fallback;
+    }
+
     private static long absoluteDifference(long first, long second) {
         long difference = Math.subtractExact(first, second);
-        if (difference == Long.MIN_VALUE) throw new ArithmeticException("surface difference exceeds signed range");
+        if (difference == Long.MIN_VALUE) {
+            throw new ArithmeticException("surface difference exceeds signed range");
+        }
         return Math.abs(difference);
     }
 
