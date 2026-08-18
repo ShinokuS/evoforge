@@ -5,6 +5,7 @@ import io.github.evoforge.simulation.world.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.pathfinding.PathSearch;
 import io.github.evoforge.simulation.world.pathfinding.PathSearchMetrics;
 import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.visualizer.presentation.route.RoutePresentation;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
@@ -32,13 +33,10 @@ final class PathfindingScenarioDiagnostics {
                 if (marker != null) markers.add(marker);
             }
         }
+        RoutePresentation route = RoutePresentation.EMPTY;
         if (search.status() == PathSearchStatus.FOUND) {
-            PathRoute route = search.route();
-            for (int index = 0; index < route.size(); index++) {
-                markers.add(new ScenarioCellMarker(
-                        route.x(index), route.y(index), route.z(index),
-                        ScenarioCellMarkerStyle.ROUTE));
-            }
+            PathRoute found = search.route();
+            route = RoutePresentation.from(found);
         }
         markers.add(new ScenarioCellMarker(
                 query.fromX(), query.fromY(), query.fromZ(), ScenarioCellMarkerStyle.START));
@@ -46,6 +44,7 @@ final class PathfindingScenarioDiagnostics {
                 query.toX(), query.toY(), query.toZ(), ScenarioCellMarkerStyle.GOAL));
         return new ScenarioDiagnostics(
                 markers.toArray(ScenarioCellMarker[]::new),
+                route,
                 summary(search));
     }
 

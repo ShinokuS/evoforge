@@ -19,11 +19,13 @@ import io.github.evoforge.visualizer.presentation.ProceduralShapePresentations;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.presentation.portal.ViewPortalLookup;
+import io.github.evoforge.visualizer.presentation.route.RoutePresentationLookup;
+import io.github.evoforge.visualizer.presentation.route.SelectedMoveToRouteLookup;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLookup;
 import io.github.evoforge.visualizer.render.LandscapeRenderer;
-import io.github.evoforge.visualizer.render.MoveToRouteDiagnosticRenderer;
 import io.github.evoforge.visualizer.render.ObjectPresentationRenderer;
 import io.github.evoforge.visualizer.render.RainRenderer;
+import io.github.evoforge.visualizer.render.RouteOverlayRenderer;
 import io.github.evoforge.visualizer.render.SurfaceCliffRenderer;
 import io.github.evoforge.visualizer.render.SurfaceLandscapeRenderer;
 import io.github.evoforge.visualizer.render.VisionDiagnosticRenderer;
@@ -41,6 +43,7 @@ import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 import io.github.evoforge.visualizer.visual.ProceduralWaterArt;
 import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
+import io.github.evoforge.visualizer.visual.WorldCellPresentationVisibility;
 
 /** Orchestrates presentation of the authoritative simulation view. */
 public final class ZLevelVisualizer {
@@ -69,7 +72,7 @@ public final class ZLevelVisualizer {
     private final WaterRenderer waterRenderer;
     private final RainRenderer rainRenderer;
     private final VisionDiagnosticRenderer visionDiagnostics;
-    private final MoveToRouteDiagnosticRenderer moveToRouteDiagnostics;
+    private final RouteOverlayRenderer routeOverlay;
     private final VisualizerOverlayRenderer overlayRenderer;
     private final ObjectPresentationRenderer objectRenderer;
     private final WorldInteractionOverlayRenderer interactionOverlay;
@@ -116,7 +119,11 @@ public final class ZLevelVisualizer {
         waterRenderer = new WaterRenderer(view, waterArt);
         rainRenderer = new RainRenderer(WeatherPresentationLookup.CLEAR_LOOKUP);
         visionDiagnostics = new VisionDiagnosticRenderer(view, simulationTime, state, camera);
-        moveToRouteDiagnostics = new MoveToRouteDiagnosticRenderer(view, state, camera);
+        routeOverlay = new RouteOverlayRenderer(
+                state,
+                camera,
+                surfaceResolver,
+                new SelectedMoveToRouteLookup(view, state));
         overlayRenderer = new VisualizerOverlayRenderer(
                 view, state, camera, sliceResolver, shapePresentations);
         objectRenderer = new ObjectPresentationRenderer(
@@ -164,6 +171,11 @@ public final class ZLevelVisualizer {
         rainRenderer.setWeather(weather);
     }
 
+    /** Adds a scenario route source without changing the renderer used by production MoveTo. */
+    public void setScenarioRoutePresentation(RoutePresentationLookup routes) {
+        routeOverlay.setScenarioRoute(routes);
+    }
+
     public void setView(int selectedZ, float cameraX, float cameraY, float zoom) {
         state.setSelectedZ(selectedZ);
         camera.setView(cameraX, cameraY, zoom);
@@ -178,6 +190,11 @@ public final class ZLevelVisualizer {
     public int selectedZ() { return state.selectedZ(); }
     public VisualizerViewMode viewMode() { return state.viewMode(); }
     public VisualizerCamera.Cell cellAt(int screenX, int screenY) { return camera.cellAt(screenX, screenY); }
+
+    /** Shared XYZ visibility law used by external scenario diagnostics. */
+    public boolean cellVisible(int x, int y, int z) {
+        return WorldCellPresentationVisibility.visible(state, surfaceResolver, x, y, z);
+    }
 
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
@@ -225,7 +242,7 @@ public final class ZLevelVisualizer {
         interactionOverlay.drawPortals(range);
         objectRenderer.draw(range);
         overlayRenderer.draw(range);
-        moveToRouteDiagnostics.draw(range);
+        routeOverlay.draw(range);
         if (state.showVisionDiagnostics()) visionDiagnostics.draw(range);
         interactionOverlay.drawFeedback();
         rainRenderer.draw(presentationSeconds);
@@ -265,7 +282,7 @@ public final class ZLevelVisualizer {
         interactionOverlay.dispose();
         objectRenderer.dispose();
         overlayRenderer.dispose();
-        moveToRouteDiagnostics.dispose();
+        routeOverlay.dispose();
         visionDiagnostics.dispose();
         worldGrid.dispose();
         surfaceCliffs.dispose();

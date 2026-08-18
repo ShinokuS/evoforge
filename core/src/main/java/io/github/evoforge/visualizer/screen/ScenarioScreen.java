@@ -82,6 +82,7 @@ public final class ScenarioScreen extends ScreenAdapter {
         visualizer.setInteractionBindings(session.portals(), commandSink(runtime));
         visualizer.setManualMovementEnabled(scenario.manualMovementEnabled());
         visualizer.setWeatherPresentation(session.weather());
+        visualizer.setScenarioRoutePresentation(() -> session.diagnostics().route());
 
         ScenarioView initial = session.view();
         visualizer.setView(
@@ -118,7 +119,7 @@ public final class ScenarioScreen extends ScreenAdapter {
         session.update();
         ScenarioDiagnostics diagnostics = session.diagnostics();
         visualizer.copyWorldProjection(worldProjection);
-        diagnosticRenderer.draw(diagnostics, worldProjection, visualizer.selectedZ());
+        diagnosticRenderer.draw(diagnostics, worldProjection, visualizer::cellVisible);
         drawScenarioLabel(diagnostics);
     }
 

@@ -2,8 +2,8 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
-import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
+
+import io.github.evoforge.visualizer.presentation.route.RoutePresentation;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
@@ -48,13 +48,11 @@ final class PathfindingScenariosTest {
         boolean usesSideLane = false;
         boolean crossesSolid = false;
         boolean crossesSlow = false;
-        ScenarioDiagnostics diagnostics = session.diagnostics();
-        for (int index = 0; index < diagnostics.cellCount(); index++) {
-            ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() != ScenarioCellMarkerStyle.ROUTE) continue;
-            if (marker.y() != 0) usesSideLane = true;
-            if (marker.y() == 0 && marker.x() == 8) crossesSolid = true;
-            if (marker.y() == 0 && marker.x() == 14) crossesSlow = true;
+        RoutePresentation route = session.diagnostics().route();
+        for (int index = 0; index < route.size(); index++) {
+            if (route.y(index) != 0) usesSideLane = true;
+            if (route.y(index) == 0 && route.x(index) == 8) crossesSolid = true;
+            if (route.y(index) == 0 && route.x(index) == 14) crossesSlow = true;
         }
         assertTrue(usesSideLane, "fresh route must use one side lane");
         assertTrue(!crossesSolid, "fresh route must avoid the new solid block");
@@ -62,7 +60,7 @@ final class PathfindingScenariosTest {
     }
 
     @Test
-    void verticalScenariosExposeRouteAcrossMultipleZSlices() {
+    void verticalScenariosExposeOneOrderedRouteAcrossMultipleZSlices() {
         assertRouteZSlices(new PathfindingMultiLevelClimbScenario(), 4);
         assertRouteZSlices(new PathfindingZSwitchbackScenario(), 3);
         assertRouteZSlices(new PathfindingVerticalOverpassScenario(), 3);
@@ -81,27 +79,32 @@ final class PathfindingScenariosTest {
             ScenarioSession second = scenario.create();
             assertEquals(first.view(), second.view());
             assertEquals(first.diagnostics().summary(), second.diagnostics().summary());
-            assertEquals(first.diagnostics().cellCount(), second.diagnostics().cellCount());
+            assertRouteEquals(first.diagnostics().route(), second.diagnostics().route());
         }
     }
 
     private static void assertRouteStaysOnCenter(ScenarioDiagnostics diagnostics) {
-        for (int index = 0; index < diagnostics.cellCount(); index++) {
-            ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() == ScenarioCellMarkerStyle.ROUTE) {
-                assertEquals(0, marker.y(), "visible pre-change route must stay on the center lane");
-            }
+        RoutePresentation route = diagnostics.route();
+        assertTrue(!route.empty(), "expected visible route presentation");
+        for (int index = 0; index < route.size(); index++) {
+            assertEquals(0, route.y(index), "visible pre-change route must stay on the center lane");
         }
     }
 
     private static void assertRouteZSlices(VisualizerScenario scenario, int minimumSlices) {
-        ScenarioDiagnostics diagnostics = scenario.create().diagnostics();
+        RoutePresentation route = scenario.create().diagnostics().route();
         Set<Integer> routeZ = new HashSet<>();
-        for (int index = 0; index < diagnostics.cellCount(); index++) {
-            ScenarioCellMarker marker = diagnostics.cell(index);
-            if (marker.style() == ScenarioCellMarkerStyle.ROUTE) routeZ.add(marker.z());
-        }
+        for (int index = 0; index < route.size(); index++) routeZ.add(route.z(index));
         assertTrue(routeZ.size() >= minimumSlices, scenario.id() + ": route Z slices=" + routeZ);
+    }
+
+    private static void assertRouteEquals(RoutePresentation first, RoutePresentation second) {
+        assertEquals(first.size(), second.size());
+        for (int index = 0; index < first.size(); index++) {
+            assertEquals(first.x(index), second.x(index));
+            assertEquals(first.y(index), second.y(index));
+            assertEquals(first.z(index), second.z(index));
+        }
     }
 
     private static void assertStatus(VisualizerScenario scenario, String expectedStatus) {
