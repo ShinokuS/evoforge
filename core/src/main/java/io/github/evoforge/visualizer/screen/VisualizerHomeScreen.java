@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.utils.Align;
 
 /** Top-level navigation between simulation scenarios and world-generation tools. */
 public final class VisualizerHomeScreen extends ScreenAdapter {
@@ -108,8 +109,10 @@ public final class VisualizerHomeScreen extends ScreenAdapter {
 
         font.getData().setScale(0.94f);
         font.setColor(MUTED);
-        font.draw(batch, "Choose a focused workspace instead of mixing simulation scenarios with world generation.",
-                52f, height - 88f);
+        font.draw(batch,
+                "Choose a focused workspace instead of mixing simulation scenarios with world generation.",
+                52f,
+                height - 88f);
 
         drawCard(startX, y, "SCENARIOS",
                 "Deterministic simulation acceptance scenarios, diagnostics and focused runtime experiments.",
@@ -131,7 +134,7 @@ public final class VisualizerHomeScreen extends ScreenAdapter {
 
         font.getData().setScale(0.90f);
         font.setColor(active ? Color.WHITE : MUTED);
-        font.draw(batch, description, x + 26f, y + 126f, 360f, -1, true);
+        font.draw(batch, description, x + 26f, y + 126f, 360f, Align.left, true);
     }
 
     private void activate() {
