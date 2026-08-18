@@ -11,8 +11,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  *
  * <p>V1-V4 predate thermal climate and retain a uniform datum-temperature fallback. V5+ apply the
  * authored elevation cooling rate. V1-V7 preserve historical cell-relative atmospheric-water
- * normals; V8+ require physical water-depth-per-time normals. Spatial precipitation gradients,
- * seasonality and weather remain later causal layers.</p>
+ * normals; V8+ revisions use physical water-depth-per-time normals. Spatial precipitation
+ * gradients, seasonality and weather remain later causal layers.</p>
  */
 public final class ClimateNormalsGenerationStage implements ClimateNormalsGenerator {
 
@@ -33,11 +33,7 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 || GenerationRevision.V3.equals(revision)
                 || GenerationRevision.V4.equals(revision)) {
             elevationAware = false;
-        } else if (GenerationRevision.V5.equals(revision)
-                || GenerationRevision.V6.equals(revision)
-                || GenerationRevision.V7.equals(revision)
-                || GenerationRevision.V8.equals(revision)
-                || GenerationRevision.V9.equals(revision)) {
+        } else if (usesElevationAwareClimate(revision)) {
             elevationAware = true;
         } else {
             throw new IllegalArgumentException(
@@ -45,8 +41,7 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
         }
 
         ClimateSpec climate = genesis.spec().climate();
-        boolean physicalWater = GenerationRevision.V8.equals(revision)
-                || GenerationRevision.V9.equals(revision);
+        boolean physicalWater = usesPhysicalWaterNormals(revision);
         ClimateWaterNormal.Kind expectedWaterKind = physicalWater
                 ? ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME
                 : ClimateWaterNormal.Kind.LEGACY_CELL_VOLUME_PER_TICK;
@@ -77,6 +72,23 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 temperature,
                 climate.precipitationWaterNormal(),
                 climate.evaporativeDemandWaterNormal());
+    }
+
+    private static boolean usesElevationAwareClimate(GenerationRevision revision) {
+        return GenerationRevision.V5.equals(revision)
+                || GenerationRevision.V6.equals(revision)
+                || GenerationRevision.V7.equals(revision)
+                || GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)
+                || GenerationRevision.V10.equals(revision)
+                || GenerationRevision.V11.equals(revision);
+    }
+
+    private static boolean usesPhysicalWaterNormals(GenerationRevision revision) {
+        return GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)
+                || GenerationRevision.V10.equals(revision)
+                || GenerationRevision.V11.equals(revision);
     }
 
     private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {
