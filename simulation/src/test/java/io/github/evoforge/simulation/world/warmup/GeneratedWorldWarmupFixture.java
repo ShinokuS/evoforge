@@ -6,6 +6,9 @@ import io.github.evoforge.simulation.world.bootstrap.AtmosphericForcingPolicy;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldBootstrap;
 import io.github.evoforge.simulation.world.bootstrap.GeneratedWorldRuntime;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
+import io.github.evoforge.simulation.world.genesis.RngRevision;
+import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.geology.CompiledGeologyProfile;
@@ -56,11 +59,37 @@ final class GeneratedWorldWarmupFixture {
             ClimateSpec climate,
             WorldBounds bounds,
             AtmosphericForcingPolicy atmosphericForcingPolicy) {
-        if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
+        return create(
+                WorldGenesis.current(new WorldSpec(requireBounds(bounds), climate), seed),
+                atmosphericForcingPolicy);
+    }
+
+    static GeneratedWorldRuntime create(
+            long seed,
+            ClimateSpec climate,
+            WorldBounds bounds,
+            AtmosphericForcingPolicy atmosphericForcingPolicy,
+            GenerationRevision generationRevision) {
+        if (generationRevision == null) {
+            throw new IllegalArgumentException("generation revision must not be null");
+        }
+        WorldSpec spec = new WorldSpec(requireBounds(bounds), climate);
+        return create(
+                new WorldGenesis(
+                        spec,
+                        seed,
+                        generationRevision,
+                        RngRevision.V1,
+                        WorldGenerationIntent.balanced()),
+                atmosphericForcingPolicy);
+    }
+
+    private static GeneratedWorldRuntime create(
+            WorldGenesis genesis,
+            AtmosphericForcingPolicy atmosphericForcingPolicy) {
         if (atmosphericForcingPolicy == null) {
             throw new IllegalArgumentException("atmospheric forcing policy must not be null");
         }
-        WorldGenesis genesis = WorldGenesis.current(new WorldSpec(bounds, climate), seed);
         CompiledTerrainProfile terrainProfile = terrainProfile();
         CompiledGeologyProfile geologyProfile = geologyProfile();
 
@@ -123,6 +152,11 @@ final class GeneratedWorldWarmupFixture {
 
     static WorldBounds bounds() {
         return new WorldBounds(0, 3, 0, 3, -4, 4);
+    }
+
+    private static WorldBounds requireBounds(WorldBounds bounds) {
+        if (bounds == null) throw new IllegalArgumentException("bounds must not be null");
+        return bounds;
     }
 
     private static Path asset(String relative) {
