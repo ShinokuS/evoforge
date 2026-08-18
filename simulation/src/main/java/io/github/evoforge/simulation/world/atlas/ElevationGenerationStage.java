@@ -12,7 +12,7 @@ import java.util.Arrays;
 
 /**
  * Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology,
- * and V12 makes terrain relief spatially stable across different world dimensions.
+ * and V12 authors scale-stable balanced landforms through a dedicated generator.
  */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
@@ -27,36 +27,15 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:ridge-b");
     private static final GenerationPurposeId BASIN = GenerationPurposeId.of("world:basin");
-    private static final GenerationPurposeId LOCAL_RELIEF = GenerationPurposeId.of("world:local-relief");
-    private static final GenerationPurposeId LOCAL_RELIEF_DETAIL =
-            GenerationPurposeId.of("world:local-relief-detail");
     private static final GenerationPurposeId WARP_X = GenerationPurposeId.of("world:morphology-warp-x");
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:morphology-warp-y");
     private static final int SAMPLE_MAX = 65_535;
-
-    // V12 relief wavelengths are expressed in terrain-cell space. Increasing the map dimensions
-    // therefore reveals more terrain features instead of stretching the same feature into a plateau.
-    private static final int V12_UPLIFT_SCALE = 112;
-    private static final int V12_RIDGE_SCALE = 56;
-    private static final int V12_BASIN_SCALE = 144;
-    private static final int V12_LOCAL_RELIEF_PRIMARY_SCALE = 32;
-    private static final int V12_LOCAL_RELIEF_DETAIL_SCALE = 14;
-    private static final int V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM = 700_000;
-    private static final int V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM =
-            NormalizedValue.SCALE - V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM;
-    private static final int V12_COASTAL_TRANSITION_CELLS = 12;
-    private static final long V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS =
-            7L * ElevationField.SUBUNITS_PER_CELL;
-    private static final long V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS =
-            ElevationField.SUBUNITS_PER_CELL / 8L;
-    private static final long V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS =
-            ElevationField.SUBUNITS_PER_CELL * 3L / 4L;
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         GenerationRevision revision = genesis.generationRevision();
-        if (GenerationRevision.V12.equals(revision)) return generateScaleStableMorphology(genesis);
+        if (GenerationRevision.V12.equals(revision)) return V12LandformElevationGenerator.generate(genesis);
         if (GenerationRevision.V11.equals(revision)) return generateOrganicMorphology(genesis);
         if (GenerationRevision.V10.equals(revision)) return generateMacroMorphology(genesis);
         if (GenerationRevision.V9.equals(revision)) return generateOceanFirst(genesis);
@@ -156,10 +135,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return generateStructuredMorphology(genesis, true);
     }
 
-    /**
-     * Stable V10/V11 morphology implementation. V12 is intentionally separate so fixing terrain
-     * scale does not alter any already-published revision output.
-     */
+    /** Stable V10/V11 morphology implementation retained verbatim for revision compatibility. */
     private static ElevationField generateStructuredMorphology(
             WorldGenesis genesis,
             boolean organic) {
@@ -242,293 +218,6 @@ public final class ElevationGenerationStage implements ElevationGenerator {
             elevations[cell] = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
         }
         return new DenseElevationField(bounds, elevations);
-    }
-
-    /**
-     * V12 keeps V11's calibrated land mask, but terrain height no longer depends on global land
-     * rank or world-size-scaled relief wavelengths. Coastal influence comes from actual spatial
-     * distance to ocean, and relief wavelengths remain stable in terrain-cell space.
-     */
-    private static ElevationField generateScaleStableMorphology(WorldGenesis genesis) {
-        WorldBounds bounds = genesis.spec().bounds();
-        validateOceanFirstBounds(bounds);
-        int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
-        int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
-        int area = DenseElevationField.cellCount(bounds);
-        WorldGenerationIntent intent = genesis.generationIntent();
-        GenerationRandom random = GenerationRandom.from(genesis);
-
-        int maxDimension = Math.max(width, height);
-        int coherentScale = interpolatedScale(4, Math.max(4, maxDimension), intent.landmassScale());
-        int fragmentedScale = Math.max(2, coherentScale / 4);
-        int fragmentPpm = intent.fragmentation().partsPerMillion();
-        long[] rankKeys = new long[area];
-
-        int index = 0;
-        for (int localY = 0; localY < height; localY++) {
-            int y = bounds.minY() + localY;
-            for (int localX = 0; localX < width; localX++) {
-                int x = bounds.minX() + localX;
-                int coherent = morphologyNoise(random, LANDMASS, x, y, coherentScale, true);
-                int fragmented = morphologyNoise(random, FRAGMENT, x, y, fragmentedScale, true);
-                int potential = (int) (((long) coherent * (NormalizedValue.SCALE - fragmentPpm)
-                        + (long) fragmented * fragmentPpm) / NormalizedValue.SCALE);
-                rankKeys[index] = rankKey(potential, index);
-                index++;
-            }
-        }
-        Arrays.sort(rankKeys);
-
-        int landCount = calibratedLandCount(area, intent.landCoverage());
-        boolean[] land = new boolean[area];
-        for (int rank = 0; rank < landCount; rank++) land[(int) rankKeys[rank]] = true;
-        int[] coastalInteriority = coastalInteriorityPpm(land, width, height);
-
-        long[] elevations = new long[area];
-        long landAmplitude = Math.multiplyExact(
-                (long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
-        long oceanAmplitude = Math.multiplyExact(
-                -(long) bounds.minZ(), ElevationField.SUBUNITS_PER_CELL);
-        int reliefPpm = intent.relief().partsPerMillion();
-        int localReliefPpm = intent.localRelief().partsPerMillion();
-
-        // First build the macro surface only. Local relief is applied in a second pass so its
-        // strength can respond to the actual local macro slope instead of blindly adding noise to
-        // already-busy compact terrain.
-        for (int rank = 0; rank < area; rank++) {
-            int cell = (int) rankKeys[rank];
-            if (!land[cell]) {
-                elevations[cell] = -positiveRankHeight(
-                        area - 1 - rank, area - landCount, oceanAmplitude);
-                continue;
-            }
-
-            int localY = cell / width;
-            int localX = cell - localY * width;
-            int x = bounds.minX() + localX;
-            int y = bounds.minY() + localY;
-            int interiorityPpm = coastalInteriority[cell];
-
-            int upliftPpm = sampleToPpm(
-                    organicValueNoise(random, UPLIFT, x, y, V12_UPLIFT_SCALE));
-            int ridgePpm = ridgeStrengthPpm(random, x, y, V12_RIDGE_SCALE, true);
-            int basinPpm = sampleToPpm(
-                    organicValueNoise(random, BASIN, x, y, V12_BASIN_SCALE));
-
-            long macroPpm = 250_000L
-                    + ((long) (upliftPpm - NormalizedValue.SCALE / 2) * 45L) / 100L
-                    + ((long) ridgePpm * 55L) / 100L
-                    - ((long) basinPpm * 30L) / 100L;
-            int structuredPpm = clampPpm(macroPpm);
-
-            int coastalGatePpm = 300_000 + (int) (((long) interiorityPpm * 700_000L)
-                    / NormalizedValue.SCALE);
-            structuredPpm = (int) (((long) structuredPpm * coastalGatePpm)
-                    / NormalizedValue.SCALE);
-
-            int lowlandPpm = 70_000 + (int) (((long) interiorityPpm * 110_000L)
-                    / NormalizedValue.SCALE);
-            int heightPpm = lowlandPpm + (int) (((long) (structuredPpm - lowlandPpm)
-                    * reliefPpm) / NormalizedValue.SCALE);
-            elevations[cell] = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
-        }
-
-        if (localReliefPpm == 0) {
-            return new DenseElevationField(bounds, elevations);
-        }
-
-        long[] macroElevations = elevations;
-        long[] locallyVaried = Arrays.copyOf(macroElevations, macroElevations.length);
-        for (int localY = 0; localY < height; localY++) {
-            for (int localX = 0; localX < width; localX++) {
-                int cell = localY * width + localX;
-                if (!land[cell]) continue;
-
-                int calmnessPpm = localReliefCalmnessPpm(
-                        macroElevations,
-                        land,
-                        width,
-                        height,
-                        localX,
-                        localY);
-                if (calmnessPpm == 0) continue;
-
-                int x = bounds.minX() + localX;
-                int y = bounds.minY() + localY;
-                locallyVaried[cell] = addV12LocalRelief(
-                        macroElevations[cell],
-                        landAmplitude,
-                        random,
-                        x,
-                        y,
-                        localReliefPpm,
-                        calmnessPpm);
-            }
-        }
-        return new DenseElevationField(bounds, locallyVaried);
-    }
-
-    /**
-     * Local relief is strongest on genuinely broad macro shelves and fades out on already-steep
-     * terrain. This makes the authored control solve the original problem directly: large plateaus
-     * gain rolling hills, while a small high-relief world does not become noisy everywhere.
-     */
-    private static int localReliefCalmnessPpm(
-            long[] macroElevations,
-            boolean[] land,
-            int width,
-            int height,
-            int x,
-            int y) {
-        int cell = y * width + x;
-        long center = macroElevations[cell];
-        long maximumStep = 0L;
-        int neighbours = 0;
-
-        if (x > 0 && land[cell - 1]) {
-            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell - 1]));
-            neighbours++;
-        }
-        if (x + 1 < width && land[cell + 1]) {
-            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell + 1]));
-            neighbours++;
-        }
-        if (y > 0 && land[cell - width]) {
-            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell - width]));
-            neighbours++;
-        }
-        if (y + 1 < height && land[cell + width]) {
-            maximumStep = Math.max(maximumStep, absoluteDifference(center, macroElevations[cell + width]));
-            neighbours++;
-        }
-        if (neighbours == 0) return 0;
-        if (maximumStep <= V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS) {
-            return NormalizedValue.SCALE;
-        }
-        if (maximumStep >= V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS) return 0;
-
-        long coordinate = (maximumStep - V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS)
-                * NormalizedValue.SCALE
-                / (V12_LOCAL_RELIEF_BUSY_SLOPE_SUBUNITS
-                        - V12_LOCAL_RELIEF_QUIET_SLOPE_SUBUNITS);
-        return NormalizedValue.SCALE - smoothStepPpm(coordinate);
-    }
-
-    private static long addV12LocalRelief(
-            long baseElevation,
-            long landAmplitude,
-            GenerationRandom random,
-            int x,
-            int y,
-            int localReliefPpm,
-            int calmnessPpm) {
-        // No domain warp here: local relief must stay spatially calm and predictable. The smaller
-        // secondary band breaks very long quantized shelves without introducing cell-scale noise.
-        long primaryPpm = centeredPpm(smoothValueNoise(
-                random,
-                LOCAL_RELIEF,
-                x,
-                y,
-                V12_LOCAL_RELIEF_PRIMARY_SCALE));
-        long detailPpm = centeredPpm(smoothValueNoise(
-                random,
-                LOCAL_RELIEF_DETAIL,
-                x,
-                y,
-                V12_LOCAL_RELIEF_DETAIL_SCALE));
-        long combinedPpm = (primaryPpm * V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM
-                + detailPpm * V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM)
-                / NormalizedValue.SCALE;
-        long shapedPpm = boostLocalReliefSignal(combinedPpm);
-
-        long fullStrengthOffset = shapedPpm * V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
-                / NormalizedValue.SCALE;
-        long authoredOffset = fullStrengthOffset * localReliefPpm / NormalizedValue.SCALE;
-        long offset = authoredOffset * calmnessPpm / NormalizedValue.SCALE;
-        return Math.max(1L, Math.min(landAmplitude, baseElevation + offset));
-    }
-
-    /** Boosts mid-strength hills/valleys while preserving zero and the authored maximum. */
-    private static long boostLocalReliefSignal(long centeredPpm) {
-        long magnitude = Math.min((long) NormalizedValue.SCALE, Math.abs(centeredPpm));
-        long multiplierPpm = 1_300_000L - magnitude * 300_000L / NormalizedValue.SCALE;
-        long boosted = centeredPpm * multiplierPpm / NormalizedValue.SCALE;
-        return Math.max(-(long) NormalizedValue.SCALE,
-                Math.min((long) NormalizedValue.SCALE, boosted));
-    }
-
-    private static long centeredPpm(int sample) {
-        return (long) sampleToPpm(sample) * 2L - NormalizedValue.SCALE;
-    }
-
-    private static long absoluteDifference(long first, long second) {
-        long difference = first - second;
-        if (difference == Long.MIN_VALUE) {
-            throw new ArithmeticException("elevation difference exceeds signed range");
-        }
-        return Math.abs(difference);
-    }
-
-    /**
-     * Spatial coast distance replaces V10/V11's global land-potential rank as a terrain-height
-     * input. That removes the small-world checkerboard effect and makes the same terrain settings
-     * have comparable local character on 64x64 and much larger worlds.
-     */
-    private static int[] coastalInteriorityPpm(boolean[] land, int width, int height) {
-        int[] distance = new int[land.length];
-        int infinity = width + height + 1;
-        boolean hasOcean = false;
-        for (int index = 0; index < land.length; index++) {
-            if (land[index]) {
-                distance[index] = infinity;
-            } else {
-                distance[index] = 0;
-                hasOcean = true;
-            }
-        }
-
-        int[] result = new int[land.length];
-        if (!hasOcean) {
-            Arrays.fill(result, NormalizedValue.SCALE);
-            return result;
-        }
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int index = y * width + x;
-                if (!land[index]) continue;
-                int best = distance[index];
-                if (x > 0) best = Math.min(best, distance[index - 1] + 1);
-                if (y > 0) best = Math.min(best, distance[index - width] + 1);
-                distance[index] = best;
-            }
-        }
-        for (int y = height - 1; y >= 0; y--) {
-            for (int x = width - 1; x >= 0; x--) {
-                int index = y * width + x;
-                if (!land[index]) continue;
-                int best = distance[index];
-                if (x + 1 < width) best = Math.min(best, distance[index + 1] + 1);
-                if (y + 1 < height) best = Math.min(best, distance[index + width] + 1);
-                distance[index] = best;
-            }
-        }
-
-        for (int index = 0; index < land.length; index++) {
-            if (!land[index]) continue;
-            long coordinate = Math.min(distance[index], V12_COASTAL_TRANSITION_CELLS)
-                    * (long) NormalizedValue.SCALE / V12_COASTAL_TRANSITION_CELLS;
-            result[index] = smoothStepPpm(coordinate);
-        }
-        return result;
-    }
-
-    private static int smoothStepPpm(long coordinatePpm) {
-        long coordinate = Math.max(0L, Math.min((long) NormalizedValue.SCALE, coordinatePpm));
-        long coordinateSquared = coordinate * coordinate;
-        return (int) (coordinateSquared
-                * (3L * NormalizedValue.SCALE - 2L * coordinate)
-                / ((long) NormalizedValue.SCALE * NormalizedValue.SCALE));
     }
 
     private static void validateOceanFirstBounds(WorldBounds bounds) {
