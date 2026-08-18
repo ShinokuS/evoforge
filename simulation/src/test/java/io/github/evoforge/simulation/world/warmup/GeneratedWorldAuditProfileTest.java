@@ -10,8 +10,9 @@ import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsFormat;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
+import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 final class GeneratedWorldAuditProfileTest {
 
     private static final long[] SEEDS = {0L, 1L, 42L, 991L, 123_456_789L};
+    private static final Duration CLIMATE_YEAR = Duration.ofDays(365L);
 
     @Test
     void printsRepresentativeGeneratedWorldCheckpoints() {
@@ -102,16 +104,22 @@ final class GeneratedWorldAuditProfileTest {
         return List.of(
                 new AuditProfile(
                         "isolated-water-balance",
-                        ClimateSpec.STANDARD,
+                        physicalClimate(500L, 500L),
                         AtmosphericForcingPolicy.DISABLED),
                 new AuditProfile(
                         "fractional-net-supply",
-                        ClimateSpec.of(
-                                ClimateTemperature.ofMilliCelsius(12_000),
-                                250,
-                                CellVolumeRate.of(100_001L, 3L),
-                                CellVolumeRate.of(20_003L, 4L)),
+                        physicalClimate(800L, 200L),
                         AtmosphericForcingPolicy.CLIMATE_NORMALS));
+    }
+
+    private static ClimateSpec physicalClimate(
+            long precipitationMillimetersPerYear,
+            long evaporationMillimetersPerYear) {
+        return ClimateSpec.physical(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                WaterDepthRate.ofMillimeters(precipitationMillimetersPerYear, CLIMATE_YEAR),
+                WaterDepthRate.ofMillimeters(evaporationMillimetersPerYear, CLIMATE_YEAR));
     }
 
     /** Developer audit inputs, not a user-facing climate preset contract. */
