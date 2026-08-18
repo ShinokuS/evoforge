@@ -2,6 +2,7 @@ package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Disposable;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,6 +41,13 @@ public final class ShapePresentationRegistry implements Disposable {
                 topologyMask,
                 variant,
                 solidBody);
+    }
+
+    public boolean reliefEdgeVisible(
+            Shape shape,
+            CellFace face,
+            boolean boundaryAligned) {
+        return binding(shape).reliefEdgeVisible(shape, face, boundaryAligned);
     }
 
     public ShapeDirectionDiagnostic directionDiagnostic(Shape shape) {
