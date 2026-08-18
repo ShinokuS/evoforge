@@ -3,18 +3,18 @@ package io.github.evoforge.visualizer.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
-import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
@@ -51,14 +51,16 @@ final class WorldGenerationSettingsPanel implements Disposable {
             Consumer<Boolean> surfaceVisibility,
             Consumer<Boolean> oceanVisibility,
             Consumer<Boolean> viewMode,
-            IntConsumer elevationTint) {
+            IntConsumer elevationTint,
+            IntConsumer meshDetail) {
 
         if (settings == null
                 || generateAction == null
                 || surfaceVisibility == null
                 || oceanVisibility == null
                 || viewMode == null
-                || elevationTint == null) {
+                || elevationTint == null
+                || meshDetail == null) {
             throw new IllegalArgumentException("world-generation panel dependencies must not be null");
         }
         this.settings = settings;
@@ -90,27 +92,12 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 oceanVisibility,
                 viewMode,
                 elevationTint);
-        Table performanceTab = buildPerformanceTab();
-        performanceTab.setVisible(false);
+        Table performanceTab = buildPerformanceTab(meshDetail);
 
         TextButton worldButton = new TextButton("WORLD", skin);
         TextButton performanceButton = new TextButton("PERFORMANCE", skin);
         worldButton.setChecked(true);
-        ButtonGroup<TextButton> tabs = new ButtonGroup<>(worldButton, performanceButton);
-        tabs.setMinCheckCount(1);
-        tabs.setMaxCheckCount(1);
-        tabs.setUncheckLast(false);
-
-        ChangeListener tabListener = new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                boolean performance = performanceButton.isChecked();
-                worldTab.setVisible(!performance);
-                performanceTab.setVisible(performance);
-            }
-        };
-        worldButton.addListener(tabListener);
-        performanceButton.addListener(tabListener);
+        performanceButton.setChecked(false);
 
         Table tabRow = new Table(skin);
         tabRow.add(worldButton).growX().height(32f).padRight(4f);
@@ -118,11 +105,33 @@ final class WorldGenerationSettingsPanel implements Disposable {
         rootContent.add(tabRow).growX().padBottom(8f);
         rootContent.row();
 
-        Stack stack = new Stack();
-        stack.add(worldTab);
-        stack.add(performanceTab);
-        rootContent.add(stack).growX().minWidth(0f);
+        // Replace the tab actor instead of stacking and hiding actors. This keeps Scene2D hit
+        // testing and preferred-size calculation deterministic when the two tabs have different
+        // heights, and fixes PERFORMANCE clicks being visually ignored on some layouts.
+        Table tabHost = new Table(skin);
+        tabHost.top().left();
+        showTab(tabHost, worldTab, rootContent);
+        rootContent.add(tabHost).growX().minWidth(0f).top();
         rootContent.row();
+
+        worldButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                worldButton.setChecked(true);
+                performanceButton.setChecked(false);
+                showTab(tabHost, worldTab, rootContent);
+                statusLabel.setText("World generation settings.");
+            }
+        });
+        performanceButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                worldButton.setChecked(false);
+                performanceButton.setChecked(true);
+                showTab(tabHost, performanceTab, rootContent);
+                statusLabel.setText("Performance settings apply live.");
+            }
+        });
 
         TextButton generate = new TextButton("GENERATE", skin);
         generate.addListener(new ChangeListener() {
@@ -242,7 +251,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         return content;
     }
 
-    private Table buildPerformanceTab() {
+    private Table buildPerformanceTab(IntConsumer meshDetail) {
         Table content = tabContent();
         addSection(content, "2D LOD QUALITY");
 
@@ -273,11 +282,36 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 WorldGeneration2DLod::overviewSampleBudget);
 
         Label detailHint = new Label(
-                "Detailed range controls how long exact LOD x1 is retained. Far detail controls how many blocks are kept in x2+ overview modes. For a more organic distant view, raise Far detail first.",
+                "Raise Far detail first for rounder coastlines and less compressed distant terrain. Detailed range only controls how long exact LOD x1 is retained.",
                 skin,
                 "subtitle");
         detailHint.setWrap(true);
         content.add(detailHint).growX().minWidth(0f).left().padTop(6f).padBottom(12f);
+        content.row();
+
+        addSection(content, "3D MESH QUALITY");
+        Label meshExplanation = new Label(
+                "3D mesh axis is the maximum number of terrain samples along each world axis. Large worlds currently use 160 by default; increasing it preserves much more relief shape.",
+                skin,
+                "subtitle");
+        meshExplanation.setWrap(true);
+        content.add(meshExplanation).growX().minWidth(0f).left().padBottom(12f);
+        content.row();
+
+        Slider mesh = addIntControl(
+                content,
+                "3D mesh axis",
+                WorldGeneration3DDetail.MIN_AXIS_SAMPLES,
+                WorldGeneration3DDetail.MAX_AXIS_SAMPLES,
+                WorldGeneration3DDetail.maxAxisSamples(),
+                meshDetail);
+
+        Label meshHint = new Label(
+                "160 = fast default. Try 200-240 for a more organic large-world mesh. Changes rebuild only the preview mesh; the generated world is untouched.",
+                skin,
+                "subtitle");
+        meshHint.setWrap(true);
+        content.add(meshHint).growX().minWidth(0f).left().padTop(6f).padBottom(12f);
         content.row();
 
         TextButton reset = new TextButton("RESET PERFORMANCE DEFAULTS", skin);
@@ -287,6 +321,8 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 WorldGeneration2DLod.resetTuning();
                 detail.setValue(WorldGeneration2DLod.detailedCellBudget());
                 overview.setValue(WorldGeneration2DLod.overviewSampleBudget());
+                meshDetail.accept(WorldGeneration3DDetail.DEFAULT_MAX_AXIS_SAMPLES);
+                mesh.setValue(WorldGeneration3DDetail.maxAxisSamples());
                 statusLabel.setText("Performance defaults restored. Applied live.");
             }
         });
@@ -294,13 +330,20 @@ final class WorldGenerationSettingsPanel implements Disposable {
         content.row();
 
         Label defaults = new Label(
-                "Fast defaults: 9k detailed cells / 6k far samples. Suggested visual-quality test: Far detail 12k-18k.",
+                "Fast defaults: 9k detailed / 6k far samples / 160 3D mesh axis.",
                 skin,
                 "subtitle");
         defaults.setWrap(true);
         content.add(defaults).growX().minWidth(0f).left().padTop(8f);
         content.row();
         return content;
+    }
+
+    private static void showTab(Table host, Table content, Table rootContent) {
+        host.clearChildren();
+        host.add(content).growX().minWidth(0f).top();
+        host.invalidateHierarchy();
+        rootContent.invalidateHierarchy();
     }
 
     private Table tabContent() {
@@ -429,6 +472,35 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 setter.accept(selected);
                 value.setText(formatBudget(selected));
                 statusLabel.setText("Performance tuning applied live.");
+            }
+        });
+
+        Table row = new Table(skin);
+        row.add(new Label(name, skin)).width(LABEL_WIDTH).left();
+        row.add(slider).growX().minWidth(80f);
+        row.add(value).width(VALUE_WIDTH).right().padLeft(8f);
+        content.add(row).growX().minWidth(0f);
+        content.row();
+        return slider;
+    }
+
+    private Slider addIntControl(
+            Table content,
+            String name,
+            int minimum,
+            int maximum,
+            int initial,
+            IntConsumer setter) {
+        Slider slider = new Slider(minimum, maximum, 1f, false, skin);
+        slider.setValue(initial);
+        Label value = new Label(Integer.toString(initial), skin);
+        slider.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                int selected = Math.round(slider.getValue());
+                setter.accept(selected);
+                value.setText(Integer.toString(selected));
+                statusLabel.setText("3D preview mesh rebuilt at " + selected + " samples/axis.");
             }
         });
 
