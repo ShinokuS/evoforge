@@ -1,12 +1,11 @@
 package io.github.evoforge.visualizer.screen;
 
-/** Pure sampling policy that caps far-zoom 2D preview work while keeping close inspection exact. */
+/**
+ * Pure sampling policy that caps far-zoom 2D preview work while keeping close inspection exact.
+ * Coarse rendering may add lightweight presentation diagnostics, but its terrain submission count
+ * remains bounded by {@link #MAX_SAMPLES}.
+ */
 final class WorldGeneration2DLod {
-    /**
-     * CPU-side SpriteBatch submission is the limiting cost in the generated-world overview.
-     * Keep the far view near a few tens of thousands of submitted blocks rather than attempting
-     * to draw one sprite for every visible world column.
-     */
     static final long MAX_SAMPLES = 20_000L;
 
     private WorldGeneration2DLod() {
