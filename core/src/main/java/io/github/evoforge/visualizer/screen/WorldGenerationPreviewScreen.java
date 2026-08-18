@@ -231,7 +231,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void setElevationTintPpm(int strengthPpm) {
         if (strengthPpm < 0 || strengthPpm > WorldGenerationElevationTint.SCALE) {
-            throw new IllegalArgumentException("elevation tint must be normalized ppm");
+            throw new IllegalArgumentException("elevation color sensitivity must be normalized ppm");
         }
         if (elevationTintPpm == strengthPpm) return;
         elevationTintPpm = strengthPpm;
@@ -254,6 +254,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             int elevationTintPpm) {
         int vertexCount = Math.multiplyExact(sampleWidth, sampleLength);
         float[] vertices = new float[vertexCount * 7];
+        Color color = new Color();
         int cursor = 0;
         for (int sampleY = 0; sampleY < sampleLength; sampleY++) {
             int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, sampleLength);
@@ -261,19 +262,14 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, sampleWidth);
                 long heightSubunits = elevation.elevationSubunitsAt(x, y);
                 float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
-                Color color;
                 if (heightSubunits > 0L) {
-                    float brightness = WorldGenerationElevationTint.brightness(
+                    WorldGenerationElevationTint.color(
                             heightSubunits,
                             bounds,
-                            elevationTintPpm);
-                    color = new Color(
-                            0.36f * brightness,
-                            0.50f * brightness,
-                            0.22f * brightness,
-                            1f);
+                            elevationTintPpm,
+                            color);
                 } else {
-                    color = new Color(0.16f, 0.24f, 0.30f, 1f);
+                    color.set(0.16f, 0.24f, 0.30f, 1f);
                 }
                 vertices[cursor++] = x;
                 vertices[cursor++] = h * VERTICAL_EXAGGERATION;
