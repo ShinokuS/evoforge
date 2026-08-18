@@ -296,9 +296,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         diagnostics.begin(ShapeRenderer.ShapeType.Filled);
         diagnostics.setColor(OVERVIEW_CONTOUR);
 
-        float thickness = Math.min(
-                camera.worldUnitsPerPixel() * 1.15f,
-                stride * 0.10f);
+        float thickness = Math.max(
+                0.01f,
+                Math.min(camera.worldUnitsPerPixel() * 1.15f, stride * 0.10f));
         for (int x = visible.minX(); x <= visible.maxX(); x += stride) {
             int blockWidth = Math.min(stride, visible.maxX() - x + 1);
             int sampleX = x + blockWidth / 2;
