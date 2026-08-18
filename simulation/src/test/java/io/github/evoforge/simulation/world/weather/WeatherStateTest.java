@@ -3,6 +3,9 @@ package io.github.evoforge.simulation.world.weather;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.evoforge.simulation.world.climate.ClimateNormalsField;
+import io.github.evoforge.simulation.world.climate.ClimateTemperature;
+import io.github.evoforge.simulation.world.climate.ClimateWaterNormal;
 import io.github.evoforge.simulation.world.mechanics.measurement.AirTemperature;
 import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -27,5 +30,32 @@ final class WeatherStateTest {
         assertEquals(calm, state.at(0, 0));
         assertThrows(IllegalArgumentException.class, () -> state.at(2, 0));
         assertThrows(IllegalArgumentException.class, () -> state.setAt(0, 2, storm));
+    }
+
+    @Test
+    void calmPhysicalWeatherKeepsPotentialEvaporativeDemandFromClimate() {
+        WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -1, 1);
+        WaterDepthRate evaporation = WaterDepthRate.millimetersPerYear(2_400L);
+        ClimateNormalsField climate = new ClimateNormalsField() {
+            @Override public WorldBounds bounds() { return bounds; }
+            @Override public ClimateTemperature meanTemperatureAt(int x, int y) {
+                return ClimateTemperature.ofMilliCelsius(18_000);
+            }
+            @Override public ClimateWaterNormal.Kind waterNormalKind() {
+                return ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME;
+            }
+            @Override public ClimateWaterNormal precipitationWaterNormalAt(int x, int y) {
+                return ClimateWaterNormal.physical(WaterDepthRate.millimetersPerYear(1_200L));
+            }
+            @Override public ClimateWaterNormal evaporativeDemandWaterNormalAt(int x, int y) {
+                return ClimateWaterNormal.physical(evaporation);
+            }
+        };
+
+        WeatherCellState current = WeatherState.calmFromClimateNormals(climate).at(0, 0);
+
+        assertEquals(AirTemperature.ofMilliCelsius(18_000), current.airTemperature());
+        assertEquals(WaterDepthRate.ZERO, current.precipitationRate());
+        assertEquals(evaporation, current.evaporativeDemandRate());
     }
 }
