@@ -5,30 +5,46 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.visualizer.VisualizerState;
 import io.github.evoforge.visualizer.presentation.ShapePresentationRegistry;
 import io.github.evoforge.visualizer.visual.LandscapeTopology;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.SurfaceProjectionResolver;
 import io.github.evoforge.visualizer.visual.SurfaceReliefEdgeArt;
+import io.github.evoforge.visualizer.visual.TerrainElevationColorRamp;
 
 /** Default open-world renderer: one highest terrain surface per visible XY column. */
 public final class SurfaceLandscapeRenderer {
 
     private final SimulationView view;
+    private final VisualizerState state;
     private final ShapePresentationRegistry shapePresentations;
     private final SurfaceProjectionResolver surfaces;
     private final SurfaceReliefEdgeArt reliefEdges = new SurfaceReliefEdgeArt();
+    private final Color elevationColor = new Color();
+    private final int minimumSurfaceZ;
+    private final int maximumSurfaceZ;
 
     public SurfaceLandscapeRenderer(
             SimulationView view,
+            VisualizerState state,
             ShapePresentationRegistry shapePresentations,
             SurfaceProjectionResolver surfaces) {
-        if (view == null || shapePresentations == null || surfaces == null) {
+        if (view == null || state == null || shapePresentations == null || surfaces == null) {
             throw new IllegalArgumentException("surface renderer dependencies must not be null");
         }
         this.view = view;
+        this.state = state;
         this.shapePresentations = shapePresentations;
         this.surfaces = surfaces;
+
+        int[] range = {Integer.MAX_VALUE, Integer.MIN_VALUE};
+        view.terrainSurfaces().forEach((x, y, z) -> {
+            range[0] = Math.min(range[0], z);
+            range[1] = Math.max(range[1], z);
+        });
+        minimumSurfaceZ = range[0] == Integer.MAX_VALUE ? 0 : range[0];
+        maximumSurfaceZ = range[1] == Integer.MIN_VALUE ? 0 : range[1];
     }
 
     public void draw(
@@ -79,7 +95,16 @@ public final class SurfaceLandscapeRenderer {
                 topology,
                 variant,
                 false);
-        batch.setColor(Color.WHITE);
+        if (state.showElevationGradient()) {
+            batch.setColor(TerrainElevationColorRamp.color(
+                    z,
+                    minimumSurfaceZ,
+                    maximumSurfaceZ,
+                    TerrainElevationColorRamp.DEFAULT_SCENARIO_SENSITIVITY_PPM,
+                    elevationColor));
+        } else {
+            batch.setColor(Color.WHITE);
+        }
         batch.draw(region, x, y, 1f, 1f);
     }
 
