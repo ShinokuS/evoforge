@@ -29,7 +29,7 @@ import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V11;
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V12;
     private static final int MAX_PREVIEW_AXIS = 160;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
 
@@ -384,8 +384,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE V11"
-                        : "WORLD GENERATION / ORGANIC MORPHOLOGY V11",
+                        ? "WORLD GENERATION / 2D SURFACE V12"
+                        : "WORLD GENERATION / SCALE-AWARE MORPHOLOGY V12",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
@@ -400,12 +400,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 24f,
                 Gdx.graphics.getHeight() - 48f);
         font.draw(batch, String.format(
-                "active seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   relief %.0f%%",
+                "active seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   macro %.0f%%   local %.0f%%",
                 generatedConfig.seed(),
                 generatedConfig.coveragePpm() / 10_000f,
                 generatedConfig.scalePpm() / 10_000f,
                 generatedConfig.fragmentationPpm() / 10_000f,
-                generatedConfig.reliefPpm() / 10_000f),
+                generatedConfig.reliefPpm() / 10_000f,
+                generatedConfig.localReliefPpm() / 10_000f),
                 24f,
                 Gdx.graphics.getHeight() - 72f);
         if (twoDimensional) {

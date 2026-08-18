@@ -64,7 +64,8 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
                 || GenerationRevision.V8.equals(revision)
                 || GenerationRevision.V9.equals(revision)
                 || GenerationRevision.V10.equals(revision)
-                || GenerationRevision.V11.equals(revision);
+                || GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     static long channelThreshold(int area) {

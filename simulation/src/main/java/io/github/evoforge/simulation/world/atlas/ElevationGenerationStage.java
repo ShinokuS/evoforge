@@ -10,7 +10,10 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
 
-/** Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology. */
+/**
+ * Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology,
+ * and V12 authors scale-stable balanced landforms through a dedicated generator.
+ */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
     public static final long SEA_LEVEL_SUBUNITS = 0L;
@@ -32,6 +35,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         GenerationRevision revision = genesis.generationRevision();
+        if (GenerationRevision.V12.equals(revision)) return V12LandformElevationGenerator.generate(genesis);
         if (GenerationRevision.V11.equals(revision)) return generateOrganicMorphology(genesis);
         if (GenerationRevision.V10.equals(revision)) return generateMacroMorphology(genesis);
         if (GenerationRevision.V9.equals(revision)) return generateOceanFirst(genesis);
@@ -131,7 +135,10 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return generateStructuredMorphology(genesis, true);
     }
 
-    private static ElevationField generateStructuredMorphology(WorldGenesis genesis, boolean organic) {
+    /** Stable V10/V11 morphology implementation retained verbatim for revision compatibility. */
+    private static ElevationField generateStructuredMorphology(
+            WorldGenesis genesis,
+            boolean organic) {
         WorldBounds bounds = genesis.spec().bounds();
         validateOceanFirstBounds(bounds);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);

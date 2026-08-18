@@ -25,4 +25,13 @@ public interface TerrainSurfaceTargetSampler {
     static TerrainSurfaceTargetSampler smoothVoxelTransitions() {
         return TerrainSurfaceTargetSamplers::smoothVoxelTransitionPatch;
     }
+
+    /**
+     * V12 target policy: the same geometry-only voxel transition, but only when neighbouring local
+     * gradients support one coherent cardinal slope. This rejects isolated turns and contour curls
+     * without naming or selecting a concrete runtime Shape.
+     */
+    static TerrainSurfaceTargetSampler coherentVoxelTransitions() {
+        return TerrainSurfaceTargetSamplers::coherentVoxelTransitionPatch;
+    }
 }

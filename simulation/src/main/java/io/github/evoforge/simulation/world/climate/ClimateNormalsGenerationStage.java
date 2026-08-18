@@ -81,14 +81,16 @@ public final class ClimateNormalsGenerationStage implements ClimateNormalsGenera
                 || GenerationRevision.V8.equals(revision)
                 || GenerationRevision.V9.equals(revision)
                 || GenerationRevision.V10.equals(revision)
-                || GenerationRevision.V11.equals(revision);
+                || GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     private static boolean usesPhysicalWaterNormals(GenerationRevision revision) {
         return GenerationRevision.V8.equals(revision)
                 || GenerationRevision.V9.equals(revision)
                 || GenerationRevision.V10.equals(revision)
-                || GenerationRevision.V11.equals(revision);
+                || GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     private static int temperatureAt(ClimateSpec spec, long elevationSubunits) {

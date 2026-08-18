@@ -12,6 +12,9 @@ final class WorldGenerationPreviewSettings {
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
     private int reliefPpm = 600_000;
+    private int localReliefPpm = 450_000;
+    private int landformScalePpm = 500_000;
+    private int ruggednessPpm = 350_000;
 
     int width() {
         return width;
@@ -73,6 +76,30 @@ final class WorldGenerationPreviewSettings {
         reliefPpm = requirePpm(value, "reliefPpm");
     }
 
+    int localReliefPpm() {
+        return localReliefPpm;
+    }
+
+    void localReliefPpm(int value) {
+        localReliefPpm = requirePpm(value, "localReliefPpm");
+    }
+
+    int landformScalePpm() {
+        return landformScalePpm;
+    }
+
+    void landformScalePpm(int value) {
+        landformScalePpm = requirePpm(value, "landformScalePpm");
+    }
+
+    int ruggednessPpm() {
+        return ruggednessPpm;
+    }
+
+    void ruggednessPpm(int value) {
+        ruggednessPpm = requirePpm(value, "ruggednessPpm");
+    }
+
     long columnCount() {
         return (long) width * length;
     }
@@ -89,7 +116,10 @@ final class WorldGenerationPreviewSettings {
                 coveragePpm,
                 scalePpm,
                 fragmentationPpm,
-                reliefPpm);
+                reliefPpm,
+                localReliefPpm,
+                landformScalePpm,
+                ruggednessPpm);
     }
 
     private static int requireDimension(int value, String name) {

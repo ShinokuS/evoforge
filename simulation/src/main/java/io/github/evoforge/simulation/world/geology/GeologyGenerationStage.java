@@ -98,7 +98,8 @@ public final class GeologyGenerationStage implements GeologyGenerator {
                 || GenerationRevision.V8.equals(revision)
                 || GenerationRevision.V9.equals(revision)
                 || GenerationRevision.V10.equals(revision)
-                || GenerationRevision.V11.equals(revision);
+                || GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     private int legacyGraniteOrdinal() {
