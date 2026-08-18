@@ -13,7 +13,9 @@ record WorldGenerationPreviewConfig(
         int scalePpm,
         int fragmentationPpm,
         int reliefPpm,
-        int localReliefPpm) {
+        int localReliefPpm,
+        int landformScalePpm,
+        int ruggednessPpm) {
 
     WorldGenerationPreviewConfig {
         if (width <= 0 || length <= 0) {
@@ -24,6 +26,8 @@ record WorldGenerationPreviewConfig(
         requirePpm(fragmentationPpm, "fragmentationPpm");
         requirePpm(reliefPpm, "reliefPpm");
         requirePpm(localReliefPpm, "localReliefPpm");
+        requirePpm(landformScalePpm, "landformScalePpm");
+        requirePpm(ruggednessPpm, "ruggednessPpm");
     }
 
     WorldBounds bounds() {
@@ -44,7 +48,9 @@ record WorldGenerationPreviewConfig(
                 NormalizedValue.ofPartsPerMillion(scalePpm),
                 NormalizedValue.ofPartsPerMillion(fragmentationPpm),
                 NormalizedValue.ofPartsPerMillion(reliefPpm),
-                NormalizedValue.ofPartsPerMillion(localReliefPpm));
+                NormalizedValue.ofPartsPerMillion(localReliefPpm),
+                NormalizedValue.ofPartsPerMillion(landformScalePpm),
+                NormalizedValue.ofPartsPerMillion(ruggednessPpm));
     }
 
     long columnCount() {
