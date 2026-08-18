@@ -45,6 +45,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private WorldBounds bounds;
     private int viewportWidth = 1;
     private int viewportHeight = 1;
+    private int elevationTintPpm = WorldGenerationElevationTint.DEFAULT_STRENGTH_PPM;
     private boolean smoothSampling;
     private boolean showShapeDirections = true;
     private float presentationSeconds;
@@ -61,6 +62,13 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (bounds == null) throw new IllegalArgumentException("world bounds must not be null");
         this.bounds = bounds;
         fitToWorld();
+    }
+
+    void setElevationTintPpm(int strengthPpm) {
+        if (strengthPpm < 0 || strengthPpm > WorldGenerationElevationTint.SCALE) {
+            throw new IllegalArgumentException("elevation tint must be normalized ppm");
+        }
+        elevationTintPpm = strengthPpm;
     }
 
     void update(float delta, boolean keyboardNavigation) {
@@ -159,6 +167,11 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         y,
                         z,
                         ProceduralLandscapePack.SURFACE_VARIANTS);
+                float brightness = WorldGenerationElevationTint.brightness(
+                        elevation.elevationSubunitsAt(x, y),
+                        bounds,
+                        elevationTintPpm);
+                batch.setColor(brightness, brightness, brightness, 1f);
                 batch.draw(
                         shapePresentations.terrainRegion(
                                 shape,
@@ -171,6 +184,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         1f);
             }
         }
+        batch.setColor(Color.WHITE);
     }
 
     private void drawRelief(

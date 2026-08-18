@@ -71,6 +71,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private boolean showSurface = true;
     private boolean showOcean = true;
     private boolean twoDimensional;
+    private int elevationTintPpm = WorldGenerationElevationTint.DEFAULT_STRENGTH_PPM;
     private float yaw = 45f;
     private float pitch = 42f;
     private float distance = 86f;
@@ -96,14 +97,17 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 showSurface,
                 showOcean,
                 twoDimensional,
+                elevationTintPpm,
                 visible -> showSurface = visible,
                 visible -> showOcean = visible,
                 visible -> {
                     twoDimensional = visible;
                     orbiting = false;
                     panning2D = false;
-                });
+                },
+                this::setElevationTintPpm);
         this.inputMultiplexer = new InputMultiplexer(input, settingsPanel.inputProcessor());
+        shape2DRenderer.setElevationTintPpm(elevationTintPpm);
         regenerate();
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -206,9 +210,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         disposeMeshes();
         previewWidth = sampleCount(generatedConfig.width());
         previewLength = sampleCount(generatedConfig.length());
-        surfaceMesh = buildSurface(generatedElevation, bounds, previewWidth, previewLength);
+        surfaceMesh = buildSurface(
+                generatedElevation,
+                bounds,
+                previewWidth,
+                previewLength,
+                elevationTintPpm);
         oceanMesh = buildOcean(bounds);
         shape2DRenderer.setWorldBounds(bounds);
+        shape2DRenderer.setElevationTintPpm(elevationTintPpm);
         camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
 
         if (previous == null
@@ -219,25 +229,52 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         }
     }
 
+    private void setElevationTintPpm(int strengthPpm) {
+        if (strengthPpm < 0 || strengthPpm > WorldGenerationElevationTint.SCALE) {
+            throw new IllegalArgumentException("elevation tint must be normalized ppm");
+        }
+        if (elevationTintPpm == strengthPpm) return;
+        elevationTintPpm = strengthPpm;
+        shape2DRenderer.setElevationTintPpm(strengthPpm);
+        if (generatedElevation == null || bounds == null) return;
+        if (surfaceMesh != null) surfaceMesh.dispose();
+        surfaceMesh = buildSurface(
+                generatedElevation,
+                bounds,
+                previewWidth,
+                previewLength,
+                elevationTintPpm);
+    }
+
     private static Mesh buildSurface(
             ElevationField elevation,
             WorldBounds bounds,
             int sampleWidth,
-            int sampleLength) {
+            int sampleLength,
+            int elevationTintPpm) {
         int vertexCount = Math.multiplyExact(sampleWidth, sampleLength);
         float[] vertices = new float[vertexCount * 7];
-        float amplitude = Math.max(Math.abs(bounds.minZ()), Math.abs(bounds.maxZ()));
         int cursor = 0;
         for (int sampleY = 0; sampleY < sampleLength; sampleY++) {
             int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, sampleLength);
             for (int sampleX = 0; sampleX < sampleWidth; sampleX++) {
                 int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, sampleWidth);
-                float h = (float) elevation.elevationSubunitsAt(x, y)
-                        / ElevationField.SUBUNITS_PER_CELL;
-                float normalized = MathUtils.clamp(Math.abs(h) / Math.max(1f, amplitude), 0f, 1f);
-                Color color = h > 0f
-                        ? new Color(0.24f + normalized * 0.25f, 0.42f - normalized * 0.12f, 0.18f, 1f)
-                        : new Color(0.16f, 0.20f + normalized * 0.10f, 0.24f + normalized * 0.10f, 1f);
+                long heightSubunits = elevation.elevationSubunitsAt(x, y);
+                float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
+                Color color;
+                if (heightSubunits > 0L) {
+                    float brightness = WorldGenerationElevationTint.brightness(
+                            heightSubunits,
+                            bounds,
+                            elevationTintPpm);
+                    color = new Color(
+                            0.36f * brightness,
+                            0.50f * brightness,
+                            0.22f * brightness,
+                            1f);
+                } else {
+                    color = new Color(0.16f, 0.24f, 0.30f, 1f);
+                }
                 vertices[cursor++] = x;
                 vertices[cursor++] = h * VERTICAL_EXAGGERATION;
                 vertices[cursor++] = -y;
