@@ -18,6 +18,7 @@ final class VisualizerDebugPanelTest {
         panel.resize(1200, 800);
 
         assertTrue(state.showRoute(), "route overlay should remain visible by default");
+        assertTrue(state.showElevationGradient(), "surface height color should be visible by default");
         assertFalse(state.gridEnabled());
         assertFalse(state.showOccupancy());
 
@@ -29,6 +30,14 @@ final class VisualizerDebugPanelTest {
         panel.optionAt(x, gridY).toggle(state);
         assertTrue(state.gridEnabled());
 
+        int gradientIndex = VisualizerDebugPanel.Option.ELEVATION_GRADIENT.ordinal();
+        int gradientY = Math.round(panel.yTop()
+                + panel.headerHeight()
+                + panel.rowHeight() * (gradientIndex + 0.5f));
+        assertEquals(VisualizerDebugPanel.Option.ELEVATION_GRADIENT, panel.optionAt(x, gradientY));
+        panel.optionAt(x, gradientY).toggle(state);
+        assertFalse(state.showElevationGradient());
+
         int occupancyIndex = VisualizerDebugPanel.Option.OCCUPANCY.ordinal();
         int occupancyY = Math.round(panel.yTop()
                 + panel.headerHeight()
@@ -37,6 +46,7 @@ final class VisualizerDebugPanelTest {
         panel.optionAt(x, occupancyY).toggle(state);
         assertTrue(state.showOccupancy());
         assertTrue(state.gridEnabled(), "occupancy must not alter grid state");
+        assertFalse(state.showElevationGradient(), "occupancy must not alter elevation gradient state");
     }
 
     @Test
