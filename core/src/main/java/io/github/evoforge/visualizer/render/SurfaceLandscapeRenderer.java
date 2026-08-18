@@ -60,8 +60,6 @@ public final class SurfaceLandscapeRenderer {
             int maxY) {
         if (batch == null) throw new IllegalArgumentException("batch must not be null");
 
-        // Terrain elevation uses a dedicated shader so low ground can darken and high ground can
-        // genuinely brighten without multiplying the whole atlas by a muddy absolute color.
         if (state.showElevationGradient()) elevationShader.apply(batch);
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -71,7 +69,6 @@ public final class SurfaceLandscapeRenderer {
         if (state.showElevationGradient()) elevationShader.clear(batch);
         batch.setColor(Color.WHITE);
 
-        // Relief edges share one tiny atlas and are drawn as one second texture pass.
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 drawReliefCell(batch, x, y);
@@ -145,13 +142,24 @@ public final class SurfaceLandscapeRenderer {
             CellFace face,
             SurfaceReliefEdgeArt.Side side) {
         boolean neighbourPresent = view.terrainSurfaces().hasColumn(neighbourX, neighbourY);
+        Shape neighbour = null;
+        int neighbourZ = z;
         if (neighbourPresent) {
-            int neighbourZ = view.terrainSurfaces().topZ(neighbourX, neighbourY);
-            Shape neighbour = view.geometry().find(neighbourX, neighbourY, neighbourZ);
+            neighbourZ = view.terrainSurfaces().topZ(neighbourX, neighbourY);
+            neighbour = view.geometry().find(neighbourX, neighbourY, neighbourZ);
             if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
         }
 
-        boolean raised = !neighbourPresent || z > view.terrainSurfaces().topZ(neighbourX, neighbourY);
+        // Boundary presentation is pair-owned. If either Shape owns the visual treatment of this
+        // shared boundary, the generic earth overlay must stay out. This prevents an ordinary flat
+        // neighbour from drawing the exact ramp-contact line that the ramp intentionally removes.
+        if (!shapePresentations.genericReliefEdgeAllowed(shape, face)) return;
+        if (neighbour != null
+                && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite())) {
+            return;
+        }
+
+        boolean raised = !neighbourPresent || z > neighbourZ;
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
 
