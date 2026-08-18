@@ -14,8 +14,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * prepared terrain a non-uniform bedrock identity. It is deliberately <em>not</em> the target
  * geology distribution model: adding more rock definitions here would only add more independently
  * sampled province/stratum choices. Final geology is expected to replace this algorithm behind the
- * same {@link GeologyGenerator}/{@link GeologyField} boundary with coherent formations, layers,
- * intrusions, lenses and deposits produced through the planned spatial-formation system.</p>
+ * same {@link GeologyGenerator}/{@link GeologyField} boundary with the smallest coherent formation,
+ * strata and deposit model required by the real geology stage.</p>
  *
  * <p>V1-V3 predate generated geology and intentionally reproduce the former uniform granite
  * bedrock identity. V4+ revisions currently share this provisional contract; newer revisions may
