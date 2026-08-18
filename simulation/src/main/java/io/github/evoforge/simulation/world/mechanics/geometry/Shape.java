@@ -55,6 +55,21 @@ public interface Shape {
         return CellSpace.CLOSED;
     }
 
+    /**
+     * Objective top-surface profile along one horizontal face of the anchor cell.
+     *
+     * <p>Consumers compare these profiles to decide whether adjacent terrain surfaces
+     * are geometrically continuous. The default matches the interface's default full
+     * solid cell. Shape identity is intentionally absent from this contract.</p>
+     */
+    default SurfaceBoundaryProfile surfaceBoundaryProfile(
+            CellFace face) {
+        if (face == null || face.dz() != 0) {
+            throw new IllegalArgumentException("surface boundary requires a horizontal face");
+        }
+        return SurfaceBoundaryProfile.flat(CellSpace.FULL_HEIGHT);
+    }
+
     default int transitionBlocks(
             int relativeX,
             int relativeY,

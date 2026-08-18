@@ -15,14 +15,13 @@ public final class ProceduralShapePresentations {
             ProceduralLandscapePack surfaceArt,
             ProceduralSliceArt sliceArt) {
 
-        ShapePresentationRegistry registry =
-                new ShapePresentationRegistry();
+        ShapePresentationRegistry registry = new ShapePresentationRegistry();
         registry.register(
                 FullShape.class,
                 new FullShapePresentation(surfaceArt, sliceArt));
         registry.register(
                 RampShape.class,
-                new RampShapePresentation(surfaceArt));
+                new RampShapePresentation());
         return registry;
     }
 }

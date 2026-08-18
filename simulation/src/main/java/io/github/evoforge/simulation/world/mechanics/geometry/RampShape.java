@@ -14,11 +14,15 @@ public final class RampShape
 
     private final int riseX;
     private final int riseY;
+    private final int sideX;
+    private final int sideY;
 
     private final long lowerPorts;
     private final long rampPorts;
     private final long upperPorts;
     private final long higherPorts;
+    private final long positiveSideArrivalPorts;
+    private final long negativeSideArrivalPorts;
 
     private RampShape(
             int riseX,
@@ -26,54 +30,28 @@ public final class RampShape
 
         this.riseX = riseX;
         this.riseY = riseY;
+        sideX = -riseY;
+        sideY = riseX;
 
-        int lowerToRamp =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        1);
+        int lowerToRamp = TransitionMask.of(riseX, riseY, 1);
+        int rampToLower = TransitionMask.of(-riseX, -riseY, -1);
+        int rampToUpper = TransitionMask.of(riseX, riseY, 0);
+        int rampToRamp = TransitionMask.of(riseX, riseY, 1);
+        int upperToRamp = TransitionMask.of(-riseX, -riseY, 0);
+        int positiveSide = TransitionMask.of(sideX, sideY, 0);
+        int negativeSide = TransitionMask.of(-sideX, -sideY, 0);
 
-        int rampToLower =
-                TransitionMask.of(
-                        -riseX,
-                        -riseY,
-                        -1);
-
-        int rampToUpper =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        0);
-
-        int rampToRamp =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        1);
-
-        int upperToRamp =
-                TransitionMask.of(
-                        -riseX,
-                        -riseY,
-                        0);
-
-        lowerPorts =
-                TransitionPorts.arrivalsOnly(
-                        lowerToRamp);
-
-        rampPorts =
-                TransitionPorts.departuresOnly(
-                        rampToLower
-                                | rampToUpper
-                                | rampToRamp);
-
-        upperPorts =
-                TransitionPorts.arrivalsOnly(
-                        upperToRamp);
-
-        higherPorts =
-                TransitionPorts.arrivalsOnly(
-                        rampToLower);
+        lowerPorts = TransitionPorts.arrivalsOnly(lowerToRamp);
+        rampPorts = TransitionPorts.departuresOnly(
+                rampToLower
+                        | rampToUpper
+                        | rampToRamp
+                        | positiveSide
+                        | negativeSide);
+        upperPorts = TransitionPorts.arrivalsOnly(upperToRamp);
+        higherPorts = TransitionPorts.arrivalsOnly(rampToLower);
+        positiveSideArrivalPorts = TransitionPorts.arrivalsOnly(positiveSide);
+        negativeSideArrivalPorts = TransitionPorts.arrivalsOnly(negativeSide);
     }
 
     /** Cardinal horizontal direction in which this ramp rises. */
@@ -129,6 +107,21 @@ public final class RampShape
     }
 
     @Override
+    public SurfaceBoundaryProfile surfaceBoundaryProfile(CellFace face) {
+        if (face == null || face.dz() != 0) {
+            throw new IllegalArgumentException("surface boundary requires a horizontal face");
+        }
+        if (face.dx() != 0) {
+            return new SurfaceBoundaryProfile(
+                    surfaceHeightAtCorner(face.dx(), -1),
+                    surfaceHeightAtCorner(face.dx(), 1));
+        }
+        return new SurfaceBoundaryProfile(
+                surfaceHeightAtCorner(-1, face.dy()),
+                surfaceHeightAtCorner(1, face.dy()));
+    }
+
+    @Override
     public int minimumTraversalFactor() {
         return ShapeTraversalFactor.NEUTRAL;
     }
@@ -149,6 +142,18 @@ public final class RampShape
                 && relativeY == 0
                 && relativeZ == 1) {
             return rampPorts;
+        }
+
+        if (relativeZ == 1
+                && relativeX == -sideX
+                && relativeY == -sideY) {
+            return positiveSideArrivalPorts;
+        }
+
+        if (relativeZ == 1
+                && relativeX == sideX
+                && relativeY == sideY) {
+            return negativeSideArrivalPorts;
         }
 
         if (relativeX == riseX
@@ -176,5 +181,10 @@ public final class RampShape
                 relativeX,
                 relativeY,
                 relativeZ);
+    }
+
+    private int surfaceHeightAtCorner(int xSign, int ySign) {
+        int along = riseX != 0 ? xSign * riseX : ySign * riseY;
+        return along > 0 ? CellSpace.FULL_HEIGHT : CellSpace.EMPTY_HEIGHT;
     }
 }

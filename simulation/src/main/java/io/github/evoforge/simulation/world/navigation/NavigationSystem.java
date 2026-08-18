@@ -1,7 +1,9 @@
 package io.github.evoforge.simulation.world.navigation;
 
+import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionComposition;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.mechanics.geometry.TransitionPorts;
@@ -76,8 +78,54 @@ public final class NavigationSystem {
             }
         }
 
-        return TransitionComposition.resolve(
-                ports,
-                blocks);
+        int resolved = TransitionComposition.resolve(ports, blocks);
+        return filterHorizontalSurfaceJoins(x, y, z, resolved);
+    }
+
+    /**
+     * Same-level cardinal crossings must join the same physical surface line on both
+     * sides. This is Shape-agnostic: ramps, flats and future surface Shapes provide
+     * their own boundary profiles through the common geometry contract.
+     */
+    private int filterHorizontalSurfaceJoins(
+            int x,
+            int y,
+            int z,
+            int transitions) {
+        if (transitions == TransitionMask.NONE || z == Integer.MIN_VALUE) {
+            return transitions;
+        }
+
+        int supportZ = z - 1;
+        Shape source = geometry.find(x, y, supportZ);
+        if (source == null) return transitions;
+
+        int filtered = transitions;
+        for (CellFace face : CellFace.values()) {
+            if (face.dz() != 0) continue;
+            int direction = TransitionMask.of(face.dx(), face.dy(), 0);
+            if ((filtered & direction) == 0) continue;
+            if ((face.dx() < 0 && x == Integer.MIN_VALUE)
+                    || (face.dx() > 0 && x == Integer.MAX_VALUE)
+                    || (face.dy() < 0 && y == Integer.MIN_VALUE)
+                    || (face.dy() > 0 && y == Integer.MAX_VALUE)) {
+                continue;
+            }
+
+            Shape destination = geometry.find(
+                    x + face.dx(),
+                    y + face.dy(),
+                    supportZ);
+            if (destination != null
+                    && !SurfaceBoundaryContinuity.aligns(
+                            source,
+                            supportZ,
+                            face,
+                            destination,
+                            supportZ)) {
+                filtered &= ~direction;
+            }
+        }
+        return filtered;
     }
 }

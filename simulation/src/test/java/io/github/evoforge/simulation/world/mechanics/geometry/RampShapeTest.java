@@ -10,30 +10,15 @@ final class RampShapeTest {
 
     @Test
     void positiveYFormsLinearBidirectionalPassage() {
-        assertOrientation(
-                RampShape.POSITIVE_Y,
-                0,
-                1);
+        assertOrientation(RampShape.POSITIVE_Y, 0, 1);
     }
 
     @Test
     void allOrientationsUseTheSameRotatedTopology() {
-        assertOrientation(
-                RampShape.POSITIVE_X,
-                1,
-                0);
-        assertOrientation(
-                RampShape.NEGATIVE_X,
-                -1,
-                0);
-        assertOrientation(
-                RampShape.POSITIVE_Y,
-                0,
-                1);
-        assertOrientation(
-                RampShape.NEGATIVE_Y,
-                0,
-                -1);
+        assertOrientation(RampShape.POSITIVE_X, 1, 0);
+        assertOrientation(RampShape.NEGATIVE_X, -1, 0);
+        assertOrientation(RampShape.POSITIVE_Y, 0, 1);
+        assertOrientation(RampShape.NEGATIVE_Y, 0, -1);
     }
 
     @Test
@@ -45,60 +30,43 @@ final class RampShapeTest {
     }
 
     @Test
-    void exposesNoSideOrDiagonalEntries() {
-        assertEquals(
-                TransitionPorts.NONE,
-                RampShape.POSITIVE_Y.transitionPorts(
-                        1,
-                        0,
-                        1));
+    void exposesBidirectionalSidePortsButNoDiagonalEntries() {
+        int east = TransitionMask.of(1, 0, 0);
+        int west = TransitionMask.of(-1, 0, 0);
+
+        assertPorts(
+                RampShape.POSITIVE_Y.transitionPorts(0, 0, 1),
+                TransitionMask.of(0, -1, -1)
+                        | TransitionMask.of(0, 1, 0)
+                        | TransitionMask.of(0, 1, 1)
+                        | east
+                        | west,
+                TransitionMask.NONE);
+        assertPorts(
+                RampShape.POSITIVE_Y.transitionPorts(-1, 0, 1),
+                TransitionMask.NONE,
+                east);
+        assertPorts(
+                RampShape.POSITIVE_Y.transitionPorts(1, 0, 1),
+                TransitionMask.NONE,
+                west);
 
         assertEquals(
                 TransitionPorts.NONE,
-                RampShape.POSITIVE_Y.transitionPorts(
-                        1,
-                        -1,
-                        0));
-
+                RampShape.POSITIVE_Y.transitionPorts(1, -1, 0));
         assertEquals(
                 TransitionPorts.NONE,
-                RampShape.POSITIVE_Y.transitionPorts(
-                        -1,
-                        1,
-                        1));
+                RampShape.POSITIVE_Y.transitionPorts(-1, 1, 1));
     }
 
     @Test
     void blocksItsSolidTerrainVolume() {
-        int sideBlocks =
-                RampShape.POSITIVE_Y.transitionBlocks(
-                        1,
-                        0,
-                        0);
+        int sideBlocks = RampShape.POSITIVE_Y.transitionBlocks(1, 0, 0);
+        assertTrue(TransitionMask.contains(sideBlocks, -1, 0, 0));
 
-        assertTrue(
-                TransitionMask.contains(
-                        sideBlocks,
-                        -1,
-                        0,
-                        0));
-
-        int insideBlocks =
-                RampShape.POSITIVE_Y.transitionBlocks(
-                        0,
-                        0,
-                        0);
-
-        assertEquals(
-                8,
-                Integer.bitCount(insideBlocks));
-
-        assertFalse(
-                TransitionMask.contains(
-                        insideBlocks,
-                        0,
-                        0,
-                        1));
+        int insideBlocks = RampShape.POSITIVE_Y.transitionBlocks(0, 0, 0);
+        assertEquals(8, Integer.bitCount(insideBlocks));
+        assertFalse(TransitionMask.contains(insideBlocks, 0, 0, 1));
     }
 
     private static void assertOrientation(
@@ -106,65 +74,42 @@ final class RampShapeTest {
             int riseX,
             int riseY) {
 
-        int lowerToRamp =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        1);
-
+        int lowerToRamp = TransitionMask.of(riseX, riseY, 1);
         assertPorts(
-                shape.transitionPorts(
-                        -riseX,
-                        -riseY,
-                        0),
+                shape.transitionPorts(-riseX, -riseY, 0),
                 TransitionMask.NONE,
                 lowerToRamp);
 
-        int rampToLower =
-                TransitionMask.of(
-                        -riseX,
-                        -riseY,
-                        -1);
-
-        int rampToUpper =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        0);
-
-        int rampToRamp =
-                TransitionMask.of(
-                        riseX,
-                        riseY,
-                        1);
+        int rampToLower = TransitionMask.of(-riseX, -riseY, -1);
+        int rampToUpper = TransitionMask.of(riseX, riseY, 0);
+        int rampToRamp = TransitionMask.of(riseX, riseY, 1);
+        int sideX = -riseY;
+        int sideY = riseX;
+        int positiveSide = TransitionMask.of(sideX, sideY, 0);
+        int negativeSide = TransitionMask.of(-sideX, -sideY, 0);
 
         assertPorts(
-                shape.transitionPorts(
-                        0,
-                        0,
-                        1),
-                rampToLower | rampToUpper | rampToRamp,
+                shape.transitionPorts(0, 0, 1),
+                rampToLower | rampToUpper | rampToRamp | positiveSide | negativeSide,
                 TransitionMask.NONE);
 
-        int upperToRamp =
-                TransitionMask.of(
-                        -riseX,
-                        -riseY,
-                        0);
-
         assertPorts(
-                shape.transitionPorts(
-                        riseX,
-                        riseY,
-                        1),
+                shape.transitionPorts(-sideX, -sideY, 1),
+                TransitionMask.NONE,
+                positiveSide);
+        assertPorts(
+                shape.transitionPorts(sideX, sideY, 1),
+                TransitionMask.NONE,
+                negativeSide);
+
+        int upperToRamp = TransitionMask.of(-riseX, -riseY, 0);
+        assertPorts(
+                shape.transitionPorts(riseX, riseY, 1),
                 TransitionMask.NONE,
                 upperToRamp);
 
         assertPorts(
-                shape.transitionPorts(
-                        riseX,
-                        riseY,
-                        2),
+                shape.transitionPorts(riseX, riseY, 2),
                 TransitionMask.NONE,
                 rampToLower);
     }
@@ -173,7 +118,6 @@ final class RampShapeTest {
             RampShape shape,
             int expectedX,
             int expectedY) {
-
         assertEquals(expectedX, shape.riseX());
         assertEquals(expectedY, shape.riseY());
     }
@@ -182,13 +126,7 @@ final class RampShapeTest {
             long ports,
             int expectedDepartures,
             int expectedArrivals) {
-
-        assertEquals(
-                expectedDepartures,
-                TransitionPorts.departures(ports));
-
-        assertEquals(
-                expectedArrivals,
-                TransitionPorts.arrivals(ports));
+        assertEquals(expectedDepartures, TransitionPorts.departures(ports));
+        assertEquals(expectedArrivals, TransitionPorts.arrivals(ports));
     }
 }

@@ -2,19 +2,12 @@ package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
-import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 
 /** Procedural presentation binding for cardinal ramps. */
 final class RampShapePresentation
         implements ShapePresentation<RampShape> {
 
-    private final ProceduralLandscapePack surfaceArt;
-
-    RampShapePresentation(
-            ProceduralLandscapePack surfaceArt) {
-
-        this.surfaceArt = surfaceArt;
-    }
+    private final ProceduralRampArt art = new ProceduralRampArt();
 
     @Override
     public TextureRegion terrainRegion(
@@ -23,9 +16,10 @@ final class RampShapePresentation
             int variant,
             boolean solidBody) {
 
-        return surfaceArt.ramp(
+        return art.region(
                 shape.riseX(),
                 shape.riseY(),
+                topologyMask,
                 variant);
     }
 
@@ -45,22 +39,19 @@ final class RampShapePresentation
         return "Ramp " + axisLabel(shape.riseX(), shape.riseY());
     }
 
+    @Override
+    public void dispose() {
+        art.dispose();
+    }
+
     private static String axisLabel(
             int x,
             int y) {
 
-        if (x == 1) {
-            return "+X";
-        }
-        if (x == -1) {
-            return "-X";
-        }
-        if (y == 1) {
-            return "+Y";
-        }
-        if (y == -1) {
-            return "-Y";
-        }
+        if (x == 1) return "+X";
+        if (x == -1) return "-X";
+        if (y == 1) return "+Y";
+        if (y == -1) return "-Y";
         throw new IllegalArgumentException(
                 "unsupported ramp rise vector " + x + "," + y);
     }

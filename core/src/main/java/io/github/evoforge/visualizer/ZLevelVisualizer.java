@@ -289,6 +289,7 @@ public final class ZLevelVisualizer {
         surfaceLandscapeRenderer.dispose();
         rainRenderer.dispose();
         uiAssets.dispose();
+        shapePresentations.dispose();
         waterArt.dispose();
         sliceArt.dispose();
         landscapePack.dispose();

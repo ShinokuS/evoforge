@@ -21,6 +21,7 @@ physical cell geometry
     solidVolume()
     freeVolumeBelow(localHeight)
     boundaryOpeningFloor(CellFace)
+    surfaceBoundaryProfile(CellFace)
 
 structural traversal geometry
     transitionPorts(relativeSource)
@@ -29,7 +30,7 @@ structural traversal geometry
     arrivalTraversalFactor(relativeSource, direction)
 ```
 
-Physical methods describe occupied/free cell-local space and physical face connectivity. Transition methods describe structural standing/movement roles. Consumers must not reinterpret one family as the other merely because both describe the same Shape.
+Physical methods describe occupied/free cell-local space, physical face connectivity and the objective top-surface line at a horizontal boundary. Transition methods describe structural standing/movement roles. Consumers must not reinterpret one family as the other merely because both describe the same Shape.
 
 The relative traversal source is:
 
@@ -111,14 +112,40 @@ top face          full-cell height
 Current Ramp semantics are:
 
 ```text
-low face                0
-perpendicular side faces 0
-high face               CLOSED
-bottom face             CLOSED
-top face                full-cell height
+low face                  0
+perpendicular side faces  0
+high face                 CLOSED
+bottom face               CLOSED
+top face                  full-cell height
 ```
 
 This first-order sill model is enough for current Water. A future arch/tunnel/multiple-hole Shape that cannot be represented by one lower sill should extend a **neutral physical boundary profile**, not add `instanceof` logic inside Water and not reuse Navigation transition ports.
+
+## Surface boundary continuity
+
+`Shape.surfaceBoundaryProfile(face)` describes the top-surface line along one horizontal cell boundary as two fixed-point endpoint heights. Endpoint ordering is canonical in world space, so opposite faces can be compared without knowing concrete Shape identity or orientation.
+
+`SurfaceBoundaryContinuity` translates both profiles by their Shape anchor Z and compares them in world space:
+
+```text
+same world-space boundary line
+    -> continuous surface join
+
+different boundary line
+    -> geometric break / ledge
+```
+
+The default Shape profile is a flat full-height top. A cardinal Ramp derives the profile from its linear rise. Consequently:
+
+- parallel ramps with the same slope join laterally;
+- a sloped ramp side does not falsely join a flat block at the same anchor Z;
+- opposite ramp slopes do not join;
+- a ramp high edge joins the natural upper platform;
+- a ramp low edge joins the natural lower platform.
+
+Navigation uses this neutral continuity fact to validate same-level cardinal transitions after ordinary transition-port composition. Surface presentation uses the same fact to suppress visual banks and contour seams. Neither consumer branches on `RampShape`.
+
+Water does not use surface continuity as a traversal shortcut. It continues to consume the independent `boundaryOpeningFloor` / free-volume geometry. Parallel ramp sides are already physically open through that contract, so lateral liquid exchange requires no Ramp-specific Water rule.
 
 ## Structural transition roles
 
@@ -146,7 +173,7 @@ The source-support Shape offers departure from its supported position. For an ed
 relative source = S - d
 ```
 
-Every external edge therefore needs compatible source departure and destination arrival ownership.
+Every external edge therefore needs compatible source departure and destination arrival ownership. RampShape contributes lateral roles for its two side faces; the generic surface-continuity validation decides whether the neighbouring support surface actually matches.
 
 This one-supported-position model is current, not eternal. A real future Shape needing multiple standing positions must drive a coordinated contract revision rather than local exceptions.
 
@@ -201,6 +228,6 @@ If a future Shape fits the current contract, existing generic consumers should n
 
 ## Diagnostics and tests
 
-Tests cover Shape ports/blocks, solid/free-volume profiles, physical face-opening floors, role/factor ownership, terrain lifecycle, world-bound closure and integer/locality hardening. Navigation, TransitionCost and Water integration tests verify that the independent Shape fact families are consumed consistently.
+Tests cover Shape ports/blocks, solid/free-volume profiles, physical face-opening floors, surface-boundary continuity, role/factor ownership, terrain lifecycle, world-bound closure and integer/locality hardening. Navigation, TransitionCost and Water/Liquid integration tests verify that the independent Shape fact families are consumed consistently.
 
 See [Shape Transition Algebra decision](../decisions/002-shape-transition-algebra.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Navigation](navigation.md) and [Water](water.md).

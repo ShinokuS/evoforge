@@ -9,8 +9,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import io.github.evoforge.visualizer.VisualizerCamera;
@@ -183,7 +185,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
-            if (stride == 1) drawRelief(batch, elevation, visible);
+            if (stride == 1) drawRelief(batch, elevation, terrainShapes, visible);
         }
         if (showOcean) {
             if (stride == 1) {
@@ -209,6 +211,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         elevationShader.dispose();
         diagnostics.dispose();
         reliefEdges.dispose();
+        shapePresentations.dispose();
         waterArt.dispose();
         sliceArt.dispose();
         landscapePack.dispose();
@@ -223,8 +226,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 int z = elevation.elevationAt(x, y);
-                Shape shape = terrainShapes.shapeOverrideAt(x, y);
-                if (shape == null) shape = FullShape.INSTANCE;
+                Shape shape = shapeAt(terrainShapes, x, y);
                 int variant = LandscapeTopology.variant(
                         x,
                         y,
@@ -238,7 +240,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 batch.draw(
                         shapePresentations.terrainRegion(
                                 shape,
-                                neighbourMask(elevation, x, y, z),
+                                neighbourMask(elevation, terrainShapes, x, y, z, shape),
                                 variant,
                                 false),
                         x,
@@ -347,14 +349,20 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private void drawRelief(
             SpriteBatch batch,
             ElevationField elevation,
+            TerrainShapeField terrainShapes,
             VisualizerCamera.VisibleRange visible) {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 int z = elevation.elevationAt(x, y);
-                drawReliefEdge(batch, elevation, x, y, z, x, y + 1, SurfaceReliefEdgeArt.Side.NORTH);
-                drawReliefEdge(batch, elevation, x, y, z, x + 1, y, SurfaceReliefEdgeArt.Side.EAST);
-                drawReliefEdge(batch, elevation, x, y, z, x, y - 1, SurfaceReliefEdgeArt.Side.SOUTH);
-                drawReliefEdge(batch, elevation, x, y, z, x - 1, y, SurfaceReliefEdgeArt.Side.WEST);
+                Shape shape = shapeAt(terrainShapes, x, y);
+                drawReliefEdge(batch, elevation, terrainShapes, x, y, z, shape,
+                        x, y + 1, CellFace.POSITIVE_Y, SurfaceReliefEdgeArt.Side.NORTH);
+                drawReliefEdge(batch, elevation, terrainShapes, x, y, z, shape,
+                        x + 1, y, CellFace.POSITIVE_X, SurfaceReliefEdgeArt.Side.EAST);
+                drawReliefEdge(batch, elevation, terrainShapes, x, y, z, shape,
+                        x, y - 1, CellFace.NEGATIVE_Y, SurfaceReliefEdgeArt.Side.SOUTH);
+                drawReliefEdge(batch, elevation, terrainShapes, x, y, z, shape,
+                        x - 1, y, CellFace.NEGATIVE_X, SurfaceReliefEdgeArt.Side.WEST);
             }
         }
     }
@@ -362,14 +370,21 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private void drawReliefEdge(
             SpriteBatch batch,
             ElevationField elevation,
+            TerrainShapeField terrainShapes,
             int x,
             int y,
             int z,
+            Shape shape,
             int neighbourX,
             int neighbourY,
+            CellFace face,
             SurfaceReliefEdgeArt.Side side) {
         boolean neighbourPresent = elevation.contains(neighbourX, neighbourY);
-        if (neighbourPresent && elevation.elevationAt(neighbourX, neighbourY) == z) return;
+        if (neighbourPresent) {
+            int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
+            Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
+            if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
+        }
         boolean raised = !neighbourPresent || z > elevation.elevationAt(neighbourX, neighbourY);
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
@@ -452,20 +467,53 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 baseY - sideY);
     }
 
-    private int neighbourMask(ElevationField elevation, int x, int y, int z) {
+    private int neighbourMask(
+            ElevationField elevation,
+            TerrainShapeField terrainShapes,
+            int x,
+            int y,
+            int z,
+            Shape shape) {
         int mask = 0;
-        if (sameSurface(elevation, x, y + 1, z)) mask |= LandscapeTopology.N;
-        if (sameSurface(elevation, x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
-        if (sameSurface(elevation, x + 1, y, z)) mask |= LandscapeTopology.E;
-        if (sameSurface(elevation, x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
-        if (sameSurface(elevation, x, y - 1, z)) mask |= LandscapeTopology.S;
-        if (sameSurface(elevation, x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
-        if (sameSurface(elevation, x - 1, y, z)) mask |= LandscapeTopology.W;
-        if (sameSurface(elevation, x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
+        if (joins(elevation, terrainShapes, shape, z, x, y + 1, CellFace.POSITIVE_Y)) {
+            mask |= LandscapeTopology.N;
+        }
+        if (sameDiscreteSurface(elevation, x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
+        if (joins(elevation, terrainShapes, shape, z, x + 1, y, CellFace.POSITIVE_X)) {
+            mask |= LandscapeTopology.E;
+        }
+        if (sameDiscreteSurface(elevation, x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
+        if (joins(elevation, terrainShapes, shape, z, x, y - 1, CellFace.NEGATIVE_Y)) {
+            mask |= LandscapeTopology.S;
+        }
+        if (sameDiscreteSurface(elevation, x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
+        if (joins(elevation, terrainShapes, shape, z, x - 1, y, CellFace.NEGATIVE_X)) {
+            mask |= LandscapeTopology.W;
+        }
+        if (sameDiscreteSurface(elevation, x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
         return LandscapeTopology.normalize(mask);
     }
 
-    private static boolean sameSurface(ElevationField elevation, int x, int y, int z) {
+    private boolean joins(
+            ElevationField elevation,
+            TerrainShapeField terrainShapes,
+            Shape shape,
+            int z,
+            int neighbourX,
+            int neighbourY,
+            CellFace face) {
+        if (!elevation.contains(neighbourX, neighbourY)) return false;
+        int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
+        Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
+        return SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
+    }
+
+    private static Shape shapeAt(TerrainShapeField terrainShapes, int x, int y) {
+        Shape shape = terrainShapes.shapeOverrideAt(x, y);
+        return shape == null ? FullShape.INSTANCE : shape;
+    }
+
+    private static boolean sameDiscreteSurface(ElevationField elevation, int x, int y, int z) {
         return elevation.contains(x, y) && elevation.elevationAt(x, y) == z;
     }
 

@@ -14,9 +14,12 @@ public interface ShapePresentation<S extends Shape> {
 
     default ShapeDirectionDiagnostic directionDiagnostic(
             S shape) {
-
         return ShapeDirectionDiagnostic.NONE;
     }
 
     String debugLabel(S shape);
+
+    /** Releases presentation-owned resources; shared external atlases remain externally owned. */
+    default void dispose() {
+    }
 }
