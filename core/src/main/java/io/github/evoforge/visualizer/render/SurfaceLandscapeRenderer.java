@@ -150,9 +150,6 @@ public final class SurfaceLandscapeRenderer {
             if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
         }
 
-        // Boundary presentation is pair-owned. If either Shape owns the visual treatment of this
-        // shared boundary, the generic earth overlay must stay out. This prevents an ordinary flat
-        // neighbour from drawing the exact ramp-contact line that the ramp intentionally removes.
         if (!shapePresentations.genericReliefEdgeAllowed(shape, face)) return;
         if (neighbour != null
                 && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite())) {
@@ -165,18 +162,18 @@ public final class SurfaceLandscapeRenderer {
 
     private int neighbourMask(int x, int y, int z, Shape shape) {
         int mask = 0;
-        if (joins(shape, z, x, y + 1, CellFace.POSITIVE_Y)) mask |= LandscapeTopology.N;
+        if (terrainArtJoins(shape, z, x, y + 1, CellFace.POSITIVE_Y)) mask |= LandscapeTopology.N;
         if (sameDiscreteSurface(x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
-        if (joins(shape, z, x + 1, y, CellFace.POSITIVE_X)) mask |= LandscapeTopology.E;
+        if (terrainArtJoins(shape, z, x + 1, y, CellFace.POSITIVE_X)) mask |= LandscapeTopology.E;
         if (sameDiscreteSurface(x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
-        if (joins(shape, z, x, y - 1, CellFace.NEGATIVE_Y)) mask |= LandscapeTopology.S;
+        if (terrainArtJoins(shape, z, x, y - 1, CellFace.NEGATIVE_Y)) mask |= LandscapeTopology.S;
         if (sameDiscreteSurface(x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
-        if (joins(shape, z, x - 1, y, CellFace.NEGATIVE_X)) mask |= LandscapeTopology.W;
+        if (terrainArtJoins(shape, z, x - 1, y, CellFace.NEGATIVE_X)) mask |= LandscapeTopology.W;
         if (sameDiscreteSurface(x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
         return LandscapeTopology.normalize(mask);
     }
 
-    private boolean joins(
+    private boolean terrainArtJoins(
             Shape shape,
             int z,
             int neighbourX,
@@ -185,7 +182,13 @@ public final class SurfaceLandscapeRenderer {
         if (!view.terrainSurfaces().hasColumn(neighbourX, neighbourY)) return false;
         int neighbourZ = view.terrainSurfaces().topZ(neighbourX, neighbourY);
         Shape neighbour = view.geometry().find(neighbourX, neighbourY, neighbourZ);
-        return SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
+        if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return true;
+
+        // A normal terrain tile must not paint its own earth edge into a boundary whose neighbour
+        // explicitly owns the visual treatment (ramps do). The owning Shape still receives the
+        // physical topology mask, so it can keep an exposed lateral bank or remove a true ramp join.
+        return shapePresentations.genericReliefEdgeAllowed(shape, face)
+                && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite());
     }
 
     private boolean sameDiscreteSurface(int x, int y, int z) {
