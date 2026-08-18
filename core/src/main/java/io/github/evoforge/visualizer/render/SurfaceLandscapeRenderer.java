@@ -145,11 +145,13 @@ public final class SurfaceLandscapeRenderer {
             CellFace face,
             SurfaceReliefEdgeArt.Side side) {
         boolean neighbourPresent = view.terrainSurfaces().hasColumn(neighbourX, neighbourY);
+        boolean aligned = false;
         if (neighbourPresent) {
             int neighbourZ = view.terrainSurfaces().topZ(neighbourX, neighbourY);
             Shape neighbour = view.geometry().find(neighbourX, neighbourY, neighbourZ);
-            if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
+            aligned = SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
         }
+        if (!shapePresentations.reliefEdgeVisible(shape, face, aligned)) return;
 
         boolean raised = !neighbourPresent || z > view.terrainSurfaces().topZ(neighbourX, neighbourY);
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
