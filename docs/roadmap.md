@@ -95,53 +95,54 @@ A richer interruption/preemption policy is deliberately not automatic next work.
 
 The internal design of a future milestone is introduced by its first real consumer. A name on this roadmap does not justify dormant infrastructure.
 
-## Current world-generation sequence
+## Current world-generation milestone
 
-The accepted world-generation baseline is V12. It provides a high-quality **base surface fabric**, not yet a complete geological/hydrological/ecological world:
+The accepted V12 surface appearance is now the protected base for a disciplined world-generation rebuild. The canonical contract and detailed stage acceptance criteria live in [World Generation](systems/world-generation.md). This roadmap intentionally does not duplicate those details.
+
+The current stage is:
 
 ```text
-WorldSpec + seed + WorldGenerationIntent
-                ↓
-          WorldGenesis V12
-                ↓
- accepted ocean-first base ElevationField
-                ↓
-      complete typed WorldAtlas
-                ↓
- generated-world preparation / materialization
-                ↓
-       2D + 3D developer preview
+Stage 0 — architecture stabilization
+semantic intent
+    ↓
+calibration
+    ↓
+versioned algorithm recipe
+    ↓
+replaceable spatial algorithm
+    ↓
+typed generated facts
 ```
 
-The current V12 terrain intentionally remains the protected ordinary-landscape baseline. It already supplies coherent landmasses, coastlines, hills, depressions and rugged relief, but its vertical scale is still modest and its existing hydrography is analytical rather than terrain-carving. Future work extends this baseline through explicit later stages instead of silently retuning the accepted V12 landform algorithm.
+The locked milestone sequence is:
 
-The locked sequence is:
+1. **Stage 0 — architecture stabilization and V12 normalization** (active);
+2. **Stage 1 — mountain systems** over the accepted base morphology;
+3. **Stage 2 — dry hydrography and carving**: watersheds, basins, river hierarchy, channels, valleys and lake bowls, still without Water;
+4. **Stage 3 — coherent geology**: authored/calibrated rock definitions, formations, strata and required deposits;
+5. **Stage 4 — caves** as coherent underground volumes;
+6. **Stage 5 — surface layers/material synthesis** from morphology + hydrographic/depositional facts + geology + calibrated definitions;
+7. **Stage 6 — dry-world visual/test acceptance**;
+8. **Stage 7 — finite initial Water fill** into already prepared oceans/lakes/channels;
+9. **Stage 8 — runtime handoff audit and world-generation milestone close**.
 
-1. deep vertical world;
-2. sparse mountain provinces/ranges over V12;
-3. watersheds, basins, outlets and river hierarchy;
-4. river-valley/channel/lake-bowl terrain carving;
-5. finite generated-water handoff into runtime hydrology;
-6. generic coherent Spatial Formation primitives only when the first geology consumer requires them;
-7. coherent geology/strata and authored rock palettes;
-8. caves driven by geology/water causes;
-9. coherent soil identity/formation;
-10. ecological potential;
-11. vegetation communities with controlled mixing and transitions;
-12. derived biome classification;
-13. resources and natural sites.
+One world-generation stage uses one PR. If implementation changes this sequence, the canonical World Generation document and the stage report change in the same PR before work continues.
 
-The canonical contract, current stage ownership and audit findings are documented in [World Generation](systems/world-generation.md) and the [August 2026 pipeline audit](notes/world-generation-pipeline-audit-2026-08.md).
+The current generated-water/hydrography and provisional geology code remains useful compatibility/typed infrastructure, but its historical ordering does not override the canonical dry-world-first pipeline.
 
 ## Separate research / large future milestones
 
-The following remain outside the mandatory immediate sequence and require their own design work when a real consumer appears:
+The following remain outside the mandatory current world-generation milestone and require their own design work when a real consumer appears:
 
 - persistent Belief / Memory and landmark/topological navigation;
 - richer sensory mechanics such as hearing and smell;
 - richer fluid mechanics beyond the baseline deterministic local solver, including richer boundary profiles, derived water-body identity, detailed pressure/inertia/viscosity and erosion;
-- tectonic/depositional history beyond the first coherent geology consumer when it proves necessary for accepted formations;
-- broader plant lifecycle semantics such as age, reproduction, withering and death.
+- tectonic/depositional history beyond the first coherent geology model when accepted formations prove it necessary;
+- ecology/biome potential derived from the completed physical world;
+- coherent vegetation communities and plant populations;
+- broader plant lifecycle semantics such as age, reproduction, withering and death;
+- natural resources/sites beyond the deposits required by the geology milestone;
+- settlements, societies, economy and other world-population generation.
 
 ## Deferred presentation work
 
