@@ -73,6 +73,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private double generationMillis;
     private int lastMouseX;
     private int lastMouseY;
+    private boolean orbiting;
 
     public WorldGenerationPreviewScreen(Runnable returnToWorkspace) {
         if (returnToWorkspace == null) {
@@ -89,7 +90,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 showOcean,
                 visible -> showSurface = visible,
                 visible -> showOcean = visible);
-        this.inputMultiplexer = new InputMultiplexer(settingsPanel.inputProcessor(), input);
+        this.inputMultiplexer = new InputMultiplexer(input, settingsPanel.inputProcessor());
         regenerate();
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -135,6 +136,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     @Override
     public void hide() {
+        orbiting = false;
         if (Gdx.input.getInputProcessor() == inputMultiplexer) {
             Gdx.input.setInputProcessor(null);
         }
@@ -340,14 +342,25 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-            if (button != Input.Buttons.LEFT) return false;
+            if (button != Input.Buttons.LEFT || settingsPanel.containsScreenPoint(screenX, screenY)) {
+                return false;
+            }
             lastMouseX = screenX;
             lastMouseY = screenY;
+            orbiting = true;
+            return true;
+        }
+
+        @Override
+        public boolean touchUp(int screenX, int screenY, int pointer, int button) {
+            if (button != Input.Buttons.LEFT || !orbiting) return false;
+            orbiting = false;
             return true;
         }
 
         @Override
         public boolean touchDragged(int screenX, int screenY, int pointer) {
+            if (!orbiting) return false;
             yaw += (screenX - lastMouseX) * 0.45f;
             pitch = MathUtils.clamp(pitch - (screenY - lastMouseY) * 0.35f, 8f, 82f);
             lastMouseX = screenX;
@@ -357,6 +370,9 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
+            if (settingsPanel.containsScreenPoint(Gdx.input.getX(), Gdx.input.getY())) {
+                return false;
+            }
             float minDistance = Math.max(24f, generatedConfig.maxHorizontalDimension() * 0.35f);
             float maxDistance = Math.max(180f, generatedConfig.maxHorizontalDimension() * 4f);
             distance = MathUtils.clamp(distance * (1f + amountY * 0.08f), minDistance, maxDistance);
