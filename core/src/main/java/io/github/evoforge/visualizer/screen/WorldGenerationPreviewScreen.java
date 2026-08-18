@@ -26,11 +26,14 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationStage;
 import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V12;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
+    private static final int SURFACE_CHUNK_INTERVALS = 128;
 
     private static final String VERTEX_SHADER = """
             attribute vec3 a_position;
@@ -69,7 +72,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private ElevationField generatedElevation;
     private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
     private TerrainShapeField generatedShapes;
-    private Mesh surfaceMesh;
+    private Mesh[] surfaceMeshes = new Mesh[0];
     private Mesh oceanMesh;
     private boolean showSurface = true;
     private boolean showOcean = true;
@@ -158,7 +161,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
         shader.bind();
         shader.setUniformMatrix("u_projView", camera.combined);
-        if (showSurface && surfaceMesh != null) surfaceMesh.render(shader, GL20.GL_TRIANGLES);
+        if (showSurface) {
+            for (Mesh surfaceMesh : surfaceMeshes) {
+                surfaceMesh.render(shader, GL20.GL_TRIANGLES);
+            }
+        }
         if (showOcean && oceanMesh != null) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -233,7 +240,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
-        rebuildSurfaceMesh();
+        rebuildSurfaceMeshes();
         oceanMesh = buildOcean(bounds);
         shape2DRenderer.setWorldBounds(bounds);
         shape2DRenderer.setElevationRange(elevationRange);
@@ -255,24 +262,21 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         if (elevationTintPpm == strengthPpm) return;
         elevationTintPpm = strengthPpm;
         shape2DRenderer.setElevationTintPpm(strengthPpm);
-        rebuildSurfaceMesh();
+        rebuildSurfaceMeshes();
     }
 
     private void set3DMeshAxis(int samples) {
         if (WorldGeneration3DDetail.maxAxisSamples() == samples) return;
         WorldGeneration3DDetail.maxAxisSamples(samples);
-        rebuildSurfaceMesh();
+        rebuildSurfaceMeshes();
     }
 
-    private void rebuildSurfaceMesh() {
+    private void rebuildSurfaceMeshes() {
         if (generatedElevation == null || bounds == null || generatedConfig == null) return;
         previewWidth = WorldGeneration3DDetail.sampleCount(generatedConfig.width());
         previewLength = WorldGeneration3DDetail.sampleCount(generatedConfig.length());
-        if (surfaceMesh != null) {
-            surfaceMesh.dispose();
-            surfaceMesh = null;
-        }
-        surfaceMesh = buildSurface(
+        disposeSurfaceMeshes();
+        surfaceMeshes = buildSurfaceMeshes(
                 generatedElevation,
                 bounds,
                 elevationRange,
@@ -281,21 +285,59 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 elevationTintPpm);
     }
 
-    private static Mesh buildSurface(
+    private static Mesh[] buildSurfaceMeshes(
             ElevationField elevation,
             WorldBounds bounds,
             WorldGenerationElevationRange elevationRange,
             int sampleWidth,
             int sampleLength,
             int elevationTintPpm) {
+        List<Mesh> meshes = new ArrayList<>();
+        for (int startY = 0; startY < sampleLength - 1; startY += SURFACE_CHUNK_INTERVALS) {
+            int endY = Math.min(sampleLength - 1, startY + SURFACE_CHUNK_INTERVALS);
+            for (int startX = 0; startX < sampleWidth - 1; startX += SURFACE_CHUNK_INTERVALS) {
+                int endX = Math.min(sampleWidth - 1, startX + SURFACE_CHUNK_INTERVALS);
+                meshes.add(buildSurfaceChunk(
+                        elevation,
+                        bounds,
+                        elevationRange,
+                        sampleWidth,
+                        sampleLength,
+                        startX,
+                        endX,
+                        startY,
+                        endY,
+                        elevationTintPpm));
+            }
+        }
+        return meshes.toArray(Mesh[]::new);
+    }
+
+    private static Mesh buildSurfaceChunk(
+            ElevationField elevation,
+            WorldBounds bounds,
+            WorldGenerationElevationRange elevationRange,
+            int globalSampleWidth,
+            int globalSampleLength,
+            int startSampleX,
+            int endSampleX,
+            int startSampleY,
+            int endSampleY,
+            int elevationTintPpm) {
+        int sampleWidth = endSampleX - startSampleX + 1;
+        int sampleLength = endSampleY - startSampleY + 1;
         int vertexCount = Math.multiplyExact(sampleWidth, sampleLength);
         float[] vertices = new float[vertexCount * 7];
         Color color = new Color();
         int cursor = 0;
-        for (int sampleY = 0; sampleY < sampleLength; sampleY++) {
-            int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, sampleLength);
-            for (int sampleX = 0; sampleX < sampleWidth; sampleX++) {
-                int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, sampleWidth);
+        for (int localY = 0; localY < sampleLength; localY++) {
+            int sampleY = startSampleY + localY;
+            int y = sampleCoordinate(
+                    bounds.minY(), bounds.maxY(), sampleY, globalSampleLength);
+            for (int localX = 0; localX < sampleWidth; localX++) {
+                int sampleX = startSampleX + localX;
+                int x = sampleCoordinate(
+                        bounds.minX(), bounds.maxX(), sampleX, globalSampleWidth);
                 long heightSubunits = elevation.elevationSubunitsAt(x, y);
                 float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
                 if (heightSubunits >= 0L) {
@@ -429,12 +471,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     Gdx.graphics.getHeight() - 96f);
         } else {
             font.draw(batch, String.format(
-                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   axis cap %d",
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   chunks %d   axis cap %d",
                     Gdx.graphics.getFramesPerSecond(),
                     Gdx.graphics.getDeltaTime() * 1000f,
                     lastCpuMillis,
                     previewWidth,
                     previewLength,
+                    surfaceMeshes.length,
                     WorldGeneration3DDetail.maxAxisSamples()),
                     24f,
                     Gdx.graphics.getHeight() - 96f);
@@ -459,14 +502,18 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     }
 
     private void disposeMeshes() {
-        if (surfaceMesh != null) {
-            surfaceMesh.dispose();
-            surfaceMesh = null;
-        }
+        disposeSurfaceMeshes();
         if (oceanMesh != null) {
             oceanMesh.dispose();
             oceanMesh = null;
         }
+    }
+
+    private void disposeSurfaceMeshes() {
+        for (Mesh surfaceMesh : surfaceMeshes) {
+            surfaceMesh.dispose();
+        }
+        surfaceMeshes = new Mesh[0];
     }
 
     private static int sampleCoordinate(int min, int max, int sampleIndex, int sampleCount) {
