@@ -69,7 +69,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private float pitch = 42f;
     private float distance = 86f;
     private int previewWidth;
-    private int previewHeight;
+    private int previewLength;
     private double generationMillis;
     private int lastMouseX;
     private int lastMouseY;
@@ -167,14 +167,14 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         disposeMeshes();
         previewWidth = sampleCount(generatedConfig.width());
-        previewHeight = sampleCount(generatedConfig.height());
-        surfaceMesh = buildSurface(elevation, bounds, previewWidth, previewHeight);
+        previewLength = sampleCount(generatedConfig.length());
+        surfaceMesh = buildSurface(elevation, bounds, previewWidth, previewLength);
         oceanMesh = buildOcean(bounds);
         camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
 
         if (previous == null
                 || previous.width() != generatedConfig.width()
-                || previous.height() != generatedConfig.height()) {
+                || previous.length() != generatedConfig.length()) {
             fitCameraToWorld();
         }
     }
@@ -183,13 +183,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             ElevationField elevation,
             WorldBounds bounds,
             int sampleWidth,
-            int sampleHeight) {
-        int vertexCount = Math.multiplyExact(sampleWidth, sampleHeight);
+            int sampleLength) {
+        int vertexCount = Math.multiplyExact(sampleWidth, sampleLength);
         float[] vertices = new float[vertexCount * 7];
         float amplitude = Math.max(Math.abs(bounds.minZ()), Math.abs(bounds.maxZ()));
         int cursor = 0;
-        for (int sampleY = 0; sampleY < sampleHeight; sampleY++) {
-            int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, sampleHeight);
+        for (int sampleY = 0; sampleY < sampleLength; sampleY++) {
+            int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, sampleLength);
             for (int sampleX = 0; sampleX < sampleWidth; sampleX++) {
                 int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, sampleWidth);
                 float h = (float) elevation.elevationSubunitsAt(x, y)
@@ -208,9 +208,9 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             }
         }
 
-        short[] indices = new short[(sampleWidth - 1) * (sampleHeight - 1) * 6];
+        short[] indices = new short[(sampleWidth - 1) * (sampleLength - 1) * 6];
         int index = 0;
-        for (int y = 0; y < sampleHeight - 1; y++) {
+        for (int y = 0; y < sampleLength - 1; y++) {
             for (int x = 0; x < sampleWidth - 1; x++) {
                 int a = y * sampleWidth + x;
                 int b = a + 1;
@@ -283,12 +283,12 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(batch, String.format(
                 "active %dx%d (%,d columns)   z %d..%d   preview %dx%d   generation %.1f ms",
                 generatedConfig.width(),
-                generatedConfig.height(),
+                generatedConfig.length(),
                 generatedConfig.columnCount(),
                 bounds.minZ(),
                 bounds.maxZ(),
                 previewWidth,
-                previewHeight,
+                previewLength,
                 generationMillis),
                 24f,
                 Gdx.graphics.getHeight() - 48f);
