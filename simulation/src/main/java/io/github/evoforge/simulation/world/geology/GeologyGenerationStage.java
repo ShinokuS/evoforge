@@ -8,11 +8,18 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Deterministic first geology model: coherent jittered macro-provinces with vertical strata.
+ * Deterministic provisional geology: coherent jittered macro-provinces with coarse vertical strata.
+ *
+ * <p>This implementation exists to exercise the typed geology/profile/material pipeline and to give
+ * prepared terrain a non-uniform bedrock identity. It is deliberately <em>not</em> the target
+ * geology distribution model: adding more rock definitions here would only add more independently
+ * sampled province/stratum choices. Final geology is expected to replace this algorithm behind the
+ * same {@link GeologyGenerator}/{@link GeologyField} boundary with coherent formations, layers,
+ * intrusions, lenses and deposits produced through the planned spatial-formation system.</p>
  *
  * <p>V1-V3 predate generated geology and intentionally reproduce the former uniform granite
- * bedrock identity. V4+ revisions currently share the same generated geology contract; newer
- * revisions may change other world-generation stages without silently changing geology.</p>
+ * bedrock identity. V4+ revisions currently share this provisional contract; newer revisions may
+ * change other world-generation stages without silently changing geology.</p>
  */
 public final class GeologyGenerationStage implements GeologyGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:geology");
