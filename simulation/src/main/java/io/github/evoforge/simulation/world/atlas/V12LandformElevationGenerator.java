@@ -49,7 +49,7 @@ final class V12LandformElevationGenerator {
     private static final int UPLIFT_WEIGHT_PPM = 220_000;
     private static final int LANDFORM_WEIGHT_PPM = 340_000;
     private static final int RIDGE_WEIGHT_PPM = 300_000;
-    private static final int ROLLING_WEIGHT_PPM = 180_000;
+    private static final int ROLLING_WEIGHT_PPM = 240_000;
     private static final int ROLLING_PRIMARY_WEIGHT_PPM = 760_000;
     private static final int ROLLING_DETAIL_WEIGHT_PPM = PPM - ROLLING_PRIMARY_WEIGHT_PPM;
     private static final int NEGATIVE_RELIEF_COMPRESSION_PPM = 650_000;
