@@ -9,6 +9,7 @@ import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsFormat;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.List;
@@ -41,13 +42,16 @@ final class GeneratedWorldAuditProfileTest {
                         seed,
                         profile.climate(),
                         bounds,
-                        profile.atmosphericForcingPolicy());
+                        profile.atmosphericForcingPolicy(),
+                        GenerationRevision.V11);
+                assertEquals(GenerationRevision.V11, world.atlas().genesis().generationRevision());
+
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
                 GeneratedWorldDiagnostics initial = trace.get(0);
                 assertTrue(initial.geologyProvinces() >= 1);
-                assertTrue(initial.geologyUnits() > 1, "V5 geology collapsed to one unit");
+                assertTrue(initial.geologyUnits() > 1, "generated geology collapsed to one unit");
                 assertTrue(initial.generatedInitialWaterVolume() > 0L);
                 assertTrue(initial.generatedInitialWaterColumns() > 0);
                 assertTrue(initial.generatedShorelineColumns() > 0);
@@ -67,7 +71,8 @@ final class GeneratedWorldAuditProfileTest {
                             initial.generatedShorelineColumns(),
                             snapshot.generatedShorelineColumns());
                     System.out.println(
-                            "scenario=" + profile.name()
+                            "revision=" + GenerationRevision.V11.value()
+                                    + " scenario=" + profile.name()
                                     + " side=" + side
                                     + " "
                                     + GeneratedWorldDiagnosticsFormat.line(snapshot));
