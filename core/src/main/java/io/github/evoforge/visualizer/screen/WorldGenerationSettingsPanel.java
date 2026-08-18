@@ -16,6 +16,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -83,6 +84,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         addDimensionControl(content, "Width", widthField);
         addDimensionControl(content, "Length", lengthField);
         addSeedControl(content);
+        addRandomSeedControl(content);
 
         addSection(content, "LAND SHAPE");
         addPercentControl(content, "Land", settings.coveragePpm(), settings::coveragePpm);
@@ -222,6 +224,25 @@ final class WorldGenerationSettingsPanel implements Disposable {
         content.row();
     }
 
+    private void addRandomSeedControl(Table content) {
+        CheckBox randomSeed = new CheckBox("", skin);
+        randomSeed.setChecked(settings.randomSeedOnGenerate());
+        randomSeed.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                settings.randomSeedOnGenerate(randomSeed.isChecked());
+                markDirty();
+            }
+        });
+
+        Table row = new Table(skin);
+        row.add(randomSeed).left();
+        row.add(new Label("Random seed on Generate", skin)).left().padLeft(8f);
+        row.add().expandX();
+        content.add(row).growX().minWidth(0f).left().padBottom(4f);
+        content.row();
+    }
+
     private void addPercentControl(
             Table content,
             String name,
@@ -319,18 +340,23 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Integer length = parseDimension("Length", lengthField);
         if (length == null) return;
 
-        String seedText = seedField.getText().trim();
-        long seed;
-        try {
-            seed = Long.parseLong(seedText);
-        } catch (NumberFormatException exception) {
-            statusLabel.setText("Seed must be a signed 64-bit integer.");
-            return;
-        }
-
         settings.width(width);
         settings.length(length);
-        settings.seed(seed);
+
+        if (settings.randomSeedOnGenerate()) {
+            settings.prepareSeedForGeneration(() -> ThreadLocalRandom.current().nextLong());
+        } else {
+            String seedText = seedField.getText().trim();
+            long seed;
+            try {
+                seed = Long.parseLong(seedText);
+            } catch (NumberFormatException exception) {
+                statusLabel.setText("Seed must be a signed 64-bit integer.");
+                return;
+            }
+            settings.seed(seed);
+        }
+
         widthField.setText(Integer.toString(settings.width()));
         lengthField.setText(Integer.toString(settings.length()));
         seedField.setText(Long.toString(settings.seed()));
@@ -338,7 +364,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         generateAction.run();
         stage.setKeyboardFocus(null);
         stage.setScrollFocus(null);
-        statusLabel.setText("Generated from current settings.");
+        statusLabel.setText("Generated with seed " + settings.seed() + ".");
     }
 
     private Integer parseDimension(String name, TextField field) {
