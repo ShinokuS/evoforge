@@ -93,8 +93,8 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Table performanceTab = buildPerformanceTab();
         performanceTab.setVisible(false);
 
-        TextButton worldButton = new TextButton("WORLD", skin, "toggle");
-        TextButton performanceButton = new TextButton("PERFORMANCE", skin, "toggle");
+        TextButton worldButton = new TextButton("WORLD", skin);
+        TextButton performanceButton = new TextButton("PERFORMANCE", skin);
         worldButton.setChecked(true);
         ButtonGroup<TextButton> tabs = new ButtonGroup<>(worldButton, performanceButton);
         tabs.setMinCheckCount(1);
