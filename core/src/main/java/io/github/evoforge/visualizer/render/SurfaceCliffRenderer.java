@@ -3,6 +3,9 @@ package io.github.evoforge.visualizer.render;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import io.github.evoforge.simulation.runtime.SimulationView;
+import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
+import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import io.github.evoforge.visualizer.VisualizerState;
 
@@ -39,8 +42,9 @@ public final class SurfaceCliffRenderer {
             for (int y = range.minY(); y <= range.maxY(); y++) {
                 if (!view.terrainSurfaces().hasColumn(x, y)) continue;
                 int z = view.terrainSurfaces().topZ(x, y);
-                drawEastTransition(x, y, z, thickness);
-                drawNorthTransition(x, y, z, thickness);
+                Shape shape = view.geometry().find(x, y, z);
+                drawEastTransition(x, y, z, shape, thickness);
+                drawNorthTransition(x, y, z, shape, thickness);
             }
         }
         shapes.end();
@@ -48,12 +52,24 @@ public final class SurfaceCliffRenderer {
 
     public void dispose() { shapes.dispose(); }
 
-    /** Draw one paired light/high + dark/low cue for a vertical screen edge. */
-    private void drawEastTransition(int x, int y, int z, float thickness) {
+    private void drawEastTransition(
+            int x,
+            int y,
+            int z,
+            Shape shape,
+            float thickness) {
         boolean neighbour = view.terrainSurfaces().hasColumn(x + 1, y);
         if (neighbour) {
             int neighbourZ = view.terrainSurfaces().topZ(x + 1, y);
-            if (z == neighbourZ) return;
+            Shape neighbourShape = view.geometry().find(x + 1, y, neighbourZ);
+            if (SurfaceBoundaryContinuity.aligns(
+                    shape,
+                    z,
+                    CellFace.POSITIVE_X,
+                    neighbourShape,
+                    neighbourZ)) {
+                return;
+            }
             if (z > neighbourZ) {
                 drawVerticalPair(x + 1f, y, thickness, true);
             } else {
@@ -61,16 +77,27 @@ public final class SurfaceCliffRenderer {
             }
             return;
         }
-        // World/map edge reads as a high ledge against the void.
         drawVerticalPair(x + 1f, y, thickness, true);
     }
 
-    /** Draw one paired light/high + dark/low cue for a horizontal screen edge. */
-    private void drawNorthTransition(int x, int y, int z, float thickness) {
+    private void drawNorthTransition(
+            int x,
+            int y,
+            int z,
+            Shape shape,
+            float thickness) {
         boolean neighbour = view.terrainSurfaces().hasColumn(x, y + 1);
         if (neighbour) {
             int neighbourZ = view.terrainSurfaces().topZ(x, y + 1);
-            if (z == neighbourZ) return;
+            Shape neighbourShape = view.geometry().find(x, y + 1, neighbourZ);
+            if (SurfaceBoundaryContinuity.aligns(
+                    shape,
+                    z,
+                    CellFace.POSITIVE_Y,
+                    neighbourShape,
+                    neighbourZ)) {
+                return;
+            }
             if (z > neighbourZ) {
                 drawHorizontalPair(x, y + 1f, thickness, true);
             } else {
@@ -81,10 +108,12 @@ public final class SurfaceCliffRenderer {
         drawHorizontalPair(x, y + 1f, thickness, true);
     }
 
-    /**
-     * @param highOnWest true when the cell left of the boundary is higher.
-     */
-    private void drawVerticalPair(float boundaryX, int y, float thickness, boolean highOnWest) {
+    /** @param highOnWest true when the cell left of the boundary is higher. */
+    private void drawVerticalPair(
+            float boundaryX,
+            int y,
+            float thickness,
+            boolean highOnWest) {
         if (highOnWest) {
             shapes.setColor(HIGH_CONTOUR);
             shapes.rect(boundaryX - thickness * 2f, y, thickness, 1f);
@@ -98,10 +127,12 @@ public final class SurfaceCliffRenderer {
         }
     }
 
-    /**
-     * @param highOnSouth true when the cell below the boundary is higher.
-     */
-    private void drawHorizontalPair(int x, float boundaryY, float thickness, boolean highOnSouth) {
+    /** @param highOnSouth true when the cell below the boundary is higher. */
+    private void drawHorizontalPair(
+            int x,
+            float boundaryY,
+            float thickness,
+            boolean highOnSouth) {
         if (highOnSouth) {
             shapes.setColor(HIGH_CONTOUR);
             shapes.rect(x, boundaryY - thickness * 2f, 1f, thickness);
