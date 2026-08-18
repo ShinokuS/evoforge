@@ -36,6 +36,26 @@ final class LandscapeTopologyTest {
     }
 
     @Test
+    void surfaceArtDoesNotCreatePointOnlyEarthCorners() {
+        assertEquals(
+                LandscapeTopology.N | LandscapeTopology.NE | LandscapeTopology.E,
+                LandscapeTopology.normalizeSurfaceArt(
+                        LandscapeTopology.N | LandscapeTopology.E));
+        assertEquals(
+                LandscapeTopology.E | LandscapeTopology.SE | LandscapeTopology.S,
+                LandscapeTopology.normalizeSurfaceArt(
+                        LandscapeTopology.E | LandscapeTopology.S));
+        assertEquals(
+                LandscapeTopology.S | LandscapeTopology.SW | LandscapeTopology.W,
+                LandscapeTopology.normalizeSurfaceArt(
+                        LandscapeTopology.S | LandscapeTopology.W));
+        assertEquals(
+                LandscapeTopology.W | LandscapeTopology.NW | LandscapeTopology.N,
+                LandscapeTopology.normalizeSurfaceArt(
+                        LandscapeTopology.W | LandscapeTopology.N));
+    }
+
+    @Test
     void worldCellVariantIsStableAndCoordinateSensitive() {
         int first = LandscapeTopology.variant(7, -3, 2, 4);
         int repeated = LandscapeTopology.variant(7, -3, 2, 4);
