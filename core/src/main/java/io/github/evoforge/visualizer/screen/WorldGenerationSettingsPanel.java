@@ -7,7 +7,6 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
-import com.badlogic.gdx.scenes.scene2d.ui.SelectBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
@@ -21,13 +20,19 @@ import java.util.function.IntConsumer;
 
 /** Mouse-driven settings sidebar for the world-generation preview workspace. */
 final class WorldGenerationSettingsPanel implements Disposable {
-    private static final float PANEL_WIDTH = 390f;
+    private static final float PANEL_WIDTH = 360f;
+    private static final float PANEL_MARGIN = 12f;
+    private static final float CONTENT_PADDING = 16f;
+    private static final float LABEL_WIDTH = 98f;
+    private static final float VALUE_WIDTH = 46f;
 
     private final WorldGenerationPreviewSettings settings;
     private final Runnable generateAction;
     private final Stage stage = new Stage(new ScreenViewport());
     private final Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
     private final Label statusLabel = new Label("Edit settings, then press Generate.", skin);
+    private final TextField widthField;
+    private final TextField lengthField;
     private final TextField seedField;
 
     WorldGenerationSettingsPanel(
@@ -46,23 +51,26 @@ final class WorldGenerationSettingsPanel implements Disposable {
         }
         this.settings = settings;
         this.generateAction = generateAction;
+        this.widthField = dimensionField(settings.width());
+        this.lengthField = dimensionField(settings.length());
         this.seedField = new TextField(Long.toString(settings.seed()), skin);
+        addDirtyListener(seedField);
 
         Table content = new Table(skin);
         content.top().left();
-        content.pad(18f);
-        content.defaults().left().padBottom(8f);
+        content.pad(CONTENT_PADDING);
+        content.defaults().growX().minWidth(0f).padBottom(8f);
 
         Label title = new Label("WORLD GENERATION", skin, "window");
-        content.add(title).colspan(3).left().padBottom(4f);
+        content.add(title).left().padBottom(4f);
         content.row();
         Label subtitle = new Label("V10 macro morphology", skin, "subtitle");
-        content.add(subtitle).colspan(3).left().padBottom(14f);
+        content.add(subtitle).left().padBottom(14f);
         content.row();
 
         addSection(content, "WORLD");
-        addDimensionControl(content, "Width", true);
-        addDimensionControl(content, "Height", false);
+        addTextControl(content, "Width", widthField);
+        addTextControl(content, "Length", lengthField);
         addSeedControl(content);
 
         addSection(content, "LAND SHAPE");
@@ -84,7 +92,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 surfaceVisibility.accept(surface.isChecked());
             }
         });
-        content.add(surface).colspan(3).left();
+        content.add(surface).left();
         content.row();
 
         CheckBox ocean = new CheckBox(" Ocean plane", skin);
@@ -95,7 +103,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 oceanVisibility.accept(ocean.isChecked());
             }
         });
-        content.add(ocean).colspan(3).left().padBottom(14f);
+        content.add(ocean).left().padBottom(14f);
         content.row();
 
         TextButton generate = new TextButton("GENERATE", skin);
@@ -105,21 +113,27 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 generateFromControls();
             }
         });
-        content.add(generate).colspan(3).growX().height(38f).padTop(6f).padBottom(10f);
+        content.add(generate).growX().minWidth(0f).height(38f).padTop(6f).padBottom(10f);
         content.row();
 
         statusLabel.setWrap(true);
-        content.add(statusLabel).colspan(3).growX().left();
+        content.add(statusLabel).growX().minWidth(0f).left();
         content.row();
 
-        ScrollPane scroll = new ScrollPane(content, skin, "list");
+        ScrollPane scroll = new ScrollPane(content, skin);
         scroll.setFadeScrollBars(false);
         scroll.setScrollingDisabled(true, false);
+        scroll.setOverscroll(false, false);
+
+        Table frame = new Table(skin);
+        frame.setBackground(skin.getDrawable("list"));
+        frame.setClip(true);
+        frame.add(scroll).grow().minWidth(0f);
 
         Table root = new Table();
         root.setFillParent(true);
         root.top().right();
-        root.add(scroll).width(PANEL_WIDTH).growY().pad(12f);
+        root.add(frame).width(PANEL_WIDTH).growY().pad(PANEL_MARGIN);
         stage.addActor(root);
     }
 
@@ -143,22 +157,19 @@ final class WorldGenerationSettingsPanel implements Disposable {
         skin.dispose();
     }
 
-    private void addDimensionControl(Table content, String name, boolean width) {
-        Label label = new Label(name, skin);
-        SelectBox<Integer> box = new SelectBox<>(skin);
-        box.setItems(settings.horizontalPresets());
-        box.setSelected(width ? settings.width() : settings.height());
-        box.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                if (width) settings.width(box.getSelected());
-                else settings.height(box.getSelected());
-                markDirty();
-            }
-        });
+    private TextField dimensionField(int initialValue) {
+        TextField field = new TextField(Integer.toString(initialValue), skin);
+        field.setTextFieldFilter(new TextField.TextFieldFilter.DigitsOnlyFilter());
+        field.setMaxLength(Integer.toString(WorldGenerationPreviewSettings.MAX_HORIZONTAL_DIMENSION).length());
+        addDirtyListener(field);
+        return field;
+    }
 
-        content.add(label).width(112f);
-        content.add(box).colspan(2).growX();
+    private void addTextControl(Table content, String name, TextField field) {
+        Table row = new Table(skin);
+        row.add(new Label(name, skin)).width(LABEL_WIDTH).left();
+        row.add(field).growX().minWidth(0f).height(28f);
+        content.add(row).growX().minWidth(0f);
         content.row();
     }
 
@@ -172,16 +183,12 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 markDirty();
             }
         });
-        seedField.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, Actor actor) {
-                markDirty();
-            }
-        });
 
-        content.add(new Label("Seed", skin)).width(112f);
-        content.add(seedField).growX();
-        content.add(nextSeed).width(72f).padLeft(6f);
+        Table row = new Table(skin);
+        row.add(new Label("Seed", skin)).width(LABEL_WIDTH).left();
+        row.add(seedField).growX().minWidth(0f).height(28f);
+        row.add(nextSeed).width(64f).height(28f).padLeft(6f);
+        content.add(row).growX().minWidth(0f);
         content.row();
     }
 
@@ -204,30 +211,73 @@ final class WorldGenerationSettingsPanel implements Disposable {
             }
         });
 
-        content.add(new Label(name, skin)).width(112f);
-        content.add(slider).width(178f).growX();
-        content.add(value).width(58f).right().padLeft(8f);
+        Table row = new Table(skin);
+        row.add(new Label(name, skin)).width(LABEL_WIDTH).left();
+        row.add(slider).growX().minWidth(80f);
+        row.add(value).width(VALUE_WIDTH).right().padLeft(8f);
+        content.add(row).growX().minWidth(0f);
         content.row();
     }
 
     private void addSection(Table content, String title) {
         Label label = new Label(title, skin, "subtitle");
-        content.add(label).colspan(3).left().padTop(10f).padBottom(8f);
+        content.add(label).left().padTop(10f).padBottom(8f);
         content.row();
     }
 
     private void generateFromControls() {
+        Integer width = parseDimension("Width", widthField);
+        if (width == null) return;
+        Integer length = parseDimension("Length", lengthField);
+        if (length == null) return;
+
         String seedText = seedField.getText().trim();
+        long seed;
         try {
-            settings.seed(Long.parseLong(seedText));
+            seed = Long.parseLong(seedText);
         } catch (NumberFormatException exception) {
             statusLabel.setText("Seed must be a signed 64-bit integer.");
             return;
         }
 
+        settings.width(width);
+        settings.length(length);
+        settings.seed(seed);
+        widthField.setText(Integer.toString(settings.width()));
+        lengthField.setText(Integer.toString(settings.length()));
+        seedField.setText(Long.toString(settings.seed()));
+
         generateAction.run();
         stage.setKeyboardFocus(null);
         statusLabel.setText("Generated from current settings.");
+    }
+
+    private Integer parseDimension(String name, TextField field) {
+        String text = field.getText().trim();
+        try {
+            int value = Integer.parseInt(text);
+            if (value < WorldGenerationPreviewSettings.MIN_HORIZONTAL_DIMENSION
+                    || value > WorldGenerationPreviewSettings.MAX_HORIZONTAL_DIMENSION) {
+                throw new NumberFormatException("dimension outside supported range");
+            }
+            return value;
+        } catch (NumberFormatException exception) {
+            statusLabel.setText(String.format(
+                    "%s must be an integer from %d to %d cells.",
+                    name,
+                    WorldGenerationPreviewSettings.MIN_HORIZONTAL_DIMENSION,
+                    WorldGenerationPreviewSettings.MAX_HORIZONTAL_DIMENSION));
+            return null;
+        }
+    }
+
+    private void addDirtyListener(TextField field) {
+        field.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                markDirty();
+            }
+        });
     }
 
     private void markDirty() {
