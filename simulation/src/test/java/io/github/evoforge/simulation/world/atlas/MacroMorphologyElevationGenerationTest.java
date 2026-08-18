@@ -2,6 +2,7 @@ package io.github.evoforge.simulation.world.atlas;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
@@ -11,6 +12,7 @@ import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 final class MacroMorphologyElevationGenerationTest {
@@ -24,11 +26,31 @@ final class MacroMorphologyElevationGenerationTest {
     }
 
     @Test
+    void sameGenesisProducesSameOrganicMorphology() {
+        WorldGenesis genesis = genesis(42L, GenerationRevision.V11, 380_000, 700_000, 250_000, 650_000);
+        assertArrayEquals(snapshot(generate(genesis)), snapshot(generate(genesis)));
+    }
+
+    @Test
     void reliefChangesHeightsWithoutChangingLandOceanMask() {
         ElevationField flat = generate(genesis(
                 17L, GenerationRevision.V10, 420_000, 750_000, 200_000, 0));
         ElevationField strong = generate(genesis(
                 17L, GenerationRevision.V10, 420_000, 750_000, 200_000, 1_000_000));
+
+        assertEquals(signMask(flat), signMask(strong));
+        assertEquals(expectedLandCount(420_000), landCount(flat));
+        assertEquals(expectedLandCount(420_000), landCount(strong));
+        assertTrue(landRange(strong) > landRange(flat));
+        assertTrue(maxLand(strong) > maxLand(flat));
+    }
+
+    @Test
+    void v11ReliefChangesHeightsWithoutChangingItsOrganicLandMask() {
+        ElevationField flat = generate(genesis(
+                17L, GenerationRevision.V11, 420_000, 750_000, 200_000, 0));
+        ElevationField strong = generate(genesis(
+                17L, GenerationRevision.V11, 420_000, 750_000, 200_000, 1_000_000));
 
         assertEquals(signMask(flat), signMask(strong));
         assertEquals(expectedLandCount(420_000), landCount(flat));
@@ -48,6 +70,16 @@ final class MacroMorphologyElevationGenerationTest {
     }
 
     @Test
+    void v11IsRevisionIsolatedFromV10() {
+        long[] v10 = snapshot(generate(genesis(
+                99L, GenerationRevision.V10, 350_000, 850_000, 300_000, 1_000_000)));
+        long[] v11 = snapshot(generate(genesis(
+                99L, GenerationRevision.V11, 350_000, 850_000, 300_000, 1_000_000)));
+
+        assertFalse(Arrays.equals(v10, v11));
+    }
+
+    @Test
     void v9IgnoresReliefIntent() {
         ElevationField low = generate(genesis(
                 23L, GenerationRevision.V9, 400_000, 600_000, 300_000, 0));
@@ -61,6 +93,13 @@ final class MacroMorphologyElevationGenerationTest {
     void requestedCoverageRemainsExactUnderMacroMorphology() {
         ElevationField field = generate(genesis(
                 71L, GenerationRevision.V10, 370_000, 550_000, 650_000, 800_000));
+        assertEquals(expectedLandCount(370_000), landCount(field));
+    }
+
+    @Test
+    void requestedCoverageRemainsExactUnderOrganicMorphology() {
+        ElevationField field = generate(genesis(
+                71L, GenerationRevision.V11, 370_000, 550_000, 650_000, 800_000));
         assertEquals(expectedLandCount(370_000), landCount(field));
     }
 
