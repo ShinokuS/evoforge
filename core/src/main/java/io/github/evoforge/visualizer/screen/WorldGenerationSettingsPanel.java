@@ -4,11 +4,13 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.ButtonGroup;
 import com.badlogic.gdx.scenes.scene2d.ui.CheckBox;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
@@ -26,7 +28,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
     private static final float PANEL_MARGIN = 12f;
     private static final float CONTENT_PADDING = 18f;
     private static final float LABEL_WIDTH = 122f;
-    private static final float VALUE_WIDTH = 46f;
+    private static final float VALUE_WIDTH = 64f;
     private static final float DIMENSION_FIELD_WIDTH = 92f;
 
     private final WorldGenerationPreviewSettings settings;
@@ -68,54 +70,59 @@ final class WorldGenerationSettingsPanel implements Disposable {
         this.seedField.setAlignment(Align.center);
         addDirtyListener(seedField);
 
-        Table content = new Table(skin);
-        content.top().left();
-        content.pad(CONTENT_PADDING);
-        content.defaults().growX().minWidth(0f).padBottom(10f);
+        Table rootContent = new Table(skin);
+        rootContent.top().left();
+        rootContent.pad(CONTENT_PADDING);
+        rootContent.defaults().growX().minWidth(0f).padBottom(10f);
 
         Label title = new Label("WORLD GENERATION", skin, "window");
-        content.add(title).left().padBottom(4f);
-        content.row();
+        rootContent.add(title).left().padBottom(4f);
+        rootContent.row();
         Label subtitle = new Label("V12 balanced multi-scale landforms", skin, "subtitle");
-        content.add(subtitle).left().padBottom(14f);
-        content.row();
+        rootContent.add(subtitle).left().padBottom(10f);
+        rootContent.row();
 
-        addSection(content, "WORLD");
-        addDimensionControl(content, "Width", widthField);
-        addDimensionControl(content, "Length", lengthField);
-        addSeedControl(content);
-        addRandomSeedControl(content);
+        Table worldTab = buildWorldTab(
+                showSurface,
+                showOcean,
+                elevationTintPpm,
+                surfaceVisibility,
+                oceanVisibility,
+                viewMode,
+                elevationTint);
+        Table performanceTab = buildPerformanceTab();
+        performanceTab.setVisible(false);
 
-        addSection(content, "LAND SHAPE");
-        addPercentControl(content, "Land", settings.coveragePpm(), settings::coveragePpm);
-        addPercentControl(content, "Continent scale", settings.scalePpm(), settings::scalePpm);
-        addPercentControl(
-                content,
-                "Fragmentation",
-                settings.fragmentationPpm(),
-                settings::fragmentationPpm);
-        addPercentControl(content, "Macro height", settings.reliefPpm(), settings::reliefPpm);
-        addPercentControl(
-                content,
-                "Rolling hills",
-                settings.localReliefPpm(),
-                settings::localReliefPpm);
-        addPercentControl(
-                content,
-                "Landform size",
-                settings.landformScalePpm(),
-                settings::landformScalePpm);
-        addPercentControl(
-                content,
-                "Ruggedness",
-                settings.ruggednessPpm(),
-                settings::ruggednessPpm);
+        TextButton worldButton = new TextButton("WORLD", skin, "toggle");
+        TextButton performanceButton = new TextButton("PERFORMANCE", skin, "toggle");
+        worldButton.setChecked(true);
+        ButtonGroup<TextButton> tabs = new ButtonGroup<>(worldButton, performanceButton);
+        tabs.setMinCheckCount(1);
+        tabs.setMaxCheckCount(1);
+        tabs.setUncheckLast(true);
 
-        addSection(content, "PREVIEW");
-        addViewModeControl(content, viewMode);
-        addLivePercentControl(content, "Z contrast", elevationTintPpm, elevationTint);
-        addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
-        addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
+        ChangeListener tabListener = new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                boolean performance = performanceButton.isChecked();
+                worldTab.setVisible(!performance);
+                performanceTab.setVisible(performance);
+            }
+        };
+        worldButton.addListener(tabListener);
+        performanceButton.addListener(tabListener);
+
+        Table tabRow = new Table(skin);
+        tabRow.add(worldButton).growX().height(32f).padRight(4f);
+        tabRow.add(performanceButton).growX().height(32f).padLeft(4f);
+        rootContent.add(tabRow).growX().padBottom(8f);
+        rootContent.row();
+
+        Stack stack = new Stack();
+        stack.add(worldTab);
+        stack.add(performanceTab);
+        rootContent.add(stack).growX().minWidth(0f);
+        rootContent.row();
 
         TextButton generate = new TextButton("GENERATE", skin);
         generate.addListener(new ChangeListener() {
@@ -124,14 +131,14 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 generateFromControls();
             }
         });
-        content.add(generate).growX().minWidth(0f).height(38f).padTop(8f).padBottom(10f);
-        content.row();
+        rootContent.add(generate).growX().minWidth(0f).height(38f).padTop(8f).padBottom(10f);
+        rootContent.row();
 
         statusLabel.setWrap(true);
-        content.add(statusLabel).growX().minWidth(0f).left();
-        content.row();
+        rootContent.add(statusLabel).growX().minWidth(0f).left();
+        rootContent.row();
 
-        ScrollPane scroll = new ScrollPane(content, skin);
+        ScrollPane scroll = new ScrollPane(rootContent, skin);
         scroll.setFadeScrollBars(false);
         scroll.setScrollingDisabled(true, false);
         scroll.setOverscroll(false, false);
@@ -184,6 +191,123 @@ final class WorldGenerationSettingsPanel implements Disposable {
     public void dispose() {
         stage.dispose();
         skin.dispose();
+    }
+
+    private Table buildWorldTab(
+            boolean showSurface,
+            boolean showOcean,
+            int elevationTintPpm,
+            Consumer<Boolean> surfaceVisibility,
+            Consumer<Boolean> oceanVisibility,
+            Consumer<Boolean> viewMode,
+            IntConsumer elevationTint) {
+        Table content = tabContent();
+
+        addSection(content, "WORLD");
+        addDimensionControl(content, "Width", widthField);
+        addDimensionControl(content, "Length", lengthField);
+        addSeedControl(content);
+        addRandomSeedControl(content);
+
+        addSection(content, "LAND SHAPE");
+        addPercentControl(content, "Land", settings.coveragePpm(), settings::coveragePpm);
+        addPercentControl(content, "Continent scale", settings.scalePpm(), settings::scalePpm);
+        addPercentControl(
+                content,
+                "Fragmentation",
+                settings.fragmentationPpm(),
+                settings::fragmentationPpm);
+        addPercentControl(content, "Macro height", settings.reliefPpm(), settings::reliefPpm);
+        addPercentControl(
+                content,
+                "Rolling hills",
+                settings.localReliefPpm(),
+                settings::localReliefPpm);
+        addPercentControl(
+                content,
+                "Landform size",
+                settings.landformScalePpm(),
+                settings::landformScalePpm);
+        addPercentControl(
+                content,
+                "Ruggedness",
+                settings.ruggednessPpm(),
+                settings::ruggednessPpm);
+
+        addSection(content, "PREVIEW");
+        addViewModeControl(content, viewMode);
+        addLivePercentControl(content, "Z contrast", elevationTintPpm, elevationTint);
+        addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
+        addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
+        return content;
+    }
+
+    private Table buildPerformanceTab() {
+        Table content = tabContent();
+        addSection(content, "2D LOD QUALITY");
+
+        Label explanation = new Label(
+                "Live presentation-only tuning. Higher values keep more terrain samples and look smoother from far away, but cost more FPS.",
+                skin,
+                "subtitle");
+        explanation.setWrap(true);
+        content.add(explanation).growX().minWidth(0f).left().padBottom(12f);
+        content.row();
+
+        Slider detail = addBudgetControl(
+                content,
+                "Detailed range",
+                WorldGeneration2DLod.MIN_DETAILED_CELLS,
+                WorldGeneration2DLod.MAX_DETAILED_CELLS,
+                500L,
+                WorldGeneration2DLod.detailedCellBudget(),
+                WorldGeneration2DLod::detailedCellBudget);
+
+        Slider overview = addBudgetControl(
+                content,
+                "Far detail",
+                WorldGeneration2DLod.MIN_OVERVIEW_SAMPLES,
+                WorldGeneration2DLod.MAX_OVERVIEW_SAMPLES,
+                500L,
+                WorldGeneration2DLod.overviewSampleBudget(),
+                WorldGeneration2DLod::overviewSampleBudget);
+
+        Label detailHint = new Label(
+                "Detailed range controls how long exact LOD x1 is retained. Far detail controls how many blocks are kept in x2+ overview modes. For a more organic distant view, raise Far detail first.",
+                skin,
+                "subtitle");
+        detailHint.setWrap(true);
+        content.add(detailHint).growX().minWidth(0f).left().padTop(6f).padBottom(12f);
+        content.row();
+
+        TextButton reset = new TextButton("RESET PERFORMANCE DEFAULTS", skin);
+        reset.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                WorldGeneration2DLod.resetTuning();
+                detail.setValue(WorldGeneration2DLod.detailedCellBudget());
+                overview.setValue(WorldGeneration2DLod.overviewSampleBudget());
+                statusLabel.setText("Performance defaults restored. Applied live.");
+            }
+        });
+        content.add(reset).growX().height(34f).padTop(4f);
+        content.row();
+
+        Label defaults = new Label(
+                "Fast defaults: 9k detailed cells / 6k far samples. Suggested visual-quality test: Far detail 12k-18k.",
+                skin,
+                "subtitle");
+        defaults.setWrap(true);
+        content.add(defaults).growX().minWidth(0f).left().padTop(8f);
+        content.row();
+        return content;
+    }
+
+    private Table tabContent() {
+        Table content = new Table(skin);
+        content.top().left();
+        content.defaults().growX().minWidth(0f).padBottom(10f);
+        return content;
     }
 
     private TextField dimensionField(int initialValue) {
@@ -285,6 +409,36 @@ final class WorldGenerationSettingsPanel implements Disposable {
         row.add(value).width(VALUE_WIDTH).right().padLeft(8f);
         content.add(row).growX().minWidth(0f);
         content.row();
+    }
+
+    private Slider addBudgetControl(
+            Table content,
+            String name,
+            long minimum,
+            long maximum,
+            long step,
+            long initial,
+            java.util.function.LongConsumer setter) {
+        Slider slider = new Slider(minimum, maximum, step, false, skin);
+        slider.setValue(initial);
+        Label value = new Label(formatBudget(initial), skin);
+        slider.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                long selected = Math.round(slider.getValue() / step) * step;
+                setter.accept(selected);
+                value.setText(formatBudget(selected));
+                statusLabel.setText("Performance tuning applied live.");
+            }
+        });
+
+        Table row = new Table(skin);
+        row.add(new Label(name, skin)).width(LABEL_WIDTH).left();
+        row.add(slider).growX().minWidth(80f);
+        row.add(value).width(VALUE_WIDTH).right().padLeft(8f);
+        content.add(row).growX().minWidth(0f);
+        content.row();
+        return slider;
     }
 
     private void addViewModeControl(Table content, Consumer<Boolean> viewMode) {
@@ -401,5 +555,15 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
     private static String formatPercent(int ppm) {
         return Math.round(ppm / 10_000f) + "%";
+    }
+
+    private static String formatBudget(long value) {
+        if (value >= 1_000L) {
+            float thousands = value / 1_000f;
+            return thousands == Math.round(thousands)
+                    ? Math.round(thousands) + "k"
+                    : String.format("%.1fk", thousands);
+        }
+        return Long.toString(value);
     }
 }
