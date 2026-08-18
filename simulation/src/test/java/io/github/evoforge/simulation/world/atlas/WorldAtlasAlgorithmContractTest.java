@@ -23,13 +23,13 @@ final class WorldAtlasAlgorithmContractTest {
         assertSame(genesis, atlas.genesis());
         assertNotNull(atlas.elevation());
         assertNotNull(atlas.geology());
-        assertNotNull(atlas.climate());
+        assertNotNull(atlas.climateNormals());
         assertNotNull(atlas.drainage());
         assertNotNull(atlas.hydrography());
         assertNotNull(atlas.surfaceHydrology());
         assertEquals(bounds, atlas.elevation().bounds());
         assertEquals(bounds, atlas.geology().bounds());
-        assertEquals(bounds, atlas.climate().bounds());
+        assertEquals(bounds, atlas.climateNormals().bounds());
         assertEquals(bounds, atlas.drainage().bounds());
         assertEquals(bounds, atlas.hydrography().bounds());
         assertEquals(bounds, atlas.surfaceHydrology().bounds());
