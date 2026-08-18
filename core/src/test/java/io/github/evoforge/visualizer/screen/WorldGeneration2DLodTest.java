@@ -1,11 +1,18 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 final class WorldGeneration2DLodTest {
+    @AfterEach
+    void restoreDefaults() {
+        WorldGeneration2DLod.resetTuning();
+    }
+
     @Test
     void closeInspectionKeepsOneSamplePerCellWithinDetailedBudget() {
         assertEquals(1, WorldGeneration2DLod.stride(90, 90));
@@ -19,7 +26,9 @@ final class WorldGeneration2DLodTest {
 
         assertEquals(2, stride);
         assertEquals(2_304L, sampled);
-        assertTrue(WorldGeneration2DLod.MAX_SAMPLES < WorldGeneration2DLod.MAX_DETAILED_CELLS);
+        assertTrue(
+                WorldGeneration2DLod.DEFAULT_MAX_SAMPLES
+                        < WorldGeneration2DLod.DEFAULT_MAX_DETAILED_CELLS);
     }
 
     @Test
@@ -29,7 +38,7 @@ final class WorldGeneration2DLodTest {
 
         assertEquals(4, stride);
         assertEquals(5_625L, sampled);
-        assertTrue(sampled <= WorldGeneration2DLod.MAX_SAMPLES);
+        assertTrue(sampled <= WorldGeneration2DLod.DEFAULT_MAX_SAMPLES);
     }
 
     @Test
@@ -39,7 +48,7 @@ final class WorldGeneration2DLodTest {
 
         assertEquals(8, stride);
         assertEquals(5_625L, sampled);
-        assertTrue(sampled <= WorldGeneration2DLod.MAX_SAMPLES);
+        assertTrue(sampled <= WorldGeneration2DLod.DEFAULT_MAX_SAMPLES);
     }
 
     @Test
@@ -48,6 +57,49 @@ final class WorldGeneration2DLodTest {
         long sampled = WorldGeneration2DLod.sampledCells(2048, 2048, stride);
 
         assertTrue(stride >= 27);
-        assertTrue(sampled <= WorldGeneration2DLod.MAX_SAMPLES);
+        assertTrue(sampled <= WorldGeneration2DLod.DEFAULT_MAX_SAMPLES);
+    }
+
+    @Test
+    void raisingFarDetailProducesFinerOverviewSampling() {
+        int defaultStride = WorldGeneration2DLod.stride(2000, 2000);
+
+        WorldGeneration2DLod.overviewSampleBudget(18_000L);
+        int qualityStride = WorldGeneration2DLod.stride(2000, 2000);
+
+        assertTrue(qualityStride < defaultStride);
+        assertTrue(WorldGeneration2DLod.sampledCells(2000, 2000, qualityStride) <= 18_500L);
+    }
+
+    @Test
+    void raisingDetailedRangeKeepsExactLodLonger() {
+        assertEquals(2, WorldGeneration2DLod.stride(120, 120));
+
+        WorldGeneration2DLod.detailedCellBudget(15_000L);
+
+        assertEquals(1, WorldGeneration2DLod.stride(120, 120));
+    }
+
+    @Test
+    void tuningRejectsUnsafeValuesAndResetRestoresFastDefaults() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> WorldGeneration2DLod.overviewSampleBudget(
+                        WorldGeneration2DLod.MAX_OVERVIEW_SAMPLES + 1L));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> WorldGeneration2DLod.detailedCellBudget(
+                        WorldGeneration2DLod.MIN_DETAILED_CELLS - 1L));
+
+        WorldGeneration2DLod.overviewSampleBudget(18_000L);
+        WorldGeneration2DLod.detailedCellBudget(15_000L);
+        WorldGeneration2DLod.resetTuning();
+
+        assertEquals(
+                WorldGeneration2DLod.DEFAULT_MAX_SAMPLES,
+                WorldGeneration2DLod.overviewSampleBudget());
+        assertEquals(
+                WorldGeneration2DLod.DEFAULT_MAX_DETAILED_CELLS,
+                WorldGeneration2DLod.detailedCellBudget());
     }
 }
