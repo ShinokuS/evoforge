@@ -11,7 +11,7 @@ public final class VisualizerCamera {
     private static final float BASE_VIEW_WIDTH = 28f;
     private static final float PAN_SPEED = 8f;
     private static final float MIN_ZOOM = 0.25f;
-    private static final float MAX_ZOOM = 4f;
+    private static final float DEFAULT_MAX_ZOOM = 4f;
     private static final float FAR_ZOOM_SMOOTH_SAMPLING = 2.5f;
 
     private final OrthographicCamera camera = new OrthographicCamera();
@@ -19,6 +19,7 @@ public final class VisualizerCamera {
 
     private float targetX;
     private float targetY;
+    private float maximumZoom = DEFAULT_MAX_ZOOM;
     private int screenWidth = 1;
     private int screenHeight = 1;
 
@@ -59,8 +60,43 @@ public final class VisualizerCamera {
 
         targetX = x;
         targetY = y;
-        camera.zoom = MathUtils.clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+        camera.zoom = MathUtils.clamp(zoom, MIN_ZOOM, maximumZoom);
         update();
+    }
+
+    /**
+     * Fits one world-space rectangle while retaining the normal scenario zoom semantics.
+     * Large inspection workspaces may therefore zoom farther out than ordinary scenarios
+     * without changing the scenario camera defaults.
+     */
+    public void fitBounds(
+            float minX,
+            float maxX,
+            float minY,
+            float maxY,
+            float paddingFactor) {
+
+        if (!Float.isFinite(minX)
+                || !Float.isFinite(maxX)
+                || !Float.isFinite(minY)
+                || !Float.isFinite(maxY)
+                || maxX <= minX
+                || maxY <= minY) {
+            throw new IllegalArgumentException("camera fit bounds must be finite and non-empty");
+        }
+        if (!Float.isFinite(paddingFactor) || paddingFactor < 1f) {
+            throw new IllegalArgumentException("camera fit padding must be finite and >= 1");
+        }
+
+        float fitZoom = Math.max(
+                (maxX - minX) / Math.max(0.0001f, camera.viewportWidth),
+                (maxY - minY) / Math.max(0.0001f, camera.viewportHeight))
+                * paddingFactor;
+        maximumZoom = Math.max(DEFAULT_MAX_ZOOM, fitZoom);
+        setView(
+                (minX + maxX) * 0.5f,
+                (minY + maxY) * 0.5f,
+                fitZoom);
     }
 
     public void pan(
@@ -73,13 +109,24 @@ public final class VisualizerCamera {
         targetY += directionY * distance;
     }
 
+    /** Moves the camera target by an exact world-space delta. */
+    public void panBy(
+            float deltaX,
+            float deltaY) {
+        if (!Float.isFinite(deltaX) || !Float.isFinite(deltaY)) {
+            throw new IllegalArgumentException("camera pan delta must be finite");
+        }
+        targetX += deltaX;
+        targetY += deltaY;
+    }
+
     public void zoom(
             float amountY) {
 
         camera.zoom = MathUtils.clamp(
                 camera.zoom * (1f + amountY * 0.1f),
                 MIN_ZOOM,
-                MAX_ZOOM);
+                maximumZoom);
     }
 
     public void update() {
