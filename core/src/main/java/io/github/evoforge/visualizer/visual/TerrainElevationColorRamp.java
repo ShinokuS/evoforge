@@ -6,15 +6,16 @@ import com.badlogic.gdx.math.MathUtils;
 /**
  * Presentation-only green height palette for terrain surfaces.
  *
- * <p>Sensitivity controls both palette spread and band density. At zero the palette position is
- * neutral. Increasing sensitivity makes the same Z difference produce a larger visual separation
- * and more distinct bands, without changing simulation state.</p>
+ * <p>Sensitivity controls both palette spread and band density. The UI-normalized range intentionally
+ * exposes up to twice the original contrast: 50% now reproduces the former 100% look, while 100%
+ * emphasizes smaller Z differences more strongly. Zero remains the neutral unmodified midpoint.</p>
  */
 public final class TerrainElevationColorRamp {
     public static final int SCALE = 1_000_000;
-    public static final int DEFAULT_PREVIEW_SENSITIVITY_PPM = 650_000;
-    public static final int DEFAULT_SCENARIO_SENSITIVITY_PPM = 700_000;
+    public static final int DEFAULT_PREVIEW_SENSITIVITY_PPM = 500_000;
+    public static final int DEFAULT_SCENARIO_SENSITIVITY_PPM = 350_000;
 
+    private static final float MAX_CONTRAST = 2f;
     private static final Color LOW = new Color(0.18f, 0.34f, 0.13f, 1f);
     private static final Color MID = new Color(0.50f, 0.67f, 0.34f, 1f);
     private static final Color HIGH = new Color(0.79f, 0.88f, 0.53f, 1f);
@@ -35,12 +36,12 @@ public final class TerrainElevationColorRamp {
                 (float) (elevation - minimum) / (float) (maximum - minimum),
                 0f,
                 1f);
-        float sensitivity = sensitivityPpm / (float) SCALE;
+        float contrast = sensitivityPpm / (float) SCALE * MAX_CONTRAST;
 
-        int bands = 3 + Math.round(45f * sensitivity);
+        int bands = 3 + Math.round(45f * contrast);
         float quantized = Math.round(normalized * (bands - 1f)) / (bands - 1f);
         return MathUtils.clamp(
-                0.5f + (quantized - 0.5f) * sensitivity,
+                0.5f + (quantized - 0.5f) * contrast,
                 0f,
                 1f);
     }
