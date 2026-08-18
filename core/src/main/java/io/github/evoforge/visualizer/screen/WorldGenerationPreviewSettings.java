@@ -1,5 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
+import java.util.function.LongSupplier;
+
 /** Mutable draft settings edited by the world-generation development UI. */
 final class WorldGenerationPreviewSettings {
     static final int MIN_HORIZONTAL_DIMENSION = 32;
@@ -8,6 +10,7 @@ final class WorldGenerationPreviewSettings {
     private int width = 64;
     private int length = 64;
     private long seed = 1L;
+    private boolean randomSeedOnGenerate;
     private int coveragePpm = 350_000;
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
@@ -38,6 +41,24 @@ final class WorldGenerationPreviewSettings {
 
     void seed(long value) {
         seed = value;
+    }
+
+    boolean randomSeedOnGenerate() {
+        return randomSeedOnGenerate;
+    }
+
+    void randomSeedOnGenerate(boolean value) {
+        randomSeedOnGenerate = value;
+    }
+
+    long prepareSeedForGeneration(LongSupplier randomSeedSource) {
+        if (randomSeedSource == null) {
+            throw new IllegalArgumentException("random seed source must not be null");
+        }
+        if (randomSeedOnGenerate) {
+            seed = randomSeedSource.getAsLong();
+        }
+        return seed;
     }
 
     void nextSeed() {
