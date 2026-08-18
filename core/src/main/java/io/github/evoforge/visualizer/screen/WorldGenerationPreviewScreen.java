@@ -29,6 +29,7 @@ import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V11;
     private static final int MAX_PREVIEW_AXIS = 160;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
 
@@ -219,13 +220,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         WorldGenesis genesis = new WorldGenesis(
                 new WorldSpec(bounds),
                 generatedConfig.seed(),
-                GenerationRevision.V10,
+                PREVIEW_REVISION,
                 RngRevision.V1,
                 generatedConfig.intent());
 
         long started = System.nanoTime();
         generatedElevation = new ElevationGenerationStage().generate(genesis);
-        generatedShapes = TerrainShapeGenerationStage.standard().generate(generatedElevation);
+        generatedShapes = TerrainShapeGenerationStage
+                .forRevision(PREVIEW_REVISION)
+                .generate(generatedElevation);
         elevationRange = WorldGenerationElevationRange.from(generatedElevation);
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
@@ -381,8 +384,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE"
-                        : "WORLD GENERATION / MACRO MORPHOLOGY V10",
+                        ? "WORLD GENERATION / 2D SURFACE V11"
+                        : "WORLD GENERATION / ORGANIC MORPHOLOGY V11",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
