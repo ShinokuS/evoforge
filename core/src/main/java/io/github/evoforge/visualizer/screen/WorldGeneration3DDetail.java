@@ -4,7 +4,7 @@ package io.github.evoforge.visualizer.screen;
 final class WorldGeneration3DDetail {
     static final int DEFAULT_MAX_AXIS_SAMPLES = 160;
     static final int MIN_AXIS_SAMPLES = 64;
-    static final int MAX_AXIS_SAMPLES = 255;
+    static final int MAX_AXIS_SAMPLES = 512;
 
     private static volatile int maxAxisSamples = DEFAULT_MAX_AXIS_SAMPLES;
 
