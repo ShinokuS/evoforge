@@ -10,10 +10,12 @@ import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicRuntime
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialBindings;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
 import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
+import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.preparation.GeneratedLandscapeProperties;
 import io.github.evoforge.simulation.world.preparation.PreparedGeneratedWorld;
 import io.github.evoforge.simulation.world.scale.PhysicalSpaceScale;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import java.util.Optional;
 
 /**
@@ -70,6 +72,7 @@ public final class GeneratedWorldRuntimeBootstrap {
                 prepared.atlas(),
                 assembly,
                 TerrainMaterialResolver.resolved(prepared.terrainMaterials(), bindings),
+                prepared.terrainShapes(),
                 prepared.landscapeProperties());
     }
 
@@ -81,20 +84,33 @@ public final class GeneratedWorldRuntimeBootstrap {
         if (atlas == null || assembly == null || materials == null) {
             throw new IllegalArgumentException("runtime bootstrap inputs must not be null");
         }
-        return start(atlas, assembly, materials, GeneratedLandscapeProperties.empty(
-                atlas.genesis().spec().bounds()));
+        WorldBounds bounds = atlas.genesis().spec().bounds();
+        return start(
+                atlas,
+                assembly,
+                materials,
+                TerrainShapeField.baseline(bounds),
+                GeneratedLandscapeProperties.empty(bounds));
     }
 
     private GeneratedWorldRuntime start(
             WorldAtlas atlas,
             SimulationAssembly assembly,
             TerrainMaterialResolver materials,
+            TerrainShapeField terrainShapes,
             GeneratedLandscapeProperties landscapeProperties) {
-        if (atlas == null || assembly == null || materials == null || landscapeProperties == null) {
+        if (atlas == null
+                || assembly == null
+                || materials == null
+                || terrainShapes == null
+                || landscapeProperties == null) {
             throw new IllegalArgumentException("runtime bootstrap inputs must not be null");
         }
 
         WorldBounds bounds = atlas.genesis().spec().bounds();
+        if (!bounds.equals(terrainShapes.bounds())) {
+            throw new IllegalArgumentException("generated terrain shape bounds must match runtime world bounds");
+        }
         if (!bounds.equals(landscapeProperties.bounds())) {
             throw new IllegalArgumentException(
                     "generated landscape property bounds must match runtime world bounds");
@@ -113,6 +129,7 @@ public final class GeneratedWorldRuntimeBootstrap {
 
         TerrainMaterializationResult materialization = assembly.materializeGeneratedTerrain(
                 atlas.elevation(), materials);
+        materializeGeneratedShapes(atlas, terrainShapes, assembly);
         materializeInitialSurfaceWater(atlas, assembly);
 
         AtmosphericRuntimeComposition atmosphere = atmospherePlan.compose(atlas, timeScale);
@@ -142,6 +159,21 @@ public final class GeneratedWorldRuntimeBootstrap {
                 atlas.elevation(),
                 spaceScale,
                 resolvedTimeScale));
+    }
+
+    private static void materializeGeneratedShapes(
+            WorldAtlas atlas,
+            TerrainShapeField shapes,
+            SimulationAssembly assembly) {
+        WorldBounds bounds = shapes.bounds();
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                Shape shape = shapes.shapeOverrideAt(x, y);
+                if (shape == null) continue;
+                int surfaceZ = atlas.elevation().elevationAt(x, y);
+                assembly.setShape(x, y, surfaceZ, shape);
+            }
+        }
     }
 
     private static void materializeInitialSurfaceWater(
