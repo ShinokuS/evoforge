@@ -29,7 +29,6 @@ import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationS
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static final int MAX_PREVIEW_AXIS = 160;
-    private static final int MAX_2D_PREVIEW_AXIS = 256;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
 
     private static final String VERTEX_SHADER = """
@@ -77,12 +76,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private float distance = 86f;
     private int previewWidth;
     private int previewLength;
-    private int preview2DWidth;
-    private int preview2DLength;
     private double generationMillis;
     private int lastMouseX;
     private int lastMouseY;
     private boolean orbiting;
+    private boolean panning2D;
 
     public WorldGenerationPreviewScreen(Runnable returnToWorkspace) {
         if (returnToWorkspace == null) {
@@ -103,6 +101,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 visible -> {
                     twoDimensional = visible;
                     orbiting = false;
+                    panning2D = false;
                 });
         this.inputMultiplexer = new InputMultiplexer(input, settingsPanel.inputProcessor());
         regenerate();
@@ -119,6 +118,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         Gdx.gl.glClearColor(0.025f, 0.035f, 0.05f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
         if (twoDimensional) {
+            shape2DRenderer.update(delta, !settingsPanel.keyboardInputActive());
             renderTwoDimensional();
         } else {
             renderThreeDimensional();
@@ -147,11 +147,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         shape2DRenderer.render(
                 generatedElevation,
                 generatedShapes,
-                bounds,
-                preview2DWidth,
-                preview2DLength,
-                settingsPanel.previewRightEdge(),
-                showSurface);
+                showSurface,
+                showOcean);
     }
 
     @Override
@@ -164,13 +161,16 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
         camera.update();
         batch.getProjectionMatrix().setToOrtho2D(0f, 0f, width, height);
-        shape2DRenderer.resize(width, height);
         settingsPanel.resize(width, height);
+        shape2DRenderer.resize(
+                Math.max(1, Math.round(settingsPanel.previewRightEdge())),
+                height);
     }
 
     @Override
     public void hide() {
         orbiting = false;
+        panning2D = false;
         if (Gdx.input.getInputProcessor() == inputMultiplexer) {
             Gdx.input.setInputProcessor(null);
         }
@@ -204,18 +204,18 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
-        previewWidth = sampleCount(generatedConfig.width(), MAX_PREVIEW_AXIS);
-        previewLength = sampleCount(generatedConfig.length(), MAX_PREVIEW_AXIS);
-        preview2DWidth = sampleCount(generatedConfig.width(), MAX_2D_PREVIEW_AXIS);
-        preview2DLength = sampleCount(generatedConfig.length(), MAX_2D_PREVIEW_AXIS);
+        previewWidth = sampleCount(generatedConfig.width());
+        previewLength = sampleCount(generatedConfig.length());
         surfaceMesh = buildSurface(generatedElevation, bounds, previewWidth, previewLength);
         oceanMesh = buildOcean(bounds);
+        shape2DRenderer.setWorldBounds(bounds);
         camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
 
         if (previous == null
                 || previous.width() != generatedConfig.width()
                 || previous.length() != generatedConfig.length()) {
             fitCameraToWorld();
+            shape2DRenderer.fitToWorld();
         }
     }
 
@@ -240,7 +240,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                         : new Color(0.16f, 0.20f + normalized * 0.10f, 0.24f + normalized * 0.10f, 1f);
                 vertices[cursor++] = x;
                 vertices[cursor++] = h * VERTICAL_EXAGGERATION;
-                vertices[cursor++] = y;
+                vertices[cursor++] = -y;
                 vertices[cursor++] = color.r;
                 vertices[cursor++] = color.g;
                 vertices[cursor++] = color.b;
@@ -257,11 +257,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 int c = a + sampleWidth;
                 int d = c + 1;
                 indices[index++] = (short) a;
-                indices[index++] = (short) c;
-                indices[index++] = (short) b;
                 indices[index++] = (short) b;
                 indices[index++] = (short) c;
+                indices[index++] = (short) b;
                 indices[index++] = (short) d;
+                indices[index++] = (short) c;
             }
         }
         Mesh mesh = mesh(vertexCount, indices.length);
@@ -273,15 +273,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static Mesh buildOcean(WorldBounds bounds) {
         float minX = bounds.minX();
         float maxX = bounds.maxX();
-        float minY = bounds.minY();
-        float maxY = bounds.maxY();
+        float minZ = -bounds.maxY();
+        float maxZ = -bounds.minY();
         float[] vertices = {
-                minX, 0f, minY, 0.08f, 0.38f, 0.62f, 0.52f,
-                maxX, 0f, minY, 0.08f, 0.38f, 0.62f, 0.52f,
-                minX, 0f, maxY, 0.08f, 0.38f, 0.62f, 0.52f,
-                maxX, 0f, maxY, 0.08f, 0.38f, 0.62f, 0.52f
+                minX, 0f, minZ, 0.08f, 0.38f, 0.62f, 0.52f,
+                maxX, 0f, minZ, 0.08f, 0.38f, 0.62f, 0.52f,
+                minX, 0f, maxZ, 0.08f, 0.38f, 0.62f, 0.52f,
+                maxX, 0f, maxZ, 0.08f, 0.38f, 0.62f, 0.52f
         };
-        short[] indices = {0, 2, 1, 1, 2, 3};
+        short[] indices = {0, 1, 2, 1, 3, 2};
         Mesh mesh = mesh(4, 6);
         mesh.setVertices(vertices);
         mesh.setIndices(indices);
@@ -299,16 +299,16 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void updateCamera() {
         float centerX = (bounds.minX() + bounds.maxX()) * 0.5f;
-        float centerY = (bounds.minY() + bounds.maxY()) * 0.5f;
+        float centerZ = -(bounds.minY() + bounds.maxY()) * 0.5f;
         float pitchRadians = pitch * MathUtils.degreesToRadians;
         float yawRadians = yaw * MathUtils.degreesToRadians;
         float horizontal = MathUtils.cos(pitchRadians) * distance;
         camera.position.set(
                 centerX + MathUtils.cos(yawRadians) * horizontal,
                 MathUtils.sin(pitchRadians) * distance,
-                centerY + MathUtils.sin(yawRadians) * horizontal);
+                centerZ + MathUtils.sin(yawRadians) * horizontal);
         camera.up.set(Vector3.Y);
-        camera.lookAt(centerX, 0f, centerY);
+        camera.lookAt(centerX, 0f, centerZ);
         camera.update();
     }
 
@@ -322,7 +322,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE SHAPES"
+                        ? "WORLD GENERATION / 2D SURFACE"
                         : "WORLD GENERATION / MACRO MORPHOLOGY V10",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
@@ -350,7 +350,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         if (twoDimensional) {
             font.draw(
                     batch,
-                    "orange arrow = generated non-default surface geometry, arrow points uphill | Esc: development tools",
+                    "WASD / drag: pan | wheel: zoom (" + shape2DRenderer.zoomLabel()
+                            + ") | F: fit | F3: shape directions | Esc: development tools",
                     24f,
                     24f);
         } else {
@@ -374,8 +375,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         }
     }
 
-    private static int sampleCount(int dimension, int maximum) {
-        return Math.min(dimension, maximum);
+    private static int sampleCount(int dimension) {
+        return Math.min(dimension, MAX_PREVIEW_AXIS);
     }
 
     private static int sampleCoordinate(int min, int max, int sampleIndex, int sampleCount) {
@@ -387,33 +388,56 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private final class PreviewInput extends InputAdapter {
         @Override
         public boolean keyDown(int keycode) {
-            if (keycode != Input.Keys.ESCAPE) return false;
-            returnToWorkspace.run();
-            return true;
+            if (keycode == Input.Keys.ESCAPE) {
+                returnToWorkspace.run();
+                return true;
+            }
+            if (twoDimensional && keycode == Input.Keys.F) {
+                shape2DRenderer.fitToWorld();
+                return true;
+            }
+            if (twoDimensional && keycode == Input.Keys.F3) {
+                shape2DRenderer.toggleShapeDirections();
+                return true;
+            }
+            return false;
         }
 
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-            if (twoDimensional
-                    || button != Input.Buttons.LEFT
+            if (button != Input.Buttons.LEFT
                     || settingsPanel.containsScreenPoint(screenX, screenY)) {
                 return false;
             }
             lastMouseX = screenX;
             lastMouseY = screenY;
-            orbiting = true;
+            if (twoDimensional) {
+                panning2D = true;
+            } else {
+                orbiting = true;
+            }
             return true;
         }
 
         @Override
         public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-            if (button != Input.Buttons.LEFT || !orbiting) return false;
+            if (button != Input.Buttons.LEFT) return false;
+            boolean handled = orbiting || panning2D;
             orbiting = false;
-            return true;
+            panning2D = false;
+            return handled;
         }
 
         @Override
         public boolean touchDragged(int screenX, int screenY, int pointer) {
+            if (panning2D) {
+                shape2DRenderer.panByPixels(
+                        screenX - lastMouseX,
+                        screenY - lastMouseY);
+                lastMouseX = screenX;
+                lastMouseY = screenY;
+                return true;
+            }
             if (!orbiting) return false;
             yaw += (screenX - lastMouseX) * 0.45f;
             pitch = MathUtils.clamp(pitch - (screenY - lastMouseY) * 0.35f, 8f, 82f);
@@ -424,9 +448,12 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
-            if (twoDimensional
-                    || settingsPanel.containsScreenPoint(Gdx.input.getX(), Gdx.input.getY())) {
+            if (settingsPanel.containsScreenPoint(Gdx.input.getX(), Gdx.input.getY())) {
                 return false;
+            }
+            if (twoDimensional) {
+                shape2DRenderer.zoom(amountY);
+                return true;
             }
             float minDistance = Math.max(24f, generatedConfig.maxHorizontalDimension() * 0.35f);
             float maxDistance = Math.max(180f, generatedConfig.maxHorizontalDimension() * 4f);
