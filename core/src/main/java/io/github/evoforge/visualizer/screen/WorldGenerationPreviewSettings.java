@@ -12,7 +12,7 @@ final class WorldGenerationPreviewSettings {
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
     private int reliefPpm = 600_000;
-    private int localReliefPpm = 350_000;
+    private int localReliefPpm = 250_000;
 
     int width() {
         return width;
