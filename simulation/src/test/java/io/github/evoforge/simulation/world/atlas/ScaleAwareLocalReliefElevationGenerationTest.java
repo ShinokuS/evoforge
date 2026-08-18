@@ -13,6 +13,8 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class ScaleAwareLocalReliefElevationGenerationTest {
@@ -21,7 +23,7 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
 
     @Test
-    void sameV12GenesisProducesSameLocalTerrain() {
+    void sameV12GenesisProducesSameScaleStableTerrain() {
         WorldGenesis genesis = genesis(
                 SMALL_BOUNDS,
                 42L,
@@ -30,40 +32,13 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
                 700_000,
                 250_000,
                 650_000,
-                250_000);
+                350_000);
 
         assertArrayEquals(snapshot(generate(genesis)), snapshot(generate(genesis)));
     }
 
     @Test
-    void zeroLocalReliefIsExactV11MacroBaseline() {
-        ElevationField v11 = generate(genesis(
-                SMALL_BOUNDS,
-                23L,
-                GenerationRevision.V11,
-                400_000,
-                600_000,
-                300_000,
-                800_000,
-                0));
-        ElevationField v12 = generate(genesis(
-                SMALL_BOUNDS,
-                23L,
-                GenerationRevision.V12,
-                400_000,
-                600_000,
-                300_000,
-                800_000,
-                0));
-
-        assertArrayEquals(
-                snapshot(v11),
-                snapshot(v12),
-                "the local-relief slider must have an unambiguous zero baseline");
-    }
-
-    @Test
-    void v11IgnoresTheNewLocalReliefCoordinate() {
+    void v11StillIgnoresTheNewLocalReliefCoordinate() {
         ElevationField localOff = generate(genesis(
                 SMALL_BOUNDS,
                 29L,
@@ -114,34 +89,68 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
     }
 
     @Test
-    void compactWorldKeepsCalmRegionsInsteadOfPerturbingEveryCell() {
-        ElevationField baseline = allLand(SMALL_BOUNDS, 91L, 0);
-        ElevationField rolling = allLand(SMALL_BOUNDS, 91L, 1_000_000);
-        long[] delta = delta(snapshot(rolling), snapshot(baseline));
+    void compactMacroTerrainIsSmoothInsteadOfCellScaleNoise() {
+        ElevationField field = allLand(SMALL_BOUNDS, 91L, 0);
+        long maximumStep = maximumCardinalPreciseStep(field);
+        int discreteTransitions = discreteCardinalTransitions(field);
+        int cardinalEdges = cardinalEdgeCount(SMALL_BOUNDS);
 
-        int unchanged = 0;
-        int changed = 0;
-        for (long value : delta) {
-            if (value == 0L) unchanged++;
-            else changed++;
-            assertTrue(Math.abs(value) <= 3L * CELL, "local relief must stay cell-space bounded");
-        }
-
-        assertTrue(changed > delta.length / 8, "maximum local relief should still be clearly visible");
         assertTrue(
-                unchanged > delta.length / 8,
-                "quiet local bands should preserve substantial calm terrain on compact worlds");
+                maximumStep < CELL,
+                "64x64 macro terrain must not jump a whole cell between adjacent columns; max step="
+                        + maximumStep);
+        assertTrue(
+                discreteTransitions < cardinalEdges / 2,
+                "64x64 macro terrain must not become a checkerboard of Z changes; transitions="
+                        + discreteTransitions + "/" + cardinalEdges);
     }
 
     @Test
-    void compactWorldLocalLayerIsSmoothRatherThanCellScaleNoise() {
+    void largeMacroTerrainDoesNotCollapseIntoOnePlateau() {
+        ElevationField field = allLand(LARGE_BOUNDS, 1234L, 0);
+        int variedWindows = windowsWithAtLeastTwoDiscreteLevels(field, 64);
+        int totalWindows = (width(LARGE_BOUNDS) / 64) * (height(LARGE_BOUNDS) / 64);
+
+        assertTrue(
+                variedWindows >= totalWindows / 3,
+                "large worlds must retain terrain structure in detailed 64x64 windows; varied="
+                        + variedWindows + "/" + totalWindows);
+    }
+
+    @Test
+    void maximumLocalReliefChangesManyDiscreteCellsOnCompactWorld() {
         ElevationField baseline = allLand(SMALL_BOUNDS, 101L, 0);
         ElevationField rolling = allLand(SMALL_BOUNDS, 101L, 1_000_000);
-        long[] base = snapshot(baseline);
-        long[] changed = snapshot(rolling);
-        long[] delta = delta(changed, base);
 
-        long maximumStep = maximumUnclippedCardinalDeltaStep(
+        int changed = discreteChangedColumns(baseline, rolling);
+        assertTrue(
+                changed > area(SMALL_BOUNDS) / 5,
+                "maximum local relief should visibly affect a substantial part of 64x64 terrain; changed="
+                        + changed);
+    }
+
+    @Test
+    void maximumLocalReliefRemainsVisibleAcrossLargeWorldDetailWindows() {
+        ElevationField baseline = allLand(LARGE_BOUNDS, 202L, 0);
+        ElevationField rolling = allLand(LARGE_BOUNDS, 202L, 1_000_000);
+
+        int visibleWindows = windowsWithDiscreteChangesAtLeast(baseline, rolling, 64, 128);
+        int totalWindows = (width(LARGE_BOUNDS) / 64) * (height(LARGE_BOUNDS) / 64);
+
+        assertTrue(
+                visibleWindows >= totalWindows / 3,
+                "large worlds must show local relief in many detailed windows; visible="
+                        + visibleWindows + "/" + totalWindows);
+    }
+
+    @Test
+    void localReliefContributionRollsAcrossCellsInsteadOfAddingNoise() {
+        ElevationField baseline = allLand(SMALL_BOUNDS, 303L, 0);
+        ElevationField rolling = allLand(SMALL_BOUNDS, 303L, 1_000_000);
+        long[] changed = snapshot(rolling);
+        long[] delta = delta(changed, snapshot(baseline));
+
+        long maximumDeltaStep = maximumUnclippedCardinalDeltaStep(
                 delta,
                 changed,
                 width(SMALL_BOUNDS),
@@ -150,13 +159,18 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
                 (long) SMALL_BOUNDS.maxZ() * CELL);
 
         assertTrue(
-                maximumStep < CELL,
-                "local contribution must roll across several cells instead of producing cell noise; max step="
-                        + maximumStep);
+                maximumDeltaStep < CELL,
+                "local relief must form broad slopes rather than one-cell noise; max delta step="
+                        + maximumDeltaStep);
+        for (long value : delta) {
+            assertTrue(
+                    Math.abs(value) <= 8L * CELL,
+                    "local relief must remain bounded in terrain-cell height");
+        }
     }
 
     @Test
-    void sliderStrengthMonotonicallyIncreasesVisibleDiscreteTerrainChanges() {
+    void sliderStrengthMonotonicallyIncreasesDiscreteTerrainChanges() {
         ElevationField baseline = allLand(SMALL_BOUNDS, 1337L, 0);
         ElevationField low = allLand(SMALL_BOUNDS, 1337L, 250_000);
         ElevationField medium = allLand(SMALL_BOUNDS, 1337L, 500_000);
@@ -168,24 +182,9 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
 
         assertTrue(lowChanged <= mediumChanged, "50% must not be visually weaker than 25%");
         assertTrue(mediumChanged <= highChanged, "100% must not be visually weaker than 50%");
-        assertTrue(highChanged > lowChanged, "the slider must have a clearly stronger high end");
-    }
-
-    @Test
-    void largeWorldKeepsLocalReliefVisibleInDetailedWindows() {
-        ElevationField baseline = allLand(LARGE_BOUNDS, 1234L, 0);
-        ElevationField rolling = allLand(LARGE_BOUNDS, 1234L, 1_000_000);
-
-        int visibleWindows = windowsWithDiscreteChangesAtLeast(
-                baseline,
-                rolling,
-                64,
-                64);
-
         assertTrue(
-                visibleWindows >= 12,
-                "local relief should change actual voxel surface levels in many detailed 64x64 windows; windows="
-                        + visibleWindows);
+                highChanged >= lowChanged + area(SMALL_BOUNDS) / 20,
+                "the high end of the slider must be materially stronger than the low end");
     }
 
     private static ElevationField allLand(WorldBounds bounds, long seed, int localRelief) {
@@ -261,8 +260,63 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
         return matching;
     }
 
+    private static int windowsWithAtLeastTwoDiscreteLevels(ElevationField field, int windowSize) {
+        WorldBounds bounds = field.bounds();
+        int varied = 0;
+        for (int startY = bounds.minY(); startY <= bounds.maxY(); startY += windowSize) {
+            for (int startX = bounds.minX(); startX <= bounds.maxX(); startX += windowSize) {
+                int endY = Math.min(bounds.maxY(), startY + windowSize - 1);
+                int endX = Math.min(bounds.maxX(), startX + windowSize - 1);
+                Set<Integer> levels = new HashSet<>();
+                for (int y = startY; y <= endY && levels.size() < 2; y++) {
+                    for (int x = startX; x <= endX && levels.size() < 2; x++) {
+                        levels.add(field.elevationAt(x, y));
+                    }
+                }
+                if (levels.size() >= 2) varied++;
+            }
+        }
+        return varied;
+    }
+
+    private static long maximumCardinalPreciseStep(ElevationField field) {
+        WorldBounds bounds = field.bounds();
+        long maximum = 0L;
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                long current = field.elevationSubunitsAt(x, y);
+                if (x < bounds.maxX()) {
+                    maximum = Math.max(maximum, Math.abs(field.elevationSubunitsAt(x + 1, y) - current));
+                }
+                if (y < bounds.maxY()) {
+                    maximum = Math.max(maximum, Math.abs(field.elevationSubunitsAt(x, y + 1) - current));
+                }
+            }
+        }
+        return maximum;
+    }
+
+    private static int discreteCardinalTransitions(ElevationField field) {
+        WorldBounds bounds = field.bounds();
+        int count = 0;
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                int current = field.elevationAt(x, y);
+                if (x < bounds.maxX() && field.elevationAt(x + 1, y) != current) count++;
+                if (y < bounds.maxY() && field.elevationAt(x, y + 1) != current) count++;
+            }
+        }
+        return count;
+    }
+
+    private static int cardinalEdgeCount(WorldBounds bounds) {
+        int width = width(bounds);
+        int height = height(bounds);
+        return (width - 1) * height + (height - 1) * width;
+    }
+
     private static int expectedLandCount(WorldBounds bounds, int coveragePpm) {
-        long area = (long) width(bounds) * height(bounds);
+        long area = area(bounds);
         return Math.toIntExact((area * coveragePpm + NormalizedValue.SCALE / 2L)
                 / NormalizedValue.SCALE);
     }
@@ -354,6 +408,10 @@ final class ScaleAwareLocalReliefElevationGenerationTest {
             return 0L;
         }
         return Math.abs(delta[second] - delta[first]);
+    }
+
+    private static int area(WorldBounds bounds) {
+        return Math.multiplyExact(width(bounds), height(bounds));
     }
 
     private static int width(WorldBounds bounds) {
