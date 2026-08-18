@@ -25,6 +25,7 @@ import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationStage;
+import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 
 /** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
@@ -59,12 +60,14 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private final ShaderProgram shader = new ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     private final PreviewInput input = new PreviewInput();
     private final WorldGenerationShape2DRenderer shape2DRenderer = new WorldGenerationShape2DRenderer();
+    private final VisualizerPerformanceTelemetry performance = new VisualizerPerformanceTelemetry();
     private final WorldGenerationSettingsPanel settingsPanel;
     private final InputMultiplexer inputMultiplexer;
 
     private WorldGenerationPreviewConfig generatedConfig;
     private WorldBounds bounds;
     private ElevationField generatedElevation;
+    private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
     private TerrainShapeField generatedShapes;
     private Mesh surfaceMesh;
     private Mesh oceanMesh;
@@ -78,6 +81,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private int previewWidth;
     private int previewLength;
     private double generationMillis;
+    private double lastCpuMillis;
     private int lastMouseX;
     private int lastMouseY;
     private boolean orbiting;
@@ -119,16 +123,33 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        long frameStart = System.nanoTime();
         Gdx.gl.glClearColor(0.025f, 0.035f, 0.05f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
+
+        long afterUpdate;
         if (twoDimensional) {
             shape2DRenderer.update(delta, !settingsPanel.keyboardInputActive());
+            afterUpdate = System.nanoTime();
             renderTwoDimensional();
         } else {
+            afterUpdate = System.nanoTime();
             renderThreeDimensional();
         }
+        long afterWorld = System.nanoTime();
         drawOverlay();
+        long afterOverlay = System.nanoTime();
         settingsPanel.render(delta);
+        long frameEnd = System.nanoTime();
+
+        lastCpuMillis = (frameEnd - frameStart) / 1_000_000d;
+        performance.record(
+                delta,
+                frameEnd - frameStart,
+                afterUpdate - frameStart,
+                afterWorld - afterUpdate,
+                afterOverlay - afterWorld,
+                frameEnd - afterOverlay);
     }
 
     private void renderThreeDimensional() {
@@ -205,6 +226,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         long started = System.nanoTime();
         generatedElevation = new ElevationGenerationStage().generate(genesis);
         generatedShapes = TerrainShapeGenerationStage.standard().generate(generatedElevation);
+        elevationRange = WorldGenerationElevationRange.from(generatedElevation);
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
@@ -213,11 +235,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         surfaceMesh = buildSurface(
                 generatedElevation,
                 bounds,
+                elevationRange,
                 previewWidth,
                 previewLength,
                 elevationTintPpm);
         oceanMesh = buildOcean(bounds);
         shape2DRenderer.setWorldBounds(bounds);
+        shape2DRenderer.setElevationRange(elevationRange);
         shape2DRenderer.setElevationTintPpm(elevationTintPpm);
         camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
 
@@ -241,6 +265,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         surfaceMesh = buildSurface(
                 generatedElevation,
                 bounds,
+                elevationRange,
                 previewWidth,
                 previewLength,
                 elevationTintPpm);
@@ -249,6 +274,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static Mesh buildSurface(
             ElevationField elevation,
             WorldBounds bounds,
+            WorldGenerationElevationRange elevationRange,
             int sampleWidth,
             int sampleLength,
             int elevationTintPpm) {
@@ -262,10 +288,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, sampleWidth);
                 long heightSubunits = elevation.elevationSubunitsAt(x, y);
                 float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
-                if (heightSubunits > 0L) {
+                if (heightSubunits >= 0L) {
                     WorldGenerationElevationTint.color(
                             heightSubunits,
-                            bounds,
+                            elevationRange,
                             elevationTintPpm,
                             color);
                 } else {
@@ -379,6 +405,29 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 generatedConfig.reliefPpm() / 10_000f),
                 24f,
                 Gdx.graphics.getHeight() - 72f);
+        if (twoDimensional) {
+            font.draw(batch, String.format(
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   visible %,d   sampled %,d   LOD x%d",
+                    Gdx.graphics.getFramesPerSecond(),
+                    Gdx.graphics.getDeltaTime() * 1000f,
+                    lastCpuMillis,
+                    shape2DRenderer.visibleColumns(),
+                    shape2DRenderer.renderedSamples(),
+                    shape2DRenderer.lodStride()),
+                    24f,
+                    Gdx.graphics.getHeight() - 96f);
+        } else {
+            font.draw(batch, String.format(
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d",
+                    Gdx.graphics.getFramesPerSecond(),
+                    Gdx.graphics.getDeltaTime() * 1000f,
+                    lastCpuMillis,
+                    previewWidth,
+                    previewLength),
+                    24f,
+                    Gdx.graphics.getHeight() - 96f);
+        }
+
         font.setColor(Color.LIGHT_GRAY);
         if (twoDimensional) {
             font.draw(
