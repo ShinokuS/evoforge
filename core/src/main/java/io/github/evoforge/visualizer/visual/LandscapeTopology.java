@@ -40,6 +40,23 @@ public final class LandscapeTopology {
         return normalized;
     }
 
+    /**
+     * Canonical topology for the exposed top surface of a full terrain cell.
+     *
+     * <p>Earth is a face-boundary cue. If two adjacent cardinal faces are already visually joined,
+     * a missing diagonal neighbour touches only at one point and must not create a tiny isolated
+     * earth "inner corner". This is especially important where a neighbouring Shape owns the
+     * shared visual boundary, such as a ramp meeting an ordinary surface.</p>
+     */
+    public static int normalizeSurfaceArt(int mask) {
+        int normalized = normalize(mask);
+        if (contains(normalized, N) && contains(normalized, E)) normalized |= NE;
+        if (contains(normalized, S) && contains(normalized, E)) normalized |= SE;
+        if (contains(normalized, S) && contains(normalized, W)) normalized |= SW;
+        if (contains(normalized, N) && contains(normalized, W)) normalized |= NW;
+        return normalized;
+    }
+
     /** Returns a stable visual variant for one world cell. */
     public static int variant(
             int x,

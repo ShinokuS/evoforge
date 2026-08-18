@@ -58,7 +58,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private int viewportHeight = 1;
     private int elevationTintPpm = WorldGenerationElevationTint.DEFAULT_STRENGTH_PPM;
     private boolean smoothSampling;
-    private boolean showShapeDirections = true;
+    private boolean showShapeDirections;
     private float presentationSeconds;
     private long lastVisibleColumns;
     private long lastRenderedSamples;
@@ -223,32 +223,65 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             ElevationField elevation,
             TerrainShapeField terrainShapes,
             VisualizerCamera.VisibleRange visible) {
+        drawTerrainBaseCells(batch, elevation, terrainShapes, visible);
+        drawTerrainOverrides(batch, elevation, terrainShapes, visible);
+    }
+
+    private void drawTerrainBaseCells(
+            SpriteBatch batch,
+            ElevationField elevation,
+            TerrainShapeField terrainShapes,
+            VisualizerCamera.VisibleRange visible) {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
-                int z = elevation.elevationAt(x, y);
-                Shape shape = shapeAt(terrainShapes, x, y);
-                int variant = LandscapeTopology.variant(
-                        x,
-                        y,
-                        z,
-                        ProceduralLandscapePack.SURFACE_VARIANTS);
-                batch.setColor(WorldGenerationElevationTint.shaderColor(
-                        elevation.elevationSubunitsAt(x, y),
-                        elevationRange,
-                        elevationTintPpm,
-                        elevationColor));
-                batch.draw(
-                        shapePresentations.terrainRegion(
-                                shape,
-                                neighbourMask(elevation, terrainShapes, x, y, z, shape),
-                                variant,
-                                false),
-                        x,
-                        y,
-                        1f,
-                        1f);
+                if (terrainShapes.shapeOverrideAt(x, y) != null) continue;
+                drawTerrainCell(batch, elevation, terrainShapes, x, y, FullShape.INSTANCE);
             }
         }
+    }
+
+    private void drawTerrainOverrides(
+            SpriteBatch batch,
+            ElevationField elevation,
+            TerrainShapeField terrainShapes,
+            VisualizerCamera.VisibleRange visible) {
+        for (int x = visible.minX(); x <= visible.maxX(); x++) {
+            for (int y = visible.minY(); y <= visible.maxY(); y++) {
+                Shape shape = terrainShapes.shapeOverrideAt(x, y);
+                if (shape == null) continue;
+                drawTerrainCell(batch, elevation, terrainShapes, x, y, shape);
+            }
+        }
+    }
+
+    private void drawTerrainCell(
+            SpriteBatch batch,
+            ElevationField elevation,
+            TerrainShapeField terrainShapes,
+            int x,
+            int y,
+            Shape shape) {
+        int z = elevation.elevationAt(x, y);
+        int variant = LandscapeTopology.variant(
+                x,
+                y,
+                z,
+                ProceduralLandscapePack.SURFACE_VARIANTS);
+        batch.setColor(WorldGenerationElevationTint.shaderColor(
+                elevation.elevationSubunitsAt(x, y),
+                elevationRange,
+                elevationTintPpm,
+                elevationColor));
+        batch.draw(
+                shapePresentations.terrainRegion(
+                        shape,
+                        neighbourMask(elevation, terrainShapes, x, y, z, shape),
+                        variant,
+                        false),
+                x,
+                y,
+                1f,
+                1f);
     }
 
     private void drawTerrainOverview(
@@ -283,11 +316,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         }
     }
 
-    /**
-     * Keeps coarse overview readable without reinstating the expensive exact per-cell relief pass.
-     * Lines follow Z changes between the same representative blocks that the LOD terrain renderer
-     * already submits, so cost remains proportional to the bounded overview sample count.
-     */
     private void drawOverviewContours(
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible,
@@ -316,13 +344,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     int eastWidth = Math.min(stride, visible.maxX() - eastX + 1);
                     int eastSampleX = eastX + eastWidth / 2;
                     long eastElevation = elevation.elevationSubunitsAt(eastSampleX, sampleY);
-                    if (eastElevation >= 0L && elevation.elevationAt(eastSampleX, sampleY) != sampleZ) {
-                        diagnostics.rectLine(
-                                eastX,
-                                y,
-                                eastX,
-                                y + blockLength,
-                                thickness);
+                    if (eastElevation >= 0L
+                            && elevation.elevationAt(eastSampleX, sampleY) != sampleZ) {
+                        diagnostics.rectLine(eastX, y, eastX, y + blockLength, thickness);
                     }
                 }
 
@@ -331,13 +355,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     int northLength = Math.min(stride, visible.maxY() - northY + 1);
                     int northSampleY = northY + northLength / 2;
                     long northElevation = elevation.elevationSubunitsAt(sampleX, northSampleY);
-                    if (northElevation >= 0L && elevation.elevationAt(sampleX, northSampleY) != sampleZ) {
-                        diagnostics.rectLine(
-                                x,
-                                northY,
-                                x + blockWidth,
-                                northY,
-                                thickness);
+                    if (northElevation >= 0L
+                            && elevation.elevationAt(sampleX, northSampleY) != sampleZ) {
+                        diagnostics.rectLine(x, northY, x + blockWidth, northY, thickness);
                     }
                 }
             }
@@ -380,12 +400,21 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             CellFace face,
             SurfaceReliefEdgeArt.Side side) {
         boolean neighbourPresent = elevation.contains(neighbourX, neighbourY);
+        Shape neighbour = null;
+        int neighbourZ = z;
         if (neighbourPresent) {
-            int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
-            Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
+            neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
+            neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
             if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
         }
-        boolean raised = !neighbourPresent || z > elevation.elevationAt(neighbourX, neighbourY);
+
+        if (!shapePresentations.genericReliefEdgeAllowed(shape, face)) return;
+        if (neighbour != null
+                && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite())) {
+            return;
+        }
+
+        boolean raised = !neighbourPresent || z > neighbourZ;
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
 
@@ -475,26 +504,26 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             int z,
             Shape shape) {
         int mask = 0;
-        if (joins(elevation, terrainShapes, shape, z, x, y + 1, CellFace.POSITIVE_Y)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x, y + 1, CellFace.POSITIVE_Y)) {
             mask |= LandscapeTopology.N;
         }
         if (sameDiscreteSurface(elevation, x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
-        if (joins(elevation, terrainShapes, shape, z, x + 1, y, CellFace.POSITIVE_X)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x + 1, y, CellFace.POSITIVE_X)) {
             mask |= LandscapeTopology.E;
         }
         if (sameDiscreteSurface(elevation, x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
-        if (joins(elevation, terrainShapes, shape, z, x, y - 1, CellFace.NEGATIVE_Y)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x, y - 1, CellFace.NEGATIVE_Y)) {
             mask |= LandscapeTopology.S;
         }
         if (sameDiscreteSurface(elevation, x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
-        if (joins(elevation, terrainShapes, shape, z, x - 1, y, CellFace.NEGATIVE_X)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x - 1, y, CellFace.NEGATIVE_X)) {
             mask |= LandscapeTopology.W;
         }
         if (sameDiscreteSurface(elevation, x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
         return LandscapeTopology.normalize(mask);
     }
 
-    private boolean joins(
+    private boolean terrainArtJoins(
             ElevationField elevation,
             TerrainShapeField terrainShapes,
             Shape shape,
@@ -505,7 +534,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (!elevation.contains(neighbourX, neighbourY)) return false;
         int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
         Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
-        return SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
+        if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return true;
+
+        return shapePresentations.genericReliefEdgeAllowed(shape, face)
+                && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite());
     }
 
     private static Shape shapeAt(TerrainShapeField terrainShapes, int x, int y) {
