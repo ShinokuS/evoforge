@@ -1,16 +1,16 @@
 package io.github.evoforge.visualizer.screen;
 
 /**
- * Pure sampling policy that caps far-zoom 2D preview work while keeping close inspection exact.
+ * Pure sampling policy that caps 2D preview work while keeping close inspection exact.
  *
  * <p>Detailed LOD x1 is substantially more expensive than overview sampling because each visible
- * cell resolves Shape presentation, neighbour topology and relief edges. Keep a separate detailed
- * budget so the renderer steps to x2 before it enters the old high-cost fringe near the overview
- * threshold.</p>
+ * cell resolves Shape presentation, neighbour topology and relief edges. Overview mode is also
+ * intentionally capped well below the old 20k-sample budget because terrain, water and contour
+ * passes compound the actual GPU submissions.</p>
  */
 final class WorldGeneration2DLod {
-    static final long MAX_DETAILED_CELLS = 16_384L;
-    static final long MAX_SAMPLES = 20_000L;
+    static final long MAX_DETAILED_CELLS = 9_000L;
+    static final long MAX_SAMPLES = 6_000L;
 
     private WorldGeneration2DLod() {
     }
