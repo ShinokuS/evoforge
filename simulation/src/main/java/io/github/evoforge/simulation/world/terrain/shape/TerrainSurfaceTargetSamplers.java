@@ -25,39 +25,102 @@ final class TerrainSurfaceTargetSamplers {
 
     static TerrainSurfacePatch smoothVoxelTransitionPatch(ElevationField elevation, int x, int y) {
         requireElevation(elevation);
+        TransitionIntent intent = transitionIntent(elevation, x, y, false);
+        if (intent == null) return precisePatch(elevation, x, y);
+        return normalizedCardinalPlane(intent.dx(), intent.dy());
+    }
+
+    /**
+     * V12 rejects one-cell turns and locally rotating contour fragments. A generated transition is
+     * promoted only when at least one lateral neighbour supports the same cardinal ascending
+     * direction, and a lateral neighbour that is itself a valid transition may not point elsewhere.
+     * This keeps the policy geometry-only while preventing spiral-like chains of unrelated ramps.
+     */
+    static TerrainSurfacePatch coherentVoxelTransitionPatch(ElevationField elevation, int x, int y) {
+        requireElevation(elevation);
+        TransitionIntent intent = transitionIntent(elevation, x, y, true);
+        if (intent == null || !hasCoherentLateralSupport(elevation, x, y, intent)) {
+            return precisePatch(elevation, x, y);
+        }
+        return normalizedCardinalPlane(intent.dx(), intent.dy());
+    }
+
+    private static TransitionIntent transitionIntent(
+            ElevationField elevation,
+            int x,
+            int y,
+            boolean requireCardinalDominance) {
+        if (!elevation.contains(x, y)) return null;
         TerrainSurfacePatch precise = precisePatch(elevation, x, y);
-        if (precise.reliefSubunits() >= MAX_RAW_TRANSITION_RELIEF) return precise;
+        if (precise.reliefSubunits() >= MAX_RAW_TRANSITION_RELIEF) return null;
 
         long center = elevation.elevationSubunitsAt(x, y);
         long layer = Math.floorDiv(center, CELL);
         long gradientX = precise.gradientXSubunits();
         long gradientY = precise.gradientYSubunits();
-        long dominantGradient = Math.max(absolute(gradientX), absolute(gradientY));
-        if (dominantGradient == 0L) return precise;
+        long absoluteX = absolute(gradientX);
+        long absoluteY = absolute(gradientY);
+        long dominantGradient = Math.max(absoluteX, absoluteY);
+        if (dominantGradient == 0L) return null;
 
         if (!smoothNeighbor(elevation, x - 1, y, center, layer)
                 || !smoothNeighbor(elevation, x + 1, y, center, layer)
                 || !smoothNeighbor(elevation, x, y - 1, center, layer)
                 || !smoothNeighbor(elevation, x, y + 1, center, layer)) {
-            return precise;
+            return null;
         }
-        if (!crossesAscendingBoundary(elevation, x, y, layer, gradientX, gradientY)) return precise;
 
-        return normalizedPlane(gradientX, gradientY, dominantGradient);
+        int dx;
+        int dy;
+        if (absoluteX >= absoluteY) {
+            if (requireCardinalDominance && absoluteX * 2L < absoluteY * 3L) return null;
+            dx = gradientX > 0L ? 1 : -1;
+            dy = 0;
+        } else {
+            if (requireCardinalDominance && absoluteY * 2L < absoluteX * 3L) return null;
+            dx = 0;
+            dy = gradientY > 0L ? 1 : -1;
+        }
+
+        if (!crossesAscendingBoundary(elevation, x, y, layer, dx, dy)) return null;
+        return new TransitionIntent(dx, dy);
     }
 
-    private static TerrainSurfacePatch normalizedPlane(
-            long gradientX,
-            long gradientY,
-            long dominantGradient) {
+    private static boolean hasCoherentLateralSupport(
+            ElevationField elevation,
+            int x,
+            int y,
+            TransitionIntent center) {
+        int sideX = -center.dy();
+        int sideY = center.dx();
+        int support = 0;
+
+        for (int sign : new int[] {-1, 1}) {
+            int neighbourX = x + sideX * sign;
+            int neighbourY = y + sideY * sign;
+            if (!elevation.contains(neighbourX, neighbourY)) continue;
+
+            TransitionIntent neighbour = transitionIntent(
+                    elevation,
+                    neighbourX,
+                    neighbourY,
+                    true);
+            if (neighbour == null) continue;
+            if (!center.sameDirection(neighbour)) return false;
+            support++;
+        }
+        return support > 0;
+    }
+
+    private static TerrainSurfacePatch normalizedCardinalPlane(int dx, int dy) {
         long half = CELL / 2L;
-        long scaledX = Math.multiplyExact(gradientX, CELL) / dominantGradient;
-        long scaledY = Math.multiplyExact(gradientY, CELL) / dominantGradient;
+        long gradientX = (long) dx * CELL;
+        long gradientY = (long) dy * CELL;
         return new TerrainSurfacePatch(
-                half - scaledX / 2L,
-                half + scaledX / 2L,
-                half - scaledY / 2L,
-                half + scaledY / 2L);
+                half - gradientX / 2L,
+                half + gradientX / 2L,
+                half - gradientY / 2L,
+                half + gradientY / 2L);
     }
 
     private static boolean smoothNeighbor(
@@ -77,12 +140,9 @@ final class TerrainSurfaceTargetSamplers {
             int x,
             int y,
             long centerLayer,
-            long gradientX,
-            long gradientY) {
-        return gradientX > 0L && layerAt(elevation, x + 1, y, centerLayer) == centerLayer + 1L
-                || gradientX < 0L && layerAt(elevation, x - 1, y, centerLayer) == centerLayer + 1L
-                || gradientY > 0L && layerAt(elevation, x, y + 1, centerLayer) == centerLayer + 1L
-                || gradientY < 0L && layerAt(elevation, x, y - 1, centerLayer) == centerLayer + 1L;
+            int dx,
+            int dy) {
+        return layerAt(elevation, x + dx, y + dy, centerLayer) == centerLayer + 1L;
     }
 
     private static long layerAt(ElevationField elevation, int x, int y, long fallback) {
@@ -110,11 +170,25 @@ final class TerrainSurfaceTargetSamplers {
     }
 
     private static long absolute(long value) {
-        if (value == Long.MIN_VALUE) throw new ArithmeticException("surface difference exceeds signed range");
+        if (value == Long.MIN_VALUE) {
+            throw new ArithmeticException("surface difference exceeds signed range");
+        }
         return Math.abs(value);
     }
 
     private static void requireElevation(ElevationField elevation) {
         if (elevation == null) throw new IllegalArgumentException("elevation must not be null");
+    }
+
+    private record TransitionIntent(int dx, int dy) {
+        private TransitionIntent {
+            if (Math.abs(dx) + Math.abs(dy) != 1) {
+                throw new IllegalArgumentException("transition direction must be cardinal");
+            }
+        }
+
+        private boolean sameDirection(TransitionIntent other) {
+            return other != null && dx == other.dx && dy == other.dy;
+        }
     }
 }
