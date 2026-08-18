@@ -223,9 +223,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             ElevationField elevation,
             TerrainShapeField terrainShapes,
             VisualizerCamera.VisibleRange visible) {
-        // Draw ordinary full cells first and generated Shape overrides second. The current ramp art
-        // owns a separate atlas; grouping the passes avoids a SpriteBatch flush every time the scan
-        // crosses full -> ramp -> full terrain on shape-dense generated worlds.
         drawTerrainBaseCells(batch, elevation, terrainShapes, visible);
         drawTerrainOverrides(batch, elevation, terrainShapes, visible);
     }
@@ -319,11 +316,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         }
     }
 
-    /**
-     * Keeps coarse overview readable without reinstating the expensive exact per-cell relief pass.
-     * Lines follow Z changes between the same representative blocks that the LOD terrain renderer
-     * already submits, so cost remains proportional to the bounded overview sample count.
-     */
     private void drawOverviewContours(
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible,
@@ -354,12 +346,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     long eastElevation = elevation.elevationSubunitsAt(eastSampleX, sampleY);
                     if (eastElevation >= 0L
                             && elevation.elevationAt(eastSampleX, sampleY) != sampleZ) {
-                        diagnostics.rectLine(
-                                eastX,
-                                y,
-                                eastX,
-                                y + blockLength,
-                                thickness);
+                        diagnostics.rectLine(eastX, y, eastX, y + blockLength, thickness);
                     }
                 }
 
@@ -370,12 +357,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     long northElevation = elevation.elevationSubunitsAt(sampleX, northSampleY);
                     if (northElevation >= 0L
                             && elevation.elevationAt(sampleX, northSampleY) != sampleZ) {
-                        diagnostics.rectLine(
-                                x,
-                                northY,
-                                x + blockWidth,
-                                northY,
-                                thickness);
+                        diagnostics.rectLine(x, northY, x + blockWidth, northY, thickness);
                     }
                 }
             }
@@ -426,8 +408,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return;
         }
 
-        // The decision is symmetric. Suppressing the overlay only on the ramp cell is insufficient:
-        // the adjacent full cell would otherwise draw the same brown contact line from its side.
         if (!shapePresentations.genericReliefEdgeAllowed(shape, face)) return;
         if (neighbour != null
                 && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite())) {
@@ -524,26 +504,26 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             int z,
             Shape shape) {
         int mask = 0;
-        if (joins(elevation, terrainShapes, shape, z, x, y + 1, CellFace.POSITIVE_Y)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x, y + 1, CellFace.POSITIVE_Y)) {
             mask |= LandscapeTopology.N;
         }
         if (sameDiscreteSurface(elevation, x + 1, y + 1, z)) mask |= LandscapeTopology.NE;
-        if (joins(elevation, terrainShapes, shape, z, x + 1, y, CellFace.POSITIVE_X)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x + 1, y, CellFace.POSITIVE_X)) {
             mask |= LandscapeTopology.E;
         }
         if (sameDiscreteSurface(elevation, x + 1, y - 1, z)) mask |= LandscapeTopology.SE;
-        if (joins(elevation, terrainShapes, shape, z, x, y - 1, CellFace.NEGATIVE_Y)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x, y - 1, CellFace.NEGATIVE_Y)) {
             mask |= LandscapeTopology.S;
         }
         if (sameDiscreteSurface(elevation, x - 1, y - 1, z)) mask |= LandscapeTopology.SW;
-        if (joins(elevation, terrainShapes, shape, z, x - 1, y, CellFace.NEGATIVE_X)) {
+        if (terrainArtJoins(elevation, terrainShapes, shape, z, x - 1, y, CellFace.NEGATIVE_X)) {
             mask |= LandscapeTopology.W;
         }
         if (sameDiscreteSurface(elevation, x - 1, y + 1, z)) mask |= LandscapeTopology.NW;
         return LandscapeTopology.normalize(mask);
     }
 
-    private boolean joins(
+    private boolean terrainArtJoins(
             ElevationField elevation,
             TerrainShapeField terrainShapes,
             Shape shape,
@@ -554,7 +534,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (!elevation.contains(neighbourX, neighbourY)) return false;
         int neighbourZ = elevation.elevationAt(neighbourX, neighbourY);
         Shape neighbour = shapeAt(terrainShapes, neighbourX, neighbourY);
-        return SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ);
+        if (SurfaceBoundaryContinuity.aligns(shape, z, face, neighbour, neighbourZ)) return true;
+
+        return shapePresentations.genericReliefEdgeAllowed(shape, face)
+                && !shapePresentations.genericReliefEdgeAllowed(neighbour, face.opposite());
     }
 
     private static Shape shapeAt(TerrainShapeField terrainShapes, int x, int y) {
