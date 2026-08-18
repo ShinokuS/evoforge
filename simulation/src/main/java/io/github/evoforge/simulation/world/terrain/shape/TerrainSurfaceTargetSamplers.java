@@ -8,6 +8,7 @@ final class TerrainSurfaceTargetSamplers {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
     private static final long MAX_TRANSITION_NEIGHBOR_DELTA = CELL * 45L / 100L;
     private static final long MAX_RAW_TRANSITION_RELIEF = CELL * 65L / 100L;
+    private static final int MIN_COHERENT_BAND_WIDTH = 3;
 
     private TerrainSurfaceTargetSamplers() {
     }
@@ -31,29 +32,22 @@ final class TerrainSurfaceTargetSamplers {
     }
 
     /**
-     * V12 rejects one-cell turns and locally rotating contour fragments. A smooth voxel-transition
-     * candidate is promoted only when the local gradient has a clear cardinal direction and a
-     * lateral neighbour supports that same direction. If a cell is recognizably part of a smooth
-     * voxel transition but fails the coherence rule, it deliberately falls back to the neutral flat
-     * target rather than allowing the precise patch to select a stray shaped template. Shape
-     * identity never participates in this decision.
+     * V12 accepts only locally coherent smooth voxel-transition bands. A candidate must have a
+     * clear cardinal rise and belong to a contiguous same-direction lateral band at least three
+     * cells wide. Anything else intentionally produces the neutral flat target for Shape fitting.
+     *
+     * <p>This policy is deliberately stricter than V11. V12 generated Shapes are meant to describe
+     * broad traversable surface structure, not every local precise contour fragment. The decision
+     * uses only sampled surface geometry; no concrete runtime Shape identity participates.</p>
      */
     static TerrainSurfacePatch coherentVoxelTransitionPatch(ElevationField elevation, int x, int y) {
         requireElevation(elevation);
-        TerrainSurfacePatch precise = precisePatch(elevation, x, y);
-
-        // Distinguish "not a smooth voxel transition" from "a transition candidate that is locally
-        // incoherent". Literal non-transition geometry is preserved; an incoherent transition is
-        // explicitly denied a shaped target so isolated/turning artifacts cannot leak through.
-        TransitionIntent rawIntent = transitionIntent(elevation, x, y, false);
-        if (rawIntent == null) return precise;
-
-        TransitionIntent coherentIntent = transitionIntent(elevation, x, y, true);
-        if (coherentIntent == null
-                || !hasCoherentLateralSupport(elevation, x, y, coherentIntent)) {
+        TransitionIntent intent = transitionIntent(elevation, x, y, true);
+        if (intent == null
+                || coherentBandWidth(elevation, x, y, intent) < MIN_COHERENT_BAND_WIDTH) {
             return TerrainSurfacePatch.flatTop();
         }
-        return normalizedCardinalPlane(coherentIntent.dx(), coherentIntent.dy());
+        return normalizedCardinalPlane(intent.dx(), intent.dy());
     }
 
     private static TransitionIntent transitionIntent(
@@ -97,30 +91,41 @@ final class TerrainSurfaceTargetSamplers {
         return new TransitionIntent(dx, dy);
     }
 
-    private static boolean hasCoherentLateralSupport(
+    private static int coherentBandWidth(
             ElevationField elevation,
             int x,
             int y,
             TransitionIntent center) {
         int sideX = -center.dy();
         int sideY = center.dx();
+        int width = 1;
+
+        width += contiguousSupport(elevation, x, y, center, sideX, sideY);
+        width += contiguousSupport(elevation, x, y, center, -sideX, -sideY);
+        return width;
+    }
+
+    /** Only two cells per side are needed to prove the minimum three-cell visual band. */
+    private static int contiguousSupport(
+            ElevationField elevation,
+            int x,
+            int y,
+            TransitionIntent center,
+            int stepX,
+            int stepY) {
         int support = 0;
-
-        for (int sign : new int[] {-1, 1}) {
-            int neighbourX = x + sideX * sign;
-            int neighbourY = y + sideY * sign;
-            if (!elevation.contains(neighbourX, neighbourY)) continue;
-
+        for (int distance = 1; distance < MIN_COHERENT_BAND_WIDTH; distance++) {
+            int neighbourX = x + stepX * distance;
+            int neighbourY = y + stepY * distance;
             TransitionIntent neighbour = transitionIntent(
                     elevation,
                     neighbourX,
                     neighbourY,
                     true);
-            if (neighbour == null) continue;
-            if (!center.sameDirection(neighbour)) return false;
+            if (!center.sameDirection(neighbour)) break;
             support++;
         }
-        return support > 0;
+        return support;
     }
 
     private static TerrainSurfacePatch normalizedCardinalPlane(int dx, int dy) {
