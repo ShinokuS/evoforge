@@ -7,25 +7,51 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  *
  * <p>The values describe desired outcomes and spatial character, not implementation thresholds or
  * physical constants. Generation stages are responsible for calibrating their algorithms to these
- * coordinates. {@code relief} controls macro elevation structure, while {@code localRelief}
- * controls the strength of smaller regional hills and depressions without directly selecting a
- * noise frequency or vertical amplitude.</p>
+ * coordinates. {@code relief} controls large vertical structure, {@code localRelief} controls the
+ * strength of ordinary rolling hills and depressions, {@code landformScale} controls their typical
+ * horizontal size, and {@code ruggedness} controls ridge prominence and tolerated local slope.</p>
  */
 public record WorldGenerationIntent(
         NormalizedValue landCoverage,
         NormalizedValue landmassScale,
         NormalizedValue fragmentation,
         NormalizedValue relief,
-        NormalizedValue localRelief) {
+        NormalizedValue localRelief,
+        NormalizedValue landformScale,
+        NormalizedValue ruggedness) {
+
+    private static final NormalizedValue DEFAULT_LANDFORM_SCALE =
+            NormalizedValue.ofPartsPerMillion(500_000);
+    private static final NormalizedValue DEFAULT_RUGGEDNESS =
+            NormalizedValue.ofPartsPerMillion(350_000);
 
     public WorldGenerationIntent {
         if (landCoverage == null
                 || landmassScale == null
                 || fragmentation == null
                 || relief == null
-                || localRelief == null) {
+                || localRelief == null
+                || landformScale == null
+                || ruggedness == null) {
             throw new IllegalArgumentException("world generation intent values must not be null");
         }
+    }
+
+    /** Compatibility constructor for the first V12 drafts that predate terrain character controls. */
+    public WorldGenerationIntent(
+            NormalizedValue landCoverage,
+            NormalizedValue landmassScale,
+            NormalizedValue fragmentation,
+            NormalizedValue relief,
+            NormalizedValue localRelief) {
+        this(
+                landCoverage,
+                landmassScale,
+                fragmentation,
+                relief,
+                localRelief,
+                DEFAULT_LANDFORM_SCALE,
+                DEFAULT_RUGGEDNESS);
     }
 
     /** Compatibility constructor for V11 and older callers that predate local relief. */
@@ -39,7 +65,9 @@ public record WorldGenerationIntent(
                 landmassScale,
                 fragmentation,
                 relief,
-                NormalizedValue.ofPartsPerMillion(0));
+                NormalizedValue.ofPartsPerMillion(0),
+                DEFAULT_LANDFORM_SCALE,
+                DEFAULT_RUGGEDNESS);
     }
 
     /** Compatibility constructor for V9 and older callers that do not author relief explicitly. */
@@ -52,7 +80,9 @@ public record WorldGenerationIntent(
                 landmassScale,
                 fragmentation,
                 NormalizedValue.ofPartsPerMillion(500_000),
-                NormalizedValue.ofPartsPerMillion(0));
+                NormalizedValue.ofPartsPerMillion(0),
+                DEFAULT_LANDFORM_SCALE,
+                DEFAULT_RUGGEDNESS);
     }
 
     /** Neutral intent used by compatibility constructors and simple tooling. */
@@ -61,7 +91,9 @@ public record WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(500_000),
-                NormalizedValue.ofPartsPerMillion(500_000),
-                NormalizedValue.ofPartsPerMillion(350_000));
+                NormalizedValue.ofPartsPerMillion(600_000),
+                NormalizedValue.ofPartsPerMillion(450_000),
+                DEFAULT_LANDFORM_SCALE,
+                DEFAULT_RUGGEDNESS);
     }
 }
