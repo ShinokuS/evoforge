@@ -37,7 +37,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final int V12_UPLIFT_SCALE = 112;
     private static final int V12_RIDGE_SCALE = 56;
     private static final int V12_BASIN_SCALE = 144;
-    private static final int V12_LOCAL_RELIEF_SCALE = 32;
+    private static final int V12_LOCAL_RELIEF_SCALE = 40;
     private static final int V12_COASTAL_TRANSITION_CELLS = 12;
     private static final int V12_LOCAL_RELIEF_DEAD_ZONE_PPM = 125_000;
     private static final long V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS =
