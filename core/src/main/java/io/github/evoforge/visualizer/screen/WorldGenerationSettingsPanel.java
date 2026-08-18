@@ -36,23 +36,28 @@ final class WorldGenerationSettingsPanel implements Disposable {
     private final TextField widthField;
     private final TextField lengthField;
     private final TextField seedField;
+    private boolean twoDimensional;
 
     WorldGenerationSettingsPanel(
             WorldGenerationPreviewSettings settings,
             Runnable generateAction,
             boolean showSurface,
             boolean showOcean,
+            boolean twoDimensional,
             Consumer<Boolean> surfaceVisibility,
-            Consumer<Boolean> oceanVisibility) {
+            Consumer<Boolean> oceanVisibility,
+            Consumer<Boolean> viewMode) {
 
         if (settings == null
                 || generateAction == null
                 || surfaceVisibility == null
-                || oceanVisibility == null) {
+                || oceanVisibility == null
+                || viewMode == null) {
             throw new IllegalArgumentException("world-generation panel dependencies must not be null");
         }
         this.settings = settings;
         this.generateAction = generateAction;
+        this.twoDimensional = twoDimensional;
         this.widthField = dimensionField(settings.width());
         this.lengthField = dimensionField(settings.length());
         this.seedField = new TextField(Long.toString(settings.seed()), skin);
@@ -67,7 +72,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         content.add(title).left().padBottom(4f);
         content.row();
-        Label subtitle = new Label("V10 macro morphology", skin, "subtitle");
+        Label subtitle = new Label("V10 macro morphology + surface shapes", skin, "subtitle");
         content.add(subtitle).left().padBottom(14f);
         content.row();
 
@@ -87,6 +92,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         addPercentControl(content, "Relief", settings.reliefPpm(), settings::reliefPpm);
 
         addSection(content, "PREVIEW");
+        addViewModeControl(content, viewMode);
         addVisibilityControl(content, "Surface mesh", showSurface, surfaceVisibility);
         addVisibilityControl(content, "Ocean plane", showOcean, oceanVisibility);
 
@@ -133,6 +139,10 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 && screenX <= screenWidth - PANEL_MARGIN
                 && screenY >= PANEL_MARGIN
                 && screenY <= screenHeight - PANEL_MARGIN;
+    }
+
+    float previewRightEdge() {
+        return Gdx.graphics.getWidth() - PANEL_MARGIN - PANEL_WIDTH - PANEL_MARGIN;
     }
 
     void render(float delta) {
@@ -214,6 +224,24 @@ final class WorldGenerationSettingsPanel implements Disposable {
         row.add(value).width(VALUE_WIDTH).right().padLeft(8f);
         content.add(row).growX().minWidth(0f);
         content.row();
+    }
+
+    private void addViewModeControl(Table content, Consumer<Boolean> viewMode) {
+        TextButton mode = new TextButton(viewModeLabel(), skin);
+        mode.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                twoDimensional = !twoDimensional;
+                mode.setText(viewModeLabel());
+                viewMode.accept(twoDimensional);
+            }
+        });
+        content.add(mode).growX().minWidth(0f).height(32f).padBottom(6f);
+        content.row();
+    }
+
+    private String viewModeLabel() {
+        return twoDimensional ? "VIEW: 2D" : "VIEW: 3D";
     }
 
     private void addVisibilityControl(
