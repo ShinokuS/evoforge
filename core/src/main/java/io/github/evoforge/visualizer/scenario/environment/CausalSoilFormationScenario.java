@@ -79,7 +79,7 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
     @Override public String id() { return "causal-soil-formation"; }
     @Override public String title() { return "Causal Soil Formation"; }
     @Override public String description() {
-        return "One Soil Definition and one Terrain material develop different local hydraulics from generated convex/concave morphology and drainage; identical rain then produces different retained and free Water.";
+        return "One Soil Definition and one Terrain material develop different local hydraulics from generated convex/concave morphology and drainage; identical rain produces different retained and free Water, and the dry phase keeps reducing both.";
     }
 
     @Override
@@ -105,7 +105,8 @@ public final class CausalSoilFormationScenario implements VisualizerScenario {
         SimulationAssembly assembly = SimulationAssembly.create();
         LandscapeDefinitionId ground = assembly.landscapeDefinition(GROUND.value());
         assembly.surfaceRetention(ground, 10_000);
-        assembly.precipitation(RAIN);
+        assembly.precipitation(RAIN)
+                .periodicEvaporation(RAIN.amountPerColumn(), RAIN.intervalTicks());
 
         SoilSemanticProfileBindings semantics = SoilSemanticProfileBindings.of(Map.of(
                 GROUND,

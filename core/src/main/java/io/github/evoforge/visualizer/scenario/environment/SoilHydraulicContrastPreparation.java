@@ -41,6 +41,10 @@ final class SoilHydraulicContrastPreparation {
     static final SoilHydraulicProfile COARSE = profile(100_000,400_000);
     static final SoilHydraulicProfile FINE = profile(800_000,400_000);
     private static final PhysicalSpaceScale SPACE=PhysicalSpaceScale.cubicMillimeters(1_000L);
+    private static final WaterDepthRate PRECIPITATION_NORMAL =
+            WaterDepthRate.ofMillimeters(1_200L, Duration.ofDays(365L));
+    private static final WaterDepthRate EVAPORATIVE_DEMAND_NORMAL =
+            WaterDepthRate.ofMillimeters(2_400L, Duration.ofDays(365L));
     private static final TerrainMaterialKey COARSE_KEY=TerrainMaterialKey.of("scenario:soil-coarse");
     private static final TerrainMaterialKey FINE_KEY=TerrainMaterialKey.of("scenario:soil-fine");
     private static final TerrainMaterialKey DIVIDER_KEY=TerrainMaterialKey.of("scenario:soil-divider");
@@ -69,7 +73,7 @@ final class SoilHydraulicContrastPreparation {
 
     private static WorldAtlas atlas(WorldBounds bounds) {
         ClimateSpec climate=ClimateSpec.physical(ClimateTemperature.ofMilliCelsius(12_000),250,
-                WaterDepthRate.ofMillimeters(1_200L,Duration.ofDays(365L)),WaterDepthRate.ZERO);
+                PRECIPITATION_NORMAL,EVAPORATIVE_DEMAND_NORMAL);
         WorldGenesis genesis=new WorldGenesis(new WorldSpec(bounds,climate,SPACE),4_204_212L,
                 GenerationRevision.V8,RngRevision.V1);
         WorldGenerationAlgorithms algorithms=WorldGenerationAlgorithms.standard()

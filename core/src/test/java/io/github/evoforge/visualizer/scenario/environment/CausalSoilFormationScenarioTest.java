@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 final class CausalSoilFormationScenarioTest {
 
     @Test
-    void sameTerrainMaterialRespondsDifferentlyAfterCausalFormation() {
+    void sameTerrainMaterialRespondsDifferentlyAfterCausalFormationAndThenDries() {
         ScenarioSession session = new CausalSoilFormationScenario().create();
 
         assertEquals(
@@ -47,14 +47,37 @@ final class CausalSoilFormationScenarioTest {
 
         session.runtime().stepper().advance();
 
-        CausalSoilFormationScenario.CellWater ridgeWater = ridgeWater(session);
-        CausalSoilFormationScenario.CellWater basinWater = basinWater(session);
+        CausalSoilFormationScenario.CellWater ridgeFirstRain = ridgeWater(session);
+        CausalSoilFormationScenario.CellWater basinFirstRain = basinWater(session);
         assertTrue(
-                ridgeWater.retained() > basinWater.retained(),
+                ridgeFirstRain.retained() > basinFirstRain.retained(),
                 "the faster developed soil must absorb more of the same first rain pulse");
         assertTrue(
-                basinWater.free() > ridgeWater.free(),
+                basinFirstRain.free() > ridgeFirstRain.free(),
                 "the slower concave soil must leave more free Water without any Puddle generator");
+
+        while (session.runtime().time().tick() < 8L) {
+            session.runtime().stepper().advance();
+        }
+        CausalSoilFormationScenario.CellWater ridgeAfterRain = ridgeWater(session);
+        CausalSoilFormationScenario.CellWater basinAfterRain = basinWater(session);
+
+        while (session.runtime().time().tick() < 40L) {
+            session.runtime().stepper().advance();
+        }
+        CausalSoilFormationScenario.CellWater ridgeAfterDry = ridgeWater(session);
+        CausalSoilFormationScenario.CellWater basinAfterDry = basinWater(session);
+
+        assertTrue(
+                total(ridgeAfterDry) < total(ridgeAfterRain),
+                "the dry phase must keep reducing Water at the exposed ridge site");
+        assertTrue(
+                total(basinAfterDry) < total(basinAfterRain),
+                "the dry phase must keep reducing Water at the exposed basin site");
+    }
+
+    private static long total(CausalSoilFormationScenario.CellWater water) {
+        return water.retained() + water.free();
     }
 
     private static CausalSoilFormationScenario.CellWater ridgeWater(ScenarioSession session) {

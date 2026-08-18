@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 final class SoilHydraulicContrastScenarioTest {
 
     @Test
-    void identicalRainfallProducesDifferentSoilAndSurfaceWaterResponse() {
+    void identicalRainfallProducesDifferentSoilAndSurfaceWaterResponseThenDries() {
         ScenarioSession session = new SoilHydraulicContrastScenario().create();
 
         assertEquals(0L, session.runtime().time().tick());
@@ -42,6 +42,29 @@ final class SoilHydraulicContrastScenarioTest {
         assertTrue(
                 slow.free() > 0L,
                 "slow soil should leave surface water from that same rain pulse");
+
+        long previousWater = total(fast) + total(slow);
+        int clearWeatherDecreases = 0;
+        for (int step = 0; step < 200 && clearWeatherDecreases < 2; step++) {
+            session.runtime().stepper().advance();
+            SoilHydraulicContrastScenario.SideWater currentLeft = left(session);
+            SoilHydraulicContrastScenario.SideWater currentRight = right(session);
+            long currentWater = total(currentLeft) + total(currentRight);
+
+            if (session.weather().current().kind() == WeatherPresentationKind.CLEAR
+                    && currentWater < previousWater) {
+                clearWeatherDecreases++;
+            }
+            previousWater = currentWater;
+        }
+
+        assertTrue(
+                clearWeatherDecreases >= 2,
+                "repeated clear-weather evaporation must keep reducing exposed Water after rainfall");
+    }
+
+    private static long total(SoilHydraulicContrastScenario.SideWater water) {
+        return water.retained() + water.free();
     }
 
     private static SoilHydraulicContrastScenario.SideWater left(ScenarioSession session) {
