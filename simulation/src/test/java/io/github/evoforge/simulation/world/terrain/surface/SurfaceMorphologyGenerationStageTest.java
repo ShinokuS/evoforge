@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.surface;
+package io.github.evoforge.simulation.world.terrain.surface;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

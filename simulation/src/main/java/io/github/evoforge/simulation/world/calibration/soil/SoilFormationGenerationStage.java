@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.calibration.soil;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.atlas.DrainageField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialKey;
 import java.math.BigInteger;

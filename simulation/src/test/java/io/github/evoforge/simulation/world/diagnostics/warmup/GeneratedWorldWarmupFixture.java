@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.warmup;
+package io.github.evoforge.simulation.world.diagnostics.warmup;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.time.SimulationTimeScale;

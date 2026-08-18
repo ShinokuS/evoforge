@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerat
 import io.github.evoforge.simulation.world.calibration.soil.SoilHydraulicProfileField;
 import io.github.evoforge.simulation.world.calibration.soil.SoilSemanticProfileBindings;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyField;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerator;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyField;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyGenerator;
 import io.github.evoforge.simulation.world.terrain.generation.CompiledTerrainProfile;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialField;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;

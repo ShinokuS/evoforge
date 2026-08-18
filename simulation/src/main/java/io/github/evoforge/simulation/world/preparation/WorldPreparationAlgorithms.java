@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.world.preparation;
 
 import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerationStage;
 import io.github.evoforge.simulation.world.calibration.soil.SoilFormationGenerator;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerationStage;
-import io.github.evoforge.simulation.world.surface.SurfaceMorphologyGenerator;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyGenerationStage;
+import io.github.evoforge.simulation.world.terrain.surface.SurfaceMorphologyGenerator;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerationStage;
 import io.github.evoforge.simulation.world.terrain.generation.TerrainMaterialGenerator;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationStage;

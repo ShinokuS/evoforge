@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.warmup;
+package io.github.evoforge.simulation.world.diagnostics.warmup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
