@@ -56,6 +56,17 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
                 targets);
     }
 
+    /** Uses this stage's palette/calibration while selecting only the revision-specific target law. */
+    @Override
+    public TerrainShapeField generate(GenerationRevision revision, ElevationField elevation) {
+        if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
+        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
+                ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
+                : targetSampler;
+        if (targets == targetSampler) return generate(elevation);
+        return new TerrainShapeGenerationStage(palette, calibration, targets).generate(elevation);
+    }
+
     @Override
     public TerrainShapeField generate(ElevationField elevation) {
         if (elevation == null) throw new IllegalArgumentException("elevation must not be null");
