@@ -12,12 +12,12 @@ import java.util.Arrays;
  * V12 terrain authoring built around explicit multi-scale landforms rather than a stack of
  * unconstrained noise bands.
  *
- * <p>The generator deliberately separates four spatial roles:
- * continent/coast membership, broad uplift, balanced hill/depression kernels, and rolling local
- * relief. A narrow ridged field is mixed in only through the authored ruggedness coordinate. All
- * relief wavelengths are expressed in terrain-cell space, so a larger world contains more
- * landforms instead of stretching one feature into a huge plateau. A final deterministic slope
- * relaxation keeps the precise height field readable when projected onto discrete terrain cells.</p>
+ * <p>The generator deliberately separates four spatial roles: continent/coast membership, broad
+ * uplift, balanced hill/depression kernels, and rolling local relief. A narrow ridged field is
+ * mixed in only through the authored ruggedness coordinate. All relief wavelengths are expressed
+ * in terrain-cell space, so a larger world contains more landforms instead of stretching one
+ * feature into a huge plateau. A final deterministic slope relaxation keeps the precise height
+ * field readable when projected onto discrete terrain cells.</p>
  */
 final class V12LandformElevationGenerator {
     private static final GenerationPurposeId LANDMASS = GenerationPurposeId.of("world:landmass");
@@ -93,6 +93,7 @@ final class V12LandformElevationGenerator {
         long[] elevations = new long[area];
 
         int landformSpacing = landformSpacing(intent.landformScale());
+        LandformFeatureGrid landforms = LandformFeatureGrid.create(random, bounds, landformSpacing);
         int upliftScale = Math.max(52, landformSpacing * 2);
         int ridgeScale = Math.max(34, landformSpacing * 3 / 2);
         int rollingScale = Math.max(16, landformSpacing / 2);
@@ -123,11 +124,7 @@ final class V12LandformElevationGenerator {
                     x,
                     y,
                     upliftScale));
-            long landformPpm = landformFieldPpm(
-                    random,
-                    x,
-                    y,
-                    landformSpacing);
+            long landformPpm = landformFieldPpm(landforms, x, y);
             int ridgePpm = ridgeCrestPpm(random, x, y, ridgeScale);
             long rollingPpm = rollingFieldPpm(
                     random,
@@ -206,18 +203,12 @@ final class V12LandformElevationGenerator {
     }
 
     /**
-     * One deterministic feature lives in every feature-lattice cell. Each 2x2 group contains two
-     * hills and two depressions, but the pattern phase, center, radius and amplitude are randomized.
-     * This prevents an unlucky small map from becoming all peaks or all bowls while avoiding a
-     * visible regular checkerboard.
+     * Every feature-lattice cell is authored once and cached. A terrain sample only evaluates the
+     * surrounding 3x3 kernels, avoiding dozens of deterministic hash calls per terrain column.
      */
-    private static long landformFieldPpm(
-            GenerationRandom random,
-            int x,
-            int y,
-            int spacing) {
-        long latticeX = Math.floorDiv((long) x, spacing);
-        long latticeY = Math.floorDiv((long) y, spacing);
+    private static long landformFieldPpm(LandformFeatureGrid grid, int x, int y) {
+        long latticeX = Math.floorDiv((long) x, grid.spacing());
+        long latticeY = Math.floorDiv((long) y, grid.spacing());
         long xPpm = (long) x * PPM;
         long yPpm = (long) y * PPM;
         long sum = 0L;
@@ -226,50 +217,54 @@ final class V12LandformElevationGenerator {
             long featureY = latticeY + offsetY;
             for (int offsetX = -1; offsetX <= 1; offsetX++) {
                 long featureX = latticeX + offsetX;
+                LandformFeature feature = grid.get(featureX, featureY);
 
-                int jitterX = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 0L);
-                int jitterY = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 1L);
-                long centerX = featureX * spacing * (long) PPM
-                        + (long) spacing * PPM / 2L
-                        + (long) jitterX * spacing * FEATURE_JITTER_PPM / PPM;
-                long centerY = featureY * spacing * (long) PPM
-                        + (long) spacing * PPM / 2L
-                        + (long) jitterY * spacing * FEATURE_JITTER_PPM / PPM;
-
-                int radiusCoordinate = randomPpm(
-                        random,
-                        LANDFORM_FEATURE,
-                        featureX,
-                        featureY,
-                        2L);
-                int radiusFactorPpm = FEATURE_RADIUS_MIN_PPM
-                        + (int) ((long) radiusCoordinate * FEATURE_RADIUS_RANGE_PPM / PPM);
-                long radius = (long) spacing * radiusFactorPpm;
-
-                long dx = xPpm - centerX;
-                long dy = yPpm - centerY;
-                long normalizedX = dx * PPM / radius;
-                long normalizedY = dy * PPM / radius;
+                long dx = xPpm - feature.centerXPpm();
+                long dy = yPpm - feature.centerYPpm();
+                long normalizedX = dx * PPM / feature.radiusPpm();
+                long normalizedY = dy * PPM / feature.radiusPpm();
                 long distanceSquaredPpm = (normalizedX * normalizedX
                         + normalizedY * normalizedY) / PPM;
                 if (distanceSquaredPpm >= PPM) continue;
 
                 int falloffPpm = smoothStepPpm(PPM - distanceSquaredPpm);
-                int magnitudeCoordinate = randomPpm(
-                        random,
-                        LANDFORM_FEATURE,
-                        featureX,
-                        featureY,
-                        3L);
-                int magnitudePpm = FEATURE_MAGNITUDE_MIN_PPM
-                        + (int) ((long) magnitudeCoordinate * FEATURE_MAGNITUDE_RANGE_PPM / PPM);
-                int sign = landformSign(random, featureX, featureY);
-                sum += (long) sign * magnitudePpm * falloffPpm / PPM;
+                sum += (long) feature.signedMagnitudePpm() * falloffPpm / PPM;
             }
         }
         return clampCenteredPpm(sum);
     }
 
+    private static LandformFeature createLandformFeature(
+            GenerationRandom random,
+            long featureX,
+            long featureY,
+            int spacing) {
+        int jitterX = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 0L);
+        int jitterY = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 1L);
+        long centerX = featureX * spacing * (long) PPM
+                + (long) spacing * PPM / 2L
+                + (long) jitterX * spacing * FEATURE_JITTER_PPM / PPM;
+        long centerY = featureY * spacing * (long) PPM
+                + (long) spacing * PPM / 2L
+                + (long) jitterY * spacing * FEATURE_JITTER_PPM / PPM;
+
+        int radiusCoordinate = randomPpm(random, LANDFORM_FEATURE, featureX, featureY, 2L);
+        int radiusFactorPpm = FEATURE_RADIUS_MIN_PPM
+                + (int) ((long) radiusCoordinate * FEATURE_RADIUS_RANGE_PPM / PPM);
+        long radius = (long) spacing * radiusFactorPpm;
+
+        int magnitudeCoordinate = randomPpm(random, LANDFORM_FEATURE, featureX, featureY, 3L);
+        int magnitudePpm = FEATURE_MAGNITUDE_MIN_PPM
+                + (int) ((long) magnitudeCoordinate * FEATURE_MAGNITUDE_RANGE_PPM / PPM);
+        int sign = landformSign(random, featureX, featureY);
+        return new LandformFeature(centerX, centerY, radius, sign * magnitudePpm);
+    }
+
+    /**
+     * Each 2x2 feature block contains two hills and two depressions. A deterministic random phase
+     * per block prevents a globally visible checkerboard while retaining local balance even on a
+     * compact map.
+     */
     private static int landformSign(
             GenerationRandom random,
             long featureX,
@@ -583,6 +578,82 @@ final class V12LandformElevationGenerator {
         if (bounds.minZ() >= 0 || bounds.maxZ() <= 0) {
             throw new IllegalArgumentException(
                     "ocean-first generation requires world bounds below and above sea level z=0");
+        }
+    }
+
+    private record LandformFeature(
+            long centerXPpm,
+            long centerYPpm,
+            long radiusPpm,
+            int signedMagnitudePpm) {
+    }
+
+    private static final class LandformFeatureGrid {
+        private final long minFeatureX;
+        private final long minFeatureY;
+        private final int width;
+        private final int height;
+        private final int spacing;
+        private final LandformFeature[] features;
+
+        private LandformFeatureGrid(
+                long minFeatureX,
+                long minFeatureY,
+                int width,
+                int height,
+                int spacing,
+                LandformFeature[] features) {
+            this.minFeatureX = minFeatureX;
+            this.minFeatureY = minFeatureY;
+            this.width = width;
+            this.height = height;
+            this.spacing = spacing;
+            this.features = features;
+        }
+
+        static LandformFeatureGrid create(
+                GenerationRandom random,
+                WorldBounds bounds,
+                int spacing) {
+            long minFeatureX = Math.floorDiv((long) bounds.minX(), spacing) - 1L;
+            long maxFeatureX = Math.floorDiv((long) bounds.maxX(), spacing) + 1L;
+            long minFeatureY = Math.floorDiv((long) bounds.minY(), spacing) - 1L;
+            long maxFeatureY = Math.floorDiv((long) bounds.maxY(), spacing) + 1L;
+            int width = Math.toIntExact(maxFeatureX - minFeatureX + 1L);
+            int height = Math.toIntExact(maxFeatureY - minFeatureY + 1L);
+            LandformFeature[] features = new LandformFeature[Math.multiplyExact(width, height)];
+
+            int index = 0;
+            for (long featureY = minFeatureY; featureY <= maxFeatureY; featureY++) {
+                for (long featureX = minFeatureX; featureX <= maxFeatureX; featureX++) {
+                    features[index++] = createLandformFeature(
+                            random,
+                            featureX,
+                            featureY,
+                            spacing);
+                }
+            }
+            return new LandformFeatureGrid(
+                    minFeatureX,
+                    minFeatureY,
+                    width,
+                    height,
+                    spacing,
+                    features);
+        }
+
+        int spacing() {
+            return spacing;
+        }
+
+        LandformFeature get(long featureX, long featureY) {
+            long localX = featureX - minFeatureX;
+            long localY = featureY - minFeatureY;
+            if (localX < 0L || localX >= width || localY < 0L || localY >= height) {
+                throw new IllegalArgumentException(
+                        "landform feature outside cached grid: " + featureX + "," + featureY);
+            }
+            return features[Math.toIntExact(localY * width + localX)];
         }
     }
 }
