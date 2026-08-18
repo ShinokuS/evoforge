@@ -99,7 +99,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         ButtonGroup<TextButton> tabs = new ButtonGroup<>(worldButton, performanceButton);
         tabs.setMinCheckCount(1);
         tabs.setMaxCheckCount(1);
-        tabs.setUncheckLast(true);
+        tabs.setUncheckLast(false);
 
         ChangeListener tabListener = new ChangeListener() {
             @Override
