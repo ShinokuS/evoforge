@@ -45,8 +45,8 @@ final class GeneratedWorldAuditProfileTest {
                         profile.climate(),
                         bounds,
                         profile.atmosphericForcingPolicy(),
-                        GenerationRevision.V11);
-                assertEquals(GenerationRevision.V11, world.atlas().genesis().generationRevision());
+                        GenerationRevision.V12);
+                assertEquals(GenerationRevision.V12, world.atlas().genesis().generationRevision());
 
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
@@ -73,7 +73,7 @@ final class GeneratedWorldAuditProfileTest {
                             initial.generatedShorelineColumns(),
                             snapshot.generatedShorelineColumns());
                     System.out.println(
-                            "revision=" + GenerationRevision.V11.value()
+                            "revision=" + GenerationRevision.V12.value()
                                     + " scenario=" + profile.name()
                                     + " side=" + side
                                     + " "

@@ -12,7 +12,8 @@ record WorldGenerationPreviewConfig(
         int coveragePpm,
         int scalePpm,
         int fragmentationPpm,
-        int reliefPpm) {
+        int reliefPpm,
+        int localReliefPpm) {
 
     WorldGenerationPreviewConfig {
         if (width <= 0 || length <= 0) {
@@ -22,6 +23,7 @@ record WorldGenerationPreviewConfig(
         requirePpm(scalePpm, "scalePpm");
         requirePpm(fragmentationPpm, "fragmentationPpm");
         requirePpm(reliefPpm, "reliefPpm");
+        requirePpm(localReliefPpm, "localReliefPpm");
     }
 
     WorldBounds bounds() {
@@ -41,7 +43,8 @@ record WorldGenerationPreviewConfig(
                 NormalizedValue.ofPartsPerMillion(coveragePpm),
                 NormalizedValue.ofPartsPerMillion(scalePpm),
                 NormalizedValue.ofPartsPerMillion(fragmentationPpm),
-                NormalizedValue.ofPartsPerMillion(reliefPpm));
+                NormalizedValue.ofPartsPerMillion(reliefPpm),
+                NormalizedValue.ofPartsPerMillion(localReliefPpm));
     }
 
     long columnCount() {

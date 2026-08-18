@@ -12,6 +12,7 @@ final class WorldGenerationPreviewSettings {
     private int scalePpm = 750_000;
     private int fragmentationPpm = 250_000;
     private int reliefPpm = 600_000;
+    private int localReliefPpm = 350_000;
 
     int width() {
         return width;
@@ -73,6 +74,14 @@ final class WorldGenerationPreviewSettings {
         reliefPpm = requirePpm(value, "reliefPpm");
     }
 
+    int localReliefPpm() {
+        return localReliefPpm;
+    }
+
+    void localReliefPpm(int value) {
+        localReliefPpm = requirePpm(value, "localReliefPpm");
+    }
+
     long columnCount() {
         return (long) width * length;
     }
@@ -89,7 +98,8 @@ final class WorldGenerationPreviewSettings {
                 coveragePpm,
                 scalePpm,
                 fragmentationPpm,
-                reliefPpm);
+                reliefPpm,
+                localReliefPpm);
     }
 
     private static int requireDimension(int value, String name) {

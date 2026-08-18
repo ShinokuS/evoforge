@@ -47,7 +47,7 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
     /** Revision-aware generated-world compiler policy; Shape identity never participates. */
     public static TerrainShapeGenerationStage forRevision(GenerationRevision revision) {
         if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
-        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
+        TerrainSurfaceTargetSampler targets = usesSmoothVoxelTargets(revision)
                 ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
                 : TerrainSurfaceTargetSampler.precise();
         return new TerrainShapeGenerationStage(
@@ -60,7 +60,7 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
     @Override
     public TerrainShapeField generate(GenerationRevision revision, ElevationField elevation) {
         if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
-        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
+        TerrainSurfaceTargetSampler targets = usesSmoothVoxelTargets(revision)
                 ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
                 : targetSampler;
         if (targets == targetSampler) return generate(elevation);
@@ -113,6 +113,11 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
             }
         }
         return best;
+    }
+
+    private static boolean usesSmoothVoxelTargets(GenerationRevision revision) {
+        return GenerationRevision.V11.equals(revision)
+                || GenerationRevision.V12.equals(revision);
     }
 
     private static long absoluteDifference(long first, long second) {

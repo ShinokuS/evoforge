@@ -10,7 +10,10 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
 
-/** Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology. */
+/**
+ * Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology,
+ * and V12 separates scale-aware local relief from macro relief.
+ */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
     public static final long SEA_LEVEL_SUBUNITS = 0L;
@@ -24,14 +27,19 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:ridge-b");
     private static final GenerationPurposeId BASIN = GenerationPurposeId.of("world:basin");
+    private static final GenerationPurposeId LOCAL_RELIEF = GenerationPurposeId.of("world:local-relief");
     private static final GenerationPurposeId WARP_X = GenerationPurposeId.of("world:morphology-warp-x");
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:morphology-warp-y");
     private static final int SAMPLE_MAX = 65_535;
+    private static final int LOCAL_RELIEF_MIN_SCALE = 20;
+    private static final int LOCAL_RELIEF_MAX_SCALE = 48;
+    private static final int LOCAL_RELIEF_MAX_AMPLITUDE_PPM = 140_000;
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         GenerationRevision revision = genesis.generationRevision();
+        if (GenerationRevision.V12.equals(revision)) return generateScaleAwareMorphology(genesis);
         if (GenerationRevision.V11.equals(revision)) return generateOrganicMorphology(genesis);
         if (GenerationRevision.V10.equals(revision)) return generateMacroMorphology(genesis);
         if (GenerationRevision.V9.equals(revision)) return generateOceanFirst(genesis);
@@ -119,7 +127,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
      * This method stays isolated because its exact output is a stable revision contract.
      */
     private static ElevationField generateMacroMorphology(WorldGenesis genesis) {
-        return generateStructuredMorphology(genesis, false);
+        return generateStructuredMorphology(genesis, false, false);
     }
 
     /**
@@ -128,10 +136,22 @@ public final class ElevationGenerationStage implements ElevationGenerator {
      * relief belts while exact coverage calibration still chooses the requested number of land cells.
      */
     private static ElevationField generateOrganicMorphology(WorldGenesis genesis) {
-        return generateStructuredMorphology(genesis, true);
+        return generateStructuredMorphology(genesis, true, false);
     }
 
-    private static ElevationField generateStructuredMorphology(WorldGenesis genesis, boolean organic) {
+    /**
+     * V12 decomposes morphology into macro relief plus a bounded local relief band. Macro structures
+     * no longer collapse to very small wavelengths on compact worlds, while local wavelengths stop
+     * growing once they are large enough to remain useful at detailed zoom on large worlds.
+     */
+    private static ElevationField generateScaleAwareMorphology(WorldGenesis genesis) {
+        return generateStructuredMorphology(genesis, true, true);
+    }
+
+    private static ElevationField generateStructuredMorphology(
+            WorldGenesis genesis,
+            boolean organic,
+            boolean scaleAwareLocalRelief) {
         WorldBounds bounds = genesis.spec().bounds();
         validateOceanFirstBounds(bounds);
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -167,10 +187,20 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                 (long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
         long oceanAmplitude = Math.multiplyExact(
                 -(long) bounds.minZ(), ElevationField.SUBUNITS_PER_CELL);
-        int upliftScale = Math.max(8, maxDimension / 3);
-        int ridgeScale = Math.max(4, maxDimension / 10);
-        int basinScale = Math.max(8, maxDimension / 4);
+        int upliftScale = scaleAwareLocalRelief
+                ? Math.max(24, maxDimension / 3)
+                : Math.max(8, maxDimension / 3);
+        int ridgeScale = scaleAwareLocalRelief
+                ? Math.max(16, maxDimension / 10)
+                : Math.max(4, maxDimension / 10);
+        int basinScale = scaleAwareLocalRelief
+                ? Math.max(24, maxDimension / 4)
+                : Math.max(8, maxDimension / 4);
+        int localScale = scaleAwareLocalRelief ? localReliefScale(maxDimension) : 0;
         int reliefPpm = intent.relief().partsPerMillion();
+        int localReliefPpm = scaleAwareLocalRelief
+                ? intent.localRelief().partsPerMillion()
+                : 0;
 
         for (int rank = 0; rank < area; rank++) {
             int cell = (int) rankKeys[rank];
@@ -208,9 +238,37 @@ public final class ElevationGenerationStage implements ElevationGenerator {
                     / NormalizedValue.SCALE);
             int heightPpm = lowlandPpm + (int) (((long) (structuredPpm - lowlandPpm)
                     * reliefPpm) / NormalizedValue.SCALE);
+            if (localReliefPpm > 0) {
+                heightPpm = addLocalRelief(
+                        heightPpm,
+                        random,
+                        x,
+                        y,
+                        localScale,
+                        localReliefPpm);
+            }
             elevations[cell] = positiveNormalizedHeight(clampPpm(heightPpm), landAmplitude);
         }
         return new DenseElevationField(bounds, elevations);
+    }
+
+    private static int addLocalRelief(
+            int heightPpm,
+            GenerationRandom random,
+            int x,
+            int y,
+            int scale,
+            int localReliefPpm) {
+        int samplePpm = sampleToPpm(smoothValueNoise(random, LOCAL_RELIEF, x, y, scale));
+        long centeredPpm = (long) samplePpm * 2L - NormalizedValue.SCALE;
+        long offsetPpm = centeredPpm * localReliefPpm / NormalizedValue.SCALE;
+        offsetPpm = offsetPpm * LOCAL_RELIEF_MAX_AMPLITUDE_PPM / NormalizedValue.SCALE;
+        return clampPpm((long) heightPpm + offsetPpm);
+    }
+
+    private static int localReliefScale(int maxDimension) {
+        int proposed = Math.max(1, maxDimension / 3);
+        return Math.max(LOCAL_RELIEF_MIN_SCALE, Math.min(LOCAL_RELIEF_MAX_SCALE, proposed));
     }
 
     private static void validateOceanFirstBounds(WorldBounds bounds) {

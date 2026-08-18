@@ -13,6 +13,7 @@ public record GenerationRevision(String value) {
     public static final GenerationRevision V9 = new GenerationRevision("evoforge:worldgen-v9");
     public static final GenerationRevision V10 = new GenerationRevision("evoforge:worldgen-v10");
     public static final GenerationRevision V11 = new GenerationRevision("evoforge:worldgen-v11");
+    public static final GenerationRevision V12 = new GenerationRevision("evoforge:worldgen-v12");
 
     public GenerationRevision {
         value = GenesisKeyFormat.requireKey(value, "generation revision");

@@ -75,7 +75,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         content.add(title).left().padBottom(4f);
         content.row();
-        Label subtitle = new Label("V11 organic morphology + surface shapes", skin, "subtitle");
+        Label subtitle = new Label("V12 scale-aware macro + local relief", skin, "subtitle");
         content.add(subtitle).left().padBottom(14f);
         content.row();
 
@@ -92,7 +92,12 @@ final class WorldGenerationSettingsPanel implements Disposable {
                 "Fragmentation",
                 settings.fragmentationPpm(),
                 settings::fragmentationPpm);
-        addPercentControl(content, "Relief", settings.reliefPpm(), settings::reliefPpm);
+        addPercentControl(content, "Macro relief", settings.reliefPpm(), settings::reliefPpm);
+        addPercentControl(
+                content,
+                "Local relief",
+                settings.localReliefPpm(),
+                settings::localReliefPpm);
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);

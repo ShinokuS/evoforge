@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationPreviewSettingsTest {
 
     @Test
-    void defaultsMatchCurrentV10PreviewInputs() {
+    void defaultsMatchCurrentV12PreviewInputs() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
         WorldGenerationPreviewConfig snapshot = settings.snapshot();
 
@@ -20,6 +20,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(750_000, snapshot.scalePpm());
         assertEquals(250_000, snapshot.fragmentationPpm());
         assertEquals(600_000, snapshot.reliefPpm());
+        assertEquals(350_000, snapshot.localReliefPpm());
         assertEquals(4_096L, snapshot.columnCount());
         assertEquals(new WorldBounds(-32, 31, -32, 31, -12, 12), snapshot.bounds());
     }
@@ -47,12 +48,14 @@ final class WorldGenerationPreviewSettingsTest {
         settings.length(777);
         settings.coveragePpm(650_000);
         settings.reliefPpm(900_000);
+        settings.localReliefPpm(800_000);
         settings.seed(44L);
 
         assertEquals(64, generated.width());
         assertEquals(64, generated.length());
         assertEquals(350_000, generated.coveragePpm());
         assertEquals(600_000, generated.reliefPpm());
+        assertEquals(350_000, generated.localReliefPpm());
         assertEquals(1L, generated.seed());
 
         WorldGenerationPreviewConfig next = settings.snapshot();
@@ -60,6 +63,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(777, next.length());
         assertEquals(650_000, next.coveragePpm());
         assertEquals(900_000, next.reliefPpm());
+        assertEquals(800_000, next.localReliefPpm());
         assertEquals(44L, next.seed());
     }
 
@@ -83,5 +87,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertThrows(IllegalArgumentException.class, () -> settings.length(2_049));
         assertThrows(IllegalArgumentException.class, () -> settings.coveragePpm(-1));
         assertThrows(IllegalArgumentException.class, () -> settings.reliefPpm(1_000_001));
+        assertThrows(IllegalArgumentException.class, () -> settings.localReliefPpm(-1));
+        assertThrows(IllegalArgumentException.class, () -> settings.localReliefPpm(1_000_001));
     }
 }
