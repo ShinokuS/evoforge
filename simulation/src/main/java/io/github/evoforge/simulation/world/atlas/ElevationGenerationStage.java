@@ -28,6 +28,8 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:ridge-b");
     private static final GenerationPurposeId BASIN = GenerationPurposeId.of("world:basin");
     private static final GenerationPurposeId LOCAL_RELIEF = GenerationPurposeId.of("world:local-relief");
+    private static final GenerationPurposeId LOCAL_RELIEF_DETAIL =
+            GenerationPurposeId.of("world:local-relief-detail");
     private static final GenerationPurposeId WARP_X = GenerationPurposeId.of("world:morphology-warp-x");
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:morphology-warp-y");
     private static final int SAMPLE_MAX = 65_535;
@@ -37,9 +39,12 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     private static final int V12_UPLIFT_SCALE = 112;
     private static final int V12_RIDGE_SCALE = 56;
     private static final int V12_BASIN_SCALE = 144;
-    private static final int V12_LOCAL_RELIEF_SCALE = 40;
+    private static final int V12_LOCAL_RELIEF_PRIMARY_SCALE = 40;
+    private static final int V12_LOCAL_RELIEF_DETAIL_SCALE = 18;
+    private static final int V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM = 650_000;
+    private static final int V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM =
+            NormalizedValue.SCALE - V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM;
     private static final int V12_COASTAL_TRANSITION_CELLS = 12;
-    private static final int V12_LOCAL_RELIEF_DEAD_ZONE_PPM = 125_000;
     private static final long V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS =
             8L * ElevationField.SUBUNITS_PER_CELL;
 
@@ -334,6 +339,12 @@ public final class ElevationGenerationStage implements ElevationGenerator {
         return new DenseElevationField(bounds, elevations);
     }
 
+    /**
+     * Two smooth cell-space bands make local relief read as rolling terrain rather than one broad
+     * quantized shelf. The smaller band is deliberately subordinate: it breaks long plateaus but
+     * cannot turn a compact world back into per-cell noise. There is no exact dead zone; calm areas
+     * emerge from small gradients instead of a hard flat band in the authored field.
+     */
     private static long addV12LocalRelief(
             long baseElevation,
             long landAmplitude,
@@ -341,27 +352,30 @@ public final class ElevationGenerationStage implements ElevationGenerator {
             int x,
             int y,
             int localReliefPpm) {
-        int samplePpm = sampleToPpm(
-                smoothValueNoise(random, LOCAL_RELIEF, x, y, V12_LOCAL_RELIEF_SCALE));
-        long centeredPpm = (long) samplePpm * 2L - NormalizedValue.SCALE;
-        long shapedPpm = v12LocalReliefShapePpm(centeredPpm);
-        long fullStrengthOffset = shapedPpm * V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
+        long primaryPpm = centeredPpm(organicValueNoise(
+                random,
+                LOCAL_RELIEF,
+                x,
+                y,
+                V12_LOCAL_RELIEF_PRIMARY_SCALE));
+        long detailPpm = centeredPpm(organicValueNoise(
+                random,
+                LOCAL_RELIEF_DETAIL,
+                x,
+                y,
+                V12_LOCAL_RELIEF_DETAIL_SCALE));
+        long combinedPpm = (primaryPpm * V12_LOCAL_RELIEF_PRIMARY_WEIGHT_PPM
+                + detailPpm * V12_LOCAL_RELIEF_DETAIL_WEIGHT_PPM)
+                / NormalizedValue.SCALE;
+
+        long fullStrengthOffset = combinedPpm * V12_LOCAL_RELIEF_MAX_AMPLITUDE_SUBUNITS
                 / NormalizedValue.SCALE;
         long offset = fullStrengthOffset * localReliefPpm / NormalizedValue.SCALE;
         return Math.max(1L, Math.min(landAmplitude, baseElevation + offset));
     }
 
-    private static long v12LocalReliefShapePpm(long centeredPpm) {
-        long magnitude = Math.abs(centeredPpm);
-        if (magnitude <= V12_LOCAL_RELIEF_DEAD_ZONE_PPM) return 0L;
-
-        long coordinate = (magnitude - V12_LOCAL_RELIEF_DEAD_ZONE_PPM) * NormalizedValue.SCALE
-                / (NormalizedValue.SCALE - V12_LOCAL_RELIEF_DEAD_ZONE_PPM);
-        long coordinateSquared = coordinate * coordinate;
-        long smooth = coordinateSquared
-                * (3L * NormalizedValue.SCALE - 2L * coordinate)
-                / ((long) NormalizedValue.SCALE * NormalizedValue.SCALE);
-        return centeredPpm < 0L ? -smooth : smooth;
+    private static long centeredPpm(int sample) {
+        return (long) sampleToPpm(sample) * 2L - NormalizedValue.SCALE;
     }
 
     /**
