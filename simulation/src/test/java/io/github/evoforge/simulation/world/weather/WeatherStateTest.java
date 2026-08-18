@@ -35,7 +35,8 @@ final class WeatherStateTest {
     @Test
     void calmPhysicalWeatherKeepsPotentialEvaporativeDemandFromClimate() {
         WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -1, 1);
-        WaterDepthRate evaporation = WaterDepthRate.millimetersPerYear(2_400L);
+        WaterDepthRate evaporation =
+                WaterDepthRate.ofMillimeters(2_400L, Duration.ofDays(365L));
         ClimateNormalsField climate = new ClimateNormalsField() {
             @Override public WorldBounds bounds() { return bounds; }
             @Override public ClimateTemperature meanTemperatureAt(int x, int y) {
@@ -45,7 +46,8 @@ final class WeatherStateTest {
                 return ClimateWaterNormal.Kind.PHYSICAL_WATER_DEPTH_PER_TIME;
             }
             @Override public ClimateWaterNormal precipitationWaterNormalAt(int x, int y) {
-                return ClimateWaterNormal.physical(WaterDepthRate.millimetersPerYear(1_200L));
+                return ClimateWaterNormal.physical(
+                        WaterDepthRate.ofMillimeters(1_200L, Duration.ofDays(365L)));
             }
             @Override public ClimateWaterNormal evaporativeDemandWaterNormalAt(int x, int y) {
                 return ClimateWaterNormal.physical(evaporation);
