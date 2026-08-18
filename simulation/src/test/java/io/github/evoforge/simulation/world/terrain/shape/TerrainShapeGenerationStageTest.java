@@ -88,6 +88,41 @@ final class TerrainShapeGenerationStageTest {
     }
 
     @Test
+    void v11RepresentsBroadSmoothSlopeAtActualVoxelTransitions() {
+        WorldBounds bounds = new WorldBounds(-32, 31, -8, 7, -8, 8);
+        ElevationField broadSlope = field(
+                bounds,
+                (x, y) -> (x + 32) * 100_000 + 50_000);
+
+        TerrainShapeField precise = TerrainShapeGenerationStage.standard().generate(broadSlope);
+        TerrainShapeField voxelAware = TerrainShapeGenerationStage
+                .forRevision(GenerationRevision.V11)
+                .generate(broadSlope);
+
+        assertEquals(0L, precise.overrideCount());
+        assertTrue(
+                voxelAware.overrideCount() >= 80L,
+                "broad slopes should expose coherent shape bands where their voxel Z actually changes");
+        assertTrue(
+                voxelAware.overrideCount() < 64L * 16L,
+                "voxel-aware fitting must not turn an entire broad slope into shape overrides");
+    }
+
+    @Test
+    void v11DoesNotNormalizeAbruptOneLevelCliffIntoSurfaceShape() {
+        WorldBounds bounds = new WorldBounds(-4, 3, -4, 3, -8, 8);
+        ElevationField cliff = field(
+                bounds,
+                (x, y) -> x < 0 ? 500_000 : 1_500_000);
+
+        TerrainShapeField shapes = TerrainShapeGenerationStage
+                .forRevision(GenerationRevision.V11)
+                .generate(cliff);
+
+        assertEquals(0L, shapes.overrideCount());
+    }
+
+    @Test
     void representativeV10WorldActuallyUsesSupportedSurfaceGeometry() {
         WorldBounds bounds = new WorldBounds(-32, 31, -32, 31, -12, 12);
         WorldGenesis genesis = new WorldGenesis(
@@ -112,9 +147,36 @@ final class TerrainShapeGenerationStageTest {
                 "shape compilation must preserve ordinary full-cell terrain where no candidate fits");
     }
 
+    @Test
+    void representativeV11WorldUsesRevisionAwareSurfaceGeometry() {
+        WorldBounds bounds = new WorldBounds(-64, 63, -64, 63, -12, 12);
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds),
+                42L,
+                GenerationRevision.V11,
+                RngRevision.V1,
+                new WorldGenerationIntent(
+                        NormalizedValue.ofPartsPerMillion(350_000),
+                        NormalizedValue.ofPartsPerMillion(750_000),
+                        NormalizedValue.ofPartsPerMillion(250_000),
+                        NormalizedValue.ofPartsPerMillion(800_000)));
+        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
+
+        TerrainShapeField shapes = TerrainShapeGenerationStage
+                .forRevision(GenerationRevision.V11)
+                .generate(elevation);
+
+        assertTrue(shapes.overrideCount() > 0L);
+        assertTrue(shapes.overrideCount() < 128L * 128L);
+    }
+
     private static ElevationField field(IntBinaryOperator heights) {
+        return field(BOUNDS, heights);
+    }
+
+    private static ElevationField field(WorldBounds bounds, IntBinaryOperator heights) {
         return new ElevationField() {
-            @Override public WorldBounds bounds() { return BOUNDS; }
+            @Override public WorldBounds bounds() { return bounds; }
 
             @Override
             public int elevationAt(int x, int y) {

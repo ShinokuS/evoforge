@@ -11,7 +11,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Deterministic first geology model: coherent jittered macro-provinces with vertical strata.
  *
  * <p>V1-V3 predate generated geology and intentionally reproduce the former uniform granite
- * bedrock identity. V4+ generate multiple content-defined units without material-specific rules.</p>
+ * bedrock identity. V4+ revisions currently share the same generated geology contract; newer
+ * revisions may change other world-generation stages without silently changing geology.</p>
  */
 public final class GeologyGenerationStage implements GeologyGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:geology");
@@ -57,12 +58,7 @@ public final class GeologyGenerationStage implements GeologyGenerator {
             java.util.Arrays.fill(unitOrdinals, (char) granite);
             return new DenseGeologyField(bounds, profile, unitOrdinals, provinceIds);
         }
-        if (!GenerationRevision.V4.equals(revision)
-                && !GenerationRevision.V5.equals(revision)
-                && !GenerationRevision.V6.equals(revision)
-                && !GenerationRevision.V7.equals(revision)
-                && !GenerationRevision.V8.equals(revision)
-                && !GenerationRevision.V9.equals(revision)) {
+        if (!usesGeneratedGeology(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
@@ -92,6 +88,17 @@ public final class GeologyGenerationStage implements GeologyGenerator {
             }
         }
         return new DenseGeologyField(bounds, profile, unitOrdinals, provinceIds);
+    }
+
+    private static boolean usesGeneratedGeology(GenerationRevision revision) {
+        return GenerationRevision.V4.equals(revision)
+                || GenerationRevision.V5.equals(revision)
+                || GenerationRevision.V6.equals(revision)
+                || GenerationRevision.V7.equals(revision)
+                || GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)
+                || GenerationRevision.V10.equals(revision)
+                || GenerationRevision.V11.equals(revision);
     }
 
     private int legacyGraniteOrdinal() {

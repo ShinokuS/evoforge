@@ -8,9 +8,9 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Deterministic generated channel network derived from drainage accumulation and available surface
  * headroom.
  *
- * <p>V1/V2 predate generated surface Water and expose no channels. V3+ preserve the same durable
- * channel footprint. Climate may affect initial water but never whether this generated channel fact
- * exists, so dry climates can retain dry channels.</p>
+ * <p>V1/V2 predate generated surface Water and expose no channels. V3+ revisions currently share
+ * the same durable channel-footprint rule. Climate may affect initial water but never whether this
+ * generated channel fact exists, so dry climates can retain dry channels.</p>
  */
 public final class HydrographyGenerationStage implements HydrographyGenerator {
 
@@ -36,13 +36,7 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
             return new DenseHydrographyField(bounds, channels);
         }
-        if (!GenerationRevision.V3.equals(revision)
-                && !GenerationRevision.V4.equals(revision)
-                && !GenerationRevision.V5.equals(revision)
-                && !GenerationRevision.V6.equals(revision)
-                && !GenerationRevision.V7.equals(revision)
-                && !GenerationRevision.V8.equals(revision)
-                && !GenerationRevision.V9.equals(revision)) {
+        if (!usesGeneratedChannels(revision)) {
             throw new IllegalArgumentException(
                     "unsupported generation revision: " + revision.value());
         }
@@ -59,6 +53,18 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
             }
         }
         return new DenseHydrographyField(bounds, channels);
+    }
+
+    private static boolean usesGeneratedChannels(GenerationRevision revision) {
+        return GenerationRevision.V3.equals(revision)
+                || GenerationRevision.V4.equals(revision)
+                || GenerationRevision.V5.equals(revision)
+                || GenerationRevision.V6.equals(revision)
+                || GenerationRevision.V7.equals(revision)
+                || GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)
+                || GenerationRevision.V10.equals(revision)
+                || GenerationRevision.V11.equals(revision);
     }
 
     static long channelThreshold(int area) {

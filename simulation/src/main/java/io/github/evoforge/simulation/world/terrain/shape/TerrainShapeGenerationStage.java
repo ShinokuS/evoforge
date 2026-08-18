@@ -1,12 +1,13 @@
 package io.github.evoforge.simulation.world.terrain.shape;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.List;
 
 /**
- * Fits precise generated elevation to the available material-agnostic surface templates.
+ * Fits generated elevation targets to the available material-agnostic surface templates.
  *
  * <p>The algorithm never branches on a concrete Shape. It compares only surface geometry; the
  * selected template carries an opaque runtime Shape override for later materialization. Abrupt or
@@ -15,21 +16,55 @@ import java.util.List;
 public final class TerrainShapeGenerationStage implements TerrainShapeGenerator {
     private final TerrainShapePalette palette;
     private final TerrainShapeCalibration calibration;
+    private final TerrainSurfaceTargetSampler targetSampler;
 
     public TerrainShapeGenerationStage(
             TerrainShapePalette palette,
             TerrainShapeCalibration calibration) {
-        if (palette == null || calibration == null) {
+        this(palette, calibration, TerrainSurfaceTargetSampler.precise());
+    }
+
+    public TerrainShapeGenerationStage(
+            TerrainShapePalette palette,
+            TerrainShapeCalibration calibration,
+            TerrainSurfaceTargetSampler targetSampler) {
+        if (palette == null || calibration == null || targetSampler == null) {
             throw new IllegalArgumentException("terrain shape generation dependencies must not be null");
         }
         this.palette = palette;
         this.calibration = calibration;
+        this.targetSampler = targetSampler;
     }
 
+    /** Stable original precise fitting policy used by pre-V11 generated worlds and direct tests. */
     public static TerrainShapeGenerationStage standard() {
         return new TerrainShapeGenerationStage(
                 TerrainShapePalette.standard(),
-                TerrainShapeCalibration.representative());
+                TerrainShapeCalibration.representative(),
+                TerrainSurfaceTargetSampler.precise());
+    }
+
+    /** Revision-aware generated-world compiler policy; Shape identity never participates. */
+    public static TerrainShapeGenerationStage forRevision(GenerationRevision revision) {
+        if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
+        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
+                ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
+                : TerrainSurfaceTargetSampler.precise();
+        return new TerrainShapeGenerationStage(
+                TerrainShapePalette.standard(),
+                TerrainShapeCalibration.representative(),
+                targets);
+    }
+
+    /** Uses this stage's palette/calibration while selecting only the revision-specific target law. */
+    @Override
+    public TerrainShapeField generate(GenerationRevision revision, ElevationField elevation) {
+        if (revision == null) throw new IllegalArgumentException("generation revision must not be null");
+        TerrainSurfaceTargetSampler targets = GenerationRevision.V11.equals(revision)
+                ? TerrainSurfaceTargetSampler.smoothVoxelTransitions()
+                : targetSampler;
+        if (targets == targetSampler) return generate(elevation);
+        return new TerrainShapeGenerationStage(palette, calibration, targets).generate(elevation);
     }
 
     @Override
@@ -46,7 +81,7 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         int index = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                TerrainSurfacePatch target = targetPatch(elevation, x, y);
+                TerrainSurfacePatch target = targetSampler.sample(elevation, x, y);
                 int selectedIndex = bestTemplate(target, templates);
                 selected[index++] = (byte) selectedIndex;
                 if (templates.get(selectedIndex).shapeOverride().isPresent()) overrides++;
@@ -78,37 +113,6 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
             }
         }
         return best;
-    }
-
-    private static TerrainSurfacePatch targetPatch(ElevationField elevation, int x, int y) {
-        long center = elevation.elevationSubunitsAt(x, y);
-        long cell = ElevationField.SUBUNITS_PER_CELL;
-        long base = Math.multiplyExact(Math.floorDiv(center, cell), cell);
-        return new TerrainSurfacePatch(
-                boundaryHeight(elevation, x, y, x - 1L, y, center) - base,
-                boundaryHeight(elevation, x, y, x + 1L, y, center) - base,
-                boundaryHeight(elevation, x, y, x, y - 1L, center) - base,
-                boundaryHeight(elevation, x, y, x, y + 1L, center) - base);
-    }
-
-    private static long boundaryHeight(
-            ElevationField elevation,
-            int x,
-            int y,
-            long neighborX,
-            long neighborY,
-            long center) {
-        WorldBounds bounds = elevation.bounds();
-        if (neighborX < bounds.minX() || neighborX > bounds.maxX()
-                || neighborY < bounds.minY() || neighborY > bounds.maxY()) {
-            return center;
-        }
-        long neighbor = elevation.elevationSubunitsAt((int) neighborX, (int) neighborY);
-        return midpoint(center, neighbor);
-    }
-
-    private static long midpoint(long first, long second) {
-        return first / 2L + second / 2L + (first % 2L + second % 2L) / 2L;
     }
 
     private static long absoluteDifference(long first, long second) {

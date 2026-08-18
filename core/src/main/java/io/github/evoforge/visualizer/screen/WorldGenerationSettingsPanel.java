@@ -75,7 +75,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         content.add(title).left().padBottom(4f);
         content.row();
-        Label subtitle = new Label("V10 macro morphology + surface shapes", skin, "subtitle");
+        Label subtitle = new Label("V11 organic morphology + surface shapes", skin, "subtitle");
         content.add(subtitle).left().padBottom(14f);
         content.row();
 

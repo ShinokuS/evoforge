@@ -162,7 +162,9 @@ public final class GeneratedWorldPreparation {
             throw new IllegalStateException(
                     "generated surface morphology must match world genesis bounds");
         }
-        TerrainShapeField shapes = terrainShapeGenerator.generate(atlas.elevation());
+        TerrainShapeField shapes = terrainShapeGenerator.generate(
+                atlas.genesis().generationRevision(),
+                atlas.elevation());
         if (shapes == null) {
             throw new IllegalStateException("terrain shape generator returned null");
         }

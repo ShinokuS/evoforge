@@ -9,8 +9,10 @@ import io.github.evoforge.simulation.world.climate.ClimateTemperature;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnostics;
 import io.github.evoforge.simulation.world.diagnostics.GeneratedWorldDiagnosticsFormat;
 import io.github.evoforge.simulation.world.genesis.ClimateSpec;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolumeRate;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
+import io.github.evoforge.simulation.world.mechanics.measurement.WaterDepthRate;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.Test;
 final class GeneratedWorldAuditProfileTest {
 
     private static final long[] SEEDS = {0L, 1L, 42L, 991L, 123_456_789L};
+    private static final Duration CLIMATE_YEAR = Duration.ofDays(365L);
 
     @Test
     void printsRepresentativeGeneratedWorldCheckpoints() {
@@ -41,13 +44,16 @@ final class GeneratedWorldAuditProfileTest {
                         seed,
                         profile.climate(),
                         bounds,
-                        profile.atmosphericForcingPolicy());
+                        profile.atmosphericForcingPolicy(),
+                        GenerationRevision.V11);
+                assertEquals(GenerationRevision.V11, world.atlas().genesis().generationRevision());
+
                 List<GeneratedWorldDiagnostics> trace =
                         new GeneratedWorldWarmup().run(world, checkpoints);
 
                 GeneratedWorldDiagnostics initial = trace.get(0);
                 assertTrue(initial.geologyProvinces() >= 1);
-                assertTrue(initial.geologyUnits() > 1, "V5 geology collapsed to one unit");
+                assertTrue(initial.geologyUnits() > 1, "generated geology collapsed to one unit");
                 assertTrue(initial.generatedInitialWaterVolume() > 0L);
                 assertTrue(initial.generatedInitialWaterColumns() > 0);
                 assertTrue(initial.generatedShorelineColumns() > 0);
@@ -67,7 +73,8 @@ final class GeneratedWorldAuditProfileTest {
                             initial.generatedShorelineColumns(),
                             snapshot.generatedShorelineColumns());
                     System.out.println(
-                            "scenario=" + profile.name()
+                            "revision=" + GenerationRevision.V11.value()
+                                    + " scenario=" + profile.name()
                                     + " side=" + side
                                     + " "
                                     + GeneratedWorldDiagnosticsFormat.line(snapshot));
@@ -97,16 +104,22 @@ final class GeneratedWorldAuditProfileTest {
         return List.of(
                 new AuditProfile(
                         "isolated-water-balance",
-                        ClimateSpec.STANDARD,
+                        physicalClimate(500L, 500L),
                         AtmosphericForcingPolicy.DISABLED),
                 new AuditProfile(
                         "fractional-net-supply",
-                        ClimateSpec.of(
-                                ClimateTemperature.ofMilliCelsius(12_000),
-                                250,
-                                CellVolumeRate.of(100_001L, 3L),
-                                CellVolumeRate.of(20_003L, 4L)),
+                        physicalClimate(800L, 200L),
                         AtmosphericForcingPolicy.CLIMATE_NORMALS));
+    }
+
+    private static ClimateSpec physicalClimate(
+            long precipitationMillimetersPerYear,
+            long evaporationMillimetersPerYear) {
+        return ClimateSpec.physical(
+                ClimateTemperature.ofMilliCelsius(12_000),
+                250,
+                WaterDepthRate.ofMillimeters(precipitationMillimetersPerYear, CLIMATE_YEAR),
+                WaterDepthRate.ofMillimeters(evaporationMillimetersPerYear, CLIMATE_YEAR));
     }
 
     /** Developer audit inputs, not a user-facing climate preset contract. */

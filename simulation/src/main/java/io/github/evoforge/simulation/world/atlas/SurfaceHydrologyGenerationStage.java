@@ -13,10 +13,10 @@ import java.math.BigInteger;
  * Deterministic finite surface-water initial conditions derived from durable hydrography.
  *
  * <p>V1/V2 predate generated surface Water. V3-V6 preserve the historical drainage-derived volume
- * law. V7 introduces climate moisture balance using legacy dimensionless-compatible rates. V8 keeps
- * the same causal rule while climate water normals are expressed physically as depth per time.
- * V9 retains that V8 hydrology behavior while changing macro elevation semantics. Channel membership
- * remains durable hydrography; runtime Liquid owns all later redistribution.</p>
+ * law. V7 introduces climate moisture balance using legacy dimensionless-compatible rates. V8+
+ * revisions retain that causal moisture-balance rule while climate water normals are expressed
+ * physically as depth per time. Channel membership remains durable hydrography; runtime Liquid
+ * owns all later redistribution.</p>
  */
 public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGenerator {
     private static final int[] DX = {-1, 0, 1, -1, 1, -1, 0, 1};
@@ -89,9 +89,7 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
             return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
         }
-        boolean climateAware = GenerationRevision.V7.equals(revision)
-                || GenerationRevision.V8.equals(revision)
-                || GenerationRevision.V9.equals(revision);
+        boolean climateAware = usesClimateMoistureBalance(revision);
         if (!GenerationRevision.V3.equals(revision)
                 && !GenerationRevision.V4.equals(revision)
                 && !GenerationRevision.V5.equals(revision)
@@ -130,6 +128,14 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         }
 
         return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
+    }
+
+    private static boolean usesClimateMoistureBalance(GenerationRevision revision) {
+        return GenerationRevision.V7.equals(revision)
+                || GenerationRevision.V8.equals(revision)
+                || GenerationRevision.V9.equals(revision)
+                || GenerationRevision.V10.equals(revision)
+                || GenerationRevision.V11.equals(revision);
     }
 
     private static int initialVolume(long contributing, long threshold, int area) {
