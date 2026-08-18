@@ -96,7 +96,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);
-        addLivePercentControl(content, "Z color sensitivity", elevationTintPpm, elevationTint);
+        addLivePercentControl(content, "Z contrast", elevationTintPpm, elevationTint);
         addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
         addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
 
