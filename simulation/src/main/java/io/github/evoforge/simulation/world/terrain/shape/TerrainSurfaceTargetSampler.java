@@ -34,4 +34,12 @@ public interface TerrainSurfaceTargetSampler {
     static TerrainSurfaceTargetSampler coherentVoxelTransitions() {
         return TerrainSurfaceTargetSamplers::coherentVoxelTransitionPatch;
     }
+
+    /**
+     * V13 target policy: retain only a sparse deterministic subset of coherent transition sites so
+     * ramps remain distributed across broad slopes without consuming whole mountain faces.
+     */
+    static TerrainSurfaceTargetSampler sparseCoherentVoxelTransitions() {
+        return TerrainSurfaceTargetSamplers::sparseCoherentVoxelTransitionPatch;
+    }
 }
