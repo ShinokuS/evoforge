@@ -70,8 +70,9 @@ final class V13MountainShapeGenerationTest {
 
         assertTrue(mountainCells > 500L, "representative world must contain a substantial mountain footprint");
         assertTrue(
-                mountainGeometry * 100L >= mountainCells,
-                "at least one percent of the mountain footprint should be representable by generic non-full geometry");
+                mountainGeometry * 20L >= mountainCells,
+                "at least five percent of the mountain footprint should be representable by generic non-full geometry; "
+                        + "geometry=" + mountainGeometry + ", mountainCells=" + mountainCells);
     }
 
     private static NormalizedValue normalized(int ppm) {
