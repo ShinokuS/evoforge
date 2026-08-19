@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.world.atlas;
 
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.PriorityQueue;
 
 /**
@@ -24,9 +26,15 @@ final class MountainTerraceRegularizer {
     private MountainTerraceRegularizer() {
     }
 
-    static ElevationField widenNarrowLevels(ElevationField base, ElevationField generated) {
+    static ElevationField widenNarrowLevels(
+            ElevationField base,
+            ElevationField generated,
+            long maximumUpliftCardinalRise) {
         if (base == null || generated == null) {
             throw new IllegalArgumentException("mountain terrace inputs must not be null");
+        }
+        if (maximumUpliftCardinalRise <= 0L) {
+            throw new IllegalArgumentException("maximum mountain uplift rise must be positive");
         }
         if (!sameHorizontalBounds(base.bounds(), generated.bounds())) {
             throw new IllegalArgumentException("base and generated surfaces must share horizontal bounds");
@@ -37,59 +45,181 @@ final class MountainTerraceRegularizer {
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.toIntExact(Math.multiplyExact((long) width, height));
 
-        long[] surface = new long[area];
+        long[] baseHeights = new long[area];
+        long[] uplift = new long[area];
+        boolean[] land = new boolean[area];
         boolean[] mountain = new boolean[area];
         boolean anyMountain = false;
+        long originalMaximumSurface = Long.MIN_VALUE;
         int cell = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 long baseHeight = base.elevationSubunitsAt(x, y);
                 long generatedHeight = generated.elevationSubunitsAt(x, y);
-                surface[cell] = generatedHeight;
-                mountain[cell] = baseHeight > ElevationGenerationStage.SEA_LEVEL_SUBUNITS
-                        && generatedHeight > baseHeight;
+                baseHeights[cell] = baseHeight;
+                land[cell] = baseHeight > ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
+                mountain[cell] = land[cell] && generatedHeight > baseHeight;
+                uplift[cell] = mountain[cell] ? generatedHeight - baseHeight : 0L;
                 anyMountain |= mountain[cell];
+                originalMaximumSurface = Math.max(originalMaximumSurface, generatedHeight);
                 cell++;
             }
         }
         if (!anyMountain) return generated;
 
-        PriorityQueue<SurfaceNode> queue = new PriorityQueue<>((first, second) -> {
-            int byHeight = Long.compare(second.height(), first.height());
-            return byHeight != 0 ? byHeight : Integer.compare(first.cell(), second.cell());
-        });
+        long[] upliftCaps = footprintUpliftCaps(
+                mountain,
+                land,
+                width,
+                height,
+                maximumUpliftCardinalRise);
         for (cell = 0; cell < area; cell++) {
-            if (mountain[cell]) queue.add(new SurfaceNode(cell, surface[cell]));
+            if (!mountain[cell]) continue;
+            long summitCap = originalMaximumSurface - baseHeights[cell];
+            upliftCaps[cell] = Math.min(upliftCaps[cell], summitCap);
+            if (uplift[cell] > upliftCaps[cell]) {
+                throw new IllegalStateException("accepted mountain uplift already exceeds terrace-preservation cap");
+            }
         }
 
-        // Monotone propagation can only raise lower cells. It therefore converges without the
-        // oscillation risk of a bidirectional smoothing pass and cannot shave or move a summit.
+        PriorityQueue<SurfaceNode> queue = new PriorityQueue<>((first, second) -> {
+            int bySurface = Long.compare(second.surfaceHeight(), first.surfaceHeight());
+            return bySurface != 0 ? bySurface : Integer.compare(first.cell(), second.cell());
+        });
+        for (cell = 0; cell < area; cell++) {
+            if (mountain[cell]) {
+                queue.add(new SurfaceNode(cell, baseHeights[cell] + uplift[cell]));
+            }
+        }
+
+        /*
+         * Solve both monotone lower-bound constraints in one queue:
+         *   1. the composed V12 + mountain surface should not spend a whole Z level in one cell;
+         *   2. the original mountain-uplift Lipschitz budget remains authoritative.
+         *
+         * Every adjustment is upward, inside the original mountain footprint, and capped by both
+         * the unchanged summit height and the amount of uplift that can taper back to zero before
+         * leaving that footprint. Consequently this corrects compressed terraces without replacing
+         * the accepted macro mountain with a newly smoothed surface.
+         */
         while (!queue.isEmpty()) {
             SurfaceNode node = queue.poll();
             cell = node.cell();
-            if (node.height() != surface[cell]) continue;
+            long surfaceHeight = baseHeights[cell] + uplift[cell];
+            if (node.surfaceHeight() != surfaceHeight) continue;
 
-            long minimumNeighbourHeight = surface[cell] - MAXIMUM_COMPOSED_CARDINAL_RISE;
             int x = cell % width;
             int y = cell / width;
-            if (x > 0) propagate(cell - 1, minimumNeighbourHeight, surface, mountain, queue);
-            if (x + 1 < width) propagate(cell + 1, minimumNeighbourHeight, surface, mountain, queue);
-            if (y > 0) propagate(cell - width, minimumNeighbourHeight, surface, mountain, queue);
-            if (y + 1 < height) propagate(cell + width, minimumNeighbourHeight, surface, mountain, queue);
+            if (x > 0) relaxNeighbour(
+                    cell, cell - 1, baseHeights, uplift, mountain, upliftCaps,
+                    maximumUpliftCardinalRise, queue);
+            if (x + 1 < width) relaxNeighbour(
+                    cell, cell + 1, baseHeights, uplift, mountain, upliftCaps,
+                    maximumUpliftCardinalRise, queue);
+            if (y > 0) relaxNeighbour(
+                    cell, cell - width, baseHeights, uplift, mountain, upliftCaps,
+                    maximumUpliftCardinalRise, queue);
+            if (y + 1 < height) relaxNeighbour(
+                    cell, cell + width, baseHeights, uplift, mountain, upliftCaps,
+                    maximumUpliftCardinalRise, queue);
         }
 
+        long[] surface = baseHeights.clone();
+        for (cell = 0; cell < area; cell++) {
+            if (mountain[cell]) surface[cell] = Math.addExact(baseHeights[cell], uplift[cell]);
+        }
         return new DenseElevationField(bounds, surface);
     }
 
-    private static void propagate(
+    private static void relaxNeighbour(
+            int source,
             int target,
-            long minimumHeight,
-            long[] surface,
+            long[] base,
+            long[] uplift,
             boolean[] mountain,
+            long[] upliftCaps,
+            long maximumUpliftRise,
             PriorityQueue<SurfaceNode> queue) {
-        if (!mountain[target] || minimumHeight <= surface[target]) return;
-        surface[target] = minimumHeight;
-        queue.add(new SurfaceNode(target, minimumHeight));
+        if (!mountain[target]) return;
+
+        long sourceSurface = base[source] + uplift[source];
+        long requiredByComposedSurface = sourceSurface
+                - MAXIMUM_COMPOSED_CARDINAL_RISE
+                - base[target];
+        long requiredByUpliftBudget = uplift[source] - maximumUpliftRise;
+        long requiredUplift = Math.max(requiredByComposedSurface, requiredByUpliftBudget);
+        long candidate = Math.min(upliftCaps[target], requiredUplift);
+        if (candidate <= uplift[target]) return;
+
+        uplift[target] = candidate;
+        queue.add(new SurfaceNode(target, base[target] + candidate));
+    }
+
+    /**
+     * Maximum uplift that can still fall to the fixed zero-uplift land outside the original mountain
+     * footprint at the original mountain rise rate. Ocean cells are intentionally not anchors: the
+     * accepted mountain model already owns its independent coastal-cliff policy.
+     */
+    private static long[] footprintUpliftCaps(
+            boolean[] mountain,
+            boolean[] land,
+            int width,
+            int height,
+            long maximumUpliftRise) {
+        int[] distance = new int[mountain.length];
+        Arrays.fill(distance, Integer.MAX_VALUE);
+        ArrayDeque<Integer> queue = new ArrayDeque<>();
+
+        for (int cell = 0; cell < mountain.length; cell++) {
+            if (!mountain[cell]) continue;
+            int x = cell % width;
+            int y = cell / width;
+            if ((x > 0 && land[cell - 1] && !mountain[cell - 1])
+                    || (x + 1 < width && land[cell + 1] && !mountain[cell + 1])
+                    || (y > 0 && land[cell - width] && !mountain[cell - width])
+                    || (y + 1 < height && land[cell + width] && !mountain[cell + width])) {
+                distance[cell] = 1;
+                queue.add(cell);
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            cellLoop:
+            {
+                int cell = queue.removeFirst();
+                int nextDistance = distance[cell] + 1;
+                int x = cell % width;
+                int y = cell / width;
+                if (x > 0) spreadDistance(cell - 1, nextDistance, mountain, distance, queue);
+                if (x + 1 < width) spreadDistance(cell + 1, nextDistance, mountain, distance, queue);
+                if (y > 0) spreadDistance(cell - width, nextDistance, mountain, distance, queue);
+                if (y + 1 < height) spreadDistance(cell + width, nextDistance, mountain, distance, queue);
+                break cellLoop;
+            }
+        }
+
+        long[] caps = new long[mountain.length];
+        for (int cell = 0; cell < caps.length; cell++) {
+            if (!mountain[cell]) {
+                caps[cell] = 0L;
+            } else if (distance[cell] == Integer.MAX_VALUE) {
+                caps[cell] = Long.MAX_VALUE;
+            } else {
+                caps[cell] = Math.multiplyExact((long) distance[cell], maximumUpliftRise);
+            }
+        }
+        return caps;
+    }
+
+    private static void spreadDistance(
+            int target,
+            int candidateDistance,
+            boolean[] mountain,
+            int[] distance,
+            ArrayDeque<Integer> queue) {
+        if (!mountain[target] || candidateDistance >= distance[target]) return;
+        distance[target] = candidateDistance;
+        queue.addLast(target);
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
@@ -99,6 +229,6 @@ final class MountainTerraceRegularizer {
                 && first.maxY() == second.maxY();
     }
 
-    private record SurfaceNode(int cell, long height) {
+    private record SurfaceNode(int cell, long surfaceHeight) {
     }
 }
