@@ -6,37 +6,36 @@ import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Replaceable V13 elevation generator: accepted V12 base morphology plus dedicated mountains.
+ * Replaceable V13 elevation pipeline: a capped V12 base plus one calibrated mountain algorithm.
  *
- * <p>The V12 base is deliberately generated inside a capped positive vertical range. V13 then uses
- * the remaining world height as mountain headroom. This prevents increasing world {@code maxZ}
- * from stretching every ordinary V12 hill into a mountain.</p>
+ * <p>The pipeline owns composition only. Base generation, semantic calibration and mountain spatial
+ * synthesis are independent dependencies, so each can be replaced without changing the others.</p>
  */
 public final class V13MountainTerrainGenerator implements ElevationGenerator {
     private final ElevationGenerator baseGenerator;
     private final MountainCalibrator calibrator;
     private final MountainRecipe recipe;
-    private final MountainMorphologyAlgorithm algorithm;
+    private final MountainElevationAlgorithm mountainAlgorithm;
 
     public V13MountainTerrainGenerator(
             ElevationGenerator baseGenerator,
             MountainCalibrator calibrator,
             MountainRecipe recipe) {
-        this(baseGenerator, calibrator, recipe, new MountainMorphologyAlgorithm());
+        this(baseGenerator, calibrator, recipe, new MountainMorphologyAlgorithm()::generate);
     }
 
-    V13MountainTerrainGenerator(
+    public V13MountainTerrainGenerator(
             ElevationGenerator baseGenerator,
             MountainCalibrator calibrator,
             MountainRecipe recipe,
-            MountainMorphologyAlgorithm algorithm) {
-        if (baseGenerator == null || calibrator == null || recipe == null || algorithm == null) {
+            MountainElevationAlgorithm mountainAlgorithm) {
+        if (baseGenerator == null || calibrator == null || recipe == null || mountainAlgorithm == null) {
             throw new IllegalArgumentException("V13 mountain generator dependencies must not be null");
         }
         this.baseGenerator = baseGenerator;
         this.calibrator = calibrator;
         this.recipe = recipe;
-        this.algorithm = algorithm;
+        this.mountainAlgorithm = mountainAlgorithm;
     }
 
     public static V13MountainTerrainGenerator standard() {
@@ -50,9 +49,8 @@ public final class V13MountainTerrainGenerator implements ElevationGenerator {
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         MountainCalibration calibration = calibrator.calibrate(genesis, recipe);
-        WorldGenesis baseGenesis = baseGenesis(genesis, recipe.baseTerrainCeilingCells());
-        ElevationField base = baseGenerator.generate(baseGenesis);
-        return algorithm.generate(genesis, base, calibration, recipe);
+        ElevationField base = baseGenerator.generate(baseGenesis(genesis, recipe.baseTerrainCeilingCells()));
+        return mountainAlgorithm.generate(genesis, base, calibration, recipe);
     }
 
     private static WorldGenesis baseGenesis(WorldGenesis genesis, int baseTerrainCeilingCells) {
