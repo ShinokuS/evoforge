@@ -30,10 +30,10 @@ final class MountainArchitectureTest {
     @Test
     void largerMountainScaleProducesWiderAndMoreWidelySpacedSystems() {
         MountainCalibration small = CALIBRATOR.calibrate(
-                genesis(mountains(700_000, 300_000, 100_000, 500_000, 800_000, false, 0)),
+                genesis(mountains(700_000, 0, 100_000, 500_000, 1_000_000, false, 0)),
                 RECIPE);
         MountainCalibration large = CALIBRATOR.calibrate(
-                genesis(mountains(700_000, 300_000, 900_000, 500_000, 800_000, false, 0)),
+                genesis(mountains(700_000, 0, 900_000, 500_000, 1_000_000, false, 0)),
                 RECIPE);
 
         assertTrue(large.typicalHalfWidthCells() > small.typicalHalfWidthCells());
@@ -41,7 +41,7 @@ final class MountainArchitectureTest {
     }
 
     @Test
-    void chaininessLengthensTheSameMountainSystemInsteadOfCreatingAnotherGeneratorType() {
+    void chaininessOnlyStretchesTheSameSmoothHillAlongItsLongAxis() {
         MountainCalibration massif = CALIBRATOR.calibrate(
                 genesis(mountains(700_000, 400_000, 500_000, 0, 600_000, false, 0)),
                 RECIPE);
@@ -49,8 +49,9 @@ final class MountainArchitectureTest {
                 genesis(mountains(700_000, 400_000, 500_000, 1_000_000, 600_000, false, 0)),
                 RECIPE);
 
-        assertTrue(chain.ridgeHalfLengthCells() > massif.ridgeHalfLengthCells());
-        assertTrue(chain.branchProbabilityPpm() > massif.branchProbabilityPpm());
+        assertEquals(massif.typicalHalfWidthCells(), chain.typicalHalfWidthCells());
+        assertTrue(chain.typicalLongAxisCells() > massif.typicalLongAxisCells());
+        assertTrue(chain.typicalLongAxisCells() > chain.typicalHalfWidthCells());
     }
 
     @Test
