@@ -14,9 +14,9 @@ import java.util.PriorityQueue;
  * Deterministic spatial synthesis for V13 mountain structure.
  *
  * <p>The accepted V12 hills remain the visual reference. Each mountain starts as one very large
- * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. The result
- * is then constrained only by abstract surface geometry: cardinal mountain uplift may not change
- * faster than the calibrated rise budget. No concrete runtime Shape participates in this stage.</p>
+ * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. The final
+ * authored surface, not merely the mountain delta, is constrained by an abstract cardinal-rise
+ * budget. This is intentionally independent of concrete runtime Shapes.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -85,16 +85,27 @@ final class MountainMorphologyAlgorithm {
                     width,
                     height,
                     requiredCoastalDistance);
-            long[] coastalCaps = coastalUpliftCaps(
+            long[] upliftCaps = coastalUpliftCaps(
                     land,
                     coastalDistance,
                     maximumRawUplift,
                     calibration.shorelineUpliftSubunits(),
                     calibration.maximumCardinalRiseSubunits());
-            clampToCaps(mountainUplift, coastalCaps, land);
-            enforceCardinalRiseBudget(
+            capForMountainCeiling(
+                    upliftCaps,
+                    baseHeights,
+                    land,
+                    calibration.mountainCeilingSubunits());
+            clampToCaps(mountainUplift, upliftCaps, land);
+
+            // Important: V12 already contains rolling relief. Limiting only the mountain delta lets
+            // V12 gradient + mountain gradient add together and still cross whole voxel levels in a
+            // single cell. Constrain the composed surface instead. Lower neighbours are raised via
+            // mountain uplift; existing V12 terrain is never rewritten and summits are not shaved.
+            enforceFinalSurfaceRiseBudget(
+                    baseHeights,
                     mountainUplift,
-                    coastalCaps,
+                    upliftCaps,
                     land,
                     width,
                     height,
@@ -271,8 +282,6 @@ final class MountainMorphologyAlgorithm {
                         recipe.plateauCorePpm());
         double coreWeight = recipe.coreWeightPpm() / (double) PPM;
 
-        // Keep the original broad hill untouched at the outer slope and progressively add the core
-        // only where vertical headroom exists. Center remains normalized to exactly 1.
         return Math.min(1.0, base + coreWeight * core * (1.0 - base));
     }
 
@@ -373,6 +382,21 @@ final class MountainMorphologyAlgorithm {
         return caps;
     }
 
+    private static void capForMountainCeiling(
+            long[] caps,
+            long[] baseHeights,
+            boolean[] land,
+            long mountainCeiling) {
+        for (int cell = 0; cell < caps.length; cell++) {
+            if (!land[cell]) {
+                caps[cell] = 0L;
+                continue;
+            }
+            long headroom = Math.max(0L, mountainCeiling - baseHeights[cell]);
+            caps[cell] = Math.min(caps[cell], headroom);
+        }
+    }
+
     private static void clampToCaps(long[] uplift, long[] caps, boolean[] land) {
         for (int cell = 0; cell < uplift.length; cell++) {
             if (!land[cell]) {
@@ -384,75 +408,138 @@ final class MountainMorphologyAlgorithm {
     }
 
     /**
-     * Expands only slopes that violate the abstract cardinal rise budget. Lower neighboring cells
-     * are raised; peaks are not shaved down. This keeps high mountains possible while guaranteeing
-     * broad horizontal elevation bands. Priority ordering is deterministic for equal uplift values.
+     * Enforces the geometric rise budget on the composed V12 + mountain surface. The previous
+     * implementation constrained only mountain uplift, so an accepted V12 slope could add to a
+     * legal mountain slope and still create one-cell voxel terraces. Here lower neighbouring cells
+     * receive additional mountain uplift until the final cardinal surface difference fits the same
+     * abstract budget. No concrete Shape is queried or selected.
      */
-    private static void enforceCardinalRiseBudget(
+    private static void enforceFinalSurfaceRiseBudget(
+            long[] baseHeights,
             long[] uplift,
             long[] caps,
             boolean[] land,
             int width,
             int height,
             long maximumRise) {
-        PriorityQueue<UpliftNode> queue = new PriorityQueue<>((first, second) -> {
-            int byHeight = Long.compare(second.uplift(), first.uplift());
+        PriorityQueue<SurfaceNode> queue = new PriorityQueue<>((first, second) -> {
+            int byHeight = Long.compare(second.surface(), first.surface());
             return byHeight != 0 ? byHeight : Integer.compare(first.cell(), second.cell());
         });
 
         for (int cell = 0; cell < uplift.length; cell++) {
-            if (land[cell] && hasTooLowNeighbor(uplift, land, width, height, cell, maximumRise)) {
-                queue.add(new UpliftNode(cell, uplift[cell]));
+            if (!land[cell] || uplift[cell] <= 0L) continue;
+            long surface = Math.addExact(baseHeights[cell], uplift[cell]);
+            if (hasTooLowFinalNeighbor(
+                    baseHeights,
+                    uplift,
+                    land,
+                    width,
+                    height,
+                    cell,
+                    surface,
+                    maximumRise)) {
+                queue.add(new SurfaceNode(cell, surface));
             }
         }
 
         while (!queue.isEmpty()) {
-            UpliftNode node = queue.poll();
+            SurfaceNode node = queue.poll();
             int cell = node.cell();
-            if (node.uplift() != uplift[cell]) continue;
-            long propagated = uplift[cell] - maximumRise;
-            if (propagated <= 0L) continue;
+            long currentSurface = Math.addExact(baseHeights[cell], uplift[cell]);
+            if (node.surface() != currentSurface) continue;
+            long propagatedSurface = currentSurface - maximumRise;
 
             int x = cell % width;
             int y = cell / width;
-            if (x > 0) propagate(cell - 1, propagated, uplift, caps, land, queue);
-            if (x + 1 < width) propagate(cell + 1, propagated, uplift, caps, land, queue);
-            if (y > 0) propagate(cell - width, propagated, uplift, caps, land, queue);
-            if (y + 1 < height) propagate(cell + width, propagated, uplift, caps, land, queue);
+            if (x > 0) {
+                propagateFinalSurface(
+                        cell - 1,
+                        propagatedSurface,
+                        baseHeights,
+                        uplift,
+                        caps,
+                        land,
+                        queue);
+            }
+            if (x + 1 < width) {
+                propagateFinalSurface(
+                        cell + 1,
+                        propagatedSurface,
+                        baseHeights,
+                        uplift,
+                        caps,
+                        land,
+                        queue);
+            }
+            if (y > 0) {
+                propagateFinalSurface(
+                        cell - width,
+                        propagatedSurface,
+                        baseHeights,
+                        uplift,
+                        caps,
+                        land,
+                        queue);
+            }
+            if (y + 1 < height) {
+                propagateFinalSurface(
+                        cell + width,
+                        propagatedSurface,
+                        baseHeights,
+                        uplift,
+                        caps,
+                        land,
+                        queue);
+            }
         }
     }
 
-    private static boolean hasTooLowNeighbor(
+    private static boolean hasTooLowFinalNeighbor(
+            long[] baseHeights,
             long[] uplift,
             boolean[] land,
             int width,
             int height,
             int cell,
+            long surface,
             long maximumRise) {
-        long value = uplift[cell];
-        if (value <= maximumRise) return false;
         int x = cell % width;
         int y = cell / width;
-        if (x > 0 && land[cell - 1] && value - uplift[cell - 1] > maximumRise) return true;
-        if (x + 1 < width && land[cell + 1] && value - uplift[cell + 1] > maximumRise) return true;
-        if (y > 0 && land[cell - width] && value - uplift[cell - width] > maximumRise) return true;
+        if (x > 0 && land[cell - 1]
+                && surface - finalSurfaceAt(baseHeights, uplift, cell - 1) > maximumRise) return true;
+        if (x + 1 < width && land[cell + 1]
+                && surface - finalSurfaceAt(baseHeights, uplift, cell + 1) > maximumRise) return true;
+        if (y > 0 && land[cell - width]
+                && surface - finalSurfaceAt(baseHeights, uplift, cell - width) > maximumRise) return true;
         return y + 1 < height
                 && land[cell + width]
-                && value - uplift[cell + width] > maximumRise;
+                && surface - finalSurfaceAt(baseHeights, uplift, cell + width) > maximumRise;
     }
 
-    private static void propagate(
+    private static void propagateFinalSurface(
             int target,
-            long propagated,
+            long requiredSurface,
+            long[] baseHeights,
             long[] uplift,
             long[] caps,
             boolean[] land,
-            PriorityQueue<UpliftNode> queue) {
+            PriorityQueue<SurfaceNode> queue) {
         if (!land[target]) return;
-        long candidate = Math.min(caps[target], propagated);
-        if (candidate <= uplift[target]) return;
-        uplift[target] = candidate;
-        queue.add(new UpliftNode(target, candidate));
+        long currentSurface = finalSurfaceAt(baseHeights, uplift, target);
+        if (requiredSurface <= currentSurface) return;
+
+        long requiredUplift = Math.max(0L, requiredSurface - baseHeights[target]);
+        long candidateUplift = Math.min(caps[target], requiredUplift);
+        if (candidateUplift <= uplift[target]) return;
+        uplift[target] = candidateUplift;
+        queue.add(new SurfaceNode(
+                target,
+                Math.addExact(baseHeights[target], candidateUplift)));
+    }
+
+    private static long finalSurfaceAt(long[] baseHeights, long[] uplift, int cell) {
+        return Math.addExact(baseHeights[cell], uplift[cell]);
     }
 
     /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
@@ -545,6 +632,6 @@ final class MountainMorphologyAlgorithm {
             boolean plateau) {
     }
 
-    private record UpliftNode(int cell, long uplift) {
+    private record SurfaceNode(int cell, long surface) {
     }
 }
