@@ -18,20 +18,21 @@ public interface TerrainSurfaceTargetSampler {
         return TerrainSurfaceTargetSamplers::precisePatch;
     }
 
-    /**
-     * Voxel-aware target used by V11: broad smooth slopes become representable where they actually
-     * cross a one-level discrete surface boundary, while cliffs and flat regions remain literal.
-     */
+    /** Broad smooth V11 slopes become representable at actual one-level boundary crossings. */
     static TerrainSurfaceTargetSampler smoothVoxelTransitions() {
         return TerrainSurfaceTargetSamplers::smoothVoxelTransitionPatch;
     }
 
-    /**
-     * V12 target policy: the same geometry-only voxel transition, but only when neighbouring local
-     * gradients support one coherent cardinal slope. This rejects isolated turns and contour curls
-     * without naming or selecting a concrete runtime Shape.
-     */
+    /** V12 keeps only locally coherent cardinal transition bands. */
     static TerrainSurfaceTargetSampler coherentVoxelTransitions() {
         return TerrainSurfaceTargetSamplers::coherentVoxelTransitionPatch;
+    }
+
+    /**
+     * V13 keeps the same geometry-only contract but samples coherent transition bands sparsely and
+     * irregularly. It does not know which concrete Shape the later fitter will choose.
+     */
+    static TerrainSurfaceTargetSampler sparseCoherentVoxelTransitions() {
+        return TerrainSurfaceTargetSamplers::sparseCoherentVoxelTransitionPatch;
     }
 }

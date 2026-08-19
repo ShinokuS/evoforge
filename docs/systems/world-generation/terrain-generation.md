@@ -2,507 +2,323 @@
 
 ## In plain language
 
-Terrain generation answers several different questions that are easy to confuse:
+Terrain generation answers three different questions:
 
-1. **Where is the ground surface?** — elevation/morphology.
-2. **What solid material is inside each ground column?** — topsoil, subsurface material, sediment or geological bedrock.
-3. **What discrete shape does the surface cell use at runtime?** — for example a full block or a cardinal ramp.
+1. **Where is the ground surface?** — precise elevation and morphology.
+2. **What material occupies the solid column?** — surface/subsurface material, sediment or geology.
+3. **Which discrete runtime shape represents the surface cell?** — geometry fitting.
 
-EvoForge deliberately keeps these questions separate. A mountain is not “granite because it is a mountain”, a shore is not “sand because it is next to Water”, and a slope is not a ramp merely because a renderer would look nicer that way.
+EvoForge keeps those questions separate. Mountains do not imply granite, shores do not imply sand, and the elevation generator does not choose `RampShape` or repair navigation.
 
-The current accepted terrain baseline is V12 **base morphology**. It creates oceans, landmasses, coasts, broad uplift, ordinary hills/depressions, rolling relief and rugged ridges. Mountain systems, carved rivers/lakes, final geology and final causal surface materials are later stages.
+The current accepted dry elevation stack is:
+
+```text
+V12 ordinary base morphology
+        ↓
+V13 dedicated mountain morphology
+        ↓
+precise ElevationField
+        ↓
+generic surface-shape fitting
+```
+
+V12 and V13 have both completed deterministic checks and manual visual acceptance. Dry river/lake carving, final geology, caves and final causal surface materials remain later stages.
 
 ## Current status
 
 ### Accepted
 
-- deterministic V1–V12 elevation revision compatibility;
-- manually accepted V12 base-terrain appearance;
-- Stage 0 V12 split into semantic intent → calibration → recipe → spatial algorithm;
-- precise elevation plus discrete `elevationAt` projection;
-- local surface morphology facts (slope/convexity/concavity);
-- replaceable terrain material generation;
-- compact material profiles using semantic material keys;
-- surface-shape preparation through a shape palette rather than concrete Shape branching;
-- deterministic diagnostics and 2D/3D preview.
+- deterministic V1–V13 elevation revision compatibility;
+- manually accepted V12 ordinary-landscape appearance;
+- manually accepted V13 structural-mountain appearance;
+- V12 semantic intent → calibration → recipe → spatial algorithm split;
+- V13 semantic mountain intent → calibration → recipe → replaceable mountain algorithm split;
+- precise sub-cell elevation plus discrete `elevationAt` projection;
+- local morphology derivation (slope/convexity/concavity);
+- generic shape-template fitting independent from concrete Shape classes;
+- deterministic diagnostics, generated-world audits and 2D/3D preview.
 
 ### Explicitly provisional
 
 - current geology generation;
+- current drainage/hydrography algorithms before Stage 2 carving;
 - current slope/concavity/drainage terrain-material model;
-- current threshold hydrography;
 - historical generated initial-Water ordering.
 
-These are typed seams that later stages replace/refine; they are not permission to add feature-specific special cases.
+Typed seams may survive later stages even when their algorithms are replaced.
 
-## Part I — V12 base elevation
+## Part I — V12 ordinary base morphology
+
+V12 owns ordinary land/ocean shape and non-mountain relief.
 
 ### Architecture
 
-The accepted V12 path is:
-
 ```text
-WorldGenesis
-  └ WorldGenerationIntent (semantic 0..1 coordinates)
-              ↓
-     V12LandformCalibrator
-              ↓
-     V12LandformCalibration
-     exact values for this world
-              +
-     V12LandformRecipe
-     fixed V12 model choices
-              ↓
-  V12LandformElevationAlgorithm
-              ↓
-        ElevationField
+WorldGenerationIntent
+        ↓
+V12LandformCalibrator
+        ↓
+V12LandformCalibration
+        +
+V12LandformRecipe
+        ↓
+V12LandformElevationAlgorithm
+        ↓
+ElevationField
 ```
 
-`V12BaseTerrainGenerator` is a normal replaceable `ElevationGenerator`. `ElevationGenerationStage` routes `GenerationRevision.V12` through the legacy `V12LandformElevationGenerator` facade, which delegates to the same Stage 0 implementation. Tests lock the facade and replaceable generator to bit-identical output.
+`V12BaseTerrainGenerator` composes those pieces behind `ElevationGenerator`. The spatial algorithm does not read semantic intent directly.
 
-The spatial algorithm never reads `WorldGenerationIntent` directly. That separation is important: user meaning is calibrated before synthesis.
+### Land/ocean membership
 
-### Units
-
-`ElevationField` stores precise elevation in integer subunits:
+V12 blends a coherent landmass field with a finer fragmentation field, ranks every horizontal column deterministically and selects the calibrated land count:
 
 ```text
-1 terrain cell = ElevationField.SUBUNITS_PER_CELL
+landCount = round(horizontalArea * landCoverage)
 ```
 
-Most V12 normalized weights use parts per million:
+Later relief controls shape the selected land but do not change land/ocean membership.
+
+Sea level for ocean-first revisions is precise elevation `0`.
+
+### Coast interiority
+
+A deterministic cardinal distance transform measures distance from ocean, capped at the V12 transition length of 12 cells. Cubic smoothstep converts the distance to an interiority coordinate from coast to inland.
+
+Interiority controls baseline land height and suppresses ordinary relief near the shore without changing the coastline mask.
+
+### Spatial scales
+
+Ordinary V12 landforms are primarily measured in terrain cells rather than stretching directly with total world size. The balanced recipe keeps typical landform spacing in the range `20..64` cells.
+
+V12 combines:
+
+- broad coherent uplift;
+- explicit deterministic rounded hills/depressions;
+- rugged ridge signal;
+- rolling primary/detail relief.
+
+The important model choices live in `V12LandformRecipe`, not as user controls or scattered literals inside orchestration.
+
+### Bounded ordinary slopes
+
+V12 finishes with deterministic cardinal slope relaxation. Semantic ruggedness calibrates the maximum readable land-land step from roughly `0.18` to `0.60` terrain cell per horizontal cell.
+
+This is a synthesis/readability constraint, not physical erosion.
+
+### V12 boundary
+
+V12 deliberately does **not** own dedicated mountain abundance/height/elongation, river carving, geology, caves or final material synthesis. V13 adds mountains as a separate elevation stage instead of growing more mountain-specific policy inside V12.
+
+## Part II — V13 structural mountains
+
+V13 first generates the accepted V12 base inside a capped positive range, then applies dedicated mountain uplift on V12 land only.
 
 ```text
-PPM = 1_000_000
-0.50 = 500_000 ppm
+V13 WorldGenesis
+      ↓
+V12 base Genesis with positive ceiling +12
+      ↓
+V12BaseTerrainGenerator
+      ↓
+base ElevationField
+      +
+V13 mountain stage
+      ↓
+V13 ElevationField
 ```
 
-Sea level for ocean-first revisions is exact subunit elevation `0`.
-
-### Step 1 — exact land/ocean membership
-
-V12 creates two smooth deterministic land-potential fields:
-
-- a coherent landmass field;
-- a finer fragmented field.
-
-They are blended by semantic fragmentation:
+The mountain architecture is independently replaceable:
 
 ```text
-potential = coherent * (1 - fragmentation)
-          + fragmented * fragmentation
+WorldGenerationIntent.mountains
+        ↓
+MountainCalibrator
+        ↓
+MountainCalibration
+        +
+MountainRecipe
+        ↓
+MountainElevationAlgorithm
+        ↓
+ElevationField
 ```
 
-All horizontal cells are then ranked deterministically by potential. Ties are broken by stable cell index. Calibration computes the target land count:
+`V13MountainTerrainGenerator` is composition only. The standard spatial implementation is `MountainMorphologyAlgorithm`.
+
+### Semantic ownership
+
+- **Abundance** owns the expected fraction of V12 land occupied by dedicated mountain structures.
+- **Height** owns desired vertical prominence but is bounded by world size, vertical headroom, readable slope and the Scale-authored footprint.
+- **Scale** owns individual transverse structure size and source-lattice spacing.
+- **Chaininess** stretches the same structure along its long axis.
+- **Peak sharpness** calibrates geometric slope character; it does not select concrete runtime Shapes.
+- **Plateau enable/probability** controls whether an individual source uses the plateau variant of the same bounded profile.
+
+Scale/Height/Chaininess must not silently take ownership of global mountain coverage.
+
+### Source structure
+
+Each mountain source is one asymmetric elongated hill. Deterministic source parameters independently vary:
+
+- orientation and bounded center jitter;
+- left/right transverse width;
+- positive/negative long-axis length;
+- height;
+- plateau choice.
+
+Sources are ranked deterministically from a Scale-owned lattice. Source count is derived from Abundance's target land coverage and nominal structure footprint. Well-separated sources are preferred; overlap composes with `max`, not addition.
+
+### Height and readable Z bands
+
+The mountain profile uses an eased summit, a long near-linear middle slope and an eased foot. The derivative bounds are recipe-owned and shared by calibration and synthesis.
+
+Balanced peak sharpness calibrates maximum cardinal mountain rise between roughly:
 
 ```text
-landCount = round(area * landCoverage)
+0.22 .. 0.38 vertical cell / horizontal cell
 ```
 
-The first `landCount` ranked cells become land; the rest become ocean.
+Therefore broad discrete Z bands are a property of the generated source profile. The accepted algorithm has no post-generation terrace repair/smoothing pass.
 
-This means land coverage is not an accidental noise threshold. It is preserved to the nearest representable horizontal column.
+Height can broaden the authored Scale footprint only within a bounded multiplier. If the footprint cannot support the requested height at the readable slope, realized height is capped rather than expanding one mountain across most of the world.
 
-**Important invariant:** later V12 relief controls do not change the chosen land/ocean membership. They shape the land after the mask exists.
+### Coast interaction
 
-### Step 2 — coast interiority
-
-V12 computes each land cell's distance from ocean using a deterministic two-pass cardinal distance transform. Distance is capped at the V12 coast transition length of **12 cells** and mapped through cubic smoothstep:
+V13 preserves V12 land/ocean membership exactly. Near water/world edges, dedicated mountain uplift is limited by a cardinal-Lipschitz coastal height cap:
 
 ```text
-s(t) = t²(3 - 2t),   0 <= t <= 1
+final mountain uplift = min(raw mountain, coastal cap)
 ```
 
-The result is an `interiority` coordinate:
+The cap uses the same local-rise budget, so coast handling does not introduce a second uncontrolled gradient. V12 base morphology may still contain ordinary coastal cliffs.
 
-```text
-0  near the ocean edge
-1  fully inland after the transition distance
-```
+For the full model, exact semantics and acceptance evidence see [V13 Mountain Generation](mountain-generation.md).
 
-This coordinate controls both baseline land height and how strongly relief is allowed to appear near the coast.
-
-### Step 3 — calibrated spatial scales
-
-V12 feature wavelengths are primarily measured in **terrain cells**, not as a fraction of the entire world. This is a key reason a larger world contains more hills/depressions instead of stretching the same few blobs into giant plateaus.
-
-The balanced recipe uses:
-
-```text
-landform spacing:       20 .. 64 cells (from semantic landformScale)
-uplift scale:           max(52, spacing * 2)
-ridge scale:            max(34, spacing * 3 / 2)
-rolling scale:          max(16, spacing / 2)
-rolling detail scale:   max(10, spacing / 3)
-```
-
-Landmass coherence is calibrated separately from overall world dimensions because landmass scale is a macro shape control, while ordinary landform size is intentionally scale-stable.
-
-### Step 4 — explicit hills and depressions
-
-Ordinary large hills/depressions are not created only by layering more noise. V12 builds a deterministic feature lattice.
-
-For each feature lattice cell:
-
-- spacing = calibrated `20..64` cells;
-- center is jittered by at most about `0.26 * spacing` in each axis;
-- radius = `0.65..0.92 * spacing`;
-- magnitude = `0.55..1.00` on the normalized relief scale;
-- signs are balanced in deterministic `2 x 2` lattice blocks so both positive hills and negative depressions occur;
-- a surface sample evaluates the surrounding `3 x 3` features (`neighborhoodRadius = 1`).
-
-For a feature with normalized squared radial distance `d²`, values outside the radius contribute zero. Inside:
-
-```text
-falloff = smoothstep(1 - d²)
-contribution = signedMagnitude * falloff
-```
-
-Contributions are summed and clamped to the centered range `[-1, +1]`.
-
-This produces explicit rounded landforms with predictable physical scale instead of cell-to-cell jitter.
-
-### Step 5 — broad uplift
-
-Broad uplift is a centered, domain-warped smooth value-noise field sampled at the calibrated uplift scale.
-
-It contributes to continent/interior vertical variation but does not decide which cells are land.
-
-### Step 6 — rugged ridge belts
-
-Ridges are derived from the absolute difference between two independent warped fields. Where the two fields are similar, the raw crest signal is strong:
-
-```text
-difference = |fieldA - fieldB|
-rawRidge   = clamp(1 - 2 * normalizedDifference)
-```
-
-The balanced recipe ignores the lower half of this signal (`ridgeCrestThreshold = 0.50`), remaps the remainder through smoothstep, then squares it to concentrate the result into narrower crests.
-
-Ridge strength is multiplied by semantic `ruggedness`, so ruggedness affects ridge prominence in addition to the allowed local slope limit.
-
-### Step 7 — rolling local relief
-
-Rolling relief blends two centered smooth value-noise fields:
-
-```text
-rolling = 0.76 * primary + 0.24 * detail
-```
-
-The overall contribution is then multiplied by the recipe rolling weight `0.24` and semantic `localRelief`.
-
-This is subordinate texture/undulation; it is not supposed to replace explicit landform structure.
-
-### Step 8 — relief mixture
-
-Before semantic relief strength is applied, the macro centered signal is approximately:
-
-```text
-macro = 0.22 * uplift
-      + 0.34 * explicitLandform
-      + 0.30 * ridge * ruggedness
-
-macro *= semanticRelief
-```
-
-Local rolling signal is:
-
-```text
-local = 0.24 * rolling * semanticLocalRelief
-```
-
-Then:
-
-```text
-reliefSignal = macro + local
-```
-
-Negative relief is compressed by the balanced recipe factor `0.65` so depressions remain visible without consuming as much positive land height range:
-
-```text
-if reliefSignal < 0:
-    reliefSignal *= 0.65
-```
-
-These are V12 model constants, not user-facing controls. They live in `V12LandformRecipe.balanced()` so a future revision can replace the model instead of scattering tuned literals through spatial loops.
-
-### Step 9 — coast gating and base height
-
-Relief is damped near the coast using:
-
-```text
-coastGate = 0.25 + interiority * 0.75
-reliefSignal *= coastGate
-```
-
-Baseline normalized land height is:
-
-```text
-baseHeight = 0.07 + interiority * 0.23
-```
-
-The final normalized land height is:
-
-```text
-height = clamp01(baseHeight + reliefSignal)
-```
-
-It is converted into the positive precise elevation range allowed by `WorldBounds.maxZ`.
-
-Ocean cells receive deterministic negative depths from the non-land rank and available depth below sea level.
-
-### Step 10 — bounded slope relaxation
-
-V12 performs four deterministic cardinal relaxation passes. Pass direction alternates forward/reverse to reduce scan-direction bias.
-
-Semantic ruggedness calibrates the maximum readable land-land cardinal step between:
-
-```text
-0.18 cell .. 0.60 cell
-```
-
-For a neighboring land pair with elevation difference `Δ`:
-
-```text
-if |Δ| <= maximumStep:
-    no change
-else:
-    excess = |Δ| - maximumStep
-    distribute excess approximately half to each side
-```
-
-Heights stay inside `(0, maximum land height]`.
-
-This is a readability/synthesis constraint, not a claim of physical thermal erosion.
-
-## V12 noise building block
-
-V12 uses project-internal deterministic smooth **value noise**, not FastNoiseLite or an external noise library.
-
-For each lattice square it samples four deterministic 16-bit values and performs separable smooth interpolation. The interpolation coordinate uses:
-
-```text
-smoothstep(t) = t²(3 - 2t)
-```
-
-“Organic” V12 fields apply domain warp first:
-
-```text
-warpScale     = max(8, 2 * sourceScale)
-warpAmplitude = max(1 cell, sourceScale / 6)
-warpedX/Y     = coordinate + centeredWarpSample * warpAmplitude
-```
-
-The source field is then sampled at the warped coordinates.
-
-The purpose of the warp is visual organicity and reduced axis-aligned/value-noise regularity; it is not a physical tectonic simulation.
-
-## Why V12 is not the mountain system
-
-V12 supplies ordinary base morphology. Stage 1 will introduce mountain-specific generated structure over this baseline.
-
-A mountain system needs concepts that V12 intentionally does not own, such as sparse coherent mountain provinces/ranges, foothill organization, peak/ridge hierarchy and separate acceptance controls. Adding those as more V12 noise weights would destroy the Stage 0 separation and make future geology/hydrology harder to reason about.
-
-## Part II — local surface morphology
+## Part III — local surface morphology
 
 `world.terrain.surface` derives local geometric facts from precise elevation:
 
-- maximum cardinal-neighbor slope in elevation subunits;
-- convexity (locally above neighbors);
-- concavity (locally below neighbors).
+- maximum cardinal-neighbor slope;
+- convexity;
+- concavity.
 
-These are **derived Terrain facts**, not another elevation owner. They are consumed by current material/Soil formation models.
+These are derived Terrain facts, not another elevation owner. A uniform vertical translation preserves them because they depend on local differences.
 
-A uniform vertical translation preserves these morphology values because the model depends on local differences rather than absolute world Z.
+## Part IV — generic runtime surface shape
 
-## Part III — current terrain material profile
-
-### In plain language
-
-Once the surface shape exists, the current preparation model decides whether a solid column contains loose surface/subsurface material, deposited sediment, or geological bedrock.
-
-This model is intentionally small and provisional. It demonstrates causal composition; it is not the final Stage 5 material synthesis.
-
-### Authored semantic profile
-
-The current profile system is composed from:
+Precise elevation is fitted to the discrete Terrain shapes available to runtime Geometry:
 
 ```text
-TerrainProfileDefinition
-  └ preset keys
-TerrainMaterialSetDefinition
-  └ semantic roles -> TerrainMaterialKey
-        ↓
-TerrainProfileCompiler
-        ↓
-CompiledTerrainProfile
-```
-
-Current built-in capabilities include:
-
-```text
-NATURAL_GROUND      -> GROUND_PROFILE
-surface deposition  -> SURFACE_DEPOSITION
-```
-
-Capability conflicts are explicit rather than resolved by array ordering.
-
-The role vocabulary currently includes surface, subsurface, sediment and bedrock. Material keys are stable semantic keys; runtime `LandscapeDefinitionId` values are resolved only at materialization.
-
-### Ground depth
-
-The current `TerrainMaterialGenerationStage` maximum loose-ground profile depth is **4 cells**.
-
-For maximum local slope `s` in elevation subunits:
-
-```text
-slopeSteps = 0,                                      if s = 0
-           = 1 + floor((s - 1) / 250_000),          otherwise
-
-groundDepth = clamp(4 - slopeSteps, 0, 4)
-```
-
-So increasing slope thins the loose ground profile and can expose geology/bedrock.
-
-The `250_000` subunit increment is a current model constant, not authored content.
-
-### Deposition
-
-The first deposition score uses local concavity, normalized drainage influence and slope:
-
-```text
-drainageInfluence = contributingArea * SUBUNITS_PER_CELL / horizontalArea
-score = 2 * concavity + drainageInfluence - maximumSlope
-```
-
-Deposition is disallowed when:
-
-```text
-maximumSlope > 550_000 subunits
-```
-
-Otherwise:
-
-```text
-score < 120_000       -> no deposition
-120_000..549_999      -> 1 sediment cell
-score >= 550_000      -> 2 sediment cells
-```
-
-When a `SurfaceHydrologyField` is supplied and marks a shoreline, the current compatibility model ensures at least one deposition layer there.
-
-That shoreline behavior is explicitly **provisional**. Stage 5 must use the completed dry hydrographic/depositional/geological causes rather than grow a universal `shore = sediment` shortcut.
-
-### Vertical material lookup
-
-For each XY column the implementation stores compact values:
-
-- discrete `surfaceZ`;
-- `groundDepth` byte;
-- `depositionDepth` byte;
-- optional generated geology field.
-
-`materialAt(x,y,z)` derives the material on demand:
-
-1. if depth from surface is inside deposition depth → semantic `SEDIMENT` material;
-2. otherwise, if the ground profile exists:
-   - depth `0` → `SURFACE`;
-   - deeper but still inside ground depth → `SUBSURFACE`;
-3. otherwise, use generated geology material when available;
-4. fallback compatibility path uses the profile `BEDROCK` role.
-
-This avoids allocating one material object per solid 3D cell.
-
-## Part IV — generated runtime surface shape
-
-Precise elevation is also fitted to the discrete Terrain shapes that current runtime Geometry can represent.
-
-Conceptually:
-
-```text
-precise elevation
+precise ElevationField
       ↓
 local surface patch
       ↓
-shape-template fit
+generic template fit
       ↓
 TerrainShapeField
       ↓
-materialization / pre-start shape override
+materialization
 ```
 
-The generic fitting code compares geometry templates rather than branching on `RampShape`, `FullShape` or future concrete shape classes. A palette/adaptor is the only place where available runtime Shapes are bound to represented surface templates.
+Generic fitting compares represented surface geometry rather than branching on `RampShape`, `FullShape` or future concrete classes. The palette/adaptor is the only layer that binds available runtime Shapes to surface templates.
 
-Poor fits remain ordinary full-cell terrain. Generation does not create ramps merely to repair Navigation connectivity, and generated terrain is not required to be globally traversable.
+V13 uses a sparse coherent transition policy. A locally suitable transition must have readable neighboring elevation and a coherent band at least three cells wide; only irregular deterministic patches are then retained. Hash selection includes XY, discrete Z layer and direction so neighboring levels do not repeat one mechanical interval.
 
-## Ownership and interactions
+Poor fits remain ordinary full-cell terrain. Mountains are not required to be globally traversable and generation does not create transition shapes merely to repair Navigation connectivity.
+
+## Part V — current material preparation
+
+Material identity remains downstream from morphology.
+
+Current preparation uses compact semantic material roles (`surface`, `subsurface`, `sediment`, `bedrock`), generated geology and derived morphology/drainage/hydrology facts to build `TerrainMaterialField` before runtime starts.
+
+The existing slope/deposition/shoreline rules are an early causal slice and remain provisional until Stage 5. In particular, generic code must not grow permanent shortcuts such as:
 
 ```text
-WorldGenesis / intent         requested generation meaning
-V12 calibration + recipe      exact V12 generation policy
-ElevationField                immutable generated surface fact
-SurfaceMorphologyField        derived local geometry fact
-GeologyField                  immutable generated rock identity fact
-TerrainMaterialField          immutable generated material profile
-TerrainShapeField             immutable generated discrete shape profile
+mountain -> granite
+river    -> sand
+shore    -> sand
+```
+
+Final material synthesis must use completed morphology, hydrographic/depositional facts, geology and calibrated semantic material/Soil definitions.
+
+## Ownership
+
+```text
+WorldGenesis / intent               authored generation meaning
+V12 calibrator + recipe             ordinary base model
+Mountain calibrator + recipe        V13 mountain model
+ElevationField                      immutable generated surface fact
+SurfaceMorphologyField              derived local geometry fact
+TerrainShapeField                   immutable discrete shape-preparation fact
+GeologyField                        immutable generated rock identity fact
+TerrainMaterialField                immutable generated material-preparation fact
         ↓
 materialization
         ↓
-Landscape/Geometry runtime owners
+Landscape / Geometry runtime owners
 ```
 
-After materialization, Landscape owns mutable runtime Terrain. Generated fields remain provenance/preparation facts and are not synchronized back from later Terrain mutation.
+Generated/prepared fields are not synchronized backward from later runtime Terrain mutation.
 
 ## Invariants
 
-- Same Genesis/revision reproduces the same V12 precise elevations.
-- `landCoverage` changes land count through ranking, not through a hidden threshold.
-- V12 landform feature scales remain cell-based and do not grow in direct proportion to world dimensions.
-- Generic consumers do not branch on concrete Shape classes or material names.
-- Material composition depends on causal local/generated facts, not arbitrary coordinate noise.
-- Vertical translation of the same local morphology does not change slope/concavity-driven material layering.
-- Runtime integer definition IDs never become generated semantic identity.
+- Same Genesis/revision reproduces the same precise elevation.
+- V12 land coverage is rank-calibrated rather than a hidden noise threshold.
+- V13 zero mountain abundance preserves its V12 base exactly.
+- V13 cannot create/delete coastline cells.
+- Abundance owns mountain coverage; Scale owns individual size; Height owns bounded prominence; Chaininess owns elongation.
+- Mountain synthesis and material synthesis do not branch on concrete runtime Shape classes.
+- Shape fitting remains generic and may intentionally leave mountains partially or wholly impassable.
+- Material composition depends on causal generated/local facts rather than feature-name special cases.
 
-## Current limitations
+## Tests and acceptance
 
-V12/current terrain preparation does **not** yet implement:
+Primary coverage includes:
 
-- Stage 1 mountain ranges/provinces;
-- erosional valley/channel/lake carving;
+```text
+V12LandformCalibrationTest
+V12LandformElevationGenerationTest
+V12BaseTerrainGeneratorTest
+MountainArchitectureTest
+MountainAbundanceCoverageTest
+MountainMorphologyElevationGenerationTest
+V13MountainTerrainGeneratorCompositionTest
+V13SparseShapeGenerationTest
+WorldGenerationPreviewSettingsTest
+Generated World Audit
+```
+
+V12 and V13 visible morphology additionally require manual 2D/3D preview acceptance; numerical invariants do not substitute for visual judgement.
+
+## Current limitations / next stage
+
+The accepted terrain stack still does not implement:
+
+- final dry river hierarchy, valleys, channels and lake-bowl carving (**Stage 2 — next**);
 - final coherent geology/stratigraphy;
 - caves/open underground volumes;
 - final causal sediment/soil/exposed-bedrock synthesis;
-- erosion as runtime Terrain mutation;
+- runtime erosion;
 - biome authority;
-- connectivity repair.
+- navigation connectivity repair.
 
-## Code and tests
+## Code
 
-Primary V12 implementation:
-
-```text
-world/atlas/V12BaseTerrainGenerator.java
-world/atlas/V12LandformCalibrator.java
-world/atlas/V12LandformCalibration.java
-world/atlas/V12LandformRecipe.java
-world/atlas/V12LandformElevationAlgorithm.java
-world/atlas/V12LandformElevationGenerator.java   compatibility facade
-```
-
-Current material/surface preparation:
+Primary elevation implementation:
 
 ```text
-world/terrain/surface/*
-world/terrain/generation/*
-world/preparation/*
+simulation/.../world/atlas/V12BaseTerrainGenerator.java
+simulation/.../world/atlas/V12LandformCalibrator.java
+simulation/.../world/atlas/V12LandformRecipe.java
+simulation/.../world/atlas/V12LandformElevationAlgorithm.java
+simulation/.../world/atlas/V13MountainTerrainGenerator.java
+simulation/.../world/atlas/MountainCalibrator.java
+simulation/.../world/atlas/MountainRecipe.java
+simulation/.../world/atlas/MountainElevationAlgorithm.java
+simulation/.../world/atlas/MountainMorphologyAlgorithm.java
+simulation/.../world/terrain/shape/*
 ```
 
-Representative tests cover deterministic generation, exact land/ocean behavior, scale-aware local relief, V12 visual/readability laws, algorithm substitution, morphology invariance, material causality and generated-world audits.
-
-## Sources
-
-**Internal EvoForge design:** the accepted V12 algorithm is a project-specific deterministic synthesis model. It does not claim to implement a published geomorphology solver.
-
-**Conceptual influence for future stages:** hydrology-oriented procedural terrain by Génevaux et al. (2013) and uplift/fluvial-erosion terrain by Cordonnier et al. (2016) inform the direction of later mountain/hydrography work, not the exact V12 equations above.
-
-See [References](../../references.md), [World Generation](overview.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [ADR-020](../../decisions/020-terrain-palettes-hide-generated-complexity.md), and [ADR-021](../../decisions/021-world-preparation-and-calibration-boundary.md).
+See [V13 Mountain Generation](mountain-generation.md), [World Generation](overview.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-021](../../decisions/021-world-preparation-and-calibration-boundary.md).
