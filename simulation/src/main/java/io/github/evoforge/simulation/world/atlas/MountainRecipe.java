@@ -5,57 +5,79 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
 /**
  * Immutable model choices for the V13 structural mountain stage.
  *
- * <p>V13 deliberately starts from the same visual law as the accepted V12 hills: one broad smooth
- * landform with a soft edge. Mountain character comes from much larger scale, strong anisotropic
- * elongation and additional vertical headroom rather than from narrow ridge walls or repeated
- * high-frequency peak modulation.</p>
+ * <p>The model deliberately knows nothing about concrete runtime Shapes. Its readability contract
+ * is geometric: mountain elevation changes slowly enough across horizontal cells that the later
+ * generic surface fitter can choose whatever geometry represents that surface well.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
-        int minimumHalfWidthCells,
-        int maximumHalfWidthCells,
+        int absoluteMinimumHalfWidthCells,
+        int absoluteMaximumHalfWidthCells,
+        int minimumHalfWidthWorldPpm,
+        int maximumHalfWidthWorldPpm,
         int candidateSpacingNumerator,
         int candidateSpacingDenominator,
-        int minimumHeightHeadroomPpm,
-        int maximumHeightHeadroomPpm,
+        int minimumHeightOfWorldSlopeCapPpm,
+        int maximumHeightOfWorldSlopeCapPpm,
         int minimumAllowedRisePpm,
         int maximumAllowedRisePpm,
+        int worldSlopeRadiusUtilizationPpm,
         int minimumLongAxisWidthPpm,
         int maximumLongAxisWidthPpm,
-        int coastalTransitionCells,
+        int minimumCoastalTransitionCells,
         int shorelineUpliftPpm,
+        int maximumShorelineUpliftCells,
+        int coreRadiusPpm,
+        int coreWeightPpm,
         int plateauCorePpm,
         int centerJitterPpm,
         int widthVariationPpm,
         int heightVariationPpm,
         int minimumSharpnessMilli,
-        int maximumSharpnessMilli) {
+        int maximumSharpnessMilli,
+        int upliftSmoothingPasses) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
     public MountainRecipe {
         requirePositive(baseTerrainCeilingCells, "baseTerrainCeilingCells");
-        requirePositive(minimumHalfWidthCells, "minimumHalfWidthCells");
-        if (maximumHalfWidthCells < minimumHalfWidthCells) {
-            throw new IllegalArgumentException("maximumHalfWidthCells must be >= minimumHalfWidthCells");
+        requirePositive(absoluteMinimumHalfWidthCells, "absoluteMinimumHalfWidthCells");
+        if (absoluteMaximumHalfWidthCells < absoluteMinimumHalfWidthCells) {
+            throw new IllegalArgumentException(
+                    "absoluteMaximumHalfWidthCells must be >= absoluteMinimumHalfWidthCells");
+        }
+        requireNormalized(minimumHalfWidthWorldPpm, "minimumHalfWidthWorldPpm");
+        requireNormalized(maximumHalfWidthWorldPpm, "maximumHalfWidthWorldPpm");
+        if (maximumHalfWidthWorldPpm < minimumHalfWidthWorldPpm) {
+            throw new IllegalArgumentException(
+                    "maximumHalfWidthWorldPpm must be >= minimumHalfWidthWorldPpm");
         }
         requirePositive(candidateSpacingNumerator, "candidateSpacingNumerator");
         requirePositive(candidateSpacingDenominator, "candidateSpacingDenominator");
-        requireNormalized(minimumHeightHeadroomPpm, "minimumHeightHeadroomPpm");
-        requireNormalized(maximumHeightHeadroomPpm, "maximumHeightHeadroomPpm");
-        if (maximumHeightHeadroomPpm < minimumHeightHeadroomPpm) {
-            throw new IllegalArgumentException("maximumHeightHeadroomPpm must be >= minimumHeightHeadroomPpm");
+        requireNormalized(minimumHeightOfWorldSlopeCapPpm, "minimumHeightOfWorldSlopeCapPpm");
+        requireNormalized(maximumHeightOfWorldSlopeCapPpm, "maximumHeightOfWorldSlopeCapPpm");
+        if (maximumHeightOfWorldSlopeCapPpm < minimumHeightOfWorldSlopeCapPpm) {
+            throw new IllegalArgumentException(
+                    "maximumHeightOfWorldSlopeCapPpm must be >= minimumHeightOfWorldSlopeCapPpm");
         }
         requirePositive(minimumAllowedRisePpm, "minimumAllowedRisePpm");
-        if (maximumAllowedRisePpm < minimumAllowedRisePpm) {
-            throw new IllegalArgumentException("maximumAllowedRisePpm must be >= minimumAllowedRisePpm");
+        if (maximumAllowedRisePpm < minimumAllowedRisePpm || maximumAllowedRisePpm > PPM) {
+            throw new IllegalArgumentException(
+                    "maximumAllowedRisePpm must be in [minimumAllowedRisePpm, 1_000_000]");
         }
+        requireNormalized(worldSlopeRadiusUtilizationPpm, "worldSlopeRadiusUtilizationPpm");
         requirePositive(minimumLongAxisWidthPpm, "minimumLongAxisWidthPpm");
         if (maximumLongAxisWidthPpm < minimumLongAxisWidthPpm) {
             throw new IllegalArgumentException("maximumLongAxisWidthPpm must be >= minimumLongAxisWidthPpm");
         }
-        requirePositive(coastalTransitionCells, "coastalTransitionCells");
+        requirePositive(minimumCoastalTransitionCells, "minimumCoastalTransitionCells");
         requireNormalized(shorelineUpliftPpm, "shorelineUpliftPpm");
+        requirePositive(maximumShorelineUpliftCells, "maximumShorelineUpliftCells");
+        requireNormalized(coreRadiusPpm, "coreRadiusPpm");
+        if (coreRadiusPpm <= 0 || coreRadiusPpm >= PPM) {
+            throw new IllegalArgumentException("coreRadiusPpm must be strictly inside (0, 1_000_000)");
+        }
+        requireNormalized(coreWeightPpm, "coreWeightPpm");
         requireNormalized(plateauCorePpm, "plateauCorePpm");
         requireNormalized(centerJitterPpm, "centerJitterPpm");
         requireNormalized(widthVariationPpm, "widthVariationPpm");
@@ -64,33 +86,44 @@ public record MountainRecipe(
         if (maximumSharpnessMilli < minimumSharpnessMilli) {
             throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
         }
+        if (upliftSmoothingPasses < 0 || upliftSmoothingPasses > 4) {
+            throw new IllegalArgumentException("upliftSmoothingPasses must be in [0, 4]");
+        }
     }
 
     /**
-     * Broad, ramp-friendly mountain recipe. Even sharp mountains remain hill-like at their base;
-     * sharpness changes the upper profile instead of permitting near-vertical walls.
+     * Smooth-hill mountains with a geometry-only slope budget. At ordinary sharpness the mountain
+     * layer rises by about one vertical cell per three horizontal cells; even maximum sharpness
+     * remains above two horizontal cells per vertical level.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
                 12,
-                24,
-                72,
+                8,
+                160,
+                40_000,
+                180_000,
                 2,
                 1,
-                80_000,
-                400_000,
-                200_000,
-                600_000,
-                1_200_000,
-                2_400_000,
-                24,
-                180_000,
+                100_000,
+                1_000_000,
                 220_000,
-                160_000,
+                420_000,
+                850_000,
+                1_150_000,
+                2_350_000,
+                12,
                 120_000,
-                120_000,
+                3,
+                520_000,
+                380_000,
+                220_000,
+                140_000,
+                100_000,
+                100_000,
                 850,
-                1_350);
+                1_250,
+                1);
     }
 
     private static void requirePositive(int value, String name) {
