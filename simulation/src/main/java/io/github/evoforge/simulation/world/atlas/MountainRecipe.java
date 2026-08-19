@@ -36,7 +36,8 @@ public record MountainRecipe(
         int heightVariationPpm,
         int minimumSharpnessMilli,
         int maximumSharpnessMilli,
-        int upliftSmoothingPasses) {
+        int upliftSmoothingPasses,
+        int singleCellLevelCleanupPasses) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -88,9 +89,8 @@ public record MountainRecipe(
         if (maximumSharpnessMilli < minimumSharpnessMilli) {
             throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
         }
-        if (upliftSmoothingPasses < 0 || upliftSmoothingPasses > 4) {
-            throw new IllegalArgumentException("upliftSmoothingPasses must be in [0, 4]");
-        }
+        requirePassCount(upliftSmoothingPasses, "upliftSmoothingPasses");
+        requirePassCount(singleCellLevelCleanupPasses, "singleCellLevelCleanupPasses");
     }
 
     /**
@@ -126,7 +126,8 @@ public record MountainRecipe(
                 100_000,
                 850,
                 1_250,
-                1);
+                1,
+                2);
     }
 
     private static void requirePositive(int value, String name) {
@@ -136,6 +137,12 @@ public record MountainRecipe(
     private static void requireNormalized(int value, String name) {
         if (value < 0 || value > PPM) {
             throw new IllegalArgumentException(name + " must be in [0, 1_000_000]");
+        }
+    }
+
+    private static void requirePassCount(int value, String name) {
+        if (value < 0 || value > 4) {
+            throw new IllegalArgumentException(name + " must be in [0, 4]");
         }
     }
 }
