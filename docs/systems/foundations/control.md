@@ -1,41 +1,54 @@
 # Control and Commands
 
-## Purpose
+## In plain language
 
-Provide one external-intent boundary for player input, AI adapters, scripts, scenarios, future network adapters and debug/admin tools without making generic Control depend on world-domain semantics.
+Control is the **front desk** for external requests to the simulation.
 
-Control is intentionally small. It is not an EventBus, Scheduler replacement, internal RPC layer or a rule that every authoritative mutation must be represented as a Command.
+A player, AI adapter, scenario, script or future network client can say “start this move” or “place this terrain”. Control routes that request to the system that actually owns the rule. It does not itself decide movement physics, terrain legality or resource behavior.
 
-## Command model
+Once a long-running action has started, its mechanic continues the work internally. The front desk is not called again every tick.
 
-`Command<R extends CommandResult>` describes immutable external intent. The command does not execute itself.
+## Current status
+
+The production Control layer provides synchronous external command submission with exact concrete-command-type dispatch and open structured result codes.
+
+It is intentionally not:
+
+- an EventBus;
+- a replacement for Scheduler;
+- an internal RPC layer between world systems;
+- a rule that every internal mutation must be a Command.
+
+## Command lifecycle
 
 ```text
 external producer
-    ↓
-Command
-    ↓
+      ↓
+immutable Command<R>
+      ↓
 CommandGateway
-    ↓
+      ↓
 CommandDispatcher
-    ↓ exact runtime command type
+      ↓ exact concrete command class
 registered CommandHandler
-    ↓
-narrow domain capability
+      ↓
+narrow domain-owned capability
+      ↓
+structured result
 ```
 
-A handler adapts external intent to the authoritative domain API; it does not become the owner of that mechanic.
+A handler adapts external intent to a domain API. It never becomes the owner of that domain.
 
-## Result floor
+## Result model
 
-Operation outcomes share the neutral observation contract:
+Operation results share a neutral floor:
 
 ```java
 boolean accepted();
 ResultCode code();
 ```
 
-`CommandResult` extends that floor. Result codes are open namespaced data such as:
+`CommandResult` extends this model. `ResultCode` is open namespaced data instead of a giant global enum:
 
 ```text
 terrain:placed
@@ -46,41 +59,68 @@ movement:move_to_started
 movement:move_to_cancel_requested
 ```
 
-There is no project-wide enum of every domain outcome. A use-case handler forwards `accepted + ResultCode` rather than recreating a closed mirror of domain reasons.
+This matters because a generic caller can observe success/rejection without forcing every domain to edit one central result catalog.
 
-Command acceptance and eventual completion are separate facts. An accepted timed `MoveStep` means its edge started. An accepted `MoveTo` means route-level intent was accepted; later `MoveToCompletion` says whether the goal was actually reached. An accepted `CancelMoveTo` means cancellation was requested; an already scheduled atomic edge may still complete before the route-level action terminates.
+## Acceptance is not completion
 
-## Rejection versus exception
+For an immediate operation, acceptance may effectively be completion. For a timed/continuing operation they are separate facts.
+
+Example:
 
 ```text
-expected conflict caused by valid current world state
-    -> structured result
-
-invalid programming/configuration/invariant state
-    -> exception
+submit MoveStep
+    ↓ accepted
+Movement edge is now owned/in progress
+    ↓ later scheduled completion
+MovementCompletion reports final outcome
 ```
 
-Normal rejection includes unavailable movement capability, locomotion already owned, unavailable transitions and occupied/reserved destinations. Null dependencies, duplicate handler registration or broken trusted-runtime invariants remain exceptional.
+For `MoveTo`, command acceptance means route-level intent was accepted. A later completion may still report success/failure after multiple atomic edges.
+
+For cancellation, accepted `CancelMoveTo` means cancellation was requested. The currently scheduled atomic edge may finish; the route starts no later edge and then releases route ownership.
+
+## Expected rejection versus exception
+
+EvoForge distinguishes a valid request that the current world cannot satisfy from broken program/configuration state.
+
+```text
+valid current-world conflict
+        ↓
+structured rejection result
+
+programming/configuration/invariant failure
+        ↓
+exception
+```
+
+Typical structured rejections include:
+
+- movement capability unavailable;
+- actor already owns locomotion work;
+- structural transition unavailable;
+- destination occupied/reserved.
+
+Examples of exceptional conditions include null core dependencies, duplicate handler registration or violated trusted-runtime invariants.
 
 ## Exact-type dispatch
 
-One concrete command class has exactly one registered handler. Current production registration includes:
+One concrete command class has one registered handler. Production registration includes commands such as:
 
 ```text
-PlaceTerrainCommand.class   -> PlaceTerrainHandler
-ReplaceTerrainCommand.class -> ReplaceTerrainHandler
-MoveStepCommand.class       -> MoveStepHandler
-MoveToCommand.class         -> MoveToHandler
-CancelMoveToCommand.class   -> CancelMoveToHandler
+PlaceTerrainCommand   -> PlaceTerrainHandler
+ReplaceTerrainCommand -> ReplaceTerrainHandler
+MoveStepCommand       -> MoveStepHandler
+MoveToCommand         -> MoveToHandler
+CancelMoveToCommand   -> CancelMoveToHandler
 ```
 
-The dispatcher does not search superclass/interface hierarchies for a "closest" handler. Missing and duplicate registration are bootstrap/programming failures.
+The dispatcher does not search interfaces/superclasses for the “closest” handler. Missing/duplicate registration is a bootstrap/programming failure.
 
-Adding another command registers one adapter; the generic dispatcher does not gain another domain `switch` branch.
+Therefore adding another command normally means adding/registering one adapter, not editing a central domain switch.
 
-## Dependency law
+## Dependency boundary
 
-Generic routing stays domain-neutral:
+Generic routing packages remain world-domain neutral:
 
 ```text
 simulation.control.core  -X-> world.*
@@ -88,62 +128,64 @@ simulation.control.sync  -X-> world.*
 world.*                  -X-> simulation.control.*
 ```
 
-Concrete use-case packages under `simulation/control/<use-case>/` may import the narrow domain API they adapt, for example:
+Concrete use-case handlers may depend on the narrow domain API they adapt:
 
 ```text
-terrain handlers          -> LandscapeMutations
-MoveStepHandler           -> MovementSystem
-MoveToHandler             -> MoveToSystem
-CancelMoveToHandler       -> MoveToSystem
+terrain handler -> LandscapeMutations
+move handler    -> MovementSystem
+MoveTo handler  -> MoveToSystem
 ```
 
-The reverse dependency remains forbidden.
+World domains never depend backwards on Control merely so they can continue their own work.
 
 ## Internal continuation is not command RPC
 
-After external intent has been accepted, continuing work stays inside the owning mechanic.
+After acceptance, continuing work belongs to its mechanic:
 
-Examples:
+- Movement completion remains Movement work;
+- `MoveTo` starting the next child edge remains route/Movement work;
+- timed opportunity use remains provider-owned work;
+- Need/Growth/liquid/environment processes remain their own scheduled work.
 
-- scheduled completion of an existing Movement action;
-- MoveTo starting its next child edge after a Movement completion;
-- provider-owned timed opportunity use;
-- Need/Growth/Water periodic process continuation.
+A later external cancellation is correctly a new Command because it is a new external intent. Its internal completion still stays inside Movement/MoveTo.
 
-For route-level movement:
+## Synchronous transport semantics
+
+`SynchronousCommandGateway.submit(...)` dispatches immediately. Any immediate ownership/state mutation caused by accepting the request is visible before the call returns.
+
+This does **not** mean a timed action completes synchronously.
+
+A future queued/asynchronous gateway could reuse the command/handler model only after defining queue order and within-tick visibility explicitly.
+
+## Invariants
+
+- Control routes external intent; it does not own domain meaning.
+- Every concrete command type has at most one handler.
+- Domain outcomes remain open namespaced result data.
+- Expected world-state conflicts are results, not exceptions.
+- Continuing internal mechanics do not route through Control repeatedly.
+- World domains do not depend on generic Control packages.
+
+## Current limitations
+
+There is no queued/network command transport, permission/auth model, command persistence or distributed command ordering yet.
+
+Those future transports must preserve explicit deterministic ordering/visibility semantics rather than assuming synchronous behavior accidentally.
+
+## Code and tests
+
+Primary code:
 
 ```text
-submit(MoveToCommand)
-    -> synchronously accept route intent
-    -> Movement/MoveTo own continuing work
-
-later Scheduler
-    -> MovementActionProcessor
-    -> completion cleanup/revalidation
-    -> MoveTo continues or terminates
+simulation/.../control/core/
+simulation/.../control/sync/
+simulation/.../control/<use-case>/
 ```
 
-A later external cancellation is a new external intent and therefore correctly crosses the command boundary once through `CancelMoveToCommand`; the cancellation's continuing completion still stays inside Movement.
+Tests cover registration/dispatch, accepted/rejected domain adaptation and Movement/MoveTo command lifecycle behavior.
 
-## Current synchronous transport
+## Sources
 
-`SynchronousCommandGateway.submit` dispatches immediately. Immediate accepted mutation/ownership is visible before `submit` returns.
+**Internal EvoForge design.** The external-intent boundary and open-result convention are project architecture, not an implementation of an external command-bus framework.
 
-Synchronous delivery does not imply synchronous domain completion. Timed commands may only start continuing work; a MoveTo may also reach an immediate terminal observation such as source-equals-goal or `NO_PATH` during submission.
-
-A future queued/asynchronous gateway may reuse the same command/handler contracts only after defining queue order and within-tick visibility explicitly.
-
-## Adding a command
-
-A new command should normally require:
-
-1. prove that the operation crosses the external-intent boundary;
-2. add the immutable command/result under the relevant use-case package;
-3. implement one typed handler using narrow domain APIs;
-4. register exactly one concrete command type;
-5. test accepted and expected-rejection paths;
-6. keep programming/configuration failures exceptional;
-7. forward open domain results without rebuilding an exhaustive result catalog;
-8. keep long-lived continuation in the owning domain rather than routing it back through Commands.
-
-See [Command Boundary decision](../decisions/003-command-boundary.md) and [Movement](movement.md).
+See [ADR-003: Command boundary](../../decisions/003-command-boundary.md), [Runtime Composition](runtime.md), [Movement](../traversal/movement.md), and [Time and Scheduling](time.md).

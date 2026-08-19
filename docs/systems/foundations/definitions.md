@@ -1,24 +1,49 @@
 # Definitions
 
-## Purpose
+## In plain language
 
-Represent immutable content/configuration separately from mutable runtime state. Definitions describe what a content type is configured to be; authoritative systems own what individual runtime instances, cells and processes currently store or do.
+Definitions describe **what a type of thing is configured to be**. Runtime systems describe **what one particular thing is doing right now**.
+
+For example, a Cow definition can say that Cows can move, see, become hungry and occupy a cell exclusively. It should not store where Cow #42 currently stands or how hungry Cow #42 currently is.
+
+This separation lets many runtime instances share immutable content data while every mechanic keeps ownership of its own changing state.
+
+## Current status
+
+EvoForge uses stable textual content keys plus mechanic-specific immutable compiled definition stores. Content composition is aspect-based rather than one universal schema containing every field that any future mechanic might want.
+
+Runtime numeric definition IDs are local optimized references; stable textual keys are the durable/content identity.
 
 ## Stable identity
 
-Source definitions use stable textual keys:
+Source definitions use namespaced textual keys:
 
 ```text
 namespace:name
 ```
 
-Runtime systems use typed numeric ids such as `ObjectDefinitionId` and `LandscapeDefinitionId` for efficient references and type safety.
+Examples:
 
-Runtime numeric ids are bootstrap-local and are **not durable persistence identity**. Future save/load or content-pack boundaries must preserve the stable textual key and resolve the current runtime id when loading.
+```text
+core:cow
+core:topsoil
+core:granite
+```
 
-## Composition-driven aspects
+Runtime systems may resolve those to typed numeric IDs such as `ObjectDefinitionId` or `LandscapeDefinitionId`.
 
-Definition source is composed from mechanic-specific aspects rather than one universal schema containing every future field.
+Important distinction:
+
+```text
+stable textual key     durable/content semantic identity
+runtime numeric id     composition-local efficient reference
+```
+
+A future save/content-pack boundary must preserve stable identity and resolve the appropriate runtime ID during load. Persisting the accidental integer registration order would be incorrect.
+
+## Aspect composition
+
+A definition source contributes only the mechanics it actually supports.
 
 Conceptually:
 
@@ -32,167 +57,221 @@ Conceptually:
 }
 ```
 
-A mechanic explicitly registers and owns compilation of the aspect it understands. Generic definition loading handles stable identity and dispatch without becoming a switch over all world mechanics.
+Each mechanic owns the compiler/store for its own aspect.
 
 ```text
-source data
-    ↓
-stable definition catalog
-    ↓
-explicit mechanic compilation
-    ↓
-mechanic-owned immutable lookup/store
+source definition
+      ↓ generic stable-key loading
+mechanic-specific aspect compiler
+      ↓
+immutable mechanic-owned definition lookup
+      ↓
+runtime mechanic
 ```
 
-Fundamental bootstrap remains explicit rather than reflection/service-discovery driven so dependencies and order stay visible and deterministic.
+Generic loading does not become a giant switch over all possible mechanics, and runtime mechanics do not inspect arbitrary raw JSON.
+
+Fundamental compiler/bootstrap registration is explicit rather than reflection/service-discovery magic so dependency/order stays visible and deterministic.
 
 ## Definition data versus runtime state
 
-A useful ownership test is:
+Use this test:
 
 ```text
-Does this value describe every instance of the definition identically?
-    -> definition data may be appropriate.
+Does the value describe every instance of this definition the same way?
+    → definition data may be correct.
 
-Can it change independently for one runtime object/cell/process?
-    -> runtime state belongs to an authoritative system.
+Can the value change independently for one runtime object/cell/process?
+    → authoritative runtime state belongs to the owning mechanic.
 ```
 
 Examples:
 
-```text
-MovementRate / WaterWadingProfile        object definition data
-exclusive-cell capability                object definition data
-Agent/Vision/Need capability parameters  object definition data
-ConsumableStock/Growth configuration     object definition data
-SurfaceTraversalCost                     landscape definition data
-SoilProperties                           landscape definition data
-SurfaceRetentionDefinitions              landscape material data
-LiquidTransportProperties                liquid identity configuration
+| Immutable definition/configuration | Mutable runtime state |
+|---|---|
+| Movement rate | current Movement action |
+| exclusive Occupancy capability | current destination reservation |
+| Water-wading profile | actual Water depth / actor position |
+| Vision parameters | currently perceived cells/objects |
+| Need configuration | current Need deficit |
+| Stock capacity/config | current finite quantity |
+| Growth configuration | current growth/replenishment state |
+| landscape traversal cost | current Terrain presence/material at XYZ |
+| Soil physical properties | retained constituent amounts |
+| surface retention capacity | actual free-liquid volume |
+| liquid viscosity | actual free-liquid identity/quantity at a cell |
 
-MovementAction / MovementClaim           mutable Movement state
-execution reservation                    mutable Occupancy state
-Spatial XYZ                              mutable Spatial state
-Need deficit / consumable quantity       mutable mechanic state
-Soil retained-liquid composition         mutable environmental state
-free-liquid quantity/type                mutable environmental state
-terrain presence/material per XYZ        mutable Terrain state
-```
-
-Definitions never own object existence, positions, movement progress, reservation lifetime, terrain-cell lifetime or finite resource/liquid quantity.
+Shape is also not a mutable field embedded inside landscape material definitions. It is Geometry state/override attached to Terrain anchor lifetime.
 
 ## Current object-definition aspects
 
-Current production composition includes independent immutable stores for:
+Production composition currently has independent definition data for capabilities including:
 
-- `movement` / `MovementRate` — positive transition-cost units per simulation tick;
-- `occupancy` — whether the definition requires an exclusive cell;
-- Water wading profile — maximum terrestrial Water depth accepted by that mover;
-- autonomous Agent capability declarations;
+- Movement rate;
+- exclusive Occupancy;
+- Water-wading depth/profile;
+- Agent capabilities;
 - Vision range/FOV;
-- Needs and Need motivation thresholds;
+- Need definitions/motivations;
 - Need progression;
-- Need satisfaction/provider use parameters;
+- Need-satisfaction/provider-use parameters;
 - semantic Need-solution knowledge;
-- finite Consumable Stock configuration;
-- Growth configuration.
+- finite Consumable Stock;
+- Growth.
 
-Absence has mechanic-specific meaning. For example, no Movement aspect means ordinary self-propelled Movement is unavailable; no exclusive Occupancy aspect means the object is transparent to exclusive-cell claims; no Water-wading aspect means Water-neutral traversal under the current contract.
+Absence has mechanic-specific meaning. For example:
 
-These aspects remain independent. A definition can combine them without forcing unrelated systems to know the content's concrete name/type.
+```text
+no Movement aspect  -> ordinary self-propelled Movement unavailable
+no exclusive aspect -> object does not claim exclusive cell occupancy
+no Water-wading data -> Water-neutral behavior under the current traversal contract
+```
+
+A definition may combine many aspects while the mechanics remain independent and never switch on `core:cow` merely because it happens to contain them.
 
 ## Current landscape-definition aspects
 
-Landscape identity is composed from independent mechanic data:
+Landscape definitions currently compose independent data such as:
 
-- `SurfaceTraversalCost` — actor-independent cost contribution for an already-valid structural edge;
-- `SoilProperties` — shared pore `capacity` plus material `permeability` for the reference-viscosity liquid;
+- `SurfaceTraversalCost` — intrinsic actor-independent cost contribution for a structurally valid edge;
+- `SoilProperties` — pore capacity + material permeability for the reference-viscosity liquid;
 - deterministic local Soil-capacity variation parameters;
-- generic `SurfaceRetentionDefinitions` — material microtopographic free-liquid reserve before same-Z horizontal runoff.
+- generic `SurfaceRetentionDefinitions` — microtopographic reserve of free liquid before same-Z horizontal runoff.
 
-`SoilProperties` is intentionally physical/material-owned. Liquid-specific uptake is derived by combining material permeability with the incoming liquid's `LiquidTransportProperties`, not by storing Water-specific infiltration limits or liquid/material pair tables.
-
-Shape is Geometry state/override associated with a terrain anchor lifetime, not a mutable field inside the material definition.
-
-A missing required traversal cost on terrain participating in an otherwise valid priced edge is broken content/bootstrap configuration rather than an invitation to silently substitute a fallback.
+Soil and liquid properties are deliberately separated. Effective infiltration combines material permeability with the incoming liquid's viscosity rather than storing Water-specific infiltration tables inside Terrain definitions.
 
 ## Canonical landscape material baseline
 
-The first generated-world landscape baseline uses four stable content identities from `assets/definitions/landscape`:
+The first shipped generated-world landscape baseline includes:
 
-| key | traversal cost | Soil capacity | Soil permeability |
-| --- | ---: | ---: | ---: |
+| Key | Traversal cost | Soil capacity | Soil permeability |
+|---|---:|---:|---:|
 | `core:granite` | 1000 | — | — |
 | `core:topsoil` | 1050 | 550000 | 100000 |
 | `core:soil` | 1100 | 450000 | 60000 |
 | `core:sand` | 1300 | 350000 | 250000 |
 
-These numbers are canonical **model-v1 intrinsic values**, not a claim that one normalized cell or one simulation tick directly equals a particular real-world soil sample or laboratory measurement. `capacity` uses the normalized `CellVolume` scale and therefore represents available pore volume. `permeability` is the material conductance used for the reference-viscosity liquid; liquid viscosity is combined separately by the existing infiltration model. Traversal cost is relative to the neutral cost of `1000`.
+These are **EvoForge model-v1 values**, not direct laboratory measurements.
 
-The baseline encodes only first-order relationships required by existing mechanics:
+Interpretation:
 
-- Granite is the neutral hard, non-porous baseline under the current Soil mechanic, so it intentionally has no `soil` aspect.
-- Topsoil has the largest pore capacity of the three porous materials and moderate permeability.
-- Soil has lower pore capacity and lower permeability than Topsoil.
-- Sand has lower pore capacity but substantially higher permeability, and its loose surface is more costly to traverse.
+- traversal cost `1000` is the neutral relative cost baseline;
+- Soil capacity uses normalized `CellVolume` units and represents available pore volume;
+- permeability is the current material conductance calibrated for the reference-viscosity liquid;
+- actual liquid-specific uptake combines this with `LiquidTransportProperties`.
 
-This baseline does **not** add granular Sand simulation, erosion, compaction, saturation-dependent traversal, material-specific runoff rules, or a hidden content switch. Those require real future mechanics and must not be inferred from the material name.
+The baseline intentionally expresses only relationships needed by existing mechanics:
 
-### Ordinary material authoring contract
+- Granite has no Soil aspect and is non-porous under current Soil mechanics;
+- Topsoil has the greatest pore capacity of the three porous baseline materials and moderate permeability;
+- Soil has lower capacity and lower permeability than Topsoil;
+- Sand has lower capacity but much higher permeability and a higher traversal cost.
 
-When a new material is fully expressible through existing aspects, authoring it is a data-only operation: add one definition file under the landscape definition directory containing its stable key and the aspects it actually supports. Directory loading discovers that file deterministically; existing aspect compilers consume it generically.
+The names do **not** automatically imply granular physics, erosion, compaction, wet-sand traversal or shoreline placement. Those require real mechanics/generated causes.
 
-Ordinary material addition must not require editing a central material list, adding Java branches for the material key, changing world-generation algorithms, or modifying unrelated evaluators/calibration code. A Java change is justified only when the content introduces a genuinely new semantic mechanic that existing aspects cannot express.
+## Data-only extension rule
 
-The canonical-material test loads the shipped directory through the normal `LandscapeDefinitionBootstrap` with generic traversal and Soil compilers. This makes the authoring contract executable and prevents the four baseline materials from becoming a parallel hard-coded registry.
+If a new material/object is fully expressible through existing aspects, adding it should be data-only.
+
+For landscape material:
+
+```text
+add a new definition file with stable key + existing aspects
+        ↓
+normal deterministic directory loading
+        ↓
+existing generic aspect compilers
+```
+
+Ordinary content addition should not require:
+
+- editing a central material enum/list;
+- Java branching on the new key;
+- modifying world-generation algorithms merely to recognize the name;
+- changing unrelated mechanics.
+
+A Java change is justified when the new content introduces a genuinely new mechanic that existing aspects cannot express.
 
 ## Liquid transport definitions
 
-`LiquidTypeId` is an open domain-owned identity. A liquid that participates in free transport or Soil infiltration must have `LiquidTransportProperties` registered during composition.
+`LiquidTypeId` is an open identity. A liquid that participates in transport/infiltration must have registered immutable `LiquidTransportProperties`.
 
-The current property is kinematic viscosity. `LiquidTransportDefinitions` is frozen at runtime like other definition stores, and missing transport data is treated as broken configuration rather than silently assuming Water behavior.
+The current property is **kinematic viscosity**.
 
-Water is explicitly registered with the reference viscosity used to calibrate the previously accepted Water transport rate.
+Missing required transport data is broken configuration, not an invitation to silently assume Water behavior.
 
-Adding future physical properties must be driven by an actual mechanic. EvoForge does not maintain a speculative omnibus liquid property bag.
+Water is explicitly registered with the reference viscosity used by the accepted current transport calibration.
 
-## Immutable compiled stores
+Do not create an omnibus liquid-property bag in anticipation of hypothetical chemistry. Add physical properties only when an actual mechanic consumes them.
 
-Mechanic-owned definition stores are frozen when `SimulationAssembly.start()` begins runtime execution. Production composition freezes Landscape, traversal, Soil properties/variation, generic surface retention, liquid transport, Object, Movement, Water-wading, Occupancy, Agent/Vision/Need/Stock/Growth definition stores before scheduled simulation work starts.
+## Immutability and runtime freeze
 
-Runtime systems therefore observe immutable configuration while authoritative mutable state remains in its owner.
+Mechanic definition stores are frozen when `SimulationAssembly.start()` begins runtime execution.
+
+This includes the current production stores for Landscape/traversal/Soil/retention/liquid transport and Object/Movement/wading/Occupancy/Agent/Vision/Need/Stock/Growth definitions.
+
+Runtime then observes immutable configuration while changing state remains in its authoritative system.
 
 ## Deterministic loading
 
-Loading/compilation must not turn filesystem iteration or unordered-map order into accidental simulation semantics.
+Filesystem or unordered-map iteration order must not become hidden simulation semantics.
 
-Stable identity resolution and explicit compiler/bootstrap registration keep startup deterministic. If future content packs need priority/override rules, that order must become an explicit contract rather than incidental directory behavior.
+Stable keys, deterministic directory loading and explicit compiler registration keep startup reproducible.
 
-## Extension rule
+If future content packs need override/priority rules, that priority becomes an explicit contract rather than relying on incidental file order.
 
-When existing mechanics already express a new content type, adding that content should normally be data-only:
+## World-generation semantic authoring
 
-```text
-existing mechanics + new definition source -> new content
-```
+The same philosophy applies to generation data. Human-authored generation definitions/intents express semantic character; domain calibrators derive exact physical/operational values.
 
-Needing Java branches for every ordinary content definition is a warning that semantics are too centralized.
-
-A genuinely new definition-backed mechanic normally adds:
+Example:
 
 ```text
-source aspect
-mechanic-owned immutable compiled lookup
-explicit bootstrap/compiler registration
-runtime consumer
-headless tests
-system documentation
+"ruggedness = 0.7"
 ```
 
-Do not reserve unused aspects for hypothetical mechanics.
+means strong ruggedness on an authored normalized scale, not “maximum slope = exactly X subunits” unless the chosen revision calibrator defines that relationship.
 
-One definition may contribute independently to many mechanics. Presentation bindings are separate again: visual family/name/art choices must not become hidden simulation definition semantics merely because they use the same stable content identity.
+This prevents content authors from having to duplicate implementation details of procedural algorithms.
 
-## Deferred
+See [World Generation](../world-generation/overview.md).
 
-Persistence migrations, mod/content-pack override policy, plugin packaging and durable serialized schema-version policy remain future consumers. The stable-key-versus-runtime-id distinction must survive those decisions.
+## Invariants
+
+- Stable textual keys are content identity; runtime integers are local implementation IDs.
+- Immutable definition meaning is separate from per-instance mutable state.
+- Every aspect has one mechanic owner/compiler.
+- Generic loading does not switch on every content/mechanic type.
+- Missing required configuration fails explicitly rather than creating silent physics fallbacks.
+- Existing mechanics + new ordinary content should normally mean data-only extension.
+- Definition stores are immutable during started runtime.
+
+## Current limitations
+
+Not yet defined:
+
+- save/persistence schema migration;
+- mod/content-pack precedence/override policy;
+- plugin packaging/service discovery;
+- durable network content negotiation;
+- general serialized definition-version compatibility.
+
+The stable-key/runtime-ID distinction must survive those future decisions.
+
+## Code and tests
+
+Generic definition infrastructure lives under:
+
+```text
+simulation/.../definition/
+```
+
+Mechanic-specific compiled definition stores live with their owning domains. Canonical landscape definitions are under `assets/definitions/landscape` and are loaded through the normal bootstrap path in tests so the baseline cannot quietly become a parallel Java registry.
+
+## Sources
+
+**Internal EvoForge design.** Aspect ownership, stable-key/runtime-ID separation and semantic generation authoring are project architecture.
+
+The current Soil hydraulic calibration that consumes semantic Soil descriptions has a direct scientific model source documented in [Soil Hydraulics](../environment/soil-hydraulics.md) and [References](../../references.md).
+
+See [Objects](objects.md), [Runtime Composition](runtime.md), [Architecture](../../architecture.md), and [World Generation](../world-generation/overview.md).

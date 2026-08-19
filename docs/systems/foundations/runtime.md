@@ -1,106 +1,186 @@
 # Runtime Composition
 
-## Purpose
+## In plain language
 
-Build the production simulation once, then expose only the capabilities appropriate to runtime consumers.
+`SimulationAssembly` is where EvoForge **builds the machine**. `SimulationRuntime` is the machine after the start button has been pressed.
 
-## Owns
+During setup, the assembly is allowed to connect mutable systems, definitions, adapters and scheduled processes. After `start()`, normal consumers receive only the capabilities appropriate to a running world: submit external intent, read simulation time, advance the simulation through the production stepper, and observe a read-only `SimulationView`.
 
-Bootstrap/composition only. `SimulationAssembly` may wire mutable owners during setup; it is not itself an authoritative domain owner.
+The assembly is wiring. It is not the owner of Terrain, Water, Movement or any other domain state.
+
+## Current status
+
+Production startup composes the established runtime domains including:
+
+- objects/definitions/spatial state;
+- Landscape + Geometry;
+- Navigation + transition cost;
+- Occupancy + Movement + MoveTo + Pathfinding;
+- generic free liquids + retained Soil constituents;
+- Water-specific atmosphere/traversal/read adapters;
+- Needs, finite stock, Growth and autonomous agents;
+- optional finite world bounds;
+- optional generated-world prepared data through the generated bootstrap path.
 
 ## Public runtime boundary
 
-`SimulationAssembly.start()` yields a `SimulationRuntime` exposing:
+`SimulationAssembly.start()` yields `SimulationRuntime`, exposing the stable high-level capabilities:
 
 ```text
-submit   external Command submission
+command submission
 SimulationTime
 SimulationStepper
 SimulationView
 ```
 
-`SimulationView` groups read-only world capabilities used by presentation and other observers. It exposes lookups/views, not mutable systems.
+`SimulationView` groups read-only capabilities. It is deliberately not a mutable service locator.
 
-Current production composition includes the established Landscape/Geometry/Navigation/Traversal/Occupancy/Movement/Pathfinding stack, generic liquid/retained-Soil foundations with Water-specific environment/traversal projections, Need/Stock/Growth and autonomous-agent read projections. Adding a new read capability is explicit rather than exposing a general mutable service locator.
+A presentation system can ask “what objects are in this cell?” or “how much Water is here?” but cannot reach into `LiquidSystem`, `SpatialSystem` or `MovementSystem` and mutate them directly.
+
+## Setup versus running world
+
+```text
+SimulationAssembly
+  register definitions
+  configure bounds/scales
+  wire authoritative owners
+  register handlers/processes/adapters
+  place initial state
+        ↓
+      start()
+        ↓
+SimulationRuntime
+  immutable configuration
+  authoritative domain systems running
+  read-only public view for observers
+```
+
+Definition stores used by production mechanics are frozen before scheduled runtime work begins.
 
 ## Optional finite world bounds
 
-Before `start()`, a scenario/runtime may configure one inclusive finite box:
+Before start, a runtime may configure one inclusive box:
 
 ```java
-assembly.worldBounds(minX, maxX, minY, maxY, minZ, maxZ);
+assembly.worldBounds(minX, maxX, minY, maxY, minZ, maxZ)
 ```
 
-The assembly configures the shared `WorldGeometryLookup`. Inside the box it delegates to ordinary landscape Geometry. Outside the box it resolves `FullShape`, which gives Geometry consumers one physically closed boundary without teaching liquids, Navigation, Movement or Pathfinding special coordinate-edge rules.
+Inside the box, normal Landscape Geometry applies. Outside it, shared `WorldGeometryLookup` resolves `FullShape`, making the boundary physically closed for Geometry consumers.
 
-Setup mutations that place Terrain/objects or initial liquid also reject coordinates outside configured bounds.
+This lets Navigation, Movement and liquids observe one boundary law through their existing Geometry dependency rather than implementing separate coordinate-edge checks.
 
-Bounds are optional. An assembly that does not configure them keeps unbounded semantics. This is a runtime containment capability, not yet a chunk-generation/streaming model.
+Setup placement/initial liquid also rejects coordinates outside configured bounds.
 
-## Liquid and hydrology composition
+If no bounds are configured, unbounded coordinate semantics remain available. This is containment, not chunk streaming.
 
-The assembly wires one shared liquid authority:
+## Liquid/Soil composition
+
+The current shared environmental ownership is:
 
 ```text
-LiquidSystem
-    |
-    +--> LiquidFlowSystem
-    |        |
-    |        `--> LiquidFlowProcess
-    |
-    +--> WaterSystem                 typed Water facade
-    |
-    `--> SoilLiquidInfiltrationSystem
-                 |
-                 v
-          SoilLiquidSystem
+LiquidSystem                 authoritative free-liquid cells
+   │
+   ├─ LiquidFlowSystem        generic redistribution
+   │    └─ LiquidFlowProcess  scheduled continuation while active
+   │
+   ├─ WaterSystem             typed Water facade
+   │
+   └─ SoilLiquidInfiltrationSystem
+            ↓
+      SoilLiquidSystem        retained constituents in porous Terrain
 ```
 
-Definition/configuration inputs are independent:
+Independent immutable configuration includes:
 
 ```text
-LiquidTransportDefinitions      per-liquid kinematic viscosity
-SoilPropertiesDefinitions       material pore capacity + permeability
+LiquidTransportDefinitions       liquid viscosity
+SoilPropertiesDefinitions        pore capacity + permeability
 SoilPropertiesVariationDefinitions
-SurfaceRetentionDefinitions     material free-liquid microtopography
+SurfaceRetentionDefinitions      material free-liquid surface reserve
 ```
 
-`LiquidFlowProcess` runs generic Soil infiltration immediately before each active hydraulic solve. There is no parallel Water flow process and no Water-only Soil exchange compatibility layer.
+Generic liquid flow performs Soil infiltration before each active hydraulic solve. There is not a second Water-only flow engine.
 
-Water-specific environment composition then attaches to the shared owners:
+Water-specific environment systems then compose over shared owners:
 
 ```text
-WaterSystem
-    +--> VerticalSkySurfaceSystem
-    +--> optional precipitation schedule
-    +--> optional evaporation schedule
-    +--> Water wading
-    `--> Water-filtered presentation/diagnostics
+Water facade
+  ├─ VerticalSkySurfaceSystem
+  ├─ precipitation / atmospheric forcing
+  ├─ evaporation
+  ├─ Water-wading traversal constraint
+  └─ Water-filtered diagnostics/presentation
 ```
-
-`SimulationView` exposes `SoilLiquidLookup`, `SoilPropertiesLookup`, generic surface retention, Water-filtered quantity/surface/flow lookups and the other established read capabilities. It does not expose a second Water-moisture authority.
-
-External precipitation/evaporation mutate through Water/retained-Soil owners and wake shared hydraulic work only when free-liquid state actually needs redistribution.
 
 ## Traversal composition
 
-One production `WaterWadingConstraint` is shared by advisory MoveTo query composition and authoritative Movement start/commit revalidation. The assembly performs this wiring; Water does not become Navigation state and MoveTo does not import Water directly.
+One production `WaterWadingConstraint` is shared between:
+
+- advisory MoveTo/path query filtering;
+- authoritative Movement start/commit revalidation.
+
+This is composed at bootstrap. Water does not become Navigation topology, and MoveTo does not hard-code Water storage.
+
+## Cross-system adapter law
+
+When two domains need to interact, composition owns the adapter whenever possible.
+
+Example:
+
+```text
+Water quantity + mover wading profile
+        ↓ composed WaterWadingConstraint
+Pathfinding/MoveTo advice + Movement revalidation
+```
+
+This avoids reversing dependencies or teaching generic systems specific content/domain implementations.
+
+## Generated-world relationship
+
+Generated worlds use the same production runtime. `GeneratedWorldRuntimeBootstrap` prepares an ordinary `SimulationAssembly`, materializes generated facts once, composes atmosphere and then calls `start()`.
+
+After start, generated and hand-authored scenarios obey the same domain systems/scheduler laws.
+
+See [Generated World Runtime](../world-generation/generated-world-runtime.md).
 
 ## Invariants
 
-- setup mutation does not leak through `SimulationRuntime`;
-- presentation receives `SimulationView`, `SimulationTime` and `SimulationStepper`, not a service-locator `World`;
-- adding a read capability is explicit and reviewable;
-- one free-liquid world has one `LiquidSystem` and one `LiquidFlowSystem`;
-- typed Water capabilities filter/adapt shared state rather than duplicating authority;
-- cross-system adapters are composed at the bootstrap boundary rather than by reversing domain dependencies;
-- production composition and test fixtures may differ in construction ergonomics without changing domain semantics;
-- optional runtime bounds are represented through shared Geometry, not duplicated by every consumer.
+- `SimulationAssembly` is composition/setup, not a mutable domain owner.
+- `SimulationRuntime` does not expose setup mutation.
+- `SimulationView` exposes reads, not mutable service internals.
+- One free-liquid world has one `LiquidSystem` and one `LiquidFlowSystem`.
+- Water-specific views/adapters filter shared liquid truth rather than duplicate it.
+- Cross-domain adapters are wired at composition instead of reversing package dependencies.
+- Optional bounds are shared through Geometry.
+- Production stepping semantics are centralized in `SimulationStepper`.
+- Tests may construct smaller fixtures, but domain laws remain identical.
 
-## Diagnostics and tests
+## Current limitations
 
-`VisualizerBoundaryTest` reflects over the visualizer constructor so mutable simulation dependencies cannot silently enter presentation. Integration tests exercise production composition for movement/pathfinding, generic liquid/Water hydrology, world bounds and autonomous-agent slices.
+Runtime composition does not yet define:
 
-## Deferred
+- queued/asynchronous external command delivery;
+- networking;
+- persistence/save loading;
+- chunk streaming/partial loaded-world composition;
+- authoritative multithreaded mutation.
 
-Queued/asynchronous external command delivery, networking, persistence composition and generated/streamed world loading remain future consumers.
+Those require explicit visibility/ownership semantics before implementation.
+
+## Code and tests
+
+Primary implementation:
+
+```text
+simulation/.../runtime/SimulationAssembly.java
+simulation/.../runtime/SimulationRuntime.java
+simulation/.../runtime/SimulationView.java
+```
+
+Integration tests exercise production composition for traversal, Water/hydrology, finite bounds, agents and generated-world startup. `VisualizerBoundaryTest` guards against mutable simulation dependencies leaking into presentation construction.
+
+## Sources
+
+**Internal EvoForge design.** Runtime composition/capability exposure is project-specific architecture.
+
+See [Architecture](../../architecture.md), [Control](control.md), [Time](time.md), [Hydrology](../environment/hydrology.md), and [Generated World Runtime](../world-generation/generated-world-runtime.md).

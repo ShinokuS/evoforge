@@ -1,149 +1,197 @@
 # Time and Scheduling
 
-## Purpose
+## In plain language
 
-Provide deterministic discrete simulation time and event-driven activation so persistent inactive objects do not require mandatory per-object `update(dt)` work.
+EvoForge has its own clock. One simulation tick is an authoritative step of world time; it is **not** one rendered frame and it does not depend on monitor refresh rate.
 
-## Responsibility split
+Most things also do not need to “wake up” every tick. A movement completion due in 12 ticks, a growing plant and a dormant Water field can all sleep until real causal work is due. This is why EvoForge uses a scheduler/process model instead of mandatory `update(dt)` on every persistent object.
+
+## Current status
+
+The production time stack is:
 
 ```text
-SimulationClock       authoritative current tick
-SimulationTime        read-only tick capability
-Scheduler             when work is due + deterministic due ordering
-HandlerRegistry       HandlerId -> ScheduledHandler
-ProcessScheduler      narrow domain capability: scheduleAfter(delay, processId)
-BoundProcessScheduler binds one domain process family to one HandlerId + SimulationTime
-SimulationStepper     production definition of one simulation tick
-domain process owner  what processId means and what happens when it wakes
+SimulationClock      mutable authoritative current tick
+SimulationTime       read-only tick capability
+Scheduler            stores due activations + deterministic ordering
+HandlerRegistry      HandlerId -> ScheduledHandler
+ProcessScheduler     narrow domain scheduling capability
+BoundProcessScheduler
+SimulationStepper    authoritative one-tick phase
 ```
 
-The core law is:
+Domain systems own the meaning of process IDs and state. Scheduler owns only when/routing.
+
+## The core responsibility split
 
 ```text
-Scheduler knows WHEN / HANDLER / PROCESS ID.
-Domain knows WHAT THE PROCESS MEANS.
+Scheduler:
+  WHEN does work wake?
+  WHICH registered handler receives it?
+  WHICH opaque process id is carried?
+
+Domain mechanic:
+  WHAT does that process id mean?
+  WHAT authoritative state changes when it wakes?
 ```
 
-Scheduler must not become a central switch over simulation mechanics.
+Scheduler must never become a switch containing Movement, Water, Growth, Needs and every future mechanic.
 
-## Clock boundary
+## Clock versus wall time
 
-`SimulationClock` is mutable authoritative simulation time. `SimulationTime` exposes only `tick()` to consumers that may observe but not advance time.
+`SimulationClock` owns the integer tick. Consumers that only need to observe receive `SimulationTime.tick()`.
 
-Wall-clock time, renderer FPS and monitor refresh rate do not define authoritative mechanics. Presentation game speed changes how many simulation ticks are advanced per real second; it does not mutate MovementRate, Growth rates or other domain data.
+Rendering speed can decide how quickly real-world seconds are converted into requests to advance simulation ticks, but it does not directly alter:
 
-## Scheduled work
+- Movement rate;
+- Growth rate;
+- Need progression;
+- hydrology laws;
+- any other authoritative per-tick mechanic.
 
-Conceptually a scheduled task carries:
+That keeps the same simulation reproducible at different FPS.
+
+## Scheduled activation identity
+
+A scheduled activation conceptually contains:
 
 ```text
-when
+dueTick
 HandlerId
 processId
 TaskHandle
-stable ordering identity
+stable task ordering identity
 ```
 
-`processId` is opaque to Scheduler. The pair `HandlerId + processId` routes an activation without a global enum of all gameplay process types.
+`processId` is opaque infrastructure data. Meaning belongs to the registered domain handler.
 
-A domain process family normally registers one handler, not one handler per object/action. Thousands of Movement actions, Need progression processes or Growth processes can share their respective family handler while carrying distinct domain ids.
+Thousands of Movement actions can therefore share one Movement process-family handler while using distinct process IDs.
 
-## Domain process identity versus TaskHandle
-
-These identities stay separate:
+`TaskHandle` is different from domain process identity:
 
 ```text
-domain process id   semantic identity owned by mechanic
-TaskHandle          infrastructure identity of one scheduled activation
+domain process id = semantic domain identity
+TaskHandle        = one scheduler activation identity
 ```
 
-One domain process may eventually schedule multiple activations; cancellation of one task does not inherently redefine domain-process identity.
-
-Current route-level `MoveTo` cancellation deliberately does **not** cancel an already scheduled atomic Movement task: the current edge may finish, no next edge starts, and route ownership is released afterward. `MovementStateStore` therefore still does not retain the Scheduler `TaskHandle` for early mid-edge cancellation. A future mechanic that genuinely needs atomic task cancellation must own that lifecycle explicitly.
+One domain process may schedule multiple activations over its lifetime.
 
 ## Narrow relative scheduling
 
-A domain start system normally receives:
+A domain usually should not receive raw Scheduler + mutable clock + arbitrary HandlerId authority.
+
+Instead it can receive:
 
 ```java
-ProcessScheduler.scheduleAfter(long delayTicks, long processId)
+ProcessScheduler.scheduleAfter(delayTicks, processId)
 ```
 
-rather than raw Scheduler, HandlerId and mutable clock authority.
+`BoundProcessScheduler` already knows the family's `HandlerId` and reads current `SimulationTime` to calculate the absolute due tick.
 
-`BoundProcessScheduler` reads current `SimulationTime`, calculates the absolute due tick and delegates using its already-bound HandlerId. A mechanic can therefore say “wake my process 17 after 10 ticks” without choosing another domain's handler or advancing time.
+This lets a mechanic say “wake my process 17 in 10 ticks” without being able to route work into another domain's handler.
 
-## Production tick semantics
+## Exact production tick semantics
 
-`SimulationStepper` owns the current one-tick phase order:
+One production tick is currently:
 
 ```text
 1. SimulationClock.advance()
 2. Scheduler.dispatchDue(clock.tick())
 ```
 
-Scenario fixtures and presentation drive this production operation; they do not invent parallel tick semantics.
+`SimulationStepper` owns this order.
 
-Therefore advancing ten ticks is semantically ten calls to the same production step and must match ten individual advances.
+Therefore advancing 10 ticks must be semantically equivalent to invoking the same one-tick production operation 10 times; tests/scenarios should not call scheduled handlers manually and invent an alternate phase model.
 
-## Same-tick dispatch
+## Same-tick scheduling semantics
 
-A dispatch processes a deterministic snapshot batch of work that was due when dispatch began. A handler scheduling more work for the current tick does not cause unbounded recursive draining inside that same batch.
+A Scheduler dispatch operates on a deterministic snapshot of work due when that dispatch begins.
 
-Movement additionally enforces duration of at least one tick, so an adjacent edge never schedules its own completion for the tick in which it starts. A committed child Movement completion may synchronously let MoveTo request the next edge, but that next edge's scheduled completion is still at least one later tick.
+If a handler schedules additional work for the **current tick**, that newly created activation is not recursively drained forever inside the same batch.
 
-A future mechanic requiring repeated scheduled same-tick activation must explicitly justify a phase-policy change rather than rely on accidental recursion.
+Movement additionally requires an atomic edge duration of at least one tick, so an edge never schedules its own completion on its start tick.
 
-## Deterministic ordering
+If a future mechanic genuinely requires repeated same-tick scheduled activation, it must justify an explicit phase-policy change rather than relying on accidental recursion.
 
-Tasks due at the same simulation time have stable explicit ordering by scheduled time/task identity rather than map/heap iteration or thread timing.
+## Deterministic due ordering
 
-This ordering is already observable in current same-tick process composition such as Movement/Occupancy contention, Need/Growth progression and environment schedules. Domain semantics must not rely on accidental collection order.
+Activations due at the same tick are ordered by explicit stable scheduler/task identity rather than map iteration, heap accident or thread timing.
 
-Where two periodic environmental processes need ordering-independent semantics, the contract is encoded explicitly; current precipitation/evaporation composition, for example, suppresses evaporation on a precipitation tick rather than depending on which handler happens to dispatch first.
+This ordering can be observable in contention, so domain behavior must never depend on unspecified collection order.
 
-## Domain actions are not Scheduler state
+Where two processes should be logically order-independent, encode that semantics explicitly. Current periodic precipitation/evaporation, for example, suppresses evaporation on a precipitation-event tick instead of hoping the scheduler happens to run rain first.
 
-A scheduled task is infrastructure. A domain action/process remains domain runtime state.
+## Domain action versus scheduler state
 
-Examples:
-
-```text
-MovementAction      object/source/destination semantics in MovementStateStore
-Need progression    Need-specific process state/definition
-Growth              stock-replenishment process state/trace
-Water flow          active hydraulic frontier + one process continuation
-ScheduledTask       due time/routing in Scheduler
-```
-
-Crafting/combat/construction should follow the same ownership rule if they later become real mechanics instead of being forced into one universal Action/Scheduler state model.
-
-## Event-driven activity
-
-The intended scale model is:
+A scheduled activation is not the domain action itself.
 
 ```text
-persistent objects may remain inactive indefinitely
-only active causal processes schedule work
-Scheduler wakes due process ids
-domain handler resumes authoritative domain state
+MovementAction          authoritative Movement state
+Need progression state authoritative Need state/process
+Growth state            authoritative Growth/resource state
+Liquid active frontier  authoritative hydraulic-work state
+ScheduledTask           infrastructure wake-up
 ```
 
-Water flow also demonstrates sparse self-dormancy: once the active frontier reaches a fixed point, no continuing WaterFlow task remains until a Water mutation wakes it again.
+This separation lets domain systems revalidate, cancel or reschedule according to their own lifecycle rather than treating Scheduler as a universal action store.
 
-CPU cost can therefore correlate with active processes rather than total persistent object count. Concrete allocation/storage optimization remains workload-driven.
+### MoveTo cancellation example
 
-## Diagnostics and tests
+Current route cancellation deliberately does not cancel an already in-flight atomic Movement activation. The current edge may finish; route logic then starts no later edge and releases route ownership.
 
-Coverage includes clock advancement, handler registration, deterministic due ordering, task identity/cancellation infrastructure, bound relative scheduling, SimulationStepper phase order, scheduled Movement completion, route continuation/cancellation behavior and batched-versus-individual tick equivalence.
+Because current semantics do not require mid-edge cancellation, `MovementStateStore` does not retain a `TaskHandle` just in case. A future death/stun mechanic can introduce that ownership only if it truly needs it.
 
-Domain integration tests use real production stepping rather than manually calling scheduled handlers at arbitrary times.
+## Event-driven scale model
 
-## Deferred
+```text
+persistent state may sleep indefinitely
+        ↓
+a causal event creates/activates work
+        ↓
+domain schedules a future activation
+        ↓
+Scheduler wakes the process when due
+        ↓
+domain resumes its own state
+        ↓
+work finishes or schedules the next meaningful wake-up
+```
 
-- authoritative RNG-stream ownership when a mechanic requires stateful randomness rather than current deterministic hash variation;
-- mid-action TaskHandle retention/cancellation when a real death/stun/replacement consumer requires it;
-- background scheduling and multithreaded authoritative mutation;
-- any phase-model change required by a demonstrated same-tick consumer.
+Liquid flow demonstrates the same principle spatially: once its active frontier reaches a fixed point, the process becomes dormant until a free-liquid mutation wakes new hydraulic work.
 
-Those changes must preserve explicit deterministic ordering or deliberately revise it as an architectural decision.
+## Invariants
+
+- Simulation ticks are authoritative; renderer FPS is not.
+- Scheduler owns activation timing/routing, not domain meaning.
+- Domain process identity is separate from `TaskHandle`.
+- Same-tick dispatch uses a bounded deterministic batch.
+- Same-due-tick ordering is stable.
+- Domain systems receive narrow scheduling capabilities when possible.
+- Production tests/scenarios advance time through `SimulationStepper`.
+- Optimization through sleeping/scheduling must preserve domain semantics.
+
+## Current limitations
+
+Not yet defined:
+
+- authoritative multithreaded mutation;
+- distributed scheduler/network time;
+- stateful authoritative RNG-stream ownership for mechanics that genuinely need it;
+- general mid-action scheduled-task cancellation/interrupt phases;
+- richer sub-tick simulation phases.
+
+## Code and tests
+
+Primary code lives under:
+
+```text
+simulation/.../time/
+```
+
+Representative coverage includes clock advancement, handler registration, deterministic due order, task handles/cancellation infrastructure, bound scheduling, production step ordering, Movement completion, route continuation/cancellation and batched-versus-individual advancement equivalence.
+
+## Sources
+
+**Internal EvoForge design.** The discrete tick/process ownership model is project architecture; it is not presented as a particular published discrete-event simulation kernel.
+
+See [Runtime Composition](runtime.md), [Movement](../traversal/movement.md), and [Architecture](../../architecture.md).
