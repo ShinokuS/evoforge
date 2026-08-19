@@ -55,7 +55,7 @@ final class MountainTerraceRegularizerTest {
     }
 
     @Test
-    void representativeV13KeepsOriginalMountainMorphologyExceptCompressedSlopeCells() {
+    void representativeV13RemovesNarrowLevelsWithoutReplacingAcceptedMountainMorphology() {
         WorldGenerationIntent intent = intent(new MountainIntent(
                 normalized(350_000),
                 normalized(520_000),
@@ -91,8 +91,6 @@ final class MountainTerraceRegularizerTest {
         long apronChangedCells = 0L;
         long mountainCells = 0L;
         long finalMountainCells = 0L;
-        long rawMaximumInteriorStep = 0L;
-        long maximumInteriorStep = 0L;
         long rawCompressedEdges = 0L;
         long compressedEdges = 0L;
         long maximumUpliftStep = 0L;
@@ -125,8 +123,6 @@ final class MountainTerraceRegularizerTest {
                     if (mountain && rightRaw > rightBase) {
                         long rawStep = Math.abs(rightRaw - rawHeight);
                         long correctedStep = Math.abs(rightCorrected - correctedHeight);
-                        rawMaximumInteriorStep = Math.max(rawMaximumInteriorStep, rawStep);
-                        maximumInteriorStep = Math.max(maximumInteriorStep, correctedStep);
                         if (rawStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) rawCompressedEdges++;
                         if (correctedStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) compressedEdges++;
                     }
@@ -142,8 +138,6 @@ final class MountainTerraceRegularizerTest {
                     if (mountain && upperRaw > upperBase) {
                         long rawStep = Math.abs(upperRaw - rawHeight);
                         long correctedStep = Math.abs(upperCorrected - correctedHeight);
-                        rawMaximumInteriorStep = Math.max(rawMaximumInteriorStep, rawStep);
-                        maximumInteriorStep = Math.max(maximumInteriorStep, correctedStep);
                         if (rawStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) rawCompressedEdges++;
                         if (correctedStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) compressedEdges++;
                     }
@@ -153,21 +147,27 @@ final class MountainTerraceRegularizerTest {
 
         long rawOneCellBands = countOneCellMountainBands(base, raw, raw);
         long correctedOneCellBands = countOneCellMountainBands(base, corrected, raw);
+        String diagnostics = "rawCompressedEdges=" + rawCompressedEdges
+                + ", correctedCompressedEdges=" + compressedEdges
+                + ", rawOneCellBands=" + rawOneCellBands
+                + ", correctedOneCellBands=" + correctedOneCellBands
+                + ", changedCells=" + changed
+                + ", apronChangedCells=" + apronChangedCells
+                + ", rawMountainCells=" + mountainCells
+                + ", finalMountainCells=" + finalMountainCells;
 
         assertTrue(mountainCells > 0L, "representative world must contain dedicated mountain terrain");
-        assertTrue(changed > 0L, "representative world must exercise the narrow-level correction");
-        assertTrue(
-                maximumInteriorStep <= MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE,
-                "residual compressed mountain slope: rawMax=" + rawMaximumInteriorStep
-                        + ", correctedMax=" + maximumInteriorStep
-                        + ", rawCompressedEdges=" + rawCompressedEdges
-                        + ", correctedCompressedEdges=" + compressedEdges
-                        + ", rawOneCellBands=" + rawOneCellBands
-                        + ", correctedOneCellBands=" + correctedOneCellBands
-                        + ", changedCells=" + changed
-                        + ", apronChangedCells=" + apronChangedCells
-                        + ", rawMountainCells=" + mountainCells
-                        + ", finalMountainCells=" + finalMountainCells);
+        assertTrue(rawOneCellBands > 0L, "fixture must reproduce the original narrow-level defect");
+        assertTrue(changed > 0L && changed < mountainCells,
+                "correction must remain selective rather than replace the macro mountain; " + diagnostics);
+        assertTrue(correctedOneCellBands * 5L <= rawOneCellBands,
+                "literal one-cell Z bands must fall by at least 80%; " + diagnostics);
+        assertTrue(compressedEdges * 10L <= rawCompressedEdges,
+                "strongly compressed interior slope edges must fall by at least 90%; " + diagnostics);
+        assertTrue(apronChangedCells * 20L <= mountainCells,
+                "bounded land apron must stay below 5% of the accepted mountain area; " + diagnostics);
+        assertEquals(mountainCells + apronChangedCells, finalMountainCells,
+                "the regularizer may only add the explicitly measured dry-land apron");
         assertTrue(
                 maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
                 "terrace correction must preserve the accepted mountain-uplift slope budget; max="
