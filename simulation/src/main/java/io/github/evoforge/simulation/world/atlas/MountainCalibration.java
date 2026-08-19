@@ -10,10 +10,14 @@ public record MountainCalibration(
         int typicalHalfWidthCells,
         int typicalLongAxisCells,
         long typicalUpliftSubunits,
+        long worldHeightCapSubunits,
+        long maximumCardinalRiseSubunits,
         int peakSharpnessPpm,
         int sharpnessMilli,
         boolean plateausEnabled,
         int plateauProbabilityPpm,
+        int coastalTransitionCells,
+        long shorelineUpliftSubunits,
         long baseTerrainCeilingSubunits,
         long mountainCeilingSubunits) {
 
@@ -24,14 +28,24 @@ public record MountainCalibration(
         if (candidateSpacingCells <= 0
                 || typicalHalfWidthCells <= 0
                 || typicalLongAxisCells < typicalHalfWidthCells
-                || sharpnessMilli <= 0) {
+                || sharpnessMilli <= 0
+                || coastalTransitionCells <= 0) {
             throw new IllegalArgumentException("mountain calibrated spatial values are invalid");
         }
         requireNormalized(candidateActivationPpm, "candidateActivationPpm");
         requireNormalized(peakSharpnessPpm, "peakSharpnessPpm");
         requireNormalized(plateauProbabilityPpm, "plateauProbabilityPpm");
-        if (typicalUpliftSubunits < 0L) {
-            throw new IllegalArgumentException("typicalUpliftSubunits must be non-negative");
+        if (typicalUpliftSubunits < 0L
+                || worldHeightCapSubunits < 0L
+                || maximumCardinalRiseSubunits <= 0L
+                || shorelineUpliftSubunits < 0L) {
+            throw new IllegalArgumentException("mountain calibrated vertical values are invalid");
+        }
+        if (typicalUpliftSubunits > worldHeightCapSubunits) {
+            throw new IllegalArgumentException("typical mountain uplift must not exceed the world-size height cap");
+        }
+        if (shorelineUpliftSubunits > typicalUpliftSubunits && typicalUpliftSubunits > 0L) {
+            throw new IllegalArgumentException("shoreline mountain uplift must not exceed typical uplift");
         }
         if (baseTerrainCeilingSubunits <= 0L || mountainCeilingSubunits <= baseTerrainCeilingSubunits) {
             throw new IllegalArgumentException("mountain ceiling must leave positive headroom above V12 base terrain");
