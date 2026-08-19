@@ -67,14 +67,14 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
 
-        // A smoothstep hill can have a steeper middle band than simple height / radius suggests.
-        // Reserve 1.5x horizontal room so ordinary settings predominantly compile to coherent ramps
-        // instead of full-cell walls.
+        // For f(r)=smoothstep(1-r^2), the steepest radial derivative is about 2.23 * height/radius.
+        // Reserve 2.25x horizontal room so the mountain layer itself remains near the requested
+        // cardinal rise and compiles predominantly into long coherent ramps rather than wall bands.
         int coupledHalfWidth = typicalUplift == 0L
                 ? recipe.minimumHalfWidthCells()
                 : Math.toIntExact(Math.max(
                         1L,
-                        (typicalUplift * 3L + allowedRise * 2L - 1L) / (allowedRise * 2L)));
+                        (typicalUplift * 9L + allowedRise * 4L - 1L) / (allowedRise * 4L)));
         int typicalHalfWidth = Math.max(authoredHalfWidth, coupledHalfWidth);
 
         int chaininessPpm = intent.chaininess().partsPerMillion();
