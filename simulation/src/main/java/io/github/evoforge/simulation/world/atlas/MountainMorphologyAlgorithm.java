@@ -8,15 +8,15 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.PriorityQueue;
 
 /**
  * Deterministic spatial synthesis for V13 mountain structure.
  *
- * <p>The accepted V12 hills remain the visual reference. Each mountain starts as one very large
- * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. The result
- * is then constrained only by abstract surface geometry: cardinal mountain uplift may not change
- * faster than the calibrated rise budget. No concrete runtime Shape participates in this stage.</p>
+ * <p>The accepted 4e0f4e3 morphology remains the visual reference: one very large asymmetric,
+ * anisotropic smooth hill with a subordinate inner core. The source is now sized correctly before
+ * rasterization. Its actual sampled uplift is resolved first, then all authored axes are scaled
+ * together so the steepest derivative of that same smooth profile fits the geometric rise budget.
+ * No post-generation terrace widening and no concrete runtime Shape participates in this stage.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -28,6 +28,10 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
+
+    // Numerical upper bound for |d(profile)/d(normalized radius)| across the accepted smooth-hill
+    // sharpness range, including the subordinate inner core. A small safety margin is intentional.
+    private static final double PROFILE_GRADIENT_BOUND = 2.35;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -92,13 +96,6 @@ final class MountainMorphologyAlgorithm {
                     calibration.shorelineUpliftSubunits(),
                     calibration.maximumCardinalRiseSubunits());
             clampToCaps(mountainUplift, coastalCaps, land);
-            enforceCardinalRiseBudget(
-                    mountainUplift,
-                    coastalCaps,
-                    land,
-                    width,
-                    height,
-                    calibration.maximumCardinalRiseSubunits());
         }
 
         long[] result = baseHeights.clone();
@@ -123,7 +120,19 @@ final class MountainMorphologyAlgorithm {
         int maximumLongAxis = Math.max(
                 maximumWidth,
                 (int) StrictMath.ceil(calibration.typicalLongAxisCells() * (1.0 + variation)));
-        int margin = Math.max(1, (maximumLongAxis + spacing - 1) / spacing + 1);
+
+        double maximumHeightScale = 1.0 + recipe.heightVariationPpm() / (double) PPM;
+        long maximumSystemUplift = Math.max(
+                0L,
+                Math.round(calibration.typicalUpliftSubunits() * maximumHeightScale));
+        int requiredSourceRadius = requiredSourceRadiusCells(
+                maximumSystemUplift,
+                calibration.maximumCardinalRiseSubunits());
+        double maximumElongation = recipe.maximumLongAxisWidthPpm() / (double) PPM;
+        int maximumSourceSupport = Math.max(
+                maximumLongAxis,
+                (int) StrictMath.ceil(requiredSourceRadius * maximumElongation * (1.0 + variation)));
+        int margin = Math.max(1, (maximumSourceSupport + spacing - 1) / spacing + 1);
 
         long minimumLatticeX = Math.floorDiv((long) bounds.minX(), spacing) - margin;
         long maximumLatticeX = Math.floorDiv((long) bounds.maxX(), spacing) + margin;
@@ -183,6 +192,20 @@ final class MountainMorphologyAlgorithm {
                 0L,
                 Math.round(calibration.typicalUpliftSubunits() * upliftScale));
 
+        // This is the actual source-level fix. Preserve the already accepted asymmetry and
+        // elongation ratios, but enlarge the complete source when its real sampled height would make
+        // the smooth profile cross Z levels too quickly. Nothing is widened after rasterization.
+        int requiredRadius = requiredSourceRadiusCells(
+                uplift,
+                calibration.maximumCardinalRiseSubunits());
+        double narrowSide = Math.max(1.0, Math.min(leftWidth, rightWidth));
+        if (requiredRadius > narrowSide) {
+            double sourceScale = requiredRadius / narrowSide;
+            leftWidth *= sourceScale;
+            rightWidth *= sourceScale;
+            longAxis *= sourceScale;
+        }
+
         boolean plateau = calibration.plateausEnabled()
                 && samplePpm(random, PLATEAU, latticeX, latticeY, 0L)
                         < calibration.plateauProbabilityPpm();
@@ -197,6 +220,12 @@ final class MountainMorphologyAlgorithm {
                 rightWidth,
                 uplift,
                 plateau);
+    }
+
+    private static int requiredSourceRadiusCells(long uplift, long maximumRise) {
+        if (uplift <= 0L) return 1;
+        double required = uplift * PROFILE_GRADIENT_BOUND / Math.max(1.0, maximumRise);
+        return Math.max(1, (int) StrictMath.ceil(required));
     }
 
     private static void rasterize(
@@ -271,7 +300,7 @@ final class MountainMorphologyAlgorithm {
                         recipe.plateauCorePpm());
         double coreWeight = recipe.coreWeightPpm() / (double) PPM;
 
-        // Keep the original broad hill untouched at the outer slope and progressively add the core
+        // Keep the accepted broad hill untouched at the outer slope and progressively add the core
         // only where vertical headroom exists. Center remains normalized to exactly 1.
         return Math.min(1.0, base + coreWeight * core * (1.0 - base));
     }
@@ -351,8 +380,8 @@ final class MountainMorphologyAlgorithm {
 
     /**
      * Shore cells may retain a small cliff uplift. Moving inland, the allowed mountain uplift grows
-     * by at most the same cardinal rise budget used everywhere else, so the coast cannot create a
-     * hidden vertical discontinuity in the dry mountain surface.
+     * by at most the same source rise budget, so coastal mountains remain possible without a hidden
+     * wall in the mountain contribution itself.
      */
     private static long[] coastalUpliftCaps(
             boolean[] land,
@@ -381,78 +410,6 @@ final class MountainMorphologyAlgorithm {
                 uplift[cell] = caps[cell];
             }
         }
-    }
-
-    /**
-     * Expands only slopes that violate the abstract cardinal rise budget. Lower neighboring cells
-     * are raised; peaks are not shaved down. This keeps high mountains possible while guaranteeing
-     * broad horizontal elevation bands. Priority ordering is deterministic for equal uplift values.
-     */
-    private static void enforceCardinalRiseBudget(
-            long[] uplift,
-            long[] caps,
-            boolean[] land,
-            int width,
-            int height,
-            long maximumRise) {
-        PriorityQueue<UpliftNode> queue = new PriorityQueue<>((first, second) -> {
-            int byHeight = Long.compare(second.uplift(), first.uplift());
-            return byHeight != 0 ? byHeight : Integer.compare(first.cell(), second.cell());
-        });
-
-        for (int cell = 0; cell < uplift.length; cell++) {
-            if (land[cell] && hasTooLowNeighbor(uplift, land, width, height, cell, maximumRise)) {
-                queue.add(new UpliftNode(cell, uplift[cell]));
-            }
-        }
-
-        while (!queue.isEmpty()) {
-            UpliftNode node = queue.poll();
-            int cell = node.cell();
-            if (node.uplift() != uplift[cell]) continue;
-            long propagated = uplift[cell] - maximumRise;
-            if (propagated <= 0L) continue;
-
-            int x = cell % width;
-            int y = cell / width;
-            if (x > 0) propagate(cell - 1, propagated, uplift, caps, land, queue);
-            if (x + 1 < width) propagate(cell + 1, propagated, uplift, caps, land, queue);
-            if (y > 0) propagate(cell - width, propagated, uplift, caps, land, queue);
-            if (y + 1 < height) propagate(cell + width, propagated, uplift, caps, land, queue);
-        }
-    }
-
-    private static boolean hasTooLowNeighbor(
-            long[] uplift,
-            boolean[] land,
-            int width,
-            int height,
-            int cell,
-            long maximumRise) {
-        long value = uplift[cell];
-        if (value <= maximumRise) return false;
-        int x = cell % width;
-        int y = cell / width;
-        if (x > 0 && land[cell - 1] && value - uplift[cell - 1] > maximumRise) return true;
-        if (x + 1 < width && land[cell + 1] && value - uplift[cell + 1] > maximumRise) return true;
-        if (y > 0 && land[cell - width] && value - uplift[cell - width] > maximumRise) return true;
-        return y + 1 < height
-                && land[cell + width]
-                && value - uplift[cell + width] > maximumRise;
-    }
-
-    private static void propagate(
-            int target,
-            long propagated,
-            long[] uplift,
-            long[] caps,
-            boolean[] land,
-            PriorityQueue<UpliftNode> queue) {
-        if (!land[target]) return;
-        long candidate = Math.min(caps[target], propagated);
-        if (candidate <= uplift[target]) return;
-        uplift[target] = candidate;
-        queue.add(new UpliftNode(target, candidate));
     }
 
     /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
@@ -543,8 +500,5 @@ final class MountainMorphologyAlgorithm {
             double rightWidth,
             long upliftSubunits,
             boolean plateau) {
-    }
-
-    private record UpliftNode(int cell, long uplift) {
     }
 }
