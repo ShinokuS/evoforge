@@ -1,100 +1,62 @@
-# 2026-08-13 — Multi-agent movement conflicts belong above local occupancy
+# Multi-agent movement conflicts belong above local occupancy
 
-**Status:** Historical development note
+- Type: Entry
+- Status: Historical record
+- Date: 2026-08-13
+- Normative: No
 
-Occupancy design raised a larger question than the first milestone needs to solve: what should happen when many autonomous objects interact while moving through the same changing world?
+## Context
 
-Examples include two agents walking toward each other in a one-cell corridor, several agents surrounding one mover, repeated mutual blocking at a doorway, one agent cutting across another agent's planned route, or different kinds of creatures being able to yield, push, swap, retreat or simply wait.
+While exclusive Occupancy was being designed, larger future problems immediately appeared: two agents meeting in a one-cell corridor, repeated doorway blocking, groups trying to pass, yielding, swapping, pushing and deadlock/livelock.
 
-We deliberately did **not** turn those scenarios into the first Occupancy contract.
+The risk was to turn the first Occupancy contract into a speculative multi-agent planning framework.
 
-## Local execution reservation
+## What was observed
 
-The current reservation has one narrow job:
-
-```text
-an accepted concrete MoveStep
-    → claims only its immediate destination
-    → claim lives until that step completes or is interrupted
-```
-
-It does not reserve the rest of a future path.
-
-This keeps correctness local. Two exclusive movers cannot start into the same destination at once, while later cells remain free to change before they become real execution steps.
-
-## A path is advice
-
-A future Pathfinder may return something like:
+The important distinction is:
 
 ```text
-A → B → C → D → E
+execution reservation
+  a claim for the immediate step that has actually started
+
+planning reservation
+  a prediction that some future route may use space later
 ```
 
-Only `A → B` becomes authoritative when one-edge Movement successfully starts it. If another object occupies or reserves `C` before it becomes the next edge, the route may be discarded or reconsidered rather than forcing Movement to follow stale advice.
+They solve different problems.
 
-A future `MoveTo`/route owner is therefore the natural place to decide whether to:
+The current narrow reservation model therefore remained:
 
 ```text
-continue
-wait briefly
-retry
-replan
-abandon the destination
-escalate the failure to the agent
+accepted MoveStep
+    ↓
+reserve only immediate destination
+    ↓
+keep claim until that atomic step completes/fails
 ```
 
-Occupancy only reports the present fact. It does not decide strategy.
+A longer path remains advice. If a later route cell changes before execution reaches it, route-level logic can retry, replan, wait or fail without Occupancy pretending that the future path was authoritative.
 
-## Future conflict-resolution space
+The design also exposed the accepted conservative “caterpillar” effect: a moving exclusive object keeps its Spatial source until completion while reserving its destination, so a close follower cannot claim the leader's source early.
 
-Real multi-agent play may justify additional policies such as:
+Finally, the discussion reinforced that spatial presence, exclusive occupancy, future traversal influence and concealment are independent mechanic-specific properties rather than one universal “physical object” flag set.
 
-- yielding or backing out of a bottleneck;
-- priority based on current intent, definition capabilities or higher-level agent state;
-- explicit swap/displacement between compatible actors;
-- pushing when one actor has the physical/logical ability to move another;
-- coordinated following so a column can advance through narrow space more efficiently;
-- group/formation movement;
-- detection and recovery from deadlock or livelock;
-- bounded space-time planning reservations if repeated local replanning is measured as a real problem.
+## Outcome
 
-Those mechanisms should be introduced by the first real scenario that needs them. Different objects may reasonably resolve the same geometric conflict differently, so the eventual policy may depend on independent definition capabilities and current logical state rather than one universal collision rule.
+No yielding, path-wide reservations, swaps or deadlock framework was added to Occupancy. Those remain future multi-agent policy/mechanics to introduce only when representative agent scenarios require them.
 
-## Execution reservation is not planning reservation
+## What became canonical
 
-The distinction is important:
+Today:
 
-```text
-Execution reservation
-    current authoritative claim for a step that is actually starting
+- Occupancy owns immediate execution reservation only;
+- `MoveTo` owns route-level intent and executes one atomic Movement edge at a time;
+- Pathfinding routes are disposable advice;
+- multi-agent conflict strategy remains above local Occupancy/Movement correctness.
 
-Planning reservation
-    predicted future use of space by a route that may still change
-```
+## Links forward
 
-They solve different problems and do not need to share one storage model or lifecycle.
-
-## Known caterpillar effect
-
-Current timed Movement keeps Spatial position at the source until completion while reserving the destination. This means a follower cannot immediately claim the leader's source in a one-cell corridor.
-
-The resulting conservative “caterpillar” throughput is accepted for now. Fixing it by early source release or coordinated movement would change authoritative movement semantics, so it needs real multi-agent evidence first.
-
-## One object can contribute to many mechanics
-
-The Occupancy discussion also clarified a broader world-model principle.
-
-Spatial presence, exclusive occupancy, traversal influence and concealment are independent properties. A bush is a useful example:
-
-```text
-Spatial presence       yes
-exclusive Occupancy    no
-traversal slowdown     possible future contribution
-concealment            possible future contribution
-```
-
-A cow might be spatially present and exclusive while not providing either of the other effects. A sword may be spatially present but transparent to all of them.
-
-The architecture should therefore compose mechanic-specific definition capabilities rather than branch on concrete content types or grow one universal “physical” flag set.
-
-This note is intentionally non-normative. Current contracts live in the Occupancy and Movement system pages; these scenarios are reminders for future Pathfinder, MoveTo and agent work.
+- [Occupancy](../../systems/traversal/occupancy.md)
+- [Movement](../../systems/traversal/movement.md)
+- [Pathfinding](../../systems/traversal/pathfinding.md)
+- [Autonomous Agents](../../systems/agents/agents.md)
