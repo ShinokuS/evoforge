@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  * Immutable model choices for the V13 structural mountain stage.
  *
  * <p>The model deliberately knows nothing about concrete runtime Shapes. Its readability contract
- * is geometric: mountain elevation changes slowly enough across horizontal cells that the later
- * generic surface fitter can choose whatever geometry represents that surface well.</p>
+ * is geometric: mountain systems are born wide enough for their own vertical rise, so later surface
+ * fitting consumes an already valid mountain instead of repairing one.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
@@ -94,9 +94,9 @@ public record MountainRecipe(
     }
 
     /**
-     * Smooth-hill mountains with a geometry-only slope budget. At ordinary sharpness the mountain
-     * layer rises by about one vertical cell per three horizontal cells; even maximum sharpness
-     * remains above two horizontal cells per vertical level.
+     * Direct bounded-slope mountain synthesis. Even maximum sharpness stays near one vertical cell
+     * per three-plus horizontal cells, and actual per-system width is coupled 1:1 to its varied
+     * uplift so random height/width variation cannot violate that source-generation contract.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -109,10 +109,10 @@ public record MountainRecipe(
                 1,
                 100_000,
                 1_000_000,
-                220_000,
-                420_000,
+                180_000,
+                300_000,
                 850_000,
-                750_000,
+                1_000_000,
                 1_150_000,
                 2_350_000,
                 12,
@@ -126,7 +126,7 @@ public record MountainRecipe(
                 100_000,
                 850,
                 1_250,
-                1);
+                0);
     }
 
     private static void requirePositive(int value, String name) {
