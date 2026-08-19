@@ -28,15 +28,10 @@ public record MountainRecipe(
         int minimumCoastalTransitionCells,
         int shorelineUpliftPpm,
         int maximumShorelineUpliftCells,
-        int coreRadiusPpm,
-        int coreWeightPpm,
         int plateauCorePpm,
         int centerJitterPpm,
         int widthVariationPpm,
-        int heightVariationPpm,
-        int minimumSharpnessMilli,
-        int maximumSharpnessMilli,
-        int upliftSmoothingPasses) {
+        int heightVariationPpm) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -75,28 +70,16 @@ public record MountainRecipe(
         requirePositive(minimumCoastalTransitionCells, "minimumCoastalTransitionCells");
         requireNormalized(shorelineUpliftPpm, "shorelineUpliftPpm");
         requirePositive(maximumShorelineUpliftCells, "maximumShorelineUpliftCells");
-        requireNormalized(coreRadiusPpm, "coreRadiusPpm");
-        if (coreRadiusPpm <= 0 || coreRadiusPpm >= PPM) {
-            throw new IllegalArgumentException("coreRadiusPpm must be strictly inside (0, 1_000_000)");
-        }
-        requireNormalized(coreWeightPpm, "coreWeightPpm");
         requireNormalized(plateauCorePpm, "plateauCorePpm");
         requireNormalized(centerJitterPpm, "centerJitterPpm");
         requireNormalized(widthVariationPpm, "widthVariationPpm");
         requireNormalized(heightVariationPpm, "heightVariationPpm");
-        requirePositive(minimumSharpnessMilli, "minimumSharpnessMilli");
-        if (maximumSharpnessMilli < minimumSharpnessMilli) {
-            throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
-        }
-        if (upliftSmoothingPasses < 0 || upliftSmoothingPasses > 4) {
-            throw new IllegalArgumentException("upliftSmoothingPasses must be in [0, 4]");
-        }
     }
 
     /**
-     * Direct bounded-slope mountain synthesis. Even maximum sharpness stays near one vertical cell
-     * per three-plus horizontal cells, and actual per-system width is coupled 1:1 to its varied
-     * uplift so random height/width variation cannot violate that source-generation contract.
+     * Direct bounded-slope mountain synthesis. The steepest authored mountain rises by at most
+     * 0.235 vertical cell per cardinal step. Even a diagonal cut therefore spends about three grid
+     * cells on one vertical level, while actual per-system width is coupled 1:1 to its varied uplift.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -109,24 +92,19 @@ public record MountainRecipe(
                 1,
                 100_000,
                 1_000_000,
-                180_000,
-                300_000,
-                850_000,
+                200_000,
+                235_000,
+                920_000,
                 1_000_000,
                 1_150_000,
                 2_350_000,
                 12,
                 120_000,
                 3,
-                520_000,
-                380_000,
                 220_000,
                 140_000,
                 100_000,
-                100_000,
-                850,
-                1_250,
-                0);
+                100_000);
     }
 
     private static void requirePositive(int value, String name) {
