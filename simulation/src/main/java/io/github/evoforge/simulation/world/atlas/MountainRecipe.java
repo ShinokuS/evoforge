@@ -93,17 +93,12 @@ public record MountainRecipe(
         }
     }
 
-    /**
-     * Keeps the accepted 4e0f4e3 mountain character but reserves more horizontal distance for each
-     * vertical level. Peak sharpness remains semantic character; it is not allowed to collapse the
-     * source mountain below roughly three horizontal cells per vertical level before V12 terrain is
-     * composed underneath it.
-     */
+    /** Balanced structural-mountain defaults. Abundance owns coverage; scale owns structure size. */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
                 12,
                 8,
-                160,
+                180,
                 40_000,
                 180_000,
                 2,
@@ -119,12 +114,12 @@ public record MountainRecipe(
                 12,
                 120_000,
                 3,
-                520_000,
-                380_000,
+                500_000,
+                340_000,
                 220_000,
-                140_000,
-                100_000,
-                100_000,
+                220_000,
+                220_000,
+                120_000,
                 850,
                 1_250,
                 1);
