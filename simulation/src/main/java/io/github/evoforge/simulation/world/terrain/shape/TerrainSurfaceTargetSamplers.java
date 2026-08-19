@@ -77,9 +77,7 @@ final class TerrainSurfaceTargetSamplers {
             TransitionIntent intent) {
         long level = Math.floorDiv(elevation.elevationSubunitsAt(x, y), CELL);
         int lateralCoordinate = intent.dx() != 0 ? y : x;
-        int phase = Math.floorMod(level * 2L, V13_RAMP_LATERAL_SPACING) > Integer.MAX_VALUE
-                ? 0
-                : (int) Math.floorMod(level * 2L, V13_RAMP_LATERAL_SPACING);
+        int phase = (int) Math.floorMod(level * 2L, V13_RAMP_LATERAL_SPACING);
         return Math.floorMod(lateralCoordinate + phase, V13_RAMP_LATERAL_SPACING) == 0;
     }
 
