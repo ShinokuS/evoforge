@@ -35,6 +35,7 @@ Architecture Decision Records (ADRs) preserve **why** durable project rules exis
 | 020 | Terrain palettes hide generated complexity |
 | 021 | World preparation and calibration boundary |
 | 022 | Green checkpoint development |
+| 023 | Strict modular architecture and replaceable boundaries |
 
 All decision files are being normalized to the common format defined in the [Documentation Guide](../guides/documentation.md).
 

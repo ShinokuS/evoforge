@@ -56,6 +56,24 @@ runtime owner
 
 Meaning, calibration, model policy, spatial synthesis, generated facts and runtime ownership are deliberately separate concerns.
 
+### Strict modularity is a project-wide invariant
+
+Every non-trivial subsystem must remain decomposable into small cohesive blocks with clear owners, clear typed inputs/outputs and explicit one-way dependencies.
+
+Independently meaningful algorithms, calibrators, planners, selectors and runtime processes are replaceable through composition. Generic orchestration depends on their contracts, not concrete implementation classes. A compatible implementation should be swappable without editing unrelated consumers.
+
+Package/file structure is part of this contract. Names and directories must make ownership discoverable; unrelated responsibilities must not accumulate in giant stage classes or generic dumping-ground packages merely because they are convenient.
+
+At the same time, EvoForge does **not** abstract every private helper. The rule is:
+
+```text
+strong abstraction at real semantic boundaries
++ simple concrete implementation inside the boundary
++ explicit composition
+```
+
+This is [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md). It has the same mandatory status as the green-checkpoint development rule in ADR-022.
+
 ## Current stable capabilities
 
 The integration line already contains working foundations for:
@@ -173,8 +191,10 @@ Do not accumulate feature-specific patches in those placeholders. Replace or nar
 7. **Headless evidence + manual acceptance where needed:** tests prove invariants; visual quality is explicitly reviewed rather than inferred from numbers.
 8. **No premature universal framework:** extract shared abstractions only after real consumers prove a common concept.
 9. **Green checkpoints:** one independently meaningful concern is implemented and verified before the next semantic change is added.
+10. **Strict modular architecture:** classes/packages have clear single responsibilities, independently meaningful algorithms/processes are replaceable behind narrow typed seams, composition is separate from policy, and package/file structure visibly mirrors ownership.
+11. **Abstraction at boundaries, simplicity inside:** do not hard-wire replaceable implementations, but also do not create speculative interfaces/frameworks for private details without a real independent consumer.
 
-See [Architecture](architecture.md) and [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md).
+See [Architecture](architecture.md), [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md) and [ADR-023: Strict modular architecture](decisions/023-strict-modular-architecture.md).
 
 ## Development rule
 
@@ -182,6 +202,8 @@ Production work advances in this order:
 
 ```text
 state one contract / ownership question
+        ↓
+identify owner + typed seam + package/file placement
         ↓
 smallest meaningful implementation step
         ↓
@@ -196,6 +218,8 @@ next concern
 
 An unexplained red checkpoint blocks further semantic work. Diagnose the earliest stage that emits the wrong fact before adding downstream repair. Refactors that claim to preserve behavior stay separate from semantic changes.
 
+Before extending a subsystem, confirm the change does not widen an already-confused owner. If a compatible algorithm/process cannot be replaced without unrelated edits, fix the missing boundary first rather than adding more concrete coupling.
+
 The detailed procedure lives in [Development Workflow](guides/development-workflow.md).
 
 ## How to recover context in five minutes
@@ -203,13 +227,13 @@ The detailed procedure lives in [Development Workflow](guides/development-workfl
 Read in this order:
 
 1. **This page** — current state and direction.
-2. [Architecture](architecture.md) — global rules.
+2. [Architecture](architecture.md) — global rules, especially ownership and modularity.
 3. [Roadmap](roadmap.md) — complete/next/deferred work.
 4. The relevant group under [Systems](systems/) — current system semantics/algorithms.
-5. [Decisions](decisions/) — durable rationale.
+5. [Decisions](decisions/) — durable rationale, especially ADR-022 and ADR-023 before non-trivial development.
 6. [Development Journal](journal/) only for historical investigation/acceptance records.
 
-Then verify the owning production package and its tests before changing semantics.
+Then verify the owning production package, its contracts and its tests before changing semantics. The repository structure should itself make the responsible block discoverable; if it does not, treat that as architecture debt rather than guessing from old chat history.
 
 ## Documentation truth hierarchy
 
@@ -234,6 +258,8 @@ Confirm all of the following:
 - Stage 1 final PR is merged into `develop` and its final head is green;
 - the accepted V13 surface is the explicit dry-morphology input;
 - Stage 2 begins with one clear drainage/basin/carving ownership contract rather than extending provisional threshold hydrography blindly;
+- drainage analysis, basin/hierarchy decisions and spatial carving are separated when they have independent ownership/replacement value;
+- each replaceable algorithm/process has a narrow typed seam and a package location that communicates its owner before implementation grows around it;
 - each component is built as a green checkpoint with focused tests/diagnostics before the next component;
 - river/lake geometry is observable while still completely dry;
 - any durable pipeline/ownership change updates normative documentation and an ADR when required.

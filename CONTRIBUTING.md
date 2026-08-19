@@ -30,10 +30,31 @@ A test is changed because the intended contract changed, never merely because th
 
 See [ADR-022](docs/decisions/022-green-checkpoint-development.md) and the detailed [Development Workflow](docs/guides/development-workflow.md).
 
+## Mandatory architecture discipline
+
+Every non-trivial production change must also preserve EvoForge's strict modular architecture:
+
+1. identify the authoritative owner of the new fact/behavior before coding;
+2. keep each class/process/package focused on one explainable responsibility;
+3. depend across blocks on narrow typed contracts rather than concrete implementation classes or generic mutable contexts;
+4. expose an explicit replaceable seam when an algorithm, calibrator, process or strategy can vary independently;
+5. keep composition/orchestration separate from domain policy and algorithm mathematics;
+6. keep semantic meaning, calibration, versioned model policy and execution separate when they are independently meaningful concerns;
+7. make package and file structure communicate domain ownership clearly instead of accumulating unrelated code in generic `util`, `manager`, `service`, `common` or giant stage classes;
+8. verify important replaceability boundaries with substitution/composition tests;
+9. abstract real semantic boundaries strongly, but keep private implementation detail simple and concrete until another real consumer proves a common abstraction;
+10. if adding a feature requires widening a confused owner or branching generic code on a replaceable concrete type, stop and repair the boundary before adding more behavior.
+
+A compatible implementation should be replaceable without editing unrelated downstream consumers. Clear code organization is part of correctness because future development must be able to locate, reason about, replace and test one block without reconstructing historical context.
+
+See [ADR-023](docs/decisions/023-strict-modular-architecture.md), [Architecture](docs/architecture.md) and the detailed [Development Workflow](docs/guides/development-workflow.md).
+
 ## Before a feature PR is merged
 
 - keep the change focused on one coherent slice and the commit sequence readable as independent checkpoints;
-- add/update headless tests for semantic changes;
+- review package/file placement and verify each changed block has one clear owner/responsibility;
+- verify replaceable algorithms/processes are consumed through contracts rather than concrete-class knowledge;
+- add/update headless tests for semantic changes and architecture/composition tests where replaceability is part of the contract;
 - run `./gradlew test --rerun-tasks --console=plain` for cross-module work;
 - update normative documentation when semantics or developer operation changed;
 - run `npm run docs:build` when documentation/site configuration changed;

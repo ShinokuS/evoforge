@@ -26,6 +26,49 @@ The long-lived branches have different jobs:
 
 A branch is cheap. Use one before an uncertain architectural direction becomes entangled with unrelated work.
 
+## Architecture-quality contract
+
+Every production slice must satisfy [ADR-023: Strict modular architecture and replaceable boundaries](../decisions/023-strict-modular-architecture.md) before it is considered complete.
+
+Before implementation, answer these questions explicitly:
+
+```text
+Who owns the fact/behavior?
+What are the exact typed inputs and outputs?
+Which parts are semantic meaning, calibration/model policy, execution and composition?
+Which algorithm/process can vary independently?
+Where does that replaceable seam live?
+Which package/file owns each responsibility?
+What evidence proves an alternate implementation can be substituted cleanly?
+```
+
+The architecture rules are:
+
+1. **One explainable responsibility per block.** Classes, processes, records and packages should not become mixed owners of unrelated semantics.
+2. **Typed boundaries over concrete dependencies.** Cross-block code depends on the narrowest semantic contract it needs. Avoid ambient mutable contexts, service-locator bags and concrete implementation knowledge in generic consumers.
+3. **Replace independently meaningful mechanisms.** Algorithms, calibrators, planners, selectors, runtime processes or strategies that can change independently are injected/composed behind typed seams.
+4. **Orchestrators compose only.** Composition roots choose implementations and order dependencies; they do not absorb domain formulas, tuning policy or feature-specific branches.
+5. **Separate semantic meaning, calibration, model policy and execution.** One layer should not silently re-derive responsibility already owned upstream.
+6. **One owner for shared policy.** A model constant or rule consumed by multiple components has one explicit versioned/policy owner rather than being copied into several implementations.
+7. **Package/file structure mirrors ownership.** Names and directories must make the owner discoverable. Do not use generic dumping-ground packages as an alternative to deciding responsibility.
+8. **Verify replaceability.** Important seams receive composition/substitution tests when practical.
+9. **Abstract boundaries, not private details.** Use a few strong abstractions around independently meaningful components; keep internal helpers concrete until multiple real consumers prove a reusable concept.
+10. **Stop on architecture friction.** If the next feature requires widening a god-object, adding concrete-type branching in generic code or passing a larger universal context, repair the smallest missing boundary before continuing.
+
+A useful target is:
+
+```text
+clear semantic owner
+      ↓
+narrow typed interface
+      ↓
+simple concrete implementation
+      ↓
+explicit composition root
+```
+
+The goal is not maximum interface count. The goal is that a future compatible implementation can be swapped, combined or edited without reopening unrelated parts of the project.
+
 ## Green-checkpoint engineering contract
 
 Production development is a sequence of **small green checkpoints**, not one large implementation followed by late debugging.
@@ -76,7 +119,9 @@ update develop
     ↓
 create feature/<focused-name>
     ↓
-define semantic ownership + acceptance evidence
+define owner + typed boundaries + replaceable seams + acceptance evidence
+    ↓
+place the component in the package that owns that responsibility
     ↓
 implement one small component
     ↓
@@ -85,6 +130,8 @@ focused test/check → green commit
 repeat small green checkpoints
     ↓
 feature-level diagnostics/manual observation where relevant
+    ↓
+architecture review: ownership, dependencies, replaceability, package/file clarity
     ↓
 update only normative documentation whose semantics changed
     ↓
@@ -115,7 +162,7 @@ A temporary diagnostic branch may intentionally contain probes that production c
 
 ## Pull request shape
 
-A healthy feature PR should be understandable from its commit sequence. A typical non-trivial PR may look like:
+A healthy feature PR should be understandable from its commit sequence and package structure. A typical non-trivial PR may look like:
 
 1. semantic contract/model;
 2. one replaceable implementation component;
@@ -125,7 +172,7 @@ A healthy feature PR should be understandable from its commit sequence. A typica
 
 This is not a required file-count template. The invariant is that every commit is a coherent, green checkpoint and later commits do not hide unresolved defects from earlier ones.
 
-Before final acceptance, remove temporary diagnostics and dead/superseded code, review the whole diff for ownership leaks, run the full required checks and reconcile documentation with the actual final behavior.
+Before final acceptance, remove temporary diagnostics and dead/superseded code, review the whole diff for ownership leaks, verify that replaceable boundaries are actually consumed through interfaces/contracts, check that package/file names still communicate responsibility, run the full required checks and reconcile documentation with the actual final behavior.
 
 ## Milestone flow
 
@@ -138,7 +185,8 @@ Before opening the milestone PR:
 3. build the documentation site;
 4. reconcile `roadmap.md` and every normative system page touched by the milestone with current code/tests;
 5. perform required desktop/manual acceptance and representative profiling;
-6. make sure no known correctness issue is being hidden behind a future TODO.
+6. make sure no known correctness issue is being hidden behind a future TODO;
+7. perform a final architecture review for ownership, dependency direction, replaceability and package/file clarity.
 
 Then open one `develop -> main` PR. The preferred merge is a **merge commit** for this boundary: feature PRs were already squashed into coherent commits on `develop`, while the merge commit preserves ancestry and gives `main` an explicit milestone boundary without making `develop` diverge from it.
 
@@ -175,7 +223,7 @@ An implementation-only refactor does not require editing system documentation wh
 
 Normative documentation is part of milestone acceptance. Historical Development Journal notes are not rewritten to pretend earlier uncertainty never existed.
 
-See [Documentation Guide](documentation.md), [Development Branching Model](../decisions/005-development-branching-model.md) and [Green Checkpoint Development](../decisions/022-green-checkpoint-development.md).
+See [Documentation Guide](documentation.md), [Development Branching Model](../decisions/005-development-branching-model.md), [Green Checkpoint Development](../decisions/022-green-checkpoint-development.md) and [Strict Modular Architecture](../decisions/023-strict-modular-architecture.md).
 
 ## Performance
 

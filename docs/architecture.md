@@ -77,6 +77,18 @@ A normal domain failure such as “destination occupied” or “not enough stoc
 
 Authoritative mutation currently happens on the simulation thread. Concurrency may be added later only with an explicit ownership redesign; background work must not silently mutate live world truth.
 
+### 7. Strict modular boundaries and replaceability
+
+Every non-trivial subsystem is decomposed into small cohesive blocks with one explainable responsibility, explicit typed inputs/outputs and one-way dependencies.
+
+Independently meaningful algorithms, calibrators, planners, selectors, runtime processes and policies are replaceable through composition. Generic orchestration depends on their contracts rather than concrete implementation classes. A compatible implementation should be replaceable without editing unrelated downstream consumers.
+
+Package and file structure is part of the architecture. Names/directories must reveal ownership instead of hiding unrelated responsibilities inside generic dumping grounds or giant all-purpose stages.
+
+This does **not** mean every private helper becomes an interface. EvoForge requires strong abstraction at real semantic boundaries and simple concrete implementation inside those boundaries.
+
+See [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md).
+
 ## Time and execution
 
 ### Simulation time is not rendering time
@@ -192,6 +204,38 @@ When a new implementation fits an existing semantic contract, add it behind that
 
 If a real new consumer proves the contract insufficient, revise the smallest owning contract rather than adding an escape hatch.
 
+### Orchestrators compose; domain blocks own policy
+
+A composition root may choose implementations and order true dependencies. It should not also become the home for domain mathematics, calibration rules, feature-specific thresholds or mutable domain state.
+
+When semantic meaning, calibration, versioned model policy and execution are independently meaningful, keep them distinct:
+
+```text
+semantic meaning
+      ↓
+calibration + model policy
+      ↓
+replaceable algorithm/process
+      ↓
+typed fact / authoritative mutation
+```
+
+Shared policy has one owner instead of being copied into several implementations.
+
+### Package and file structure mirrors ownership
+
+The package tree should make it possible to locate the owner of a fact or algorithm without reconstructing historical implementation context.
+
+Prefer domain/ownership-oriented packages and focused file names. Avoid accumulating unrelated responsibilities in generic `util`, `common`, `service`, `manager` or giant stage classes merely because those locations are convenient.
+
+If a package cannot be explained by one coherent domain responsibility, treat that as architectural debt.
+
+### Abstraction belongs at real seams
+
+Do not confuse replaceability with maximum indirection. A few strong interfaces at independently meaningful boundaries are preferred over many speculative strategy/factory layers around private helpers.
+
+Internal mathematics/data structures stay simple and concrete until another real consumer proves a stable reusable concept.
+
 ### Do not build universal abstractions without consumers
 
 A possible future common concept is not enough reason to create a framework. Build the smallest correct boundary for the current real mechanic and extract shared structure only when multiple real consumers prove it exists.
@@ -258,6 +302,8 @@ Once a path is known to be hot, avoid unnecessary scans, allocations, boxing and
 
 Fundamental mechanics require headless deterministic tests. Important architectural boundaries that can be expressed structurally should also be executable tests so violations fail immediately.
 
+Where replaceability is part of the architecture, composition/substitution tests should prove that orchestration accepts a small alternate implementation without concrete-class knowledge.
+
 Diagnostics are part of system design: important state transitions should be inspectable without teaching the visualizer to own simulation truth.
 
 Visual aesthetics are different. Unit tests should protect deterministic geometry/selection/invariants, while final visual quality is manually accepted when necessary.
@@ -276,5 +322,7 @@ Documentation follows the same ownership principle as code:
 - `references.md` — reusable external model/algorithm sources.
 
 Implementation-only refactors normally do not require semantic documentation changes. A semantic change must update the owning System page in the same PR; a global architectural change also updates this page and normally receives an ADR when the reason should survive.
+
+The mandatory implementation process is defined by [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md); the mandatory architectural shape is defined by [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md). Both apply to future production work.
 
 See the [Documentation Guide](guides/documentation.md).
