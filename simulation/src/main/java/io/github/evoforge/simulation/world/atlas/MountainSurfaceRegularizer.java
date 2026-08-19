@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * <p>This class deliberately knows nothing about runtime Shapes. It only observes authoritative
  * elevation and discrete vertical cell levels. A one-cell mountain level squeezed between the same
  * neighbouring level is treated as contour noise and replaced by the local opposite-neighbour
- * surface. Wider bands are preserved for the generic shape fitter to interpret later.</p>
+ * surface when that replacement still obeys the abstract cardinal-rise budget.</p>
  */
 final class MountainSurfaceRegularizer {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
@@ -20,9 +20,13 @@ final class MountainSurfaceRegularizer {
     static ElevationField removeIsolatedSingleCellLevels(
             ElevationField base,
             ElevationField generated,
+            long maximumCardinalRise,
             int passes) {
         if (base == null || generated == null) {
             throw new IllegalArgumentException("mountain surface inputs must not be null");
+        }
+        if (maximumCardinalRise <= 0L) {
+            throw new IllegalArgumentException("maximumCardinalRise must be positive");
         }
         if (passes < 0) throw new IllegalArgumentException("cleanup passes must be non-negative");
         if (!sameHorizontalBounds(base.bounds(), generated.bounds())) {
@@ -92,7 +96,18 @@ final class MountainSurfaceRegularizer {
                     } else {
                         continue;
                     }
-                    scratch[cell] = Math.max(1L, Math.min(ceiling, replacement));
+                    replacement = Math.max(1L, Math.min(ceiling, replacement));
+                    if (fitsCardinalRiseBudget(
+                            surface,
+                            land,
+                            width,
+                            height,
+                            x,
+                            y,
+                            replacement,
+                            maximumCardinalRise)) {
+                        scratch[cell] = replacement;
+                    }
                 }
             }
             long[] swap = surface;
@@ -135,8 +150,36 @@ final class MountainSurfaceRegularizer {
         return midpoint(surface[first], surface[second]);
     }
 
+    private static boolean fitsCardinalRiseBudget(
+            long[] surface,
+            boolean[] land,
+            int width,
+            int height,
+            int x,
+            int y,
+            long replacement,
+            long maximumRise) {
+        int cell = y * width + x;
+        if (x > 0 && land[cell - 1]
+                && absolute(replacement - surface[cell - 1]) > maximumRise) return false;
+        if (x + 1 < width && land[cell + 1]
+                && absolute(replacement - surface[cell + 1]) > maximumRise) return false;
+        if (y > 0 && land[cell - width]
+                && absolute(replacement - surface[cell - width]) > maximumRise) return false;
+        return y + 1 >= height
+                || !land[cell + width]
+                || absolute(replacement - surface[cell + width]) <= maximumRise;
+    }
+
     private static long midpoint(long first, long second) {
         return first / 2L + second / 2L + (first % 2L + second % 2L) / 2L;
+    }
+
+    private static long absolute(long value) {
+        if (value == Long.MIN_VALUE) {
+            throw new ArithmeticException("surface difference exceeds signed range");
+        }
+        return Math.abs(value);
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
