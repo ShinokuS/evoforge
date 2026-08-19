@@ -1,73 +1,90 @@
-# Generated World Warmup
+# Generated World Warm-up
 
-## Purpose
+## In plain language
 
-Advance a generated production runtime through explicit deterministic checkpoints and capture comparable diagnostics without introducing alternate world laws or hidden balance policy.
+Warm-up is a developer tool that says: **run this generated world normally until these exact simulation ticks, and take diagnostic snapshots along the way**.
 
-## Contract
+It does not have a secret faster Water model, does not call rain/flow systems directly, and does not decide when a world is “settled”. It repeatedly uses the ordinary production `SimulationStepper`, so a warmed-up world obeys the same rules as any other runtime.
 
-`GeneratedWorldWarmup` operates on `GeneratedWorldRuntime` after the normal bootstrap has completed.
+## Current status
+
+The implementation now lives under:
+
+```text
+simulation/.../world/diagnostics/warmup/
+```
+
+after the Stage 0 package-ownership cleanup. The old `world.warmup` package no longer exists.
+
+The contract is:
 
 ```text
 GeneratedWorldRuntime
+      +
+absolute checkpoint ticks [t0,t1,...]
       ↓
-checkpoint ticks: [t0, t1, ...]
-      ↓
+GeneratedWorldWarmup
+      ↓ repeatedly
 SimulationRuntime.stepper().advance()
-      ↓
+      ↓ at each requested tick
 GeneratedWorldDiagnosticsProbe
       ↓
 List<GeneratedWorldDiagnostics>
 ```
 
-Checkpoint ticks are absolute simulation ticks, must be non-negative and strictly increasing, and may begin at the runtime's current tick. A checkpoint before current time is invalid.
+## Checkpoint rules
 
-Warmup never invokes precipitation, evaporation, Water flow, Soil infiltration or any other mechanic directly. Every transition between checkpoints occurs through the ordinary production `SimulationStepper` and Scheduler.
+Checkpoint ticks:
 
-## No implicit equilibrium
+- are absolute simulation ticks;
+- must be non-negative;
+- must be strictly increasing;
+- may start at the runtime's current tick;
+- may not request a tick in the past.
 
-Warmup currently has no condition such as:
+At each checkpoint the probe records facts; it does not mutate the world.
 
-```text
-water delta < threshold
-flooded columns < percentage
-soil moisture near target
-```
+## No alternate simulation path
 
-Those would be evaluation/calibration policy and are not yet justified by generated-world evidence. Warmup therefore cannot declare a world viable or settled; it only returns facts at requested times.
+Warm-up never directly invokes:
 
-A later evaluator may consume the checkpoint trace through its own typed contract.
+- precipitation;
+- evaporation;
+- liquid flow;
+- Soil infiltration;
+- Growth/Needs;
+- any other mechanic.
 
-## Canonical generated Terrain
-
-The generated-world smoke matrix and representative Water audit now bootstrap the canonical `core:temperate_terrain` palette rather than a synthetic uniform porous ground.
-
-The content setup binds the palette's existing Landscape materials with their canonical current properties:
-
-```text
-core:topsoil  -> Soil 550000 / permeability 100000
-core:soil     -> Soil 450000 / permeability 60000
-core:sand     -> Soil 350000 / permeability 250000
-core:granite  -> no Soil retention aspect
-```
-
-The material layout itself is generated from elevation/drainage through the production terrain-palette path. Warmup therefore observes the same causal chain intended for generated worlds:
+Every transition between checkpoints is ordinary:
 
 ```text
-Elevation / Drainage
-        ↓
-Terrain material profile
-        ↓
-Landscape material properties
-        ↓
-Infiltration / retained Water / free Water
+SimulationStepper.advance()
+    ↓
+clock advance + scheduler dispatch
+    ↓
+normal domain processes
 ```
 
-The test fixture does not override generated placement in order to make hydrology assertions pass.
+Therefore warming from tick 0 to 50 means “execute 50 production ticks”, not “approximate 50 ticks by a special equilibrium solver”.
 
-## Mandatory CI matrix
+## No implicit equilibrium or quality policy
 
-The regular headless suite runs a deliberately small deterministic smoke matrix across seeds:
+Warm-up currently has no rule such as:
+
+```text
+Water delta < threshold
+flooding below X%
+Soil moisture near target
+terrain quality > score
+```
+
+Those are evaluator/calibration/acceptance questions, not time-advancement semantics.
+
+Warm-up cannot declare a world viable, stable, realistic or balanced. It only returns comparable facts at requested times.
+
+## Mandatory deterministic smoke matrix
+
+The regular headless generated-world tests use small worlds and fixed seeds so replay remains cheap:
 
 ```text
 0
@@ -77,52 +94,43 @@ The regular headless suite runs a deliberately small deterministic smoke matrix 
 123456789
 ```
 
-and internal verification climate inputs including:
+Representative smoke checkpoints include:
 
-- unforced hydrology;
-- a net-positive fractional precipitation/evaporation rate pair that exercises exact `CellVolumeRate` realization.
+```text
+0, 10, 25, 50
+```
 
-For each case the suite captures checkpoints at ticks `0`, `10`, `25`, and `50`, then independently replays the complete scenario and compares the entire diagnostic trace.
+The suite independently recreates the same world and compares the entire diagnostic trace.
 
-The smoke world remains small so these correctness checks stay cheap. Its purpose is scheduler/mass/determinism coverage, not representative terrain morphology.
+Those exact seeds/ticks are **developer test inputs**, not gameplay presets and not a universal production warm-up duration.
 
-These exact rates and checkpoint values are **test inputs**, not user-facing world-generation presets and not a statement that 50 ticks is a universal production warmup duration.
+## Representative Generated World Audit
 
-The matrix checks current invariants such as:
-
-- Atlas/runtime surface agreement;
-- valid drainage summary;
-- no spontaneous Water in the unforced case;
-- Water/Soil response through the generated terrain palette under generated HydroClimate forcing;
-- exact deterministic replay.
-
-## Representative developer audit
-
-A verbose audit uses a larger world specifically so the current elevation scales (detail/medium/coarse) can produce meaningful topographic, material and drainage variation:
+A larger developer workload is available through:
 
 ```text
 ./gradlew :simulation:generatedWorldAudit
 ```
 
-Defaults:
+Current defaults:
 
 ```text
-side = 32 cells
+side  = 32 cells
 ticks = 100
 vertical bounds = -32..32
 seeds = 0, 1, 42, 991, 123456789
 ```
 
-The workload emits two complementary observations:
+The command emits both:
 
 ```text
 event=world.generated.terrain-materials ...
-scenario=<internal-profile> side=<N> event=world.generated.audit ...
+event=world.generated.audit ...
 ```
 
-The first reports the initial semantic Terrain material composition. The second reports runtime Water/Soil state at requested checkpoints. Keeping both makes it possible to relate Water behavior to the generated material profile without making diagnostics part of simulation authority.
+so the initial generated composition and later runtime Water/Soil state can be compared without teaching diagnostics to interpret balance.
 
-The workload can be changed for development experiments:
+Developer workload can be overridden, for example:
 
 ```text
 ./gradlew :simulation:generatedWorldAudit \
@@ -130,34 +138,66 @@ The workload can be changed for development experiments:
   -Devoforge.generated.audit.side=64
 ```
 
-The audit side is currently constrained to `8..128` as a developer-tool resource guard, not as a simulation world-size contract.
+The current audit guard constrains side to `8..128`; this is a tooling/resource limit, not an engine world-size contract.
 
-This task is deliberately excluded from normal unit tests so console output and larger exploratory runs do not make standard CI noisy. It has no wall-clock pass/fail threshold.
+## GitHub Actions relationship
 
-## Current evidence
+`.github/workflows/generated-world-audit.yml` runs the same Gradle audit path when relevant generated-world/runtime code changes and supports manual workload overrides.
 
-On the first `32×32` canonical-palette run, equal climate forcing produced exactly equal total Water mass at tick `100`, while retained Water differed substantially by generated material composition.
+The workflow does not contain another world generator or balance model. It exists to make deterministic checkpoint evidence visible in CI logs.
 
-The most rock-exposed fixed seed retained much less Water than the soil-dominated seeds because granite has no Soil-retention aspect. This is evidence that generated Terrain composition is causally participating in existing hydrology; it is not yet a balance verdict or target distribution.
+Ordinary CI tests remain correctness gates; the audit is additional observability.
 
-## GitHub Actions audit
+## Current Stage 0 evidence
 
-`.github/workflows/generated-world-audit.yml` exposes the same representative audit in GitHub Actions.
+The Stage 0 world-generation architecture/refactor was checked with exact-head Generated World Audit in addition to normal CI and manual V12 preview acceptance.
 
-- pull requests that touch generated-world/runtime code run a `32×32` audit to tick `100` and leave the canonical trace in the job log;
-- manual workflow dispatch accepts final `ticks` (default `500`) and square `side` (default `32`) inputs;
-- the workflow validates only the developer workload envelope and invokes `:simulation:generatedWorldAudit`; it has no extra simulation implementation or balance rules.
+This is the intended pattern for later stages:
 
-This gives CI and local development the same generated-world evidence format. The regular `CI` workflow remains the correctness gate; the audit workflow exists to make checkpoint values visible and comparable while relevant world code changes.
+```text
+headless deterministic invariants
++
+representative generated-world diagnostics
++
+manual visual acceptance where aesthetics matter
+```
 
-## Logging relationship
+No one evidence type substitutes for the others.
 
-`GeneratedWorldDiagnosticsFormat` owns the compact textual representation of one runtime snapshot. `GeneratedTerrainMaterialDiagnosticsFormat` owns the initial generated-material representation. The local developer audit and GitHub Actions use both vocabularies.
+## Invariants
 
-Structured diagnostic records remain the correctness inputs. Log strings are for inspection and support, never simulation authority or a test database.
+- Warm-up advances only through `SimulationStepper`.
+- Warm-up owns no world state or process semantics.
+- Checkpoint sequence is explicit, absolute and deterministic.
+- Diagnostic capture does not itself advance/mutate state.
+- Replaying same generated/runtime inputs yields the same trace.
+- Warm-up has no hidden equilibrium/quality threshold.
+- Developer workload limits are not simulation laws.
 
-## Next step
+## Current limitations
 
-Representative audit results should continue to determine which generated facts/mechanics need extension. Thresholds and reason codes must come from concrete observed failure modes rather than being invented inside warmup.
+Warm-up currently does not:
 
-See [Terrain Generation](terrain-generation.md), [Generated World Runtime](generated-world-runtime.md), [Generated World Diagnostics](generated-world-diagnostics.md), and [Decision 019](../decisions/019-generated-world-warmup-is-explicit-observation.md).
+- stop on dynamic predicates;
+- evaluate balance/viability;
+- extrapolate long-term state analytically;
+- accelerate sleeping processes beyond ordinary Scheduler semantics;
+- create performance benchmarks with wall-clock pass/fail thresholds.
+
+A future evaluator may consume traces, but evaluation should remain a separate typed responsibility.
+
+## Code and tests
+
+Primary implementation/tests:
+
+```text
+simulation/.../world/diagnostics/warmup/GeneratedWorldWarmup.java
+simulation/.../world/diagnostics/warmup/*Warmup*Test.java
+simulation/.../world/diagnostics/warmup/*Audit*Test.java
+```
+
+## Sources
+
+**Internal EvoForge tooling design.** Warm-up is deliberately ordinary runtime stepping plus observation.
+
+See [Generated World Diagnostics](generated-world-diagnostics.md), [Generated World Runtime](../world-generation/generated-world-runtime.md), [Time and Scheduling](../foundations/time.md), and [ADR-019](../../decisions/019-generated-world-warmup-is-explicit-observation.md).

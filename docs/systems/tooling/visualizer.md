@@ -1,326 +1,306 @@
-# Visualizer
+# Visualizer and Developer Inspection Tools
 
-## Purpose
+## In plain language
 
-Observe and interact with authoritative simulation state during development without creating a second world model.
+The Visualizer is EvoForge's **window into the simulation**. It lets a developer watch Terrain, Water, agents, routes and diagnostics, but it must never become another simulation engine.
 
-The main visualizer is scenario-driven: one generic renderer/interaction shell is reused across small deterministic worlds that demonstrate focused mechanics or cross-system behavior. Scenarios complement headless tests; they do not replace them.
+If the screen draws a Cow halfway between two cells, the authoritative Cow position is still whatever Spatial reports. If a debug overlay colors a path, Navigation/Pathfinding still own the route facts. Hiding Water or zooming far away never changes hydraulic rules.
 
-The application also contains focused pre-runtime developer tools when the thing being inspected is an immutable generated fact rather than a started `SimulationRuntime`. Those tools must still consume production generation contracts instead of maintaining a second model.
+The application also contains pre-runtime world-generation inspection tools. They consume the same production generators used by the engine and display immutable generated facts before a runtime exists.
 
-## Runtime boundary
+## Current status
 
-`ZLevelVisualizer` is constructed from read-oriented runtime capabilities:
+Two broad tool families exist:
+
+```text
+runtime scenario visualizer
+  observes/commands a started SimulationRuntime
+
+world-generation preview
+  generates and inspects immutable V12 elevation/shape facts
+  without starting a second runtime
+```
+
+Both are developer tools. Headless tests remain the primary correctness proof; manual visual acceptance complements tests for aesthetics/readability.
+
+## Runtime observer boundary
+
+`ZLevelVisualizer` is built from read-oriented/runtime capabilities such as:
 
 ```text
 SimulationView
 SimulationTime
 SimulationStepper
-optional ObjectPresentationBindings
+presentation bindings
 ```
 
-Command-capable interaction is configured explicitly after construction through presentation-side `VisualizerCommandSink` bindings. Presentation never receives mutable domain systems simply because a button needs to request a command.
-
-`SimulationView` exposes read-only Object/Spatial, Geometry/Landscape, Water/Soil, Navigation, Occupancy, MoveTo, agent and other diagnostic capabilities. The visualizer reads those contracts rather than reconstructing domain truth.
-
-## Scenario lifecycle
-
-The application starts in a grouped/searchable scenario browser:
+When interaction needs to request a real action, presentation uses an explicit command adapter/sink. It does not receive mutable `MovementSystem`, `LiquidSystem` or Landscape internals just because a UI button exists.
 
 ```text
-ScenarioCatalog
-  ├─ Geometry & Navigation
-  ├─ Movement
-  ├─ Occupancy
-  ├─ Water / Hydrology
-  ├─ Agents
-  └─ Pathfinding
-        ↓
-VisualizerScenario.create()
-        ↓
-ScenarioSession
-  ├─ fresh SimulationRuntime
-  ├─ initial ScenarioView
-  ├─ optional ScenarioController
-  ├─ optional presentation bindings / portals / weather
-  └─ command adapter
-        ↓
-ScenarioScreen
-        ↓
-ZLevelVisualizer
+user click
+   ↓
+presentation command sink
+   ↓
+production Control/domain command
+   ↓
+authoritative system
+   ↓
+SimulationView
+   ↓
+visualizer redraws result
 ```
 
-Scenario packages currently include `geometry`, `movement`, `occupancy`, `pathfinding`, `water`, `environment` and `agent`. Package ownership and browser grouping need not be one-to-one: `RainHydrologyScenario`, for example, is environment composition shown under **Water / Hydrology**.
+## Scenario model
 
-`R` recreates the scenario by discarding the old session and calling `create()` again. Simulation systems therefore need no debug-only global reset API.
+The developer application contains focused deterministic scenarios for Geometry/Navigation, Movement, Occupancy, Pathfinding, Water/Hydrology and Agents.
 
-## World-generation preview
+Each scenario creates a fresh `ScenarioSession` containing its own ordinary runtime, initial view and optional diagnostics/presentation bindings.
 
-From the scenario browser, `F9` opens `WorldGenerationPreviewScreen`, a focused 3D inspection tool for the explicit V9 ocean-first elevation slice.
+Reset recreates the scenario rather than adding debug-only global reset APIs to simulation domains.
 
-It is deliberately **not** a second simulation runtime and not a new generic rendering framework. It constructs normal production `WorldGenesis` + `WorldGenerationIntent`, calls the production `ElevationGenerationStage`, and renders the resulting immutable `ElevationField` together with a translucent presentation-only sea-level plane at `z = 0`.
+Scenarios serve three purposes:
+
+- make a mechanic understandable to a human;
+- expose state transitions that are awkward to infer from test output;
+- provide manual visual acceptance evidence.
+
+They do not replace headless invariant tests.
+
+## Presentation perspectives
+
+The runtime visualizer has explicit presentation-only perspectives:
+
+### Surface
+
+Shows the highest relevant Terrain/Water/object surface by visible XY column. Lower covered content is not drawn through upper Terrain.
+
+### Interior
+
+A presentation-local interior/cutaway context entered through portal metadata. Portal presentation does not teleport actors or create Navigation edges.
+
+### Debug Slice
+
+Explicit developer Z/cutaway inspection for internal layers.
+
+Changing these views never changes simulation coordinates/topology.
+
+## Cell-centric interaction
+
+World interaction is cell-first. Selecting a cell updates its inspector; object/portal actions are composed from the authoritative objects/facts at that cell.
+
+Movement targeting uses a disposable PathSearch only for preview/advice. Actual execution is submitted through the production MoveTo command path, and Movement/Occupancy/Water constraints remain authoritative.
+
+Cancelling a move uses the production cancellation command rather than deleting Movement state from presentation.
+
+## Water presentation
+
+Water visuals read authoritative quantity + Geometry. The renderer may derive bounded optical depth, presentation opacity and animation from current Water/flow diagnostics.
+
+`WaterMotionResolver` reads the latest real transfer sample; it does not invent motion merely because a theoretical slope exists.
+
+Presentation may suppress tiny visually meaningless flux or use deterministic animation phase. Such choices cannot suppress hydraulic simulation work.
+
+Rain presentation likewise uses a fixed rendering budget; visible raindrops are not authoritative world entities.
+
+## V12 world-generation preview
+
+The current `WorldGenerationPreviewScreen` explicitly uses:
 
 ```text
-seed + WorldGenerationIntent
+GenerationRevision.V12
+RngRevision.V1
+WorldGenerationPreviewSettings
         ↓
-WorldGenesis(V9)
+WorldGenesis + WorldSpec
         ↓
 ElevationGenerationStage
         ↓
 ElevationField
         ↓
-GPU surface mesh + sea-level plane
+TerrainShapeGenerationStage.forRevision(V12)
+        ↓
+TerrainShapeField
+        ↓
+2D / 3D presentation
 ```
 
-The surface mesh is rebuilt only when the generated world changes, not every frame. Camera orbit/zoom are presentation state and do not feed back into generation.
+This is crucial: the preview is not an approximate reimplementation of V12. It calls production generation code and only changes how the resulting facts are displayed.
 
-Current preview controls are:
+The displayed sea plane in 3D is presentation-only at the V9+ sea-level datum `z=0`.
+
+## World-generation settings panel
+
+The **WORLD** tab currently exposes:
+
+### World dimensions/provenance
 
 ```text
-mouse drag       orbit
-mouse wheel      zoom
-R                increment seed and regenerate
-Left / Right     decrease / increase landCoverage
-Down / Up        decrease / increase landmassScale
-PgDn / PgUp      decrease / increase fragmentation
-T                toggle generated surface
-O                toggle ocean plane
-Esc              return to scenario browser
+Width
+Length
+Seed
+NEXT seed
+Random seed on Generate
 ```
 
-The preview exists to answer visual acceptance questions that headless tests cannot: whether a given seed/intent produces readable macro land/ocean form and whether parameter changes have the expected qualitative effect. Determinism, coverage calibration and full-Atlas compatibility remain headless test responsibilities.
+When **Random seed on Generate** is enabled, each Generate selects a new random 64-bit seed for the developer session and writes that exact value back into the ordinary visible/copyable seed field **before generation**. The generated world still has an exact reproducible seed.
 
-## Presentation perspectives
+Unchecking random mode lets the displayed value be reused to reproduce that world.
 
-The visualizer has three explicit presentation perspectives. None changes simulation coordinates, Navigation or Movement topology.
-
-### SURFACE
-
-Default open-world view.
-
-`SurfaceProjectionResolver` resolves the highest authoritative terrain surface per visible XY column. Terrain, Water and objects are presented from that surface projection; covered lower-Z content is not drawn through higher terrain.
-
-Surface view is presentation only. There is no flattened authoritative surface world.
-
-`SurfaceLandscapeRenderer`, `SurfaceCliffRenderer` and `WaterRenderer.drawSurface(...)` operate on camera-visible XY cells. Optional Height contours are a separate diagnostic overlay.
-
-### INTERIOR
-
-An explicit presentation-local covered-space view entered through `ViewPortal` metadata.
-
-Portal metadata changes camera/presentation context only. It does not teleport objects, create Navigation edges or bypass physical walls/doorways. Ordinary `MoveTo` still uses the real world topology.
-
-Interior bounds constrain what the presentation exposes; they are not authoritative simulation bounds.
-
-### DEBUG_SLICE
-
-Development-only standing-Z/cutaway perspective, toggled with `F7` when not inside an Interior.
-
-`PgUp/PgDn` change standing Z only in Interior/Debug Slice. Surface view remains surface-projected rather than pretending its selected Z is a global world slice.
-
-## Rendering order
-
-The current orchestration is approximately:
+### V12 semantic land-shape controls
 
 ```text
-surface or slice landscape
-    ↓
-Water
-    ↓
-Surface relief / grid
-    ↓
-portal hints
-    ↓
-object presentation
-    ↓
-debug overlays + MoveTo/Vision diagnostics
-    ↓
-interaction feedback
-    ↓
-screen-space rain
-    ↓
-status / selected-cell inspector / view HUD / F1 panel / context menu
+Land             -> landCoverage
+Continent scale  -> landmassScale
+Fragmentation    -> fragmentation
+Macro height     -> relief
+Rolling hills    -> localRelief
+Landform size    -> landformScale
+Ruggedness       -> ruggedness
 ```
 
-Every layer is presentation state only.
+These are normalized semantic controls documented in [World Genesis](../world-generation/world-genesis.md). The panel does not expose V12 recipe internals such as coast transition distance or ridge weight.
 
-## Cell-centric interaction
-
-LMB belongs to the **world cell**, not to individual glyph hitboxes.
-
-Every left click first updates selected-cell/object inspection. Object and portal actions are then composed for that cell. Repeated clicks on a multi-object cell cycle through the authoritative object stack.
-
-Current object actions include:
+### Preview-only controls
 
 ```text
-Move
-Cancel move   when MoveTo is active
+2D / 3D view
+Z contrast
+Terrain surface visibility
+Ocean water visibility
 ```
 
-Current portal actions include:
+These affect presentation only and never change generated facts except when an actual generation setting is edited and Generate is pressed.
+
+## 2D preview and LOD
+
+2D mode displays generated `ElevationField` + `TerrainShapeField` with presentation-only LOD so large worlds remain inspectable.
+
+Important law:
 
 ```text
-Enter
-Return surface
-Move here     while targeting inside an Interior
+LOD changes drawing sample density
+NOT generated Terrain
 ```
 
-If an object and portal share a cell, one context menu combines both sets of actions.
-
-RMB closes the context menu or cancels an unfinished Move-target draft.
-
-### Move targeting and preview
-
-Starting `Move` keeps the selected mover even while destination cells are inspected/hovered.
-
-Hover preview is mover-aware and advisory. `VisualizerInteractionController` advances a disposable `PathSearch` with a bounded 512-expansion budget per render frame while targeting. The preview never reserves cells and never becomes execution truth.
-
-Submitting a destination goes through `VisualizerCommandSink.moveTo(...)`. Real Movement/Occupancy/Water constraints remain authoritative.
-
-`Cancel move` goes through the production cancellation command. The visualizer does not delete Movement action state directly.
-
-### Esc/back chain
-
-`Esc` backs out one presentation interaction layer at a time:
+Current LOD budgets are live developer tuning. The Performance tab exposes:
 
 ```text
-context menu
-    ↓
-unfinished Move target
-    ↓
-Interior
-    ↓
-Debug Slice
-    ↓
-hosting ScenarioScreen/browser
+Detailed range
+Far detail
 ```
 
-These states are independent rather than one overloaded mode flag.
+and reports current visible columns, rendered samples and LOD stride.
 
-## Debug overlays
-
-`F1` toggles the checkbox panel. Current independent options are:
-
-- Grid;
-- Height contours;
-- Move route;
-- Transitions;
-- Shape directions;
-- Occupancy;
-- Vision;
-- Technical inspector.
-
-The panel is immediate-mode and shares one top-right layout flow with the selected-cell inspector so the two panels do not overlap.
-
-Legacy/fast keyboard shortcuts remain:
+The current fast defaults shown by the panel are approximately:
 
 ```text
-G   cycle grid mode
-F2  Transitions
-F3  Shape directions
-F4  lower-surface slice depth
-F5  Occupancy
-F6  Technical inspector
-F7  Debug Slice
+9,000 exact/detailed cell budget
+6,000 far/overview sample budget
 ```
 
-Overlay state is independent from Surface/Interior/Debug Slice perspective.
+The earlier expensive “nearly x2 but still x1” presentation hot zone was specifically tightened so 2D preview steps to coarser LOD before exact per-cell rendering becomes unnecessarily expensive. This is a rendering optimization only.
 
-## Selected cell/object inspector
-
-The normal right-side card reports facts that correspond to the selected object/cell and current presentation surface.
-
-For an object it includes identity/presentation name, authoritative XYZ and whether a MoveTo is active.
-
-Cell facts include:
-
-- selected XYZ;
-- visible/current Terrain definition and real terrain Z;
-- visible Water amount and real Water Z;
-- Water amount / geometric cell capacity with a graphical progress bar;
-- bounded optical Water depth in Surface view;
-- SoilMoisture amount / effective local Soil capacity with a graphical progress bar;
-- explicit `n/a (non-absorbing terrain)` when the supporting terrain has no Soil hydrology;
-- object count in the selected standing cell.
-
-Technical mode additionally exposes current Soil infiltration limit, `SurfaceWaterStorage`, Shape class, Occupancy state, Navigation transition count and selected object id where applicable.
-
-The inspector reads `SimulationView`; it does not maintain a second hydrology or topology model.
-
-## Water presentation
-
-Water quantity/depth comes from authoritative Water + Geometry.
-
-Surface opacity is derived from bounded contiguous vertical optical depth; the resolver caps visual accumulation rather than scanning arbitrarily deep columns.
-
-Motion uses `WaterMotionResolver`, which reads sparse latest-step `WaterFlowLookup` produced by real hydraulic transfers:
+2D controls include:
 
 ```text
-no actual transfer sample -> CALM
-horizontal transfer       -> WEST / EAST / SOUTH / NORTH
-negative-Z transfer       -> FALLING
+WASD or drag  pan
+wheel         zoom
+F             fit world
+F3            shape-direction overlay
+Esc           return to development tools
 ```
 
-The renderer does not infer flow merely because a theoretical hydraulic slope exists. Calm Water is rendered with a fixed frame (`presentationFrame(CALM) == 0`), while active cardinal/falling Water animates from presentation time and deterministic spatial phase.
+## 3D preview
 
-## Rain presentation
+3D mode builds a surface mesh from sampled exact generated elevation. It uses chunked meshes and a configurable maximum sample axis.
 
-Rain is fixed-budget screen-space presentation, not world raindrop entities.
+Performance panel:
 
-`RainRenderer` owns at most 160 deterministic streak seeds. Weather intensity changes active streak count/opacity, and a restrained screen veil makes the weather state readable. There are no per-frame raindrop allocations and particle count does not scale with world size.
+```text
+3D mesh axis
+```
 
-Physical precipitation remains simulation state driven by the scenario/runtime schedule. In Rain Cycle, visual weather reads the same `PrecipitationSchedule` active window so visible rain and physical input begin/end together.
+Current guidance/defaults in the UI:
 
-## Object and Shape presentation
+```text
+160  fast default
+256–384 higher-detail inspection
+512  high-quality inspection limit
+```
 
-Simulation definitions do not contain renderer classes. `ObjectPresentationBindings` map definition ids to presentation-only metadata/families.
+Changing this value rebuilds only preview mesh chunks; it does not regenerate V12.
 
-Generic Shape presentation uses `ShapePresentationRegistry`, where exact concrete Shape knowledge is localized to typed presentation bindings registered by the presentation composition root. Generic renderers do not grow `instanceof RampShape/...` decision chains.
+3D controls:
 
-## UI assets
+```text
+left drag   orbit
+wheel       zoom
+Esc         return to development tools
+```
 
-Current developer UI fonts are generated at startup from the packaged `assets/ui/ui-font.ttf` using libGDX FreeType (`gdx-freetype`). Body/title sizes are currently 22/25 px, with integer glyph positioning and linear texture filtering.
+A small vertical exaggeration is presentation-only to improve relief readability.
 
-This is presentation infrastructure only. Font generation/atlas representation may change without affecting simulation contracts.
+## Performance telemetry
 
-## Controls
+The worldgen overlay reports generation time and frame/presentation statistics such as FPS, frame/CPU time and current LOD/mesh sample counts.
 
-Scenario browser:
+Runtime visualizer telemetry similarly separates observed frame interval from CPU work in major presentation stages.
 
-- `F9` — open the ocean-first V9 3D world-generation preview.
+Performance optimization follows measured rendering work. Presentation budgets/caches are allowed to become cheaper with zoom/distance because they do **not** change authoritative simulation fidelity.
 
-Application/session:
+## Manual visual acceptance versus tests
 
-- `R` — recreate current scenario;
-- `Esc` — back out through interaction/view state, then return to browser.
+Automated tests should protect deterministic facts:
 
-Generic visualizer:
+- same V12 seed/intent -> same ElevationField;
+- land coverage/range/slope/scale laws;
+- shape fitting invariants;
+- LOD sample-budget logic;
+- settings/random-seed state semantics.
 
-- `Space` — run/pause simulation;
-- `N` — one simulation step while paused;
-- `WASD` — pan;
-- mouse wheel — zoom;
-- `PgUp/PgDn` — standing Z in Interior/Debug Slice;
-- `G`, `F1`..`F7` — grid/debug/view controls described above;
-- `LMB` — inspect/select cell and open applicable context actions;
-- `RMB` — close menu/cancel unfinished Move targeting.
+Humans must still inspect questions such as:
 
-The compact status HUD reports run state, tick, FPS and zoom. View state is shown separately rather than encoding simulation meaning into the HUD.
+- Do landforms look coherent/organic?
+- Are hills/depressions readable?
+- Does 2D/3D representation communicate the same morphology?
+- Is performance/LOD acceptable in actual use?
 
-## Performance boundary
+The accepted Stage 0 V12 baseline passed both headless checks and manual 2D/3D inspection before the architecture refactor was merged.
 
-World rendering is camera-local. Water optical depth is bounded, rain particle budget is fixed, Move preview is active only while targeting and expansion-budgeted, and UI is immediate-mode.
+## Invariants
 
-The world-generation preview uploads a compact generated surface mesh only when the seed or intent changes; orbit/zoom reuse that mesh. It is a development inspection path, not runtime Terrain rendering.
+- Visualizer never owns authoritative simulation state.
+- Camera/view/LOD/mesh quality never changes simulation/generation semantics.
+- Runtime interactions go through production command/domain paths.
+- Worldgen preview calls production V12 generation contracts.
+- A random preview seed is always captured/displayed as an exact reproducible value.
+- Debug/presentation overlays never become hidden Navigation/Water/AI truth.
+- Aesthetics are manually accepted; deterministic semantics remain headless-testable.
 
-`VisualizerPerformanceTelemetry` separates observed frame interval from CPU work inside major renderer stages. Optimize only measured hot paths and keep presentation optimizations semantically invisible to simulation.
+## Current limitations
 
-## Testing boundary
+The tools are developer-facing, not a finished player UI/world-creation flow. Worldgen preview currently focuses on V12 base elevation/surface Shape; Stage 1+ should add inspectable generated facts only when the real stage introduces them.
 
-Headless simulation tests own semantic correctness. Visualizer tests cover deterministic presentation math/resolution, interaction state, route preview boundaries, debug-panel layout, Water motion/opacity mapping, rain density and scenario setup.
+Advanced roof/occlusion, rich build tools, full lighting, large art sets and broad presentation caching remain future work.
 
-The world-generation preview is manually inspected for macro visual quality; its underlying generation invariants remain covered by headless worldgen tests.
+## Code and tests
 
-Aesthetic readability and real desktop performance remain manual acceptance where automated tests would only imitate a human judgement.
+Primary runtime presentation lives under:
 
-See [Debug Scenarios Guide](../guides/debug-scenarios.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Typed Presentation Bindings decision](../decisions/004-typed-presentation-bindings.md), [Water](water.md) and [Movement](movement.md).
+```text
+core/.../visualizer/
+```
+
+Worldgen preview code lives primarily under:
+
+```text
+core/.../visualizer/screen/WorldGeneration* 
+```
+
+Key current classes include `WorldGenerationPreviewScreen`, `WorldGenerationSettingsPanel`, `WorldGeneration2DLod`, `WorldGeneration3DDetail` and `WorldGenerationShape2DRenderer`.
+
+## Sources
+
+**Internal EvoForge tooling/presentation design.** The observer boundary, preview/LOD behavior and visual acceptance workflow are project infrastructure.
+
+See [Debug Scenarios Guide](../../guides/debug-scenarios.md), [World Generation](../world-generation/overview.md), [Terrain Generation](../world-generation/terrain-generation.md), [Generated World Diagnostics](generated-world-diagnostics.md), and [ADR-004](../../decisions/004-typed-presentation-bindings.md).

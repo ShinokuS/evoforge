@@ -1,191 +1,191 @@
 # Generated World Diagnostics
 
-## Purpose
+## In plain language
 
-Provide one deterministic audit vocabulary for generated-world runs in headless CI and interactive desktop sessions.
+Generated-world diagnostics are EvoForge's **measuring instruments**. They answer questions such as:
 
-Diagnostics observe existing generated facts and runtime state. They do not alter generation, scheduling, Water, Soil, Terrain or balancing rules.
+- Did the generated Terrain materialize exactly as intended?
+- How many drainage basins exist?
+- How much free Water versus Soil-retained Water exists after 100 ticks?
+- Does replaying the same seed produce exactly the same observations?
 
-## Audit boundaries
+Diagnostics never “fix” a world and never decide whether the result is aesthetically good. They only observe authoritative generated/runtime facts at deliberate checkpoints.
 
-Runtime state is observed through the existing generated-world probe:
+## Current status
 
-```text
-WorldGenesis
-    ↓
-GeneratedWorldBootstrap
-    ↓
-WorldAtlas ──────────────┐
-                        │
-SimulationRuntime ──────┼─> GeneratedWorldDiagnosticsProbe
-                        │             ↓
-SimulationView ─────────┘     immutable runtime snapshot
-```
-
-Initial generated material composition has a separate semantic-key snapshot:
+There are two complementary diagnostic families:
 
 ```text
-WorldAtlas + TerrainPalette
-          ↓
-TerrainMaterialField
-          ↓
+WorldAtlas + prepared/generated material facts
+        ↓
 GeneratedTerrainMaterialDiagnosticsProbe
-          ↓
-initial surface / solid-volume material counts
+        ↓
+immutable initial material-composition snapshot
+
+WorldAtlas + started SimulationRuntime/SimulationView
+        ↓
+GeneratedWorldDiagnosticsProbe
+        ↓
+immutable runtime checkpoint snapshot
 ```
 
-Both probes are intentionally on-demand. They are not registered in the scheduler and may scan the finite world when an explicit diagnostic checkpoint requests exact totals.
+Both are on-demand developer/audit tools. They are not scheduled simulation processes and may deliberately scan the finite world when an exact checkpoint is requested.
 
-## Runtime facts
+## Runtime snapshot
 
-`GeneratedWorldDiagnostics` records:
+`GeneratedWorldDiagnostics` currently records deterministic facts including:
 
 - simulation tick;
 - master seed;
-- generation and RNG revisions;
+- generation/RNG revisions;
 - finite world bounds;
-- concrete Terrain cell count;
-- occupied Terrain column count;
+- concrete Terrain cells and occupied XY columns;
 - Atlas/runtime surface mismatch count;
-- minimum and maximum generated surface Z;
-- number of terminal drainage basins;
-- maximum drainage contributing area;
-- total free Water volume;
-- total retained Water volume in Soil;
-- number of cells containing free Water;
-- number of cells containing retained Water;
-- number of XY columns containing free Water;
-- number of XY columns containing retained Water;
-- maximum free-Water volume accumulated in one XY column;
-- maximum retained-Water volume accumulated in one XY column;
-- maximum number of Z cells containing free Water in one XY column.
+- minimum/maximum generated surface Z;
+- terminal drainage basin count and maximum contributing area;
+- geology province/unit summaries where present;
+- generated initial Water volume/column/shoreline facts;
+- current total free Water and retained Soil Water;
+- wet free-Water/retained-Soil cell and XY-column counts;
+- maximum free/retained Water volume in one XY column;
+- maximum vertical count of Water-occupied cells in one XY column.
 
-The snapshot deliberately excludes wall-clock duration, renderer/camera state and logging configuration. Two deterministic runs can therefore compare the record directly.
-
-## Generated Terrain material facts
-
-`GeneratedTerrainMaterialDiagnostics` records the immutable pre-runtime material composition using stable semantic keys rather than runtime integer ids.
-
-It reports exact counts for:
-
-- each material exposed on generated XY surfaces;
-- each material across the complete generated solid Terrain volume;
-- terrain cells and columns;
-- palette key and generation provenance.
-
-The canonical text event is:
-
-```text
-event=world.generated.terrain-materials ...
-```
-
-This makes `topsoil`, `soil`, `sand` and `granite` distributions inspectable without exposing the compact per-column representation used by `TerrainMaterialGenerationStage`.
+The snapshot deliberately excludes wall-clock time, camera state, FPS and logging configuration so deterministic replays can compare records directly.
 
 ## Surface invariant
 
-For every generated XY column the runtime audit compares:
+For each generated XY column the runtime probe compares:
 
 ```text
-WorldAtlas.elevation().elevationAt(x, y)
+Atlas discrete surface = atlas.elevation().elevationAt(x,y)
+Runtime surface        = simulationView.terrainSurfaces().topZ(x,y)
 ```
 
-with:
+Then:
 
 ```text
-SimulationView.terrainSurfaces().topZ(x, y)
+surfaceMismatches == 0
 ```
 
-`surfaceMismatches == 0` means the runtime surface still exactly represents the generated discrete Atlas surface at the audit checkpoint.
+means runtime Terrain still matches the original generated discrete surface at that checkpoint.
 
-A later terrain-changing runtime system may intentionally make this value non-zero. The diagnostic reports that fact; it does not assume Atlas must continuously mirror lived Terrain.
+A future legitimate Terrain-changing mechanic may make this nonzero. The diagnostic reports the divergence; it does not assert that lived Terrain must eternally mirror the Atlas.
 
-## Water audit
+## Water accounting
 
-The runtime audit independently sums Water through the existing read capabilities:
+Water totals are independently read from existing semantic capabilities:
 
 ```text
 SimulationView.water()
 SimulationView.soilLiquids()
 ```
 
-Free and retained volumes remain separate and are also exposed as `totalWaterVolume()` for convenient conservation checks.
+The probe keeps free and retained Water separate and also exposes their sum for convenient conservation/accounting checks.
 
-The audit accumulates each XY column before discarding local detail. This distinguishes **spread** from **vertical concentration** without exposing Water storage:
+Per-column aggregation distinguishes spread from vertical concentration without exposing storage internals:
 
 ```text
-wetWaterColumns
-wetSoilColumns
-maximumFreeWaterColumnVolume
-maximumRetainedWaterColumnVolume
-maximumWetWaterCellsPerColumn
+wet Water columns
+wet Soil columns
+maximum free-Water column volume
+maximum retained-Water column volume
+maximum Water-occupied Z cells in one column
 ```
 
-`maximumWetWaterCellsPerColumn` is intentionally a representation-independent count of occupied world cells, not a claim about meters of physical depth. Exact column volume is reported separately. A later physical measurement layer may derive human units when its scale contract exists.
+These are simulation units. A cell count is not silently labeled as metres.
 
-No Water storage representation is exposed. The diagnostic scans semantic world coordinates only and computes all current Water totals/distribution facts in the same deliberate full-world audit pass.
+## Terrain-material diagnostics
+
+`GeneratedTerrainMaterialDiagnostics` observes immutable pre-runtime material composition using stable `TerrainMaterialKey`s rather than runtime integer definition IDs.
+
+It counts:
+
+- material exposure on generated XY surfaces;
+- material occurrences through the complete generated solid volume;
+- Terrain cell/column totals;
+- profile/palette provenance and generation provenance.
+
+The compact developer event is:
+
+```text
+event=world.generated.terrain-materials ...
+```
+
+This lets a developer inspect composition without exposing/depending on the compact internal per-column representation of `TerrainMaterialField`.
 
 ## Logging
 
-`GeneratedWorldDiagnosticsLog.info(snapshot)` emits the runtime event:
+Runtime snapshot formatting/logging can emit:
 
 ```text
 event=world.generated.audit ...
 ```
 
-`GeneratedTerrainMaterialDiagnosticsFormat` emits the initial material event shown above for developer/CI audits.
+Log text exists for human/CI inspection. Tests compare typed immutable diagnostics rather than treating logs as an authoritative database.
 
-The existing desktop logging configuration supplies session/scenario context, persistence and rotation where runtime logging is used. Headless correctness tests assert immutable snapshots directly rather than parsing log text.
+Enabling/disabling/redirecting logs cannot change simulation behavior.
 
-This keeps logs observational: enabling, disabling or redirecting logging cannot alter simulation authority.
+## What diagnostics can prove
 
-## CI baseline
-
-Headless generated-world integration uses the same `GeneratedWorldBootstrap` and ordinary `SimulationRuntime` path intended for future desktop generation. The current warmup fixtures use the canonical generated terrain palette rather than a synthetic uniform porous material.
-
-Current scenarios prove:
-
-1. a generated world with no configured Water source does not spontaneously create free or retained Water while the production scheduler runs;
-2. Atlas-driven HydroClimate precipitation, infiltration and Water mechanics operate on generated multi-material Terrain through the production scheduler;
-3. replaying the same seed, content setup and tick count produces the same complete diagnostic snapshot;
-4. generated Atlas surfaces and runtime Terrain surfaces remain identical when no terrain-changing runtime mechanic is active;
-5. generated HydroClimate cannot accidentally stack with legacy periodic atmospheric forcing;
-6. Water spread/concentration diagnostics are deterministic across replay;
-7. semantic terrain-material generation is independent from runtime registry ids and can be audited before materialization.
-
-These are correctness gates, not performance thresholds.
-
-## Representative evidence
-
-The representative `32×32` workload now emits both material composition and runtime hydrology for the same fixed seed set.
-
-Under the same climate forcing, total Water mass at tick `100` remained identical across seeds while retained Water varied strongly with generated material composition. Rock-exposed worlds retained less Water because granite has no Soil-retention aspect; soil-dominated worlds retained more. The free-Water remainder changed by exactly the corresponding amount.
-
-This is useful causal evidence:
+Diagnostics are useful for exact claims such as:
 
 ```text
-relief / drainage
-      ↓
-generated Terrain materials
-      ↓
-existing material Soil properties
-      ↓
-retained vs free Water
+same seed + same revision + same inputs
+→ same checkpoint snapshot
 ```
 
-It does **not** establish that any current material percentage or Water distribution is the desired balance. Diagnostics report facts; future evaluation/calibration owns interpretation.
+or:
+
+```text
+no runtime Terrain-changing mechanic
+→ Atlas/runtime surface mismatch = 0
+```
+
+They can also expose causal evidence. For example, representative generated worlds with more non-porous exposed rock can retain less Water in Soil under the same forcing.
+
+That observation does **not** automatically mean the current material distribution is balanced/desirable. Measurement and acceptance policy remain separate.
 
 ## Checkpoints
 
-The probes are intended for deliberate generated-world checkpoints such as:
+Typical deliberate checkpoints:
 
-- immediately after generation/materialization (`tick=0`);
-- during deterministic warmup;
-- at warmup completion;
-- after a user-requested diagnostic capture;
-- before/after calibration candidates in development tooling.
+```text
+tick 0 after materialization/bootstrap
+deterministic warm-up ticks
+after a targeted scenario/action
+a calibration comparison point
+```
 
-Warmup policy is separate from diagnostics. A snapshot reports facts at the requested tick; it does not decide how long a world should warm up or whether the result is viable.
+A probe does not decide which checkpoint is “equilibrium” or whether a world is viable.
 
-New metrics should be added only when they represent an existing semantic fact or a concrete invariant we need to diagnose. Diagnostic objects must not become a second world model.
+## Invariants
 
-See [Terrain Generation](terrain-generation.md), [Generated World Runtime](generated-world-runtime.md), [Generated World Warmup](generated-world-warmup.md), [World Atlas](world-atlas.md), [World Materialization](world-materialization.md), [Surface Hydrology](hydrology.md), and [Decision 017](../decisions/017-generated-world-diagnostic-audits.md).
+- Diagnostics read existing authoritative/generated facts; they own no simulation state.
+- Diagnostic capture never advances time or mutates the world.
+- Snapshots contain deterministic simulation facts, not wall-clock/presentation facts.
+- Stable semantic material keys are reported instead of runtime registry IDs.
+- Full-world scans are deliberate checkpoint cost, not background per-tick behavior.
+- Adding a metric requires an existing semantic fact/concrete diagnostic need; diagnostics do not become a second world model.
+
+## Current limitations
+
+There is no universal generated-world “quality score”, viability oracle, balance threshold database or visual-aesthetic metric.
+
+Those would require concrete acceptance criteria in the stage that owns them. Manual visual acceptance remains necessary for aesthetics such as terrain readability.
+
+## Code and tests
+
+Primary code lives under:
+
+```text
+simulation/.../world/diagnostics/
+simulation/.../world/diagnostics/warmup/
+```
+
+Generated World Audit tests/workflows use these same probes and production runtime paths.
+
+## Sources
+
+**Internal EvoForge tooling design.** Diagnostics are observer-only project infrastructure, not a scientific model.
+
+See [Generated World Warm-up](generated-world-warmup.md), [World Atlas](../world-generation/world-atlas.md), [Generated World Runtime](../world-generation/generated-world-runtime.md), [Terrain Generation](../world-generation/terrain-generation.md), and [ADR-017](../../decisions/017-generated-world-diagnostic-audits.md).
