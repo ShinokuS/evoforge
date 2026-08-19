@@ -13,10 +13,10 @@ import java.util.List;
 /**
  * Deterministic spatial synthesis for V13 structural mountains.
  *
- * <p>Each source is authored as one asymmetric elongated mass. Abundance owns the expected amount
- * of land occupied by mountain structures, while scale and chaininess own their individual size and
- * elongation. Height is capped by what that authored footprint can support at the requested
- * geometric slope. The stage knows nothing about concrete runtime Shapes.</p>
+ * <p>Each source is one asymmetric elongated hill. Abundance owns the expected amount of land
+ * occupied by mountain structures, while scale and chaininess own their individual size and
+ * elongation. Height is capped by what that footprint can support at the calibrated geometric
+ * slope. The stage knows nothing about concrete runtime Shapes.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -26,14 +26,12 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId WIDTH = GenerationPurposeId.of("mountain:width");
     private static final GenerationPurposeId HEIGHT = GenerationPurposeId.of("mountain:height");
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
-    private static final GenerationPurposeId CORE = GenerationPurposeId.of("mountain:core-offset");
 
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
     private static final double PROFILE_GRADIENT_BOUND = 1.30;
     private static final double PLATEAU_PROFILE_GRADIENT_BOUND = 1.60;
     private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
-    private static final long MINIMUM_VISIBLE_UPLIFT_SUBUNITS = ElevationField.SUBUNITS_PER_CELL / 10L;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -77,9 +75,6 @@ final class MountainMorphologyAlgorithm {
             rasterize(system, bounds, width, height, land, mountainUplift, calibration, recipe);
         }
 
-        smoothUplift(mountainUplift, land, width, height, recipe.upliftSmoothingPasses());
-        removeInvisibleFringe(mountainUplift);
-
         long maximumRawUplift = maximum(mountainUplift);
         if (maximumRawUplift > 0L) {
             int[] coastalDistance = distanceFromOceanCells(
@@ -87,14 +82,14 @@ final class MountainMorphologyAlgorithm {
                     width,
                     height,
                     calibration.coastalTransitionCells() + 1);
-            applyCoastalFade(
+            applyCoastalCap(
                     mountainUplift,
                     land,
                     coastalDistance,
                     maximumRawUplift,
                     calibration.shorelineUpliftSubunits(),
-                    calibration.coastalTransitionCells());
-            removeInvisibleFringe(mountainUplift);
+                    calibration.coastalTransitionCells(),
+                    calibration.maximumCardinalRiseSubunits());
         }
 
         long[] result = baseHeights.clone();
@@ -108,8 +103,8 @@ final class MountainMorphologyAlgorithm {
 
     /**
      * Builds a deterministic ranked candidate set and selects a source count from the requested
-     * coverage budget. This avoids interpreting Abundance as a per-node Bernoulli probability,
-     * which made source size silently change total mountain coverage.
+     * coverage budget. Abundance therefore describes real structure coverage rather than a raw
+     * per-node Bernoulli probability.
      */
     private static List<MountainSystem> createSystems(
             GenerationRandom random,
@@ -153,9 +148,9 @@ final class MountainMorphologyAlgorithm {
             selected.add(candidate.system());
         }
 
-        // Small worlds or highly fragmented coastlines can leave too few well-separated centers.
-        // Fill the remaining quota from the same deterministic ranking rather than producing no
-        // mountains at all; max composition still prevents overlap from creating additive spikes.
+        // Small worlds or fragmented coastlines can leave too few well-separated centers. Fill the
+        // remaining quota from the same deterministic ranking; max composition still prevents
+        // overlap from creating additive spikes.
         if (selected.size() < desiredSources) {
             for (MountainCandidate candidate : candidates) {
                 if (selected.size() >= desiredSources) break;
@@ -268,17 +263,6 @@ final class MountainMorphologyAlgorithm {
                         narrowAxis * calibration.maximumCardinalRiseSubunits() / gradientBound));
         long uplift = Math.min(requestedUplift, supportedUplift);
 
-        double coreAlongOffset = centeredPpm(random, CORE, latticeX, latticeY, 0L)
-                / (double) PPM
-                * Math.min(negativeLongAxis, positiveLongAxis)
-                * widthVariation
-                * 0.45;
-        double coreAcrossOffset = centeredPpm(random, CORE, latticeX, latticeY, 1L)
-                / (double) PPM
-                * Math.min(leftWidth, rightWidth)
-                * widthVariation
-                * 0.45;
-
         return new MountainSystem(
                 centerX,
                 centerY,
@@ -288,8 +272,6 @@ final class MountainMorphologyAlgorithm {
                 positiveLongAxis,
                 leftWidth,
                 rightWidth,
-                coreAlongOffset,
-                coreAcrossOffset,
                 uplift,
                 plateau);
     }
@@ -350,34 +332,13 @@ final class MountainMorphologyAlgorithm {
         if (radius >= 1.0) return 0.0;
 
         double sharpness = calibration.sharpnessMilli() / 1_000.0;
-        double base = layeredHill(radius, sharpness, false, recipe.plateauCorePpm());
-
-        double coreAlong = along - system.coreAlongOffset();
-        double coreAcross = across - system.coreAcrossOffset();
-        double coreLongAxis = coreAlong < 0.0
-                ? system.negativeLongAxis()
-                : system.positiveLongAxis();
-        double coreSideWidth = coreAcross < 0.0
-                ? system.leftWidth()
-                : system.rightWidth();
-        double coreRadiusScale = recipe.coreRadiusPpm() / (double) PPM;
-        double coreRadius = StrictMath.hypot(
-                coreAlong / (coreLongAxis * coreRadiusScale),
-                coreAcross / (coreSideWidth * coreRadiusScale));
-        double core = coreRadius >= 1.0
-                ? 0.0
-                : layeredHill(
-                        coreRadius,
-                        Math.min(1.35, sharpness * 1.04),
-                        system.plateau(),
-                        recipe.plateauCorePpm());
-        double coreWeight = recipe.coreWeightPpm() / (double) PPM;
-        return Math.min(1.0, base + coreWeight * core * (1.0 - base));
+        return layeredHill(radius, sharpness, system.plateau(), recipe.plateauCorePpm());
     }
 
     /**
      * Layer-friendly radial profile: a long near-linear middle slope with smooth summit and foot.
-     * Unlike smoothstep(1-r^2), it does not concentrate most vertical change into a narrow annulus.
+     * The derivative bound is explicit so the caller can convert an authored width into a safe
+     * cardinal-rise budget before rasterization.
      */
     private static double layeredHill(
             double radius,
@@ -407,7 +368,7 @@ final class MountainMorphologyAlgorithm {
         return Math.max(0.0, slope * remaining * remaining / (2.0 * footEase));
     }
 
-    /** Cardinal distance from ocean/world edge, capped once the coastal fade is fully inland. */
+    /** Cardinal distance from ocean/world edge, capped once the coastal transition is fully inland. */
     private static int[] distanceFromOceanCells(
             boolean[] land,
             int width,
@@ -451,75 +412,41 @@ final class MountainMorphologyAlgorithm {
         return distance;
     }
 
-    private static void applyCoastalFade(
+    /**
+     * Caps mountain uplift near the coast with another cardinal-Lipschitz field.
+     *
+     * <p>Taking {@code min(rawMountain, coastalCap)} preserves the same rise bound. This is unlike
+     * multiplying a sloped mountain by a sloped fade, where both gradients add and can exceed the
+     * calibrated budget even when each input is individually smooth.</p>
+     */
+    private static void applyCoastalCap(
             long[] uplift,
             boolean[] land,
             int[] coastalDistance,
             long maximumUplift,
             long shorelineUplift,
-            int transitionCells) {
+            int transitionCells,
+            long maximumCardinalRise) {
         if (maximumUplift <= 0L) return;
-        double shorelineFactor = Math.max(
-                0.08,
-                Math.min(0.35, shorelineUplift / (double) maximumUplift));
-        int transition = Math.max(2, transitionCells);
+
+        int transition = Math.max(1, transitionCells);
+        long shoreline = Math.max(
+                0L,
+                Math.min(maximumUplift, Math.min(shorelineUplift, maximumCardinalRise)));
+        long inlandRise = maximumUplift - shoreline;
+        long risePerCell = inlandRise == 0L
+                ? 0L
+                : (inlandRise + transition - 1L) / transition;
+        risePerCell = Math.min(maximumCardinalRise, risePerCell);
+
         for (int cell = 0; cell < uplift.length; cell++) {
             if (!land[cell] || uplift[cell] <= 0L) continue;
-            double t = Math.max(
-                    0.0,
-                    Math.min(1.0, (coastalDistance[cell] - 1.0) / (transition - 1.0)));
-            double smooth = t * t * (3.0 - 2.0 * t);
-            double factor = shorelineFactor + (1.0 - shorelineFactor) * smooth;
-            uplift[cell] = Math.max(0L, Math.round(uplift[cell] * factor));
-        }
-    }
-
-    private static void smoothUplift(
-            long[] uplift,
-            boolean[] land,
-            int width,
-            int height,
-            int passes) {
-        if (passes <= 0) return;
-        long[] scratch = new long[uplift.length];
-        for (int pass = 0; pass < passes; pass++) {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int cell = y * width + x;
-                    if (!land[cell]) {
-                        scratch[cell] = 0L;
-                        continue;
-                    }
-                    long sum = uplift[cell] * 4L;
-                    int weight = 4;
-                    if (x > 0 && land[cell - 1]) {
-                        sum += uplift[cell - 1];
-                        weight++;
-                    }
-                    if (x + 1 < width && land[cell + 1]) {
-                        sum += uplift[cell + 1];
-                        weight++;
-                    }
-                    if (y > 0 && land[cell - width]) {
-                        sum += uplift[cell - width];
-                        weight++;
-                    }
-                    if (y + 1 < height && land[cell + width]) {
-                        sum += uplift[cell + width];
-                        weight++;
-                    }
-                    scratch[cell] = sum / weight;
-                }
-            }
-            System.arraycopy(scratch, 0, uplift, 0, uplift.length);
-        }
-    }
-
-    private static void removeInvisibleFringe(long[] uplift) {
-        for (int cell = 0; cell < uplift.length; cell++) {
-            if (uplift[cell] > 0L && uplift[cell] < MINIMUM_VISIBLE_UPLIFT_SUBUNITS) {
-                uplift[cell] = 0L;
-            }
+            long inlandSteps = Math.max(0L, (long) coastalDistance[cell] - 1L);
+            long allowedRise = Math.min(
+                    inlandRise,
+                    Math.multiplyExact(inlandSteps, risePerCell));
+            long cap = Math.addExact(shoreline, allowedRise);
+            uplift[cell] = Math.min(uplift[cell], cap);
         }
     }
 
@@ -575,8 +502,6 @@ final class MountainMorphologyAlgorithm {
             double positiveLongAxis,
             double leftWidth,
             double rightWidth,
-            double coreAlongOffset,
-            double coreAcrossOffset,
             long upliftSubunits,
             boolean plateau) {
     }
