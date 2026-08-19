@@ -12,7 +12,7 @@ import java.util.Arrays;
 
 /**
  * Deterministic elevation generation; V9 adds oceans, V10 macro relief, V11 organic morphology,
- * and V12 authors scale-stable balanced landforms through a dedicated generator.
+ * V12 authors scale-stable balanced landforms, and V13 composes structural mountains over V12.
  */
 public final class ElevationGenerationStage implements ElevationGenerator {
     public static final GenerationStageId STAGE_ID = GenerationStageId.of("world:elevation");
@@ -35,6 +35,7 @@ public final class ElevationGenerationStage implements ElevationGenerator {
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         GenerationRevision revision = genesis.generationRevision();
+        if (GenerationRevision.V13.equals(revision)) return V13MountainTerrainGenerator.standard().generate(genesis);
         if (GenerationRevision.V12.equals(revision)) return V12LandformElevationGenerator.generate(genesis);
         if (GenerationRevision.V11.equals(revision)) return generateOrganicMorphology(genesis);
         if (GenerationRevision.V10.equals(revision)) return generateMacroMorphology(genesis);

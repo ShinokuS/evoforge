@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
+import io.github.evoforge.simulation.world.genesis.MountainIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
@@ -15,7 +16,14 @@ record WorldGenerationPreviewConfig(
         int reliefPpm,
         int localReliefPpm,
         int landformScalePpm,
-        int ruggednessPpm) {
+        int ruggednessPpm,
+        int mountainAbundancePpm,
+        int mountainHeightPpm,
+        int mountainScalePpm,
+        int mountainChaininessPpm,
+        int mountainSharpnessPpm,
+        boolean mountainPlateausEnabled,
+        int mountainPlateauProbabilityPpm) {
 
     WorldGenerationPreviewConfig {
         if (width <= 0 || length <= 0) {
@@ -28,6 +36,12 @@ record WorldGenerationPreviewConfig(
         requirePpm(localReliefPpm, "localReliefPpm");
         requirePpm(landformScalePpm, "landformScalePpm");
         requirePpm(ruggednessPpm, "ruggednessPpm");
+        requirePpm(mountainAbundancePpm, "mountainAbundancePpm");
+        requirePpm(mountainHeightPpm, "mountainHeightPpm");
+        requirePpm(mountainScalePpm, "mountainScalePpm");
+        requirePpm(mountainChaininessPpm, "mountainChaininessPpm");
+        requirePpm(mountainSharpnessPpm, "mountainSharpnessPpm");
+        requirePpm(mountainPlateauProbabilityPpm, "mountainPlateauProbabilityPpm");
     }
 
     WorldBounds bounds() {
@@ -39,7 +53,7 @@ record WorldGenerationPreviewConfig(
                 minY,
                 minY + length - 1,
                 -12,
-                12);
+                96);
     }
 
     WorldGenerationIntent intent() {
@@ -50,7 +64,15 @@ record WorldGenerationPreviewConfig(
                 NormalizedValue.ofPartsPerMillion(reliefPpm),
                 NormalizedValue.ofPartsPerMillion(localReliefPpm),
                 NormalizedValue.ofPartsPerMillion(landformScalePpm),
-                NormalizedValue.ofPartsPerMillion(ruggednessPpm));
+                NormalizedValue.ofPartsPerMillion(ruggednessPpm),
+                new MountainIntent(
+                        NormalizedValue.ofPartsPerMillion(mountainAbundancePpm),
+                        NormalizedValue.ofPartsPerMillion(mountainHeightPpm),
+                        NormalizedValue.ofPartsPerMillion(mountainScalePpm),
+                        NormalizedValue.ofPartsPerMillion(mountainChaininessPpm),
+                        NormalizedValue.ofPartsPerMillion(mountainSharpnessPpm),
+                        mountainPlateausEnabled,
+                        NormalizedValue.ofPartsPerMillion(mountainPlateauProbabilityPpm)));
     }
 
     long columnCount() {

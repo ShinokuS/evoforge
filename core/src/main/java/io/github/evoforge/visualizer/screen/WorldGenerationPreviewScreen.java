@@ -29,9 +29,9 @@ import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Interactive 2D/3D inspection workspace for macro morphology and generated surface geometry. */
+/** Interactive 2D/3D inspection workspace for generated world morphology and surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V12;
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V13;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
     private static final int SURFACE_CHUNK_INTERVALS = 128;
 
@@ -191,7 +191,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         camera.viewportWidth = width;
         camera.viewportHeight = height;
         camera.near = 0.1f;
-        camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
+        camera.far = cameraFarPlane();
         camera.update();
         batch.getProjectionMatrix().setToOrtho2D(0f, 0f, width, height);
         settingsPanel.resize(width, height);
@@ -245,7 +245,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         shape2DRenderer.setWorldBounds(bounds);
         shape2DRenderer.setElevationRange(elevationRange);
         shape2DRenderer.setElevationTintPpm(elevationTintPpm);
-        camera.far = Math.max(500f, generatedConfig.maxHorizontalDimension() * 8f);
+        camera.far = cameraFarPlane();
 
         if (previous == null
                 || previous.width() != generatedConfig.width()
@@ -411,20 +411,43 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private void updateCamera() {
         float centerX = (bounds.minX() + bounds.maxX()) * 0.5f;
         float centerZ = -(bounds.minY() + bounds.maxY()) * 0.5f;
+        float targetY = cameraTargetY();
         float pitchRadians = pitch * MathUtils.degreesToRadians;
         float yawRadians = yaw * MathUtils.degreesToRadians;
         float horizontal = MathUtils.cos(pitchRadians) * distance;
         camera.position.set(
                 centerX + MathUtils.cos(yawRadians) * horizontal,
-                MathUtils.sin(pitchRadians) * distance,
+                targetY + MathUtils.sin(pitchRadians) * distance,
                 centerZ + MathUtils.sin(yawRadians) * horizontal);
         camera.up.set(Vector3.Y);
-        camera.lookAt(centerX, 0f, centerZ);
+        camera.lookAt(centerX, targetY, centerZ);
         camera.update();
     }
 
+    private float cameraTargetY() {
+        float maximumLand = (float) elevationRange.maximumSubunits()
+                / ElevationField.SUBUNITS_PER_CELL
+                * VERTICAL_EXAGGERATION;
+        return Math.max(0f, maximumLand * 0.28f);
+    }
+
+    private float cameraFarPlane() {
+        if (generatedConfig == null) return 500f;
+        float horizontal = generatedConfig.maxHorizontalDimension() * 8f;
+        float vertical = Math.max(
+                1f,
+                (float) elevationRange.maximumSubunits() / ElevationField.SUBUNITS_PER_CELL)
+                * VERTICAL_EXAGGERATION * 6f;
+        return Math.max(500f, Math.max(horizontal, vertical));
+    }
+
     private void fitCameraToWorld() {
-        distance = Math.max(50f, generatedConfig.maxHorizontalDimension() * 1.4f);
+        float horizontal = generatedConfig.maxHorizontalDimension() * 1.4f;
+        float vertical = Math.max(
+                0f,
+                (float) elevationRange.maximumSubunits() / ElevationField.SUBUNITS_PER_CELL)
+                * VERTICAL_EXAGGERATION * 1.8f;
+        distance = Math.max(50f, Math.max(horizontal, vertical));
     }
 
     private void drawOverlay() {
@@ -433,8 +456,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE V12"
-                        : "WORLD GENERATION / SCALE-AWARE MORPHOLOGY V12",
+                        ? "WORLD GENERATION / 2D SURFACE V13"
+                        : "WORLD GENERATION / STRUCTURAL MOUNTAINS V13",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
@@ -449,7 +472,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 24f,
                 Gdx.graphics.getHeight() - 48f);
         font.draw(batch, String.format(
-                "active seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   macro %.0f%%   local %.0f%%",
+                "base: seed %d   land %.0f%%   scale %.0f%%   fragmentation %.0f%%   macro %.0f%%   local %.0f%%",
                 generatedConfig.seed(),
                 generatedConfig.coveragePpm() / 10_000f,
                 generatedConfig.scalePpm() / 10_000f,
@@ -458,6 +481,17 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 generatedConfig.localReliefPpm() / 10_000f),
                 24f,
                 Gdx.graphics.getHeight() - 72f);
+        font.draw(batch, String.format(
+                "mountains: amount %.0f%%   height %.0f%%   scale %.0f%%   chain %.0f%%   sharp %.0f%%   plateau %s / %.0f%%",
+                generatedConfig.mountainAbundancePpm() / 10_000f,
+                generatedConfig.mountainHeightPpm() / 10_000f,
+                generatedConfig.mountainScalePpm() / 10_000f,
+                generatedConfig.mountainChaininessPpm() / 10_000f,
+                generatedConfig.mountainSharpnessPpm() / 10_000f,
+                generatedConfig.mountainPlateausEnabled() ? "on" : "off",
+                generatedConfig.mountainPlateauProbabilityPpm() / 10_000f),
+                24f,
+                Gdx.graphics.getHeight() - 96f);
         if (twoDimensional) {
             font.draw(batch, String.format(
                     "FPS %d   frame %.1f ms   CPU %.1f ms   visible %,d   sampled %,d   LOD x%d",
@@ -468,7 +502,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     shape2DRenderer.renderedSamples(),
                     shape2DRenderer.lodStride()),
                     24f,
-                    Gdx.graphics.getHeight() - 96f);
+                    Gdx.graphics.getHeight() - 120f);
         } else {
             font.draw(batch, String.format(
                     "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   chunks %d   axis cap %d",
@@ -480,7 +514,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     surfaceMeshes.length,
                     WorldGeneration3DDetail.maxAxisSamples()),
                     24f,
-                    Gdx.graphics.getHeight() - 96f);
+                    Gdx.graphics.getHeight() - 120f);
         }
 
         font.setColor(Color.LIGHT_GRAY);
