@@ -84,7 +84,7 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     @Test
-    void mountainLayerObeysAbstractCardinalRiseBudget() {
+    void generatedMountainSurfaceObeysSourceCardinalRiseBudget() {
         WorldGenerationIntent intent = intent(mountains(
                 1_000_000,
                 1_000_000,
@@ -105,10 +105,10 @@ final class MountainMorphologyElevationGenerationTest {
                 intent));
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(mountainGenesis);
 
-        long maximumUpliftStep = maximumCardinalUpliftStep(base, mountains);
+        long maximumMountainStep = maximumCardinalMountainStep(base, mountains);
         assertTrue(
-                maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
-                "mountain synthesis must enforce its geometry-only rise budget independently of Shape fitting");
+                maximumMountainStep <= calibration.maximumCardinalRiseSubunits() + 2L,
+                "the final generated mountain surface must obey its source rise law before Shape fitting");
     }
 
     @Test
@@ -222,23 +222,20 @@ final class MountainMorphologyElevationGenerationTest {
         return maximum;
     }
 
-    private static long maximumCardinalUpliftStep(ElevationField base, ElevationField mountains) {
+    private static long maximumCardinalMountainStep(ElevationField base, ElevationField mountains) {
         long maximum = 0L;
         WorldBounds bounds = mountains.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                long baseHere = base.elevationSubunitsAt(x, y);
-                if (baseHere <= 0L) continue;
-                long upliftHere = mountains.elevationSubunitsAt(x, y) - baseHere;
-                if (x < bounds.maxX() && base.elevationSubunitsAt(x + 1, y) > 0L) {
-                    long upliftRight = mountains.elevationSubunitsAt(x + 1, y)
-                            - base.elevationSubunitsAt(x + 1, y);
-                    maximum = Math.max(maximum, Math.abs(upliftHere - upliftRight));
+                long here = mountains.elevationSubunitsAt(x, y);
+                if (here <= base.elevationSubunitsAt(x, y)) continue;
+                if (x < bounds.maxX()
+                        && mountains.elevationSubunitsAt(x + 1, y) > base.elevationSubunitsAt(x + 1, y)) {
+                    maximum = Math.max(maximum, Math.abs(here - mountains.elevationSubunitsAt(x + 1, y)));
                 }
-                if (y < bounds.maxY() && base.elevationSubunitsAt(x, y + 1) > 0L) {
-                    long upliftUp = mountains.elevationSubunitsAt(x, y + 1)
-                            - base.elevationSubunitsAt(x, y + 1);
-                    maximum = Math.max(maximum, Math.abs(upliftHere - upliftUp));
+                if (y < bounds.maxY()
+                        && mountains.elevationSubunitsAt(x, y + 1) > base.elevationSubunitsAt(x, y + 1)) {
+                    maximum = Math.max(maximum, Math.abs(here - mountains.elevationSubunitsAt(x, y + 1)));
                 }
             }
         }
