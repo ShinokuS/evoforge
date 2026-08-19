@@ -5,9 +5,10 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
 /**
  * Immutable model choices for the V13 structural mountain stage.
  *
- * <p>Semantic authoring stays in {@code MountainIntent}; this recipe owns implementation policy so
- * later mountain revisions can replace the model without scattering tuned literals through the
- * spatial algorithm.</p>
+ * <p>V13 deliberately starts from the same visual law as the accepted V12 hills: one broad smooth
+ * landform with a soft edge. Mountain character comes from much larger scale, strong anisotropic
+ * elongation and additional vertical headroom rather than from narrow ridge walls or repeated
+ * high-frequency peak modulation.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
@@ -19,14 +20,10 @@ public record MountainRecipe(
         int maximumHeightHeadroomPpm,
         int minimumAllowedRisePpm,
         int maximumAllowedRisePpm,
-        int minimumRidgeHalfLengthWidthPpm,
-        int maximumRidgeHalfLengthWidthPpm,
-        int peakSpacingWidthPpm,
-        int saddleFloorPpm,
-        int branchLengthWidthPpm,
-        int maximumBranches,
-        int foothillWidthPpm,
-        int foothillWeightPpm,
+        int minimumLongAxisWidthPpm,
+        int maximumLongAxisWidthPpm,
+        int coastalTransitionCells,
+        int shorelineUpliftPpm,
         int plateauCorePpm,
         int centerJitterPpm,
         int widthVariationPpm,
@@ -53,22 +50,12 @@ public record MountainRecipe(
         if (maximumAllowedRisePpm < minimumAllowedRisePpm) {
             throw new IllegalArgumentException("maximumAllowedRisePpm must be >= minimumAllowedRisePpm");
         }
-        requireNonNegative(minimumRidgeHalfLengthWidthPpm, "minimumRidgeHalfLengthWidthPpm");
-        if (maximumRidgeHalfLengthWidthPpm < minimumRidgeHalfLengthWidthPpm) {
-            throw new IllegalArgumentException(
-                    "maximumRidgeHalfLengthWidthPpm must be >= minimumRidgeHalfLengthWidthPpm");
+        requirePositive(minimumLongAxisWidthPpm, "minimumLongAxisWidthPpm");
+        if (maximumLongAxisWidthPpm < minimumLongAxisWidthPpm) {
+            throw new IllegalArgumentException("maximumLongAxisWidthPpm must be >= minimumLongAxisWidthPpm");
         }
-        requirePositive(peakSpacingWidthPpm, "peakSpacingWidthPpm");
-        requireNormalized(saddleFloorPpm, "saddleFloorPpm");
-        requirePositive(branchLengthWidthPpm, "branchLengthWidthPpm");
-        if (maximumBranches < 0 || maximumBranches > 4) {
-            throw new IllegalArgumentException("maximumBranches must be in [0, 4]");
-        }
-        requirePositive(foothillWidthPpm, "foothillWidthPpm");
-        if (foothillWidthPpm < PPM) {
-            throw new IllegalArgumentException("foothillWidthPpm must be >= 1.0");
-        }
-        requireNormalized(foothillWeightPpm, "foothillWeightPpm");
+        requirePositive(coastalTransitionCells, "coastalTransitionCells");
+        requireNormalized(shorelineUpliftPpm, "shorelineUpliftPpm");
         requireNormalized(plateauCorePpm, "plateauCorePpm");
         requireNormalized(centerJitterPpm, "centerJitterPpm");
         requireNormalized(widthVariationPpm, "widthVariationPpm");
@@ -79,40 +66,35 @@ public record MountainRecipe(
         }
     }
 
-    /** First structural-mountain recipe, intentionally independent from the accepted V12 recipe. */
+    /**
+     * Broad, ramp-friendly mountain recipe. Even sharp mountains remain hill-like at their base;
+     * sharpness changes the upper profile instead of permitting near-vertical walls.
+     */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
                 12,
-                12,
-                54,
-                5,
-                2,
-                120_000,
-                800_000,
-                300_000,
-                1_800_000,
-                200_000,
-                3_500_000,
-                900_000,
-                580_000,
-                1_500_000,
-                2,
-                1_850_000,
-                250_000,
-                250_000,
-                220_000,
-                220_000,
+                24,
+                72,
+                3,
+                1,
+                80_000,
+                450_000,
+                140_000,
+                420_000,
+                1_200_000,
+                2_400_000,
+                24,
                 180_000,
-                800,
-                3_200);
+                220_000,
+                160_000,
+                120_000,
+                120_000,
+                850,
+                1_350);
     }
 
     private static void requirePositive(int value, String name) {
         if (value <= 0) throw new IllegalArgumentException(name + " must be positive");
-    }
-
-    private static void requireNonNegative(int value, String name) {
-        if (value < 0) throw new IllegalArgumentException(name + " must be non-negative");
     }
 
     private static void requireNormalized(int value, String name) {
