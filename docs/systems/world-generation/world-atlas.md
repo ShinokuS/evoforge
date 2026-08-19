@@ -2,15 +2,13 @@
 
 ## In plain language
 
-`WorldAtlas` is the immutable **pre-runtime map of generated facts**. It is the place where generation says things such as “the ground surface is here”, “this rock identity exists here”, “water would drain this way”, or “this is the generated initial surface-Water condition”.
+`WorldAtlas` is the immutable **pre-runtime map of generated facts**. It records facts such as the generated ground surface, rock identity, climate normals and analytical drainage topology.
 
-It is not the living world itself. Once Terrain and Water have been materialized into runtime systems, later runtime changes do not rewrite the Atlas.
-
-Think of it as the construction survey used to build the initial world, not the building after people start living in it.
+It is not the living world. Once those facts are materialized/prepared into runtime systems, later Terrain/Water/Soil changes do not rewrite the Atlas.
 
 ## Current status
 
-The current `WorldAtlas` contains seven required components and validates that every field uses the same `WorldBounds` as Genesis:
+The current Atlas contains:
 
 ```text
 WorldAtlas
@@ -23,73 +21,64 @@ WorldAtlas
 └─ SurfaceHydrologyField
 ```
 
-The fields are stable typed boundaries. Some algorithms behind them are deliberately provisional and will be replaced in later world-generation stages.
+All fields use the same `WorldBounds` as Genesis.
+
+V13 mountains are represented in the same precise `ElevationField` used by ordinary terrain. There is intentionally no separate `MountainField` merely to label feature names: no current downstream owner needs an independent mountain fact beyond final morphology.
 
 ## What each field means
 
 ### `ElevationField`
 
-The precise generated height of the surface for every horizontal `(x,y)` column. It supports precise sub-cell elevation plus a discrete cell projection used by runtime terrain materialization.
+Precise generated surface height for each horizontal `(x,y)` column, including the accepted V12 base morphology and, for `GenerationRevision.V13`, dedicated mountain uplift. It also exposes the discrete cell projection used by runtime terrain materialization.
 
 ### `GeologyField`
 
-Generated geological material identity in solid volume. The field contract is useful today, but the current production geology algorithm is a placeholder until Stage 3.
+Generated geological material identity in solid volume. The typed contract is useful; the current algorithm remains provisional until Stage 3.
 
 ### `ClimateNormalsField`
 
-Long-term climate normals used as prepared environmental facts. These are not current weather and not a statement that rain is falling now.
+Long-term generated climate normals. These are prepared environmental facts, not current runtime weather.
 
 ### `DrainageField`
 
-Analytical topological facts: downstream routing, contributing area and terminal destination/basin. It does not own Water and is not accepted erosion geometry.
+Analytical downstream routing, contributing area and terminal destination/basin. It does not own Water and does not imply accepted river carving.
 
 ### `HydrographyField`
 
-A derived channel/network footprint from current elevation + drainage. The current threshold-style algorithm is provisional; Stage 2 owns final river hierarchy/carving.
+Current derived channel/network footprint. Its threshold-style algorithm is provisional; Stage 2 owns final dry hierarchy and carving.
 
 ### `SurfaceHydrologyField`
 
-Historical generated initial surface-Water/shoreline facts. The typed field is useful compatibility infrastructure, but the canonical future pipeline moves/refines initial Water after the complete dry world has been accepted.
+Historical generated initial surface-Water/shoreline compatibility facts. The canonical milestone keeps finite initial Water after complete dry-world acceptance.
 
 ## Generation dependency graph
 
-`WorldAtlasGenerator` is intentionally a thin orchestrator. Its actual current execution/dependencies are:
+`WorldAtlasGenerator` is intentionally a thin typed orchestrator:
 
 ```text
 WorldGenesis
-   │
-   ├──────────────→ ElevationGenerator ──────────→ ElevationField
-   ├──────────────→ GeologyGenerator ────────────→ GeologyField
-   │
-   └─────────────────────────────────────────────┐
-                                                 │
-WorldGenesis + ElevationField ─→ ClimateNormalsGenerator
-                                   ↓
-                           ClimateNormalsField
+   ├─→ ElevationGenerator ─────────→ ElevationField
+   └─→ GeologyGenerator ───────────→ GeologyField
 
-ElevationField ───────────────→ DrainageGenerator
-                                   ↓
-                              DrainageField
+WorldGenesis + ElevationField
+   └─→ ClimateNormalsGenerator ────→ ClimateNormalsField
+
+ElevationField
+   └─→ DrainageGenerator ──────────→ DrainageField
 
 WorldGenesis + ElevationField + DrainageField
-        ───────────────────────→ HydrographyGenerator
-                                   ↓
-                              HydrographyField
+   └─→ HydrographyGenerator ───────→ HydrographyField
 
 WorldGenesis + ElevationField + DrainageField
 + HydrographyField + ClimateNormalsField
-        ───────────────────────→ SurfaceHydrologyGenerator
-                                   ↓
-                           SurfaceHydrologyField
+   └─→ SurfaceHydrologyGenerator ──→ SurfaceHydrologyField
 ```
 
-`WorldAtlasGenerator.generate(...)` rejects null stage outputs immediately. The final `WorldAtlas` constructor then checks all field bounds against `genesis.spec().bounds()`.
-
-This explicit dependency graph is preferable to handing every algorithm a generic mutable context that contains everything “just in case”.
+Null stage outputs are rejected immediately and the final Atlas constructor validates bounds consistency.
 
 ## Algorithm substitution
 
-Current generation algorithms are grouped by `WorldGenerationAlgorithms`:
+`WorldGenerationAlgorithms` groups typed contracts:
 
 ```text
 ElevationGenerator
@@ -100,31 +89,25 @@ HydrographyGenerator
 SurfaceHydrologyGenerator
 ```
 
-The standard bundle supplies production implementations. `withElevation(...)`, `withGeology(...)`, `withClimate(...)`, `withDrainage(...)`, `withHydrography(...)` and `withSurfaceHydrology(...)` replace one typed algorithm while keeping the other contracts unchanged.
+Each can be replaced independently for tests/experiments while downstream consumers continue reading the same fact interfaces.
 
-This is heavily useful for tests: a test can provide a tiny deterministic elevation field without teaching all downstream systems about the concrete test class.
+## V12 and V13 inside `ElevationGenerator`
 
-## V12 in the Atlas
-
-V12 changes the `ElevationField` algorithm while leaving the Atlas field boundary intact.
-
-That is the intended extensibility:
+The Atlas does not branch downstream based on which elevation implementation produced the surface:
 
 ```text
-V9/V10/V11/V12/future elevation algorithm
+V9 / V10 / V11 / V12 / V13 / test generator
                     ↓
               ElevationField
                     ↓
-same typed downstream contracts
+          same downstream contracts
 ```
 
-Downstream stages do not inspect the concrete elevation algorithm to decide how to behave.
+V12 composes semantic ordinary-landscape intent through its calibrator/recipe/spatial algorithm. V13 composes that capped V12 base with a separate `MountainCalibrator + MountainRecipe + MountainElevationAlgorithm` pipeline behind the same `ElevationGenerator` boundary.
 
-The exact V12 model is documented in [Terrain Generation](terrain-generation.md).
+See [Terrain Generation](terrain-generation.md) and [V13 Mountain Generation](mountain-generation.md).
 
 ## Climate facts versus weather
-
-A climate normal is a long-term environmental fact. Weather is current runtime state/forcing.
 
 ```text
 ClimateNormalsField
@@ -138,68 +121,58 @@ precipitation + evaporation
 Water / Soil runtime state
 ```
 
-The Atlas therefore does not contain runtime `WeatherState`, scheduler processes or current rain events.
+The Atlas does not contain runtime `WeatherState`, scheduler processes or current rain events.
 
-## Drainage, hydrography and Water are different facts
-
-A dry river channel must be possible. Therefore:
+## Drainage, hydrography and Water remain different facts
 
 ```text
-DrainageField       = where/how topological flow routes
-HydrographyField    = channel/network structure
-SurfaceHydrology    = generated initial Water compatibility fact
-runtime Liquid/Water= finite lived Water after materialization
+DrainageField        analytical routing/topology
+HydrographyField     provisional channel/network structure
+SurfaceHydrology     generated initial-Water compatibility fact
+runtime Liquid/Water finite lived Water after materialization
 ```
 
-None of the first two implies an infinite source of Water.
-
-In the final Stage 2/7 design, dry river/lake geometry is accepted before finite initial Water is added.
+Stage 2 will replace/refine the dry network/carving model from the accepted V13 dry elevation. Stage 7 owns final finite initial Water placement.
 
 ## Preparation after the Atlas
 
-The Atlas is not the end of generation preparation.
-
-Current `GeneratedWorldPreparation` uses the Atlas to derive additional immutable prepared facts:
+Additional immutable preparation derives from Atlas facts:
 
 ```text
-WorldAtlas.elevation
-        ↓
-SurfaceMorphologyGenerator
-        ↓
+ElevationField
+   ↓
 SurfaceMorphologyField
 
-WorldAtlas.elevation + GenerationRevision
-        ↓
-TerrainShapeGenerator
-        ↓
+ElevationField + GenerationRevision
+   ↓
 TerrainShapeField
 
 Elevation + Geology + Drainage + SurfaceHydrology + Morphology
-        ↓
-TerrainMaterialGenerator + CompiledTerrainProfile
-        ↓
+   ↓
 TerrainMaterialField
 ```
 
-When semantic Soil archetypes are supplied, the Soil formation generator additionally resolves spatial hydraulic profiles from material + morphology + drainage before runtime starts.
+V13 shape preparation remains generic: it consumes `ElevationField + GenerationRevision`, not a mountain-specific concrete class. The sparse V13 transition policy is a geometry fitting policy, not part of the mountain generator.
 
-These facts are packaged in `PreparedGeneratedWorld`; they do not become mutable runtime owners.
+These prepared facts are packaged in `PreparedGeneratedWorld`; they still are not mutable runtime owners.
 
 ## Invariants
 
-- Every Atlas field uses exactly the Genesis bounds.
+- Every Atlas field uses Genesis bounds.
 - Atlas fields are immutable/read-only generated facts.
 - Stage algorithms are independently replaceable behind typed contracts.
-- The Atlas does not contain runtime services or scheduler processes.
+- V13 mountains do not require a separate fact type when elevation is the only durable downstream fact.
+- Downstream consumers do not inspect concrete elevation algorithm classes.
+- The Atlas does not contain runtime services/processes.
 - Drainage/hydrography do not own Water quantity.
-- A running simulation does not regenerate the Atlas to update lived state.
-- Algorithm revision changes do not silently reinterpret historical Genesis.
+- Running simulation does not regenerate the Atlas to update lived state.
+- Generation revision changes do not silently reinterpret historical Genesis.
 
-## Current limitations
+## Current limitations / next changes
 
-The current Atlas shape is useful but not necessarily the final long-term list of generated facts. Stages 1–5 may introduce new typed mountain, carved-morphology, stratigraphy, cave or depositional facts if real downstream consumers require them.
+Stage 2 may replace/refine drainage/hydrography and may introduce new typed dry-carving facts only when real downstream consumers require them. Later stages may similarly introduce explicit stratigraphy, cave or depositional facts.
 
-Do not add a universal `Map<String,Object>` generated-fact bag. New durable facts should have explicit types and consumers.
+Do not add a universal generated-fact bag such as `Map<String,Object>`. New durable facts require explicit types and consumers.
 
 ## Code and tests
 
@@ -212,12 +185,6 @@ world/atlas/WorldGenerationAlgorithms.java
 world/atlas/*Generator.java
 ```
 
-`WorldAtlasAlgorithmContractTest` protects substitution/bounds/null-output behavior. Generated-world audit tests exercise representative complete Atlases across deterministic seeds/revisions.
+`WorldAtlasAlgorithmContractTest` protects substitution/bounds/null-output behavior. Generated-world audits exercise representative complete Atlases.
 
-## Sources
-
-**Internal EvoForge architecture:** the typed Atlas and algorithm-bundle composition are project-specific ownership/composition choices.
-
-The terrain algorithms supplying `ElevationField` have their own source classification in [Terrain Generation](terrain-generation.md).
-
-See [World Genesis](world-genesis.md), [World Generation](overview.md), [Generated World Runtime](generated-world-runtime.md), [ADR-010](../../decisions/010-world-atlas-generated-facts.md), and [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md).
+See [World Genesis](world-genesis.md), [World Generation](overview.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [Generated World Runtime](generated-world-runtime.md), [ADR-010](../../decisions/010-world-atlas-generated-facts.md), and [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md).

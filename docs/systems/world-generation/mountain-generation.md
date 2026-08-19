@@ -295,7 +295,7 @@ The V13 test set covers the contracts at their owning boundaries:
 - `V13SparseShapeGenerationTest` — the generic fitter produces sparse rather than exhaustive V13 transition geometry;
 - `Generated World Audit` — representative headless whole-world generation remains valid.
 
-Automated evidence is supplemented by explicit manual 2D/3D preview acceptance because morphology quality cannot be proven from numerical invariants alone.
+Automated evidence is supplemented by explicit manual 2D/3D preview acceptance because morphology quality cannot be proven from numerical invariants alone. The accepted visual baseline is recorded in [V13 mountain visual acceptance](../../journal/acceptance/v13-mountain-visual-acceptance.md).
 
 ## Non-goals
 

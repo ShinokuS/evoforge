@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  * High-level authored intent for dedicated mountain morphology.
  *
  * <p>These values describe desired mountain character, not implementation thresholds. The mountain
- * stage calibrates them into cell-space widths, heights, ridge lengths and occurrence policy before
- * spatial synthesis begins.</p>
+ * stage calibrates them into world-specific coverage, widths, heights, elongation, slope character
+ * and plateau policy before spatial synthesis begins.</p>
  */
 public record MountainIntent(
         NormalizedValue abundance,
