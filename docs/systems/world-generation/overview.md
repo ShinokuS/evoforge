@@ -1,409 +1,375 @@
-# World generation
+# World Generation
 
-This document is the **canonical source of truth** for the current world-generation milestone. If implementation work changes the pipeline, this document changes in the same PR. Chat history, old notes and old prototypes do not override it.
+## In plain language
+
+World generation decides **what exists when a new world begins**. Runtime simulation decides **what happens after that world begins living**.
+
+That distinction sounds simple, but it prevents many architectural mistakes. A generator may create a dry river channel and an initial amount of Water; after startup, however, ordinary Terrain/Water/Soil systems own the changing world. The generator does not keep secretly steering rivers or repairing terrain behind the simulation's back.
+
+EvoForge also separates **what a human asks for** from **how an algorithm produces it**. A player/content author can ask for “more rugged land” or “larger landforms”; they should not need to know noise frequencies, integer slope limits or erosion solver coefficients.
 
 ## Current status
 
-- **Stage 0 — architecture stabilization:** in progress in PR #108.
-- Accepted V12 terrain appearance is a protected baseline.
-- The current V12 implementation is being separated into semantic intent → calibration → algorithm recipe → spatial synthesis without changing the accepted terrain.
-- Mountains, carved river/lake geometry, final geology, caves and final surface-material synthesis are not yet accepted implementations.
-- Initial generated Water remains a later stage. River/lake geometry is generated dry first.
+**Stage 0 — architecture stabilization and V12 normalization is complete.**
 
-## Core ownership law
+The accepted V12 base terrain is the protected starting point for the next stages. The next implementation stage is:
 
-Generation answers **what exists at world start**. Runtime Simulation owns **what happens afterwards**.
+> **Stage 1 — Mountain Systems**
 
-The generated world is one continuous XYZ space. Internal dense/sparse/chunked representations are implementation details; consumers depend on typed world facts, not storage layout.
+Current code still contains several older/provisional Atlas algorithms (drainage, hydrography, geology, generated initial Water and early material placement). Their typed contracts are useful; their algorithms are not automatically accepted as the final versions for later stages.
 
-A generated fact must have exactly one clear owner, an explicit consumer and an observable acceptance test.
-
-## Authoring law: semantic definitions, generated complexity
-
-Human-authored definitions describe **character**, not exact physics.
-
-Example:
-
-```json
-{
-  "key": "core:some_soil",
-  "aspects": {
-    "soil": {
-      "absorbency": 0.8,
-      "fineness": 0.55,
-      "organicMatter": 0.7,
-      "compactness": 0.25
-    }
-  }
-}
-```
-
-`absorbency = 0.8` means “strongly absorbent on the authored semantic scale”. It does not mean a specific hydraulic conductivity, pore volume or water capacity.
-
-The canonical conversion is:
+## The central generation law
 
 ```text
-human-authored Definition JSON
-(normalized semantic coordinates)
-              ↓
-semantic Definition compiler
-(validate + compile meaning only)
-              ↓
-compiled semantic definition
-              ↓
-      + world/environment context
-      + generated local causes
-              ↓
-domain calibrator / resolver
-              ↓
-exact world-specific generated profile
-(physical / operational values)
-              ↓
-spatial generation / runtime consumer
+human-authored semantic meaning
+            ↓
+validate / compile meaning
+            ↓
+world-specific domain calibration
+            ↓
+versioned model recipe (when needed)
+            ↓
+replaceable generation algorithm
+            ↓
+immutable typed generated facts
+            ↓
+preparation / materialization
+            ↓
+ordinary SimulationRuntime ownership
 ```
 
-### Non-negotiable consequences
+Every arrow exists for a reason.
 
-- Definitions do not expose dozens of low-level physical coefficients merely because the engine uses them internally.
-- Definition compilers do not secretly perform world-dependent physics.
-- Calibration is domain-owned. There is no `GodCalibrator` that knows Soil, Rock, Climate, Water, ecology and everything else.
-- Generated complexity may be large. Authoring complexity must remain minimal and semantic.
-- New content that uses known mechanics should normally be data-only.
-- A genuinely new mechanic introduces a narrow local contract, compiler/calibrator if required, generated facts and tests.
+### Definitions and intent describe character
 
-## Algorithm law: replaceable stages
-
-Every serious generation stage follows this shape:
+Authored data should say things like:
 
 ```text
-semantic/calibrated inputs
-          ↓
-      stage contract
-          ↓
-   ┌──────┴──────┐
-   ↓             ↓
-algorithm A   algorithm B
-   │             │
-   └──────┬──────┘
-          ↓
- immutable typed facts
+land coverage = medium
+landforms = large
+ruggedness = moderate
+soil = relatively fine and organic
 ```
 
-The orchestrator knows contracts and dependencies. It does not branch on concrete material keys, rock names, soil names or implementation revisions except where explicit compatibility routing is required.
+Internally those may be normalized `0..1` coordinates. They are **not** exact physics and are not an invitation to expose every implementation constant as content JSON.
 
-A downstream stage must not know whether elevation came from V12, a future tectonic model or a test generator.
+### Calibration creates exact operating values
 
-### No scattered policy hardcode
+A domain calibrator combines semantic intent with world/environment context and decides the exact values the chosen model needs.
 
-World/model policy must not live as unexplained magic literals inside spatial loops.
+For V12, for example, normalized `landformScale` becomes an exact feature spacing between 20 and 64 terrain cells, and normalized `ruggedness` becomes an exact maximum readable cardinal slope limit.
 
-The separation is:
+Calibration is domain-owned. EvoForge deliberately has no universal “GodCalibrator” that knows every Soil, Rock, climate, mountain and Water rule.
+
+### A recipe versions algorithm policy
+
+Some values are neither authored meaning nor world-dependent calibration; they are simply the choices that define one particular algorithm revision.
+
+V12 stores those in `V12LandformRecipe`: coast transition length, component weights, feature-kernel ranges, slope-relaxation passes, warp policy and similar constants.
+
+A future V13 could implement a completely different model behind the same `ElevationGenerator` contract.
+
+### Algorithms create typed facts
+
+The orchestrator knows contracts and dependencies, not concrete material/rock names or algorithm internals.
+
+A downstream consumer sees an `ElevationField`; it should not need to know whether that field came from V12, a future tectonic model or a tiny test generator.
+
+## Deterministic provenance
+
+`WorldGenesis` is the immutable generation birth certificate:
 
 ```text
-Authored semantic intent
-        ↓
-Calibration
-        ↓
-exact world-specific operating values
-        +
-versioned algorithm recipe/model parameters
-        ↓
-spatial algorithm
+WorldSpec
+masterSeed
+GenerationRevision
+RngRevision
+WorldGenerationIntent
 ```
 
-Pure mathematical identities and representation constants may remain inside an implementation. Tunable model choices belong in an explicit immutable recipe/configuration. World-dependent operating values belong in calibration.
+Generation randomness is call-order-independent: samples are addressed by semantic stage/purpose, scope coordinates and ordinal. This allows unrelated generation work to be added without shifting every later random value merely because the call sequence changed.
 
-This is the rule used by the V12 Stage-0 refactor.
+Historical revisions remain executable; intentional world-fact changes require explicit revision handling.
 
-## Current V12 boundary
+See [World Genesis](world-genesis.md).
 
-The accepted V12 terrain remains the ordinary-landscape baseline: coherent land/ocean membership, coast transition, broad uplift, explicit hills/depressions, rolling relief and rugged ridges.
+## World Atlas: typed pre-runtime facts
 
-V12 is **base morphology**, not final geology and not a mountain/geology/river object model.
-
-The Stage-0 structural boundary is:
+The current `WorldAtlas` contains:
 
 ```text
 WorldGenesis
-  └─ normalized WorldGenerationIntent
-              ↓
-     V12LandformCalibrator
-              ↓
-     V12LandformCalibration
-       exact per-world values
-              +
-       V12LandformRecipe
-       versioned model choices
-              ↓
-  V12LandformElevationAlgorithm
-              ↓
-        ElevationField
+ElevationField
+GeologyField
+ClimateNormalsField
+DrainageField
+HydrographyField
+SurfaceHydrologyField
 ```
 
-`V12BaseTerrainGenerator` is a normal `ElevationGenerator`, so it can be replaced without changing consumers. Legacy revision routing remains only as a compatibility facade.
+These are immutable generated facts. Some algorithms behind them are provisional, but the typed fact boundaries are already valuable.
 
-The accepted V12 visual output is protected during this refactor. Later mountain and channel stages extend/transform the typed morphology explicitly; they do not silently retune V12 until it becomes a different algorithm.
+The Atlas is not live Terrain, Water, Soil, current Weather or a scheduler.
 
-## Existing reusable architecture
+See [World Atlas](world-atlas.md).
 
-The repository already contains useful seams that must be preserved rather than duplicated:
+## Stage 0 V12 base morphology
 
-- `WorldGenesis` + `GenerationRandom` — deterministic provenance and sampling root;
-- `WorldGenerationAlgorithms` — replaceable atlas algorithm composition;
-- `WorldAtlasGenerator` — orchestration of typed atlas facts;
-- `ElevationGenerator`, `GeologyGenerator`, `ClimateNormalsGenerator`, `DrainageGenerator`, `HydrographyGenerator`, `SurfaceHydrologyGenerator` — existing typed algorithm boundaries;
-- `SurfaceMorphologyField` — reusable derived local topology facts;
-- terrain profile/material-role JSON — authored palette/role selection, not a universal placement engine;
-- Soil semantic compilation + domain calibration — existing example of the desired Definition → calibration separation;
-- `GeneratedWorldPreparation` — current generated-facts-to-prepared-world boundary;
-- runtime `LiquidSystem` / Water ownership — authoritative post-generation finite-water behavior.
-
-Existing code is not accepted merely because it exists. Provisional algorithms are replaced behind their contracts when their real stage is reached.
-
-## Causal separation laws
-
-### Mountains
-
-A mountain is primarily generated **geometry/morphology**, not a hard-coded rock or terrain type.
+The accepted base-terrain path is:
 
 ```text
-mountain/range generation
+WorldGenerationIntent
         ↓
-high relief / ridge / exposed geometry
+V12LandformCalibrator
+        ↓
+V12LandformCalibration
+        +
+V12LandformRecipe
+        ↓
+V12LandformElevationAlgorithm
+        ↓
+ElevationField
+```
+
+V12 provides:
+
+- exact rank-calibrated land coverage;
+- coherent landmass/fragment fields;
+- coast interiority and coast relief gating;
+- broad uplift;
+- explicit balanced hills/depressions with cell-scale feature radii;
+- rolling primary/detail relief;
+- rugged ridge crests;
+- deterministic bounded cardinal slope relaxation.
+
+It intentionally does **not** define final mountain ranges, rivers, geology, caves or surface materials.
+
+See [Terrain Generation](terrain-generation.md) for the equations and exact balanced recipe.
+
+## Causal separation rules
+
+### Mountains are geometry first
+
+A mountain primarily changes morphology/elevation. It is not a material name.
+
+```text
+mountain generation
+        ↓
+high-relief/range geometry
 
 geology
         ↓
-which rock actually occupies that volume
+what rock occupies that volume
 
 surface synthesis
         ↓
-soil / sediment / exposed bedrock at the surface
+soil / sediment / exposed rock
 
 future climate/atmosphere
         ↓
-altitude-dependent temperature / pressure / snow potential
+altitude effects
 ```
 
-Elevation must remain a usable environmental cause so future climate/atmosphere mechanics can consume it. Snow caps, thin air and altitude physiology are deliberately deferred; the architecture must not block them.
+Therefore generic code must not contain `if mountain -> granite`.
 
-### Rivers and lakes
+### Rivers and lakes are dry geometry before Water
 
-A river is not a blue overlay and a lake is not a predeclared Water object.
+A river is not a blue texture and a lake is not a magic Water object.
+
+The canonical order is:
 
 ```text
 final dry morphology
-      ↓
-drainage / watersheds
-      ↓
-basins + outlets + river hierarchy
-      ↓
-dry channel / valley / lake-bowl carving
-      ↓
-deposition / erosion context
-      ↓
+        ↓
+drainage / watersheds / basins
+        ↓
+river hierarchy + outlets
+        ↓
+dry valley/channel/lake-bowl carving
+        ↓
+depositional/erosional context
+        ↓
 surface-material synthesis
-      ↓
+        ↓
 ONLY THEN finite initial Water
 ```
 
-Channel and lake geometry must remain visible and valid when Water rendering is disabled.
+When Water rendering is disabled, accepted channels and lake bowls must still exist and make physical sense.
 
-### Shores and sediment
+### Shore does not mean sand
 
-“Shore = sand” is forbidden as a universal rule. A coast, lake edge or river bank may expose sand, silt, gravel, soil or rock depending on morphology, geology, depositional conditions and calibrated material properties.
+A shore may expose sand, gravel, silt, soil or rock depending on the final morphology, geology and depositional conditions. A river/lake/coast label alone is not enough to choose material.
 
-Generic consumers use semantic roles/typed facts. They do not contain `if (river) sand` or `if (mountain) granite` branches.
+### Puddles are runtime consequences
 
-### Puddles
+Puddles arise from terrain geometry, Soil hydraulics, actual precipitation and finite runtime Water. They are not world-generation objects painted into the Atlas.
 
-Puddles are runtime consequences of geometry + calibrated soil + actual precipitation + finite Water. They are not worldgen objects and local hydraulic variation must not be invented from coordinate noise merely to look natural.
+## Canonical milestone sequence
 
-## Structural/pattern authoring
+### Stage 0 — Architecture stabilization and V12 normalization **[COMPLETE]**
 
-Some future generators may need authored structural descriptions: mountain-range character, stratigraphic character, deposit shape, channel character, cave character, and similar patterns.
+Completed responsibilities:
 
-Those descriptions follow the same authoring law: simple normalized semantic coordinates, not exact implementation knobs.
+- audit the generation/preparation ownership path;
+- protect the accepted V12 visual baseline;
+- separate semantic intent, world calibration, V12 recipe and spatial algorithm;
+- keep algorithms replaceable through typed seams;
+- make generated-world preparation compositional;
+- identify provisional code rather than quietly extending it;
+- reconcile package ownership and the canonical pipeline;
+- complete the context/documentation closeout represented by this documentation set.
 
-Do **not** create a universal formation/pattern framework in advance. The first real consumer introduces the smallest typed pattern contract it needs. Shared abstractions are extracted only after multiple real consumers prove the common structure.
-
-## Canonical milestone pipeline
-
-This sequence is locked. A change requires an explicit reason and an update to this document in the same PR.
-
-### Stage 0 — Architecture stabilization and V12 normalization **[ACTIVE]**
-
-Purpose:
-
-- audit the authoritative worldgen/preparation path;
-- eliminate contradictory ownership/documentation;
-- make accepted V12 a clean replaceable `ElevationGenerator` unit;
-- restore explicit semantic intent → calibration → recipe → algorithm separation;
-- keep all V12 terrain behavior visually unchanged;
-- record provisional components that will be replaced later rather than extending them accidentally.
-
-Acceptance:
-
-- existing V12 visual acceptance laws still pass;
-- deterministic outputs remain stable;
-- calibration is deterministic and seed-independent for identical semantic/world policy;
-- the V12 revision route and the replaceable V12 generator are bit-identical;
-- generic worldgen composition can substitute algorithms through contracts;
-- canonical docs and PR scope agree.
-
-### Stage 1 — Mountain systems
+### Stage 1 — Mountain Systems **[NEXT]**
 
 Purpose:
 
-- extend the accepted base morphology with sparse coherent mountain provinces/ranges, foothills, ridges and peaks;
-- keep mountain geometry independent from rock identity;
-- ensure world vertical capacity can represent mountains and later underground geology without globally inflating ordinary V12 relief.
+- generate sparse coherent mountain provinces/ranges;
+- organize foothills, ridges and peaks above the accepted ordinary landscape;
+- keep mountain geometry separate from rock identity;
+- introduce only semantic authored controls and calibrate them into exact model parameters;
+- make the result directly observable in a dedicated preview;
+- preserve ordinary V12 character when mountain intent is zero/low.
 
-Inputs: accepted base elevation + calibrated mountain intent/pattern.
-
-Output: mountain-bearing dry morphology / elevation facts.
-
-Acceptance: dedicated preview layer and visual acceptance at several world sizes/seeds; zero/low mountain intent preserves ordinary V12 character.
+The exact mountain model is **not yet decided by this page**. Stage 1 begins with research + contract design and should choose the smallest model that satisfies those observable requirements.
 
 ### Stage 2 — Dry hydrography and carving
 
-Purpose:
+From the mountain-bearing dry surface:
 
-- derive watersheds, flow accumulation, depression/basin analysis, lake basins/outlets and river hierarchy from the mountain-bearing surface;
-- carve physically readable valleys, river channels, lake bowls and shore forms;
-- keep the world completely dry.
+- derive flow/drainage structure;
+- identify watersheds and basins;
+- derive river hierarchy and outlets;
+- carve readable valleys/channels;
+- carve lake bowls/shore forms;
+- remain completely dry.
 
-Outputs are typed hydrographic and morphology facts, not runtime Water.
-
-Acceptance: with Water hidden, river channels and lake bowls are visible, connected and plausible; deterministic topology tests cover outlets/basins/network continuity.
+Typed topology tests must cover network/basin continuity; visual acceptance must prove the dry geometry is plausible.
 
 ### Stage 3 — Coherent geology
 
-Purpose:
+Replace placeholder geology with coherent formations/strata and the deposits actually required by the chosen geology model.
 
-- replace the provisional geology implementation with authored/calibrated rock definitions placed as coherent geology;
-- generate meaningful layered strata and coherent formations;
-- support distinct deposits, lenses, veins/seams or other bodies only as required by the real geology model;
-- expose rock identity through typed geology fields for later caves and surface synthesis.
-
-Acceptance: geology slice/cross-section visualization, deterministic continuity/invariant tests, no independent per-cell rock lottery.
+Geology answers **which material occupies underground volume**, not where mountains should be.
 
 ### Stage 4 — Caves
 
-Purpose:
+Generate coherent underground voids through a separate replaceable algorithm using the geology/morphology causes available at that stage.
 
-- generate coherent underground void systems using geology and morphology/hydrological causes available at that point;
-- keep cave algorithm replaceable and separate from geology ownership.
+### Stage 5 — Causal surface layers and materials
 
-Acceptance: underground slice/3D visualization, connectivity/volume/bounds tests, no generic noise-only cave field accepted without causal/visual evidence.
+Combine completed dry morphology, hydrographic/depositional facts, geology and calibrated semantic material/Soil definitions to synthesize surface/subsurface/sediment/exposed-bedrock composition.
 
-### Stage 5 — Surface layers and material synthesis
+### Stage 6 — Complete dry-world acceptance
 
-Purpose:
+Before initial Water exists, accept the full physical dry world:
 
-Combine:
+```text
+land/ocean base
+mountains
+dry rivers/lakes
+geology/deposits
+caves
+surface/subsurface materials
+```
 
-- final dry morphology;
-- dry hydrographic/depositional facts;
-- geology;
-- climate/environment where currently meaningful;
-- authored semantic material/soil/rock definitions;
-- world-specific calibrated physical profiles.
+This includes deterministic audits, visual acceptance and representative performance profiling.
 
-Produce coherent surface/subsurface/sediment/exposed-bedrock composition. Sand/silt/gravel/soil/rock placement follows causes, not hard-coded feature labels.
+### Stage 7 — Finite initial Water fill
 
-This is where existing terrain material roles and Soil semantic/physical calibration are reused/refined.
+Put finite Water into already prepared oceans/lakes/channels. Generation owns only the initial quantity/placement; ordinary runtime liquid/hydrology systems own later Water behavior.
 
-Acceptance: material/geology preview modes plus tests for causal placement and typed-role independence.
+### Stage 8 — Runtime handoff audit
 
-### Stage 6 — Dry-world acceptance gate
+Verify no generator, preparation helper or bootstrap remains a second source of truth after runtime starts. This closes the world-generation milestone.
 
-At this point the world must be complete **without Water**:
+## Provisional components in current code
 
-- land/ocean morphology;
-- mountains;
-- dry river channels and lake bowls;
-- geology/strata/deposits;
-- caves;
-- surface soils/sediments/exposed rock.
+### Drainage
 
-Perform visual acceptance, deterministic audits and performance profiling before adding Water.
+Current drainage provides deterministic downstream topology, terminal basins and contributing area. It is useful analytical infrastructure. It is **not** accepted fluvial erosion or final valley/channel geometry.
 
-### Stage 7 — Initial Water fill
+### Hydrography
 
-Fill already prepared oceans, lakes and river channels with finite initial Water using the existing authoritative liquid boundary.
+Current hydrography is a threshold-style derived footprint. Stage 2 owns the real dry network/hierarchy/carving model.
 
-Generation owns only the initial quantity/placement. After bootstrap, normal runtime liquid/hydrology systems own Water.
+### Geology
 
-Acceptance: correct initial fill/conservation and no hidden generation-time controller that continues steering Water after tick 0.
+Current geology has typed fields/profile loading and deterministic placeholder placement. Stage 3 owns final coherent geology.
 
-### Stage 8 — Runtime handoff audit and milestone close
+### Surface hydrology / generated Water
 
-Verify generated facts materialize once, runtime owns subsequent state, and no generator remains a second source of truth.
+The existing Atlas path can describe initial Water/shoreline facts and bootstrap them. Canonical Stage 7 will reposition/refine this after the dry world is complete.
 
-This closes the current **world-generation** milestone. Flora, fauna, settlements, agents, economy and broader ecology require a separate plan.
+### Terrain materials
 
-## Current provisional components
+Current slope/concavity/drainage/shoreline material logic is an early causal slice. Stage 5 owns the final synthesis and must not inherit provisional feature-label shortcuts as permanent rules.
 
-These are useful typed seams but **not final algorithms**:
+## Structural authoring rule
 
-- current `GeologyGenerationStage` — deterministic placeholder geology;
-- current threshold-style hydrography — analytical footprint, not final river/lake morphology;
-- current `SurfaceHydrologyGenerationStage` — existing initial-water path that must be repositioned after dry-world completion before final acceptance;
-- current `TerrainMaterialGenerationStage` slope/deposition rules — early vertical slice, not final causal surface synthesis;
-- current generated-preparation ordering — useful boundary but will evolve as real mountain/hydro/geology/surface stages acquire typed dependencies.
+Future mountain ranges, strata, deposits, channels or caves may need higher-level authored pattern descriptions. They follow the same law:
 
-Do not improve these placeholders by accumulating special cases. Replace/narrow them in their assigned stage.
+```text
+simple semantic character
+        ↓
+domain calibration
+        ↓
+exact model input
+```
 
-## Development discipline
+Do not build a universal “formation framework” before two or more real consumers prove the same structure exists.
 
-### One stage = one PR
+## Development protocol
 
-- Reuse the current stage PR until that stage is accepted.
-- Do not open parallel worldgen PRs for pieces of the same stage.
-- Before starting the next stage, merge/close obsolete worldgen PRs and ensure `develop` is the single baseline.
+One world-generation stage uses one PR. Inside that PR, prefer understandable internal steps:
 
-### Small internal steps inside a stage
+```text
+audit / research
+    ↓
+contracts + authored semantics
+    ↓
+calibration / model recipe
+    ↓
+algorithm
+    ↓
+diagnostics / preview
+    ↓
+tests + performance
+    ↓
+documentation / cleanup
+```
 
-Each stage PR should progress through reviewable commits:
+A stage that changes visible generated facts remains Draft until manual visual acceptance when appropriate.
 
-1. audit/contracts;
-2. calibration/data boundary;
-3. algorithm implementation;
-4. diagnostics/preview;
-5. tests/performance;
-6. cleanup/documentation.
+If implementation proves the documented pipeline wrong:
 
-A stage may be large, but its internal changes remain understandable.
-
-### Visualization gate
-
-Every stage that changes generated world facts must expose those facts in developer visualization before merge. Visual acceptance is separate from unit tests.
-
-Preview remains observer/tooling only. It never becomes an alternate simulation truth or influences generation results.
-
-### Change protocol
-
-When implementation proves this plan incomplete:
-
-1. identify the concrete contradiction/requirement;
+1. identify the concrete contradiction;
 2. change the smallest owning contract;
-3. update this document in the same PR;
-4. record the reason in the stage report/audit;
-5. update tests/preview acceptance;
-6. continue from the new documented baseline.
+3. update this page in the same PR;
+4. record durable rationale in an ADR when needed;
+5. update tests/diagnostics/acceptance;
+6. continue from the documented baseline.
 
-Do not silently drift from the plan.
+Do not silently drift.
 
-## Explicit anti-patterns
+## Anti-patterns
 
 Do not introduce:
 
-- giant generators/calibrators that own unrelated domains;
-- concrete material/rock/soil branching in generic orchestration;
-- coordinate-random material selection as a substitute for causal structure;
-- duplicated river/geology/formation frameworks alongside existing typed seams;
-- authored exact-physics JSON where normalized semantic character is sufficient;
-- hidden world policy embedded as magic constants throughout spatial loops;
-- future-facing abstractions with no real consumer;
-- generated Water before dry channel/lake/surface structure is accepted;
-- visual-only fake rivers/lakes that are not backed by authoritative generated facts.
+- one giant generator/calibrator for unrelated domains;
+- mutable universal generation contexts/service locators;
+- material/rock/soil-name branches in generic orchestration;
+- coordinate-random material placement as a substitute for causal structure;
+- exact-physics authoring knobs where semantic coordinates are sufficient;
+- scattered tunable magic constants inside spatial loops;
+- parallel duplicate river/geology/formation frameworks beside existing typed seams;
+- Water before dry channels/lakes/surface structure are accepted;
+- visual-only fake rivers/lakes not backed by generated facts;
+- a background generator that continues controlling the world after runtime starts.
+
+## Sources
+
+**Internal EvoForge architecture:** semantic definition → calibration → typed replaceable algorithm → generated fact → runtime handoff is the project's current architectural contract.
+
+**Conceptual terrain research:** Génevaux et al. (2013) demonstrates procedural terrain organized around hydrologic structure; Cordonnier et al. (2016) separates tectonic uplift and fluvial erosion at large scale. These sources inform later Stage 1/2 research direction, but current V12 is not a direct implementation of either model.
+
+See [References](../../references.md), [Project Context](../../project-context.md), [Roadmap](../../roadmap.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Terrain Generation](terrain-generation.md), and [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md).

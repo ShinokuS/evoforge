@@ -1,22 +1,35 @@
 # World Genesis
 
-World Genesis owns immutable provenance for a generated world and the deterministic random contract used while authoring its initial facts. It does not own Terrain, Water, Soil, runtime weather, objects or later runtime mutation.
+## In plain language
 
-## Current contract
+World Genesis is the **birth certificate** of a generated EvoForge world. It records what was requested and which deterministic generation rules were used, so the same authored world can be identified and replayed deliberately instead of depending on hidden global randomness.
 
-`WorldSpec` is the requested pre-generation specification. It currently contains:
+It does not contain the generated mountains, Water or Terrain itself. Those facts are produced later by the owning generation stages.
+
+A useful analogy is:
 
 ```text
-finite inclusive WorldBounds
-ClimateSpec
-optional PhysicalSpaceScale
+recipe request + seed + algorithm version
+                 ↓
+            WorldGenesis
+                 ↓
+      generated world facts
 ```
 
-`ClimateSpec` is long-term climate intent. Historical revisions V1-V7 use the legacy cell-relative atmospheric-water representation. V8+ use physical water-depth-per-time normals when a complete Atlas is generated. Runtime weather and precipitation remain separate simulation state/processes.
+## Current status
 
-`PhysicalSpaceScale` is optional because not every generation consumer needs a physical cell size. Consumers that require physical dimensions must request them explicitly through `requirePhysicalSpaceScale()` rather than inventing a hidden default.
+The repository supports generation revisions `V1` through `V12` and RNG revision `V1`.
 
-`WorldGenesis` combines:
+There are two important meanings of “current”:
+
+- `WorldGenesis.current(spec, seed)` still deliberately creates **GenerationRevision.V7 + RngRevision.V1** for the ordinary production convenience path. This compatibility choice remains in code until the full physical-climate/runtime-scale generation contract is promoted together.
+- **V12 is the manually accepted and architecturally normalized base-terrain revision used explicitly by the current world-generation milestone, preview and audits.** It is not silently substituted into `WorldGenesis.current(...)`.
+
+That distinction is intentional and must remain explicit in future documentation.
+
+## What Genesis records
+
+`WorldGenesis` contains:
 
 ```text
 WorldSpec
@@ -26,72 +39,195 @@ RngRevision
 WorldGenerationIntent
 ```
 
-`WorldGenerationIntent` is the high-level macro-generation request. Its current normalized semantic coordinates are:
+### `WorldSpec`
+
+The pre-generation world specification currently carries:
 
 ```text
-landCoverage   desired fraction of horizontal columns above global sea level
-landmassScale  characteristic spatial coherence / landmass size
-fragmentation  fine breakup of the landmass field
+finite inclusive WorldBounds
+ClimateSpec
+optional PhysicalSpaceScale
 ```
 
-These values are authored intent, not noise thresholds or physical constants. A generation algorithm is responsible for calibrating its implementation to the requested outcome.
+`PhysicalSpaceScale` is optional because not every generation consumer requires a real-world cell size. Any algorithm that needs physical dimensions must request them explicitly rather than inventing a hidden default.
 
-The compatibility constructor without an explicit intent supplies `WorldGenerationIntent.balanced()`. V1-V8 ignore this macro intent, so adding the field does not change historical elevation semantics.
+### `masterSeed`
 
-## Generation revisions
+The 64-bit master seed identifies the deterministic random family used by generation. It is provenance, not mutable runtime RNG state.
 
-`GenerationRevision` versions authored-world semantics. `RngRevision` separately versions the deterministic sampling algorithm.
+### `GenerationRevision`
 
-`WorldGenesis.current(...)` intentionally remains on `evoforge:worldgen-v7` with `evoforge:rng-v1`. Newer revisions are explicit validation targets until their complete contracts are promoted together.
+This versions **world-generation semantics**. Historical revisions remain executable so a newer algorithm does not silently rewrite what an older seed used to mean.
 
-Relevant current boundaries are:
+Current known revisions are `evoforge:worldgen-v1` through `evoforge:worldgen-v12`.
 
-- V1 retains the original cell-quantized elevation semantics;
-- V2+ retain precise sub-cell elevation facts;
-- V8 introduces the physical climate-water contract for full Atlas generation;
-- V9 introduces ocean-first macro elevation driven by `WorldGenerationIntent` while retaining V8 semantics for the other existing Atlas layers.
+### `RngRevision`
 
-V9 uses one global macro sea-level datum at `z = 0`. Its elevation generator requires vertical world bounds that contain space both below and above that datum. `landCoverage` is calibrated to the nearest representable horizontal-column count, so requested coverage is preserved to one-column precision instead of being an incidental side effect of a fixed noise threshold.
+This separately versions the deterministic sample algorithm. `GenerationRandom.from(...)` currently accepts only `RngRevision.V1`; unknown revisions fail explicitly.
 
-Historical revisions remain executable. Changing the newest generation algorithm must never silently rewrite the authored facts of an older revision.
+Separating generation semantics from RNG semantics allows either contract to evolve without pretending they are the same compatibility problem.
 
-## Deterministic random scope
+## Authored world intent
 
-`GenerationRandom` is not a mutable stream. Every sample is addressed independently by:
+`WorldGenerationIntent` is a set of normalized semantic coordinates in the range `0..1` (stored as integer parts-per-million, `0..1_000_000`). They describe desired **character**, not implementation thresholds.
+
+The current seven coordinates are:
+
+| Coordinate | Meaning |
+|---|---|
+| `landCoverage` | Desired fraction of horizontal columns classified as land by ocean-first revisions. |
+| `landmassScale` | How spatially broad/coherent major landmasses should be. |
+| `fragmentation` | How much finer structure breaks up the coherent landmass field. |
+| `relief` | Strength of large-scale vertical relief. |
+| `localRelief` | Strength of ordinary rolling hills/depressions. |
+| `landformScale` | Typical horizontal size/spacing of ordinary landform features. |
+| `ruggedness` | Ridge prominence and tolerated readable local slope in V12. |
+
+`WorldGenerationIntent.balanced()` currently resolves to:
 
 ```text
+landCoverage   = 0.50
+landmassScale  = 0.50
+fragmentation  = 0.50
+relief         = 0.60
+localRelief    = 0.45
+landformScale  = 0.50
+ruggedness     = 0.35
+```
+
+Compatibility constructors keep older callers source-compatible by supplying defaults for coordinates introduced later.
+
+These numbers are not noise frequencies, metres, erosion coefficients or slope degrees. A revision-specific calibrator translates semantic intent into exact operating values.
+
+## Revision history that matters today
+
+The exact historical implementation remains in code, but the important semantic milestones are:
+
+- **V1** — original cell-quantized elevation behavior.
+- **V2+** — precise sub-cell elevation facts are available.
+- **V8** — full Atlas generation introduces the physical climate-water contract when physical scale/time requirements are explicitly supplied.
+- **V9** — ocean-first elevation with exact rank-calibrated land coverage and global sea-level datum `z = 0`.
+- **V10** — adds structured macro relief while preserving the V9 land/ocean idea.
+- **V11** — smooth/domain-warped organic morphology replaces the more piecewise V10 character.
+- **V12** — accepted scale-stable balanced base terrain with explicit hills/depressions, rolling relief, ridges, coast gating and bounded slope relaxation behind the Stage 0 calibration/recipe architecture.
+
+V9–V12 ocean-first generation requires vertical `WorldBounds` to contain valid space both below and above sea level `z = 0`.
+
+## Deterministic generation randomness
+
+### Why a normal mutable random stream is avoided
+
+With a mutable PRNG stream, inserting one unrelated random call can shift every later value. That is dangerous for procedural generation because an innocent refactor could rewrite the whole world.
+
+EvoForge instead addresses every sample by meaning:
+
+```text
+masterSeed
 GenerationStageId
 GenerationPurposeId
 scopeX, scopeY, scopeZ
 ordinal
+        ↓
+GenerationRandom.sampleLong(...)
 ```
 
-Stage and purpose identifiers use stable namespaced keys such as `world:elevation` and `world:landmass`. Scope coordinates are signed 64-bit values. Direct cell-scoped generation passes global world coordinates unchanged; macro algorithms may use stable lattice coordinates without creating a second authoritative world position or requiring chunk identity.
+For example, a landmass sample and a ridge sample at the same coordinate use different semantic purpose keys, so adding a new unrelated purpose does not shift either result.
 
-`ordinal` distinguishes multiple samples for one semantic purpose at one scope. The result depends only on those inputs and the genesis master seed. Calling samples in another order or inserting an unrelated sample does not alter an existing result.
+### Exact V1 sample construction
 
-`evoforge:rng-v1` is an EvoForge-owned fixed 64-bit sampling algorithm and is covered by golden vectors. `GenerationRandom.from(...)` accepts only RNG revisions it can execute; unknown revisions fail explicitly.
+The current sampler:
 
-## Ownership boundary
+1. mixes the master seed with a fixed seed salt;
+2. hashes the UTF-8 stage key with 64-bit FNV-1a and mixes it with a stage salt;
+3. hashes and mixes the purpose key similarly;
+4. mixes `x`, then `y`, then `z` with independent salts;
+5. mixes the non-negative ordinal;
+6. returns the resulting 64-bit value.
 
-Genesis metadata is immutable provenance and requested generation input. Generated output belongs to the domain that owns the resulting fact:
+The avalanche function is:
 
-- elevation, geology, climate normals, drainage, hydrography and generated initial surface hydrology belong to World Atlas;
-- materialized Terrain belongs to Landscape;
-- runtime Water and Soil state belong to their existing authoritative systems;
-- runtime precipitation/evaporation and WeatherState remain environment behavior;
-- objects and agents remain owned by their existing domains.
+```text
+x = (x xor (x >>> 30)) * 0xbf58476d1ce4e5b9
+x = (x xor (x >>> 27)) * 0x94d049bb133111eb
+x =  x xor (x >>> 31)
+```
 
-A generator therefore must not become a permanent second owner of generated state. Generation ends before the started simulation begins evolving the world.
+Those constants follow the SplitMix-style `mix64` lineage, but EvoForge is **not** operating a mutable SplitMix stream. It uses the mixer as part of an addressable deterministic function.
+
+The stable string hash uses FNV-1a:
+
+```text
+hash = offset_basis
+for each UTF-8 byte b:
+    hash = hash xor b
+    hash = hash * FNV_prime
+```
+
+This is non-cryptographic and is used only for deterministic semantic-key hashing.
+
+## Invariants
+
+- Identical Genesis + compatible algorithm code must reproduce identical generated facts.
+- Sample values do not depend on call order.
+- Stage/purpose identifiers are stable namespaced semantic keys, not Java class names.
+- Historical generation revisions must not silently acquire newer elevation semantics.
+- Genesis is immutable provenance; it is never a runtime owner of Terrain, Water, agents or weather.
+- A generator may use stable lattice coordinates as random scopes without making those lattices authoritative world positions.
+
+## Ownership and lifecycle
+
+```text
+WorldGenesis
+    ↓ immutable request/provenance
+WorldAtlasGenerator / other preparation stages
+    ↓ immutable generated facts
+materialization + bootstrap
+    ↓
+SimulationRuntime
+```
+
+After runtime starts, Genesis remains provenance. It does not keep steering the world.
+
+Generated outputs belong to their domain owners: elevation/geology/climate/drainage/hydrography in the Atlas, materialized Terrain in Landscape, finite runtime Water in the liquid system, and so on.
 
 ## Persistence rule
 
-The master seed, revisions and intent are provenance, not a substitute for canonical save state. A save must eventually preserve already-generated authoritative facts/state required to continue the existing world. Loading a historical world must not rerun the newest generator and rewrite its past.
+A future save system cannot treat `seed + newest generator` as canonical world state. A lived world may have changed after generation, and historical revisions may no longer be the newest algorithm.
 
-The physical save schema is not part of this subsystem contract yet.
+Persistence must eventually store the authoritative facts/state needed to continue that existing world and preserve provenance separately.
 
-## Deliberately deferred
+## Current limitations
 
-World Genesis does not yet define chunk/region dimensions, loaded/unloaded state, streaming, packed coordinates, plate tectonics, erosion history, mountain chains, biome classification or ecology. Those contracts arrive only when a concrete generation slice needs them.
+Genesis does not yet define:
 
-See [Decision 009 — World genesis provenance and deterministic randomness](../decisions/009-world-genesis-provenance-and-randomness.md), [World Atlas](world-atlas.md), [Generated World Runtime](generated-world-runtime.md) and [Terrain Generation](terrain-generation.md).
+- chunk/region dimensions or loaded/unloaded state;
+- streaming policy;
+- packed coordinates;
+- mountain-range semantic controls beyond the currently implemented V12 base-terrain intent;
+- tectonic/depositional history;
+- biome/ecology/population generation;
+- save-file schema.
+
+Those contracts are introduced only when a real stage needs them.
+
+## Code and tests
+
+Primary implementation:
+
+```text
+simulation/.../world/genesis/WorldGenesis.java
+simulation/.../world/genesis/WorldGenerationIntent.java
+simulation/.../world/genesis/GenerationRevision.java
+simulation/.../world/genesis/RngRevision.java
+simulation/.../world/genesis/GenerationRandom.java
+```
+
+Generation/Atlas and V12 tests provide replay, revision and deterministic-output coverage; generated-world audits exercise explicit V12 Genesis construction rather than changing `WorldGenesis.current(...)`.
+
+## Sources
+
+**Algorithm lineage:** the `mix64` avalanche constants follow the splittable/SplitMix PRNG lineage described by Steele, Lea & Flood (2014). EvoForge's addressable sample construction is project-specific.
+
+**Algorithm lineage:** stable stage/purpose strings use 64-bit FNV-1a as a non-cryptographic hash.
+
+See [References](../../references.md), [World Atlas](world-atlas.md), [World Generation](overview.md), [ADR-009](../../decisions/009-world-genesis-provenance-and-randomness.md), and [Project Context](../../project-context.md).
