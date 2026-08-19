@@ -142,8 +142,8 @@ final class MountainMorphologyAlgorithm {
             MountainCalibration calibration,
             MountainRecipe recipe) {
         int spacing = calibration.candidateSpacingCells();
-        double centerX = latticeX * (double) spacing + spacing * 0.5;
-        double centerY = latticeY * (double) spacing + spacing * 0.5;
+        double centerX = latticeX * (double) spacing;
+        double centerY = latticeY * (double) spacing;
         double maximumJitter = spacing * recipe.centerJitterPpm() / (double) PPM;
         centerX += centeredPpm(random, CENTER, latticeX, latticeY, 0L) * maximumJitter / PPM;
         centerY += centeredPpm(random, CENTER, latticeX, latticeY, 1L) * maximumJitter / PPM;
