@@ -52,7 +52,11 @@ public final class V13MountainTerrainGenerator implements ElevationGenerator {
         MountainCalibration calibration = calibrator.calibrate(genesis, recipe);
         WorldGenesis baseGenesis = baseGenesis(genesis, recipe.baseTerrainCeilingCells());
         ElevationField base = baseGenerator.generate(baseGenesis);
-        return algorithm.generate(genesis, base, calibration, recipe);
+        ElevationField mountains = algorithm.generate(genesis, base, calibration, recipe);
+        return MountainSurfaceRegularizer.removeIsolatedSingleCellLevels(
+                base,
+                mountains,
+                recipe.singleCellLevelCleanupPasses());
     }
 
     private static WorldGenesis baseGenesis(WorldGenesis genesis, int baseTerrainCeilingCells) {
