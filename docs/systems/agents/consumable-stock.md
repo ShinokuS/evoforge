@@ -1,23 +1,38 @@
 # Consumable Stock
 
-## Purpose
+## In plain language
 
-Consumable Stock models a bounded quantity carried by an object instance when interactions or world processes must spend or restore real source quantity.
+Consumable Stock represents a **finite amount carried by one object source**. A patch of edible vegetation can contain 8 stock units; a use can spend 1; Growth can later restore some amount up to capacity.
 
-It is deliberately narrower than a universal resource/material framework. The current consumers are finite food and plant regrowth; later mechanics may reuse the same bounded-stock owner only when their semantics genuinely fit.
+The system deliberately does not pretend every finite quantity in EvoForge is the same kind of resource. It is a small bounded integer stock owner reused only when another mechanic genuinely fits those semantics.
+
+## Current status
+
+The current production consumers are:
+
+- finite object-based Need-satisfaction sources (food in the agent slice);
+- Growth/regrowth of those sources.
+
+Water is **not** stored in Consumable Stock; free liquids have their own volume/identity owner.
 
 ## Ownership
 
-`ConsumableStockDefinitions` owns immutable per-definition stock configuration:
+Immutable configuration:
 
 ```text
-capacity
-initialQuantity
+ConsumableStockDefinitions
+  capacity
+  initialQuantity
 ```
 
-`ConsumableStockSystem` is the authoritative owner of mutable per-object quantity.
+Mutable authoritative state:
 
-`SimulationView.consumableStocks()` exposes only `ConsumableStockLookup`:
+```text
+ConsumableStockSystem
+  ObjectId -> current quantity
+```
+
+Read-only public projection:
 
 ```text
 has(object)
@@ -25,78 +40,22 @@ quantity(object)
 capacity(object)
 ```
 
-Presentation and autonomous decision never mutate stock directly.
-
-## Mutation boundaries
-
-Consumption remains an explicit owner mutation:
-
-```text
-consume(object, exactQuantity)
-```
-
-The Growth subsystem introduced the first legitimate restoration consumer, so stock now also exposes the narrow mutation capability:
-
-```text
-ConsumableStockReplenishment.replenish(object, requestedQuantity)
-```
-
-It adds at most the remaining capacity and returns the actual quantity added.
-
-There is still no generic `setQuantity`, arbitrary mutable state exposure or universal Resource mutation interface. Future systems that need a different semantic mutation should receive an equally narrow capability rather than bypassing the owner.
+Presentation/Agent decision cannot set quantity directly.
 
 ## Quantity semantics
 
-Quantity is an integer simulation unit selected by content/mechanic definitions. The system does not claim that every stock unit is kilograms, liters, calories or any other universal physical unit.
+Quantity is a non-negative integer simulation unit whose concrete meaning is chosen by the content/mechanic using the stock.
 
-A definition can therefore choose a useful granularity for the current mechanic while future physical systems remain free to introduce stronger dimensional semantics when real consumers require them.
+The stock subsystem itself does **not** claim that one unit universally equals:
 
-## Need satisfaction integration
+- one kilogram;
+- one litre;
+- one calorie;
+- one cubic centimetre.
 
-`NeedSatisfaction` separates two values:
+If a future mechanic needs physical dimensional quantity, it should define that dimension explicitly rather than reinterpret all existing stock.
 
-```text
-amount             physiological Need reduction
-consumedQuantity   authoritative source stock spent by one use
-```
-
-Example:
-
-```text
-source stock:       8 units
-one use spends:     1 unit
-hunger reduction:  15
-```
-
-These values are intentionally independent.
-
-A satisfaction with `consumedQuantity == 0` remains persistent/non-depleting. A positive `consumedQuantity` requires the source instance to own `ConsumableStock`; missing stock is a configuration/invariant failure rather than a normal unavailable-world result.
-
-Evaluation does not advertise a finite opportunity when current quantity is below its required consumption amount.
-
-At use time the provider revalidates co-location, capability, Need deficit and stock availability before consuming stock and mutating the Need owner.
-
-## Growth integration
-
-Growth does not own stock quantity. `GrowthSystem` resolves how much growth should occur, then requests replenishment through `ConsumableStockReplenishment`.
-
-```text
-GrowthSystem
-    ↓ resolved amount
-ConsumableStockReplenishment
-    ↓
-ConsumableStockSystem
-    ↓ clamps to capacity
-actual quantity added
-```
-
-Environmental conditions remain outside Consumable Stock entirely.
-
-See [Growth](./growth.md) for growth scheduling and future environmental influence boundaries.
-
-## Data aspects
-
-Stock is an independent definition aspect:
+## Definition example
 
 ```json
 {
@@ -107,42 +66,141 @@ Stock is an independent definition aspect:
 }
 ```
 
-`initial` defaults to `capacity` when omitted.
+When `initial` is omitted it defaults to capacity under the current authoring contract.
 
-A need effect may declare its stock cost independently:
+A definition that declares Growth currently must also have the Stock capability expected by that Growth process; missing required owner configuration is an invariant/bootstrap failure.
 
-```json
-{
-  "needSatisfaction": {
-    "core:hunger": {
-      "amount": 35,
-      "consumesQuantity": 4,
-      "requiresCapability": "core:graze"
-    }
-  }
-}
+## Narrow mutations
+
+### Consumption
+
+The owner exposes explicit semantic consumption:
+
+```text
+consume(object, exactQuantity)
 ```
 
-No Grass/Hay/source-type switch exists in the runtime.
+A successful call spends real current source quantity.
 
-## Current boundaries
+### Replenishment
 
-Implemented now:
+Growth introduced the first legitimate restoration consumer, so the owner also exposes:
 
-- bounded capacity and initial quantity;
-- authoritative per-instance quantity;
-- exact quantity consumption;
-- capacity-clamped narrow replenishment;
-- stock-aware opportunity availability;
-- read-only diagnostics;
-- independent data compiler.
+```text
+replenish(object, requestedQuantity)
+```
 
-Not implemented in this subsystem:
+through a narrow `ConsumableStockReplenishment` capability.
 
-- continuous/fractional units;
-- nutrition chemistry;
-- mass, density or volume physics;
-- shared reservoirs across multiple cells;
-- automatic destruction when quantity reaches zero.
+The actual added amount is:
 
-Growth/regrowth is a separate subsystem and does not change Consumable Stock ownership.
+```text
+remaining = capacity - current
+added     = min(requested, remaining)
+new       = current + added
+```
+
+There is no public arbitrary `setQuantity()` and no universal mutable Resource interface.
+
+## Need-satisfaction integration
+
+A source's physiological effect and physical finite cost are independent values:
+
+```text
+NeedSatisfaction
+  amount             = Need deficit reduced on success
+  consumedQuantity   = stock spent on success
+```
+
+Example:
+
+```text
+source stock before  = 8
+consumedQuantity     = 1
+hunger reduction     = 15
+```
+
+One successful use can therefore remove one stock unit while reducing Hunger by 15 Need units.
+
+`consumedQuantity == 0` represents a persistent/non-depleting source under the current generic contract.
+
+A positive stock cost requires the source instance to own Consumable Stock. Missing stock is broken configuration, not ordinary “currently unavailable” world state.
+
+## Opportunity lifecycle
+
+A finite source should not be advertised as usable when:
+
+```text
+current quantity < required consumedQuantity
+```
+
+At actual provider-owned use completion, the provider rechecks current:
+
+- source existence/availability;
+- interaction access;
+- required capability;
+- Need deficit;
+- stock quantity.
+
+Only successful completion spends stock and reduces Need. Starting a timed use does not pre-consume stock.
+
+This prevents two stale observations from granting resource that no longer exists.
+
+## Growth interaction
+
+Growth does not own quantity.
+
+```text
+GrowthSystem
+  decides/resolves growth pulse
+      ↓
+ConsumableStockReplenishment
+      ↓
+ConsumableStockSystem
+  clamps to capacity and returns actual added amount
+```
+
+When successful consumption reduces a full Growth-enabled source, Stock emits only a narrow reduction notification through composition so the dormant Growth process can wake. It does not transfer Growth ownership into the stock store.
+
+See [Growth](growth.md).
+
+## Invariants
+
+- `0 <= quantity <= capacity`.
+- Consumable Stock System is the only mutable quantity owner.
+- Consumption/restoration happen through narrow semantic capabilities.
+- Replenishment cannot exceed remaining capacity.
+- Physiological benefit and source cost are independent.
+- Evaluation does not advertise an under-stocked finite use.
+- Timed use commits resource mutation only after completion revalidation.
+- Growth decides *when/how much to request*; Stock decides/clamps authoritative quantity.
+
+## Current limitations
+
+Not modeled here:
+
+- fractional/continuous quantity;
+- physical mass/density/volume;
+- nutritional chemistry;
+- multi-cell/shared reservoirs;
+- inventories/stacks/ownership transfer;
+- automatic source destruction at zero;
+- decay/spoilage.
+
+Those are different mechanics even if they also use a word like “resource”.
+
+## Code and tests
+
+Primary code lives with the consumption/stock mechanics:
+
+```text
+simulation/.../world/mechanics/consumption/
+```
+
+Tests cover definition compilation, capacity/initial values, exact consumption, clamped replenishment, opportunity availability, timed-use revalidation and Growth wake-up through narrow notifications.
+
+## Sources
+
+**Internal EvoForge design.** This is a bounded integer resource-owner contract rather than an external economic/biological model.
+
+See [Autonomous Agents](agents.md), [Growth](growth.md), [Need Progression](need-progression.md), and [Liquids](../environment/liquids.md) for a separate physically volumetric resource owner.

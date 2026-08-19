@@ -1,89 +1,70 @@
 # Autonomous Agents
 
-## Purpose
+## In plain language
 
-Prove that autonomous behavior can emerge from composable world mechanics rather than species-specific scripts.
+Autonomous Agents are EvoForge's first proof that believable behavior can emerge from **ordinary world mechanics** instead of one script per species.
 
-The current production slice demonstrates:
+A Cow does not run `CowAI.findFood()` or `CowAI.findWater()`. Instead:
 
-```text
-Need progression -> motivation threshold
-        ↓
-3D Perception -> mechanic-owned opportunities
-        ↓
-cheap execution eligibility -> common deterministic Utility
-        ↓                                      ↘ no concrete usable opportunity
-committed intent                                semantic search demand
-        ↓                                            ↓
-MoveTo to explicit InteractionSite          visual sweep / relative exploration
-        ↓                                            ↓
-provider-owned timed use <--------------- discovery through Perception
-        ↓
-Need reduction + finite source mutation
-        ↓
-world mechanics continue independently
-```
+- its Needs become more urgent over time;
+- its senses reveal only what it can currently perceive;
+- world mechanics advertise opportunities such as usable plant stock or finite Water;
+- one common deterministic Utility comparison decides which current opportunity matters most;
+- Movement/MoveTo performs the physical travel;
+- the source-owning mechanic performs the timed use and mutates its own finite resource;
+- if no solution is perceived, the agent searches without being given hidden source coordinates.
 
-The same decision layer now handles finite plant food and finite free Water. There is no `CowAI`, `EatGrassAction`, `DrinkWaterAction`, source-type switch, global action enum or omniscient `findFood()` / `findWater()`.
+The same decision system currently handles Hunger/food and Thirst/Water without a source-type switch.
 
-The broader research direction remains non-normative in [Agent AI foundations](../notes/2026-08-14-agent-ai-foundations.md). This page describes implemented semantics only.
+## Current status
 
-## Core boundary
+The production slice provides:
 
 ```text
-World truth
-   ↓
-Orientation + sensory mechanics
-   ↓
-PerceptionSnapshot
-   ├─ perceived objects
-   └─ perceived cells
-   ↓
-mechanic-owned AgentOpportunityProvider(s)
-   ↓
-AgentSystem
-   ├─ concrete opportunity -> execution eligibility -> Utility -> MoveTo InteractionSite -> provider-owned use lifecycle
-   └─ no usable opportunity -> semantic search demand -> AgentSearchSystem
+Need progression
+      ↓
+motivation threshold
+      ↓
+3D sensory truth / PerceptionSnapshot
+      ↓
+mechanic-owned AgentOpportunityProviders
+      ↓
+cheap execution eligibility
+      ↓
+common deterministic Utility
+      ↓
+committed intent
+      ├─ MoveTo InteractionSite -> provider-owned timed use
+      └─ no usable opportunity -> semantic search demand
+                                   -> visual sweep / relative exploration
 ```
 
-Need progression, Water flow, precipitation, evaporation, finite stock and Growth are independent world processes. They change authoritative state; Agent observes the resulting present-tense world through ordinary perception/decision passes.
+This is a vertical slice, not a final general-intelligence architecture. It intentionally avoids long-term memory/belief, social planning, learning and species-specific behavior trees until real consumers require them.
 
-Simulation internally uses XYZ coordinates, but cognition/search is not given an omniscient global coordinate map or hidden source locations.
+## Ownership map
 
-## Ownership
+| Fact | Owner |
+|---|---|
+| object existence/definition | Object Repository |
+| current XYZ | Spatial |
+| physical facing | Orientation |
+| sensory visibility | Vision |
+| sensor-neutral perceived objects/cells | Perception |
+| mutable Need deficits | Need System |
+| autonomous Need progression | Need Progression |
+| finite object-source amount | Consumable Stock |
+| finite free liquid amount | Liquid/Water |
+| source use duration/effect | owning opportunity provider + definitions |
+| source regrowth | Growth |
+| route/edge execution | MoveTo + Movement + Occupancy |
+| selected intent | Agent System |
+| unknown-source search state | Agent Search |
 
-| Concern | Owner / contract |
-| --- | --- |
-| object existence / definition identity | `ObjectRepository` / `ObjectLookup` |
-| physical XYZ | `SpatialSystem` / `TransformLookup` |
-| physical facing | `OrientationSystem` / `OrientationLookup` |
-| autonomous capabilities | `AgentDefinitions` |
-| Vision parameters | `VisionDefinitions` |
-| current visual truth | `VisionSystem` / `VisionLookup` |
-| sensor-neutral perceived objects/cells | `PerceptionLookup` |
-| Need definitions / mutable deficits | `NeedDefinitions` / `NeedSystem` |
-| motivation thresholds | `NeedMotivationDefinitions` |
-| autonomous Need progression | `NeedProgressionSystem` |
-| finite object-source quantity | `ConsumableStockSystem` |
-| finite free liquid quantity | `LiquidSystem` / liquid-specific lookup |
-| object-source Need effects/use timing | `NeedSatisfactionDefinitions` + provider |
-| liquid drinking capability/use timing | `LiquidDrinkDefinitions` + provider |
-| physical interaction reach | `InteractionReachProfile` + `InteractionAccessResolver` |
-| local mover arrival eligibility | `MoverDestinationAccessResolver` |
-| source regrowth | `GrowthSystem` |
-| semantic knowledge that a Need has environmental solutions | `NeedSolutionKnowledgeDefinitions` |
-| selected autonomous intent | `AgentSystem` |
-| current epistemic search state | `AgentSearchSystem` |
-| relative exploration choice | `UnguidedExplorationPolicy` |
-| search physical execution | `RelativeSearchLocomotion` |
-| route/edge movement | MoveTo / Movement / Occupancy stack |
-| decision/intent/search diagnostics | corresponding trace/lookups |
-
-Decision does not mutate physiology or Water directly. Need does not choose behavior. Search does not own Movement. Presentation does not recreate AI truth.
+Agent decision does not mutate physiology, Water or stock directly. Providers/domains own those changes.
 
 ## Open semantic identifiers
 
-Needs and capabilities use open identifiers such as:
+Needs/capabilities use namespaced open IDs:
 
 ```text
 NeedId("core:hunger")
@@ -91,142 +72,150 @@ NeedId("core:thirst")
 CapabilityId("core:graze")
 ```
 
-Adding another identifier does not require a central enum/switch. An identifier alone does not create behavior; its mechanic supplies the semantics.
+Adding another ID does not add a central enum case. The ID has meaning only because owning mechanics/definitions use it.
 
 ## Definition composition
 
-Autonomous content is composed from independent definition aspects rather than one universal Agent definition bag:
+Agent-capable object definitions can independently contribute aspects such as:
 
 ```text
-object definition
-  ├─ agent
-  ├─ vision
-  ├─ needs
-  ├─ needMotivation
-  ├─ needProgression
-  ├─ needSolutionKnowledge
-  ├─ needSatisfaction
-  ├─ liquidDrink
-  ├─ movement / traversal capability
-  ├─ consumableStock
-  └─ growth
+agent
+vision
+needs
+needMotivation
+needProgression
+needSolutionKnowledge
+needSatisfaction
+liquidDrink
+movement / occupancy / waterWading
+consumableStock
+growth
 ```
 
-This keeps sensing, physiology, locomotion, source capability, interaction semantics and regrowth independently extensible.
+This allows different content to reuse the same generic Agent loop while changing senses, physiology, locomotion and resources through data/owned mechanics.
 
-## Needs, motivation and progression
+## Need deficit and motivation
 
-Need levels are deficit-oriented: `0` is satisfied and `maxLevel` is maximum configured deficit.
-
-`NeedSystem` exclusively owns mutable levels. Current writes are narrow:
+Need levels are deficits:
 
 ```text
-satisfy(...)              reduce deficit
-NeedDeficitIncrease       increase deficit
+0        = fully satisfied
+maxLevel = maximum configured deficit
 ```
 
-A positive deficit does not necessarily justify action. `NeedMotivationDefinition(NeedId, activationLevel)` states when environmental satisfaction becomes behaviorally relevant.
+`NeedSystem` owns the mutable level.
 
-Automatic time dynamics are separate `NeedProgressionDefinition(NeedId, baseAmount, intervalTicks)` processes. Current rates are resolved through an external rate resolver so future activity/temperature/etc. can modify physiology without Hunger- or Thirst-specific branches.
+A nonzero deficit is not automatically behaviorally urgent. `NeedMotivationDefinition` supplies an activation threshold. Only sufficiently motivated Needs participate in environmental satisfaction decisions/search.
 
-See [Need Progression](need-progression.md).
+Automatic increase is a separate [Need Progression](need-progression.md) process.
 
-## Vision, perception and verticality
+This separation allows, for example, a tiny Hunger deficit to exist without making the Cow immediately abandon another valid activity.
 
-Vision is an independent 3D sensory mechanic. `VisionSystem` reads authoritative position/facing, current cell contents and sight occlusion, producing immutable visible cells and visible objects across XYZ.
+## Sensing and perception
 
-Horizontal FOV is evaluated from XY direction while vertical difference participates in range/line-of-sight. Same-column vertical cells can therefore be perceived without inventing a special Water sensor.
+### Vision owns visual truth
 
-Decision consumes sensor-neutral `PerceptionLookup`, not Vision-specific APIs. A liquid provider sees only perceived cells; an object-source provider sees only perceived objects. Future hearing/smell can contribute behind the same perception boundary.
+`VisionSystem` reads authoritative position, orientation, world cell contents and occlusion to compute visible cells/objects in 3D.
 
-Movement changes physical facing after successful edge commit; presentation reads the same Orientation.
+Horizontal field of view is evaluated from XY heading; vertical difference still participates in distance/line-of-sight.
 
-Vision shape is definition/content data, not Agent policy. The living-Cow scenarios use a broad `330°` horizontal FOV to model cattle as panoramic observers rather than giving them a human-like narrow forward cone. Generic Vision remains directional and other species/content can declare narrower or wider fields independently.
+Vision is definition data. A Cow scenario currently uses a broad `330°` FOV to model panoramic cattle vision; that is content configuration, not a Cow branch in Agent.
 
-This distinction matters at shorelines. A Cow facing along the bank may physically stand next to drinkable Water behind its heading. With a narrow FOV that Water is correctly unknown and a farther visible shoreline can win; with the Cow's panoramic content profile the nearby Water enters Perception and ordinary Utility prefers its nearer interaction site. No lake- or Cow-specific branch exists in `AgentSystem`.
+### Perception is sensor-neutral
+
+Agent does not depend on Vision-specific APIs. It receives `PerceptionSnapshot` containing currently perceived cells and objects.
+
+This means future hearing/smell could contribute facts behind the Perception boundary without rewriting decision logic to ask “was this seen or heard?” for every provider.
+
+### No omniscient source queries
+
+An opportunity provider may enumerate only from current Perception. A liquid provider sees perceived cells; an object-resource provider sees perceived objects.
+
+There is no generic `findNearestFoodAnywhere()` or `findWaterCoordinate()`.
 
 ## Source-neutral opportunities
 
-`AgentOpportunityProvider` is the narrow bridge from a mechanic into autonomous choice. Opportunities no longer assume that the source is an `ObjectId` or that the source coordinate is also the movement goal.
+`AgentOpportunityProvider` lets a world mechanic expose possible satisfaction without Agent learning concrete source type.
 
-Each concrete opportunity carries:
+One opportunity contains conceptually:
 
 ```text
-OpportunityTarget   mechanic-owned source identity
-InteractionSite     physical standing coordinate for use
+OpportunityTarget   source identity owned by provider
+InteractionSite     standing XYZ where actor can use it
 OpportunityEvaluation
 ```
 
-Object food uses an object target. Free Water uses a liquid-cell target. `AgentSystem` does not branch on either concrete source type.
+An object food source can use an Object target. Free Water can use a liquid-cell target. Agent orders both through common evidence and does not branch on which target type it is.
 
-A provider can:
+Providers can:
 
 - enumerate opportunities from current Perception;
-- evaluate a previously selected target/site;
+- reevaluate a previously selected target/site;
 - advertise motivation/search demand;
-- start provider-owned use;
-- expose whether that use remains active and its terminal completion.
+- start provider-owned timed use;
+- report whether use remains active;
+- expose terminal completion.
 
-After MoveTo reaches the selected `InteractionSite`, Agent asks the owning provider to start use. The provider owns duration and domain revalidation. Agent observes an opaque use action/completion rather than learning provider-specific verbs such as `EAT` or `DRINK`.
+## Interaction site versus source location
 
-## Interaction access
+The source coordinate and actor's standing coordinate are not necessarily the same.
 
-Physical use distance is explicit data rather than an implicit rule such as "stand in the source cell".
-
-The current shared profile `cardinalSameOrOneBelow()` permits:
-
-```text
-agent standing cell z=N
-    -> cardinal target z=N
-    -> cardinal target z=N-1 when required clearance is open
-```
-
-Diagonal reach is not allowed. The standing `InteractionSite` itself must contain physical free space, and a lower target requires the declared clearance above that target to be open.
-
-This means a Cow standing at `z=1` can drink adjacent Water at `z=0` from the shore, and can drink an adjacent rain puddle at `z=1`, without climbing above the puddle or descending into the lower Water cell merely to use it.
-
-The reach/profile boundary is generic. Future mechanics can declare different reach patterns without adding Cow- or Water-specific branches to Agent.
-
-Interaction reach is not global route proof. Before committing an opportunity, Agent also asks the generic `MoverDestinationAccessResolver` whether the non-current standing site has at least one structurally valid incoming Navigation edge allowed by the mover's current traversal policy. This is a cheap necessary condition only: it rejects a site that cannot be entered at all, but it does not claim that the site is globally reachable from the actor's present location. MoveTo/Pathfinding remains the owner of real route search and execution revalidation.
-
-## Timed use and finite sources
-
-Object Need-satisfaction definition data can declare:
+Current shared reach profile `cardinalSameOrOneBelow()` supports cases like:
 
 ```text
-amount             Need reduction on successful use
-consumedQuantity   finite stock spent
-useDurationTicks   provider-owned delay before commit
-required capability (optional)
+actor standing z=N
+  can use cardinal target z=N
+  can use cardinal target z=N-1 when required clearance is open
 ```
 
-A positive-duration use does not mutate Need/stock at start. At completion the provider revalidates current authoritative state. Only successful completion applies finite stock reduction and Need satisfaction.
+No diagonal reach.
 
-Liquid drinking similarly owns its use lifecycle, but consumption is volumetric. The configured physical cell volume maps simulation liquid amount to milliliters. A drink removes at most the requested volume from authoritative free liquid; Need relief is proportional to the volume actually removed. A small puddle can therefore be exhausted exactly without granting the benefit of a full drink.
+This lets a Cow:
 
-If the same already-selected source remains desirable and available, Agent may continue another provider-owned use immediately without an artificial one-tick idle gap. This is continuation of an owned intent, not a new omniscient candidate scan.
+- stand on shore at `z=1` and drink adjacent lower Water at `z=0`;
+- stand beside a same-level rain puddle and drink it;
+- use an object source from a valid neighboring InteractionSite.
 
-See [Consumable Stock](consumable-stock.md), [Growth](growth.md) and [Liquids](liquids.md).
+The standing site itself must be physically free. Lower-target use requires declared clearance above the target.
 
-## Semantic knowledge and unknown-source search
+Agent also asks `MoverDestinationAccessResolver` for a cheap **local necessary condition** before committing a non-current site: at least one structural incoming Navigation edge must be allowed by current mover traversal policy.
 
-`NeedSolutionKnowledgeDefinitions` currently represents only the statement:
+That does not prove a global route from the actor. Only MoveTo/Pathfinding owns that problem.
+
+## Provider-owned timed use
+
+Agent does not have verbs like `EAT`/`DRINK` in a closed action enum.
+
+After MoveTo reaches the InteractionSite:
 
 ```text
-"environmental solutions exist for NeedId X"
+Agent -> provider.startUse(...)
+               ↓
+provider owns duration + completion revalidation
+               ↓
+provider mutates authoritative source + Need through narrow capabilities
+               ↓
+Agent observes opaque completion
 ```
 
-It does not contain source definition IDs, ObjectIds, liquid coordinates, routes or last-known positions.
+For finite object sources, `NeedSatisfaction` can define independently:
 
-When a motivated Need has no concrete perceived opportunity, a provider may emit `OpportunitySearchDemand`. `AgentSearchSystem` first performs a local visual sweep. If nothing is found, `UnguidedExplorationPolicy` chooses a deterministic coordinate-free relative target within the current visual horizon.
+```text
+amount              Need reduction
+consumedQuantity    source stock spent
+useDurationTicks    delay before commit
+required capability optional
+```
 
-`RelativeSearchLocomotion` resolves that relative target against the current physical position, requires the target to belong to the fresh Vision snapshot used by search, and starts production MoveTo with a query-local constraint limited to that visible-cell snapshot.
+A timed use does not mutate Need/stock at start. Completion revalidates current state; only successful completion commits effects.
 
-Coordinates required by Pathfinding/Movement stay behind the execution boundary; they are not returned to cognition as hidden map knowledge.
+For Water drinking, the provider removes finite free-liquid volume. Need relief is proportional to actual volume removed, so an undersized puddle can be drained exactly without granting the benefit of a full requested drink.
 
-## Common Utility decision scale
+If the same selected source remains desirable/available, a new provider-owned use can continue immediately rather than forcing an artificial idle think tick.
 
-Providers do not return private final scores. They expose common evidence through `OpportunityEvaluation`:
+## Common Utility scale
+
+Providers expose evidence, not private incomparable “scores”. `OpportunityEvaluation` contains common coordinates such as:
 
 ```text
 expectedBenefit
@@ -236,17 +225,31 @@ travel
 motivation
 ```
 
-`AgentSystem` converts that evidence through the shared fixed-point `UtilityMath` and performs one deterministic ordering across all providers. Hard execution eligibility is applied before commitment: an opportunity whose standing site is already known unusable in the current local context, or whose site has no mover-permitted incoming edge, cannot win merely because its Utility is high.
+`AgentSystem` converts them through shared fixed-point `UtilityMath` and orders all current opportunities deterministically.
 
-Current travel evidence uses perceived distance to the candidate `InteractionSite`; it is intentionally not an A* route-cost query for every candidate. Within the same benefit/pressure conditions, a nearby currently usable site therefore wins over a farther perceived site. This keeps normal decision passes cheap and leaves authoritative global route proof to MoveTo.
+Before Utility can win, a candidate must pass hard cheap execution eligibility. A site already known locally unusable cannot beat a usable candidate merely by a high score.
 
-Current tie-breaking is stable: Utility first, then distance, source-neutral target key, interaction-site coordinates and provider order. Hunger and Thirst therefore compete in one decision surface rather than in separate provider-specific priority systems.
+Current travel evidence is perceived geometric distance to the `InteractionSite`, **not one A* route search per candidate**. This keeps think passes cheap. Actual route existence is delegated to MoveTo only for the committed candidate.
 
-This is intentionally a small Utility foundation, not a claim that the final long-term utility model is complete. If representative scenarios later show systematic cases where geometric distance misranks obstacles/detours, the existing disposable `MoveToPlanner` can support bounded route refinement for a small shortlisted candidate set. Running full Pathfinding for every perceived Water cell is deliberately not part of the current decision loop.
+Current deterministic tie-break order is conceptually:
 
-## Continuing intents and failure recovery
+```text
+Utility
+then distance
+then stable source-neutral target key
+then InteractionSite XYZ
+then provider order
+```
 
-Current structural phases exposed through `AgentIntentTrace` are:
+Therefore Hunger and Thirst compete on one decision surface instead of provider-specific priority code.
+
+If future representative scenes prove geometric distance systematically misranks obstacle-heavy candidates, a bounded route refinement for a shortlist can be introduced through the existing planner boundary rather than pathfinding every perceived Water cell.
+
+## Stable committed intents
+
+Agent does not rescore every possible motivation on every poll while a valid committed operation is active.
+
+Current high-level lifecycle phases are:
 
 ```text
 MOVING_TO_OPPORTUNITY
@@ -254,102 +257,122 @@ USING_OPPORTUNITY
 SEARCH_RELOCATION
 ```
 
-These are lifecycle phases, not a closed action catalog. `USING_OPPORTUNITY` deliberately does not encode `EATING`, `DRINKING`, etc.
+These are lifecycle states, not a closed list of semantic actions. `USING_OPPORTUNITY` intentionally does not reveal “eat” versus “drink”.
 
-Once an opportunity is committed, Agent does not rescore unrelated motivations every poll while MoveTo or provider-owned use remains active. This keeps intent stable and prevents decision ping-pong during normal execution.
+Stable commitment reduces oscillation/ping-pong and lets provider/Movement lifecycles finish predictably.
 
-Failure scope follows the failed contract. A terminal MoveTo failure means that the physical standing site failed as a locomotion destination, so Agent quarantines that `(x,y,z)` site for the current local position context regardless of which provider/target happened to reference it. A provider-owned use failure remains exact `(provider,target,site)` state because use semantics can differ even at the same standing coordinate.
+General preemption—e.g. abandoning a valid activity because another Need suddenly becomes critical—is intentionally deferred until a concrete gameplay case defines interruption semantics.
 
-The local quarantine is cleared when the actor changes position, completes search relocation, successfully completes use, or reaches an idle retry boundary. It is therefore transient execution knowledge, not permanent map memory.
+## Failure recovery and local quarantine
 
-A MoveTo request may be accepted as an operation yet reach a terminal `NO_PATH`/edge-failure outcome synchronously during initial planning. Agent observes that terminal result before publishing a moving intent; an immediately failed route therefore does not create a one-poll phantom `MOVING_TO_OPPORTUNITY` state.
+Failure is remembered at the scope of the failed contract.
 
-There is deliberately no generic rule such as "if stationary for N ticks, move", "if Thirst is full, escape", or a Cow/lake-specific fallback. Being stationary is not itself an AI failure. Recovery is driven by semantic eligibility, execution outcomes and search demand.
+### Movement/site failure
 
-This is recovery, not a general interruption policy. Deliberate preemption of a still-valid committed intent by a newly urgent motivation remains future work that needs a concrete gameplay case.
+A terminal MoveTo failure means the **physical standing site** failed as a locomotion destination. Agent temporarily quarantines that `(x,y,z)` for the current local-position context, regardless of which provider/target referenced it.
 
-## Determinism and scheduling
+### Provider-use failure
 
-Determinism depends on stable perceived-source ordering, common Utility/tie breaks, simulation ticks instead of wall-clock time and deterministic exploration variation from stable identity/state.
+A use failure may be provider/source specific, so it remains keyed by exact `(provider,target,site)`.
 
-Current scheduling is intentionally simple: Agent thinks on scheduled passes, polls active MoveTo/provider use/search work, and sleeps longer when idle. Need progression, Growth, precipitation, hydrology and evaporation run on their own schedules/processes.
+The transient quarantine clears when the actor moves, completes search relocation, successfully uses a source, or reaches the defined idle retry boundary.
 
-Need changes do not currently push a special reactive wake-up into Agent. Representative profiling should precede more elaborate scheduling/index structures.
+This is local execution recovery, not persistent world memory.
 
-## Developer observability
+An immediately terminal MoveTo planning failure is observed before publishing a moving intent, preventing a one-think “phantom moving” state.
 
-`SimulationView` exposes read-only Orientation, Vision, Need, NeedProgression, ConsumableStock, Growth, Agent Decision/Search and MoveTo state. Decision/intent traces expose source-neutral target keys and explicit interaction sites.
+## Unknown-source search
 
-The Surface inspector reads those authoritative projections. For autonomous objects it can show Needs, current lifecycle activity/target, Vision cell/object counts and the selected candidate's common Utility evidence without reconstructing decision semantics in presentation.
-
-Failed autonomous opportunities emit sparse structured DEBUG `agent.opportunity_failed` events with the actor, provider, target, interaction site, failure stage and result code. Movement failures are coalesced by physical standing site within the local context, while provider-use failures retain exact opportunity scope.
-
-The compact **Agents -> Living Cow Meadow** scenario combines:
+Semantic knowledge can say only:
 
 ```text
-Hunger + Thirst progression
-3D Vision / Search
-common Utility competition
-MoveTo + explicit interaction sites
-provider-owned grazing and drinking
-finite plant stock + Growth
-finite free Water
-cyclic precipitation + evaporation
-edge lake + sparse rain-created puddles
-multiple exclusive Cows
+"Need X has environmental solutions"
 ```
 
-The lake is deliberately on the map edge. Meadow terrain is mostly absorbent, while a small deterministic set of shallow low-infiltration micro-basins produces temporary puddles during the rain window. Those puddles are consequences of the same Hydrology systems, not pre-seeded visual props.
+It does not contain source IDs/coordinates/routes/last-known map locations.
 
-The scenario Cow declares a shallow-water `WaterWadingProfile` as locomotion capability data. That content aspect lets it traverse small rainwater depths while rejecting the deeper lake as a movement destination; drinking from shore is still provided by the independent interaction-reach mechanic. This is definition/scenario composition, not a generic Agent branch.
+If a motivated Need has no perceived usable opportunity, providers can emit `OpportunitySearchDemand`.
 
-A separate **Agents -> Living Cow Herd** scenario is the larger representative observation scene. It uses six Cows, substantially more regrowing forage, several rain basins and a broad interior elliptical lake. One Cow begins just north of the lake while facing along the shoreline so the scene explicitly exercises panoramic perception and nearest-shore interaction choice. The same Agent, Vision, Utility, Movement, Occupancy, Water and plant systems run unchanged; the scenario contributes only world/content composition.
+`AgentSearchSystem` then:
 
-## Current proofs
+1. performs a local visual sweep;
+2. if still empty, `UnguidedExplorationPolicy` chooses a deterministic **relative** target inside the current visual horizon;
+3. `RelativeSearchLocomotion` resolves that relative target from the actor's current position;
+4. the target must belong to the fresh Vision snapshot used by search;
+5. MoveTo is started with a query constraint limited to that visible-cell snapshot.
 
-Headless/scenario coverage proves, among other invariants:
+Cognition therefore never receives a hidden omniscient global source coordinate just because Pathfinding itself needs coordinates internally.
 
-- visible compatible object source -> MoveTo -> timed use -> Need reduction;
-- compatible new object-source definitions work without Cow/Decision code changes;
-- outside-range/behind/occluded object sources are not visual candidates;
-- semantic Need-solution knowledge can start search without source identity/location;
-- search discovers concrete sources only through Perception;
-- exploration is deterministic and relative rather than hard-coded absolute destinations;
-- exploratory MoveTo is constrained to the visible-cell snapshot that validated the relative target;
-- finite object-source use decreases authoritative stock and empty stock removes the opportunity;
-- Growth restores finite stock independently;
-- open NeedIds progress on independent schedules and clamp to configured maxima;
-- motivation thresholds suppress trivial-deficit action;
-- timed use does not mutate Need/source before provider completion;
-- repeated still-desired use remains continuously committed;
-- one common Utility scale allows Hunger and Thirst opportunities to compete deterministically;
-- unperceived Water never becomes a liquid opportunity;
-- a Cow at `z=1` can drink cardinal Water at `z=0` from a valid standing site;
-- a Cow at `z=1` can drink a cardinal same-level puddle at `z=1`;
-- a panoramic Cow already standing at the nearest valid north-shore site uses that Water before a farther simultaneously visible shore;
-- diagonal and physically blocked interaction sites are rejected;
-- partial puddle consumption preserves exact Water accounting and proportional Thirst relief;
-- a locally mover-ineligible higher-ranked opportunity cannot win commitment over a usable fallback;
-- one failed/occupied opportunity does not trap the agent when another candidate exists;
-- several higher-ranked unusable opportunities cannot form a retry loop that starves a reachable fallback;
-- movement-site failure scope is independent of which target references that standing site;
-- multiple exclusive Cows remain non-overlapping while contending for a finite source;
-- Living Cow Meadow produces sparse rain puddles, uses both puddle and lower edge-lake Water, continues grazing and returns to rain on the next climate cycle;
-- Living Cow Herd keeps six exclusive Cows non-overlapping while several independently graze and drink from a larger shared world, including the interior lake.
+## Scheduling and determinism
 
-No test defines an arbitrary maximum time that an Agent is allowed to remain stationary. Scenario acceptance is expressed through semantic world interactions and invariant outcomes instead.
+Agent thinks on scheduled passes, polls active MoveTo/provider-use/search work, and can sleep longer when idle.
 
-## Deferred work
+Need progression, Growth, precipitation and hydrology run independently on their own schedules. Agent observes their resulting authoritative state on the next ordinary think/recheck.
 
-The immediate follow-up after this vertical slice is representative-scale profiling before introducing broader AI/world hot-path structures. The observed repeated-`NO_PATH` runtime burst justified the narrow eligibility/failure-scope correction above; it does not justify a general polling, watchdog or behavior-timeout framework.
+Determinism relies on stable perception ordering, fixed-point Utility/tie rules, simulation ticks and deterministic exploration variation keyed from stable identity/state.
 
-Still deferred:
+Need changes do not currently push reactive wake-up events into Agent. Add that only if representative profiling/behavior requires it.
 
-- deliberate interruption/preemption policy for a still-valid committed intent;
-- separate activation/release thresholds if true hysteresis is required;
-- persistent beliefs/episodic or landmark memory;
-- map/compass/tool-assisted navigation;
-- bounded route-cost refinement for a shortlisted set of candidates if representative scenes prove geometric travel evidence insufficient;
+## Observability
+
+Read-only runtime projections expose Orientation, Vision, Need, Need Progression, Stock, Growth, Agent decision/search and MoveTo state.
+
+Agent traces can show:
+
+- current lifecycle phase;
+- source-neutral target key;
+- InteractionSite;
+- Utility evidence;
+- search state/failure diagnostics.
+
+Presentation reads those facts instead of reimplementing AI logic.
+
+The “Living Cow Meadow” and larger “Living Cow Herd” scenarios combine ordinary Hunger/Thirst, perception, Utility, MoveTo, Occupancy, finite plants/Growth, finite Water and rain/evaporation. Rain puddles are hydrology consequences, not AI props.
+
+## Invariants
+
+- No species/source-type switch in generic Agent decision.
+- Agent sees only Perception, not omniscient world-source queries.
+- Need, stock, Water and Movement remain authoritative in their owners.
+- Providers own source semantics and timed-use lifecycle.
+- Utility comparison uses a common deterministic evidence scale.
+- InteractionSite is explicit and may differ from source coordinate.
+- Path/Movement authority remains outside Agent.
+- Search uses semantic knowledge + fresh perception, not hidden source coordinates.
+- Committed valid intents are stable until their lifecycle requires reevaluation.
+
+## Current limitations
+
+Not yet implemented:
+
+- persistent Belief/Memory/world-map knowledge;
+- learning/conditioning;
+- social communication/herd planning;
 - hearing/smell;
-- richer provider interactions and additional competing motivations;
-- AI-specific scheduling/index/memory-layout optimization before representative profiling.
+- general action preemption policy;
+- rich multi-step goal planning;
+- sleep/reproduction/fear/combat physiology;
+- coordinated multi-agent resource reservation/yielding.
+
+These should be introduced as concrete mechanics behind existing perception/opportunity/movement boundaries rather than as a universal AI framework in advance.
+
+## Code and tests
+
+Primary code lives under:
+
+```text
+simulation/.../world/agent/
+simulation/.../world/mechanics/interaction/
+simulation/.../world/mechanics/consumption/
+simulation/.../world/mechanics/growth/
+```
+
+and composes with Need/Movement/Pathfinding/Liquid systems.
+
+Headless integration tests cover perception limits, generic providers, finite food/Water, timed use, common Utility competition, search without omniscience, deterministic exploration, failure recovery, wading/interaction sites and multi-agent contention.
+
+## Sources
+
+**Internal EvoForge design.** The current opportunity/Utility/committed-intent/search model is intentionally project-specific; EvoForge does not claim to implement a standard BDI, GOAP or behavior-tree framework.
+
+See [Need Progression](need-progression.md), [Consumable Stock](consumable-stock.md), [Growth](growth.md), [Movement](../traversal/movement.md), [Water Traversal](../traversal/water-traversal.md), and the historical [Agent AI foundation journal entry](../../journal/entries/2026-08-14-agent-ai-foundations.md).

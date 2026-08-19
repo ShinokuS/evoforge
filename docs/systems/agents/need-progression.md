@@ -1,14 +1,40 @@
 # Need Progression
 
-## Purpose
+## In plain language
 
-Need Progression models time-driven increase of an already declared Need deficit.
+Need Progression makes an already-declared physiological deficit **grow as simulation time passes**. Hunger is the first example: a Cow can begin fully fed, then gradually become hungry even if nothing else happens.
 
-The first production consumer is Hunger becoming stronger over simulation time. The subsystem is deliberately generic over open `NeedId` values and does not contain Hunger-, Thirst- or species-specific branches.
+The subsystem does not decide what the agent should do about the deficit. It only changes the authoritative Need level through a narrow mutation owned by the Need system. Agent decision later observes that changed level during its normal think cycle.
+
+## Current status
+
+The current model is generic over open `NeedId` values and contains no Hunger-, Thirst- or species-specific branches.
+
+```text
+NeedDefinition
+  maxLevel
+  initialLevel
+      +
+NeedProgressionDefinition
+  baseAmount
+  intervalTicks
+      ↓
+NeedProgressionRateResolver
+      ↓
+NeedProgressionSystem scheduled process
+      ↓
+NeedDeficitIncrease.increase(...)
+      ↓
+NeedSystem authoritative level
+```
+
+Production currently uses `IntrinsicNeedProgressionRateResolver`, which returns `baseAmount` unchanged.
 
 ## Ownership
 
-`NeedDefinitions` still declares which Needs exist on an object definition and their bounds:
+### Need definition and mutable level
+
+`NeedDefinitions` declares which Needs an object definition has:
 
 ```text
 NeedId
@@ -16,59 +42,74 @@ maxLevel
 initialLevel
 ```
 
-`NeedSystem` remains the sole authoritative owner of mutable Need levels.
+`NeedSystem` is the sole owner of the current per-object Need level.
 
-Need Progression adds a separate definition aspect:
+### Progression definition and process
+
+`NeedProgressionDefinition` contains:
 
 ```text
-NeedProgressionDefinition
-  NeedId
-  baseAmount
-  intervalTicks
+NeedId
+baseAmount
+intervalTicks
 ```
 
-`NeedProgressionSystem` owns only continuing progression processes:
+`NeedProgressionSystem` owns only the continuing process state:
 
 ```text
 activation
 scheduled evaluation
 next evaluation tick
-last evaluation trace
+latest NeedProgressionTrace
 ```
 
-It does not store or directly own Need levels.
+It does not store a second copy of the Need level.
 
-## Mutation boundary
+## Narrow mutation boundary
 
-The first real producer of increasing deficits justifies the narrow mutation capability:
+Need Progression justified one explicit way to increase a deficit:
 
 ```text
 NeedDeficitIncrease.increase(object, need, amount)
 ```
 
-`NeedSystem` implements that capability and clamps the applied amount to the Need's configured `maxLevel`.
+`NeedSystem` implements that capability and applies only the amount that still fits below the configured maximum.
 
-There is no generic Need setter and no mutable state exposure.
+Conceptually:
 
-## Effective progression boundary
+```text
+remaining = maxLevel - currentLevel
+applied   = min(requestedIncrease, remaining)
+newLevel  = currentLevel + applied
+```
 
-`NeedProgressionSystem` does not know why an organism becomes hungry or thirsty faster or slower.
+There is no public arbitrary Need setter.
 
-Each scheduled evaluation asks a `NeedProgressionRateResolver`:
+Need reduction remains a different semantic operation used by satisfaction/recovery mechanics.
+
+## Effective progression resolver
+
+`NeedProgressionSystem` does not know **why** Hunger or Thirst might progress faster in one circumstance than another.
+
+Before each pulse it asks:
 
 ```text
 ObjectId + NeedProgressionDefinition
-          ↓
+        ↓
 NeedProgressionRateResolver
-          ↓
-effective deficit increase for this interval
+        ↓
+effective increase for this interval
 ```
 
-The current runtime uses `IntrinsicNeedProgressionRateResolver`, which returns `baseAmount` unchanged.
+Current production behavior is simply:
 
-Future mechanics such as activity/exertion, temperature, illness, sleep, pregnancy or other physiological state may own their own authoritative data and be composed behind a richer resolver without modifying `NeedProgressionSystem`.
+```text
+effectiveIncrease = baseAmount
+```
 
-The project intentionally does not define a universal physiology-modifier enum or permanent multiplier formula before real consumers exist.
+A future physiology milestone could compose activity, temperature, illness, sleep or other state behind the resolver while preserving `NeedSystem` ownership.
+
+EvoForge deliberately does not invent a universal physiology-modifier enum or multiplier formula before those consumers exist.
 
 ## Scheduled semantics
 
@@ -76,25 +117,64 @@ Example:
 
 ```text
 Need core:hunger
-maxLevel = 100
+maxLevel    = 100
 initialLevel = 0
 
 NeedProgression
-baseAmount = 3
+baseAmount    = 3
 intervalTicks = 5
 ```
 
-With the intrinsic resolver, Hunger increases by 3 every 5 simulation ticks until reaching 100.
+With the current intrinsic resolver:
 
-When the Need is already at maximum, the progression process remains scheduled and records zero applied amount. This is current correctness semantics, not a performance promise; representative profiling must precede sleeping/batching optimizations.
+```text
+tick 0   hunger = 0
+tick 5   hunger = 3
+tick 10  hunger = 6
+...
+```
 
-A resolver may return zero to suppress progression for one interval. Negative values are rejected as invariant failures. Need reduction belongs to explicit satisfying/recovery mechanics rather than negative progression.
+until the configured maximum is reached.
 
-## Independent Need dynamics
+If only 2 points of room remain and a 3-point pulse is requested:
 
-Presence and time dynamics are intentionally separate.
+```text
+requested = 3
+applied   = 2
+level     = maxLevel
+```
 
-An object may declare a Need without automatic progression, or multiple Needs with different schedules:
+The exact level therefore never exceeds its definition maximum.
+
+## Behavior at maximum
+
+Unlike Growth-at-full, current Need Progression **remains scheduled even when the Need is already at maximum**. A later evaluation resolves normally but may apply zero because no deficit capacity remains.
+
+This is current correctness semantics, not a claim that periodic wake-up at max is the final optimal scheduling strategy.
+
+If representative profiling later shows a meaningful cost, a sleep/wake design would need an explicit causal signal for when the Need can leave maximum again. That optimization should not be invented without evidence.
+
+## Zero and negative resolver output
+
+A resolver may return zero for one interval:
+
+```text
+resolvedAmount = 0
+→ no level increase
+→ process remains on its normal schedule
+```
+
+Negative values are invalid because this subsystem represents **progression of deficit**, not recovery. Recovery/satisfaction uses its own semantic mutation.
+
+## Multiple independent Needs
+
+Need presence and Need progression are separate aspects. An object may:
+
+- own a Need that never progresses automatically;
+- own several Needs with different rates/intervals;
+- have one Need at maximum while another continues increasing.
+
+Example:
 
 ```json
 {
@@ -109,13 +189,30 @@ An object may declare a Need without automatic progression, or multiple Needs wi
 }
 ```
 
-The IDs remain open. Adding `mod:mana_deficit` or another Need does not require changing progression code.
+The IDs are open semantic keys. Adding another Need does not require editing the progression algorithm.
 
-A progression declaration for a Need that the object does not actually own is a configuration/invariant failure during runtime assembly.
+A progression definition referring to a Need the object does not actually own is invalid configuration and fails rather than creating hidden state.
+
+## Relationship to Agent decision
+
+Need Progression never directly calls Agent:
+
+```text
+NeedProgressionSystem
+      ↓ narrow authoritative mutation
+NeedSystem
+      ↓ ordinary read during scheduled think
+AgentSystem
+      ↓ opportunity/search decision if motivation threshold is met
+```
+
+This keeps physiology and decision scheduling independent.
+
+There is currently no special “Need changed, wake Agent immediately” event. The Agent observes the new level on its next normal think/recheck. Reactive wake-up should be added only if real behavior/performance evidence requires it.
 
 ## Diagnostics
 
-`SimulationView.needProgression()` exposes read-only `NeedProgressionLookup`:
+`SimulationView.needProgression()` exposes read-only process observations such as:
 
 ```text
 has(object, need)
@@ -134,46 +231,41 @@ levelAfter
 maxLevel
 ```
 
-These read projections remain available to focused Agent scenarios, headless diagnostics and any future richer physiology inspector. The current generic Surface inspector does not duplicate Need progression state in its normal cell/object card.
+These are diagnostics; they do not create another Need owner.
 
-## Agent relationship
+## Invariants
 
-Need Progression never calls Agent or Decision.
+- `NeedSystem` remains the only mutable Need-level owner.
+- Progression changes level only through `NeedDeficitIncrease`.
+- Levels never exceed configured `maxLevel`.
+- Open `NeedId`s progress independently without central type switches.
+- Resolver output is non-negative.
+- Negative progression is not used as recovery.
+- Progression does not directly invoke Agent behavior.
+- Current at-maximum processes remain scheduled unless a future explicit optimization changes that contract.
 
-Flow is intentionally indirect:
+## Current limitations
 
-```text
-NeedProgressionSystem
-    ↓ narrow mutation
-NeedSystem authoritative deficit
-    ↓ read on ordinary think
-Agent opportunity evaluation
-```
+Not modeled here:
 
-The current Agent scheduling remains unchanged. A Need change is observed on the agent's next normal think/recheck. Reactive wake-up is deferred until representative profiling proves it necessary.
+- exertion/activity-dependent rates;
+- temperature/illness effects;
+- sleep/recovery physiology;
+- starvation/dehydration damage/death;
+- bespoke threshold consequences;
+- reactive Agent wake-up;
+- rich biological homeostasis.
 
-## Current proofs
+Those should be introduced through concrete physiology mechanics/readers while preserving Need ownership and the resolver boundary.
 
-Headless coverage proves:
+## Code and tests
 
-- deterministic scheduled deficit increase;
-- strict clamping at Need maxLevel;
-- multiple unrelated open NeedIds progressing independently;
-- undeclared-Need progression failing configuration;
-- injected resolvers suppressing or increasing effective progression without changing the system;
-- an initially satisfied Cow becoming hungry and using the existing generic food opportunity flow without a Hunger-specific AI hook;
-- deterministic definition compilation and freeze behavior.
+Primary code lives with Need mechanics and progression processes under the agent/Need packages.
 
-## Explicitly deferred
+Coverage proves deterministic scheduled increase, strict max clamping, independent unrelated Need IDs, invalid undeclared-Need configuration, injected resolver behavior, definition compilation/freeze and integration where a previously satisfied Cow later becomes motivated and uses the existing generic opportunity flow.
 
-Not implemented here:
+## Sources
 
-- activity/exertion effects;
-- temperature or illness effects;
-- sleep/recovery dynamics;
-- starvation damage or death;
-- thresholds with bespoke physiological consequences;
-- event-driven agent wake-up;
-- dedicated rich physiology presentation.
+**Internal EvoForge design.** Current Need Progression is a deterministic scheduled deficit model, not a biological metabolism equation.
 
-Those features should be introduced by their first concrete consumers while preserving `NeedSystem` ownership and the resolver boundary.
+See [Autonomous Agents](agents.md), [Time and Scheduling](../foundations/time.md), [Definitions](../foundations/definitions.md), and [Consumable Stock](consumable-stock.md).
