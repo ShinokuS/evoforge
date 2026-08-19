@@ -84,6 +84,23 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     @Test
+    void ordinaryMountainSettingsAvoidMultiCellLandWalls() {
+        WorldGenerationIntent intent = intent(mountains(
+                1_000_000,
+                520_000,
+                500_000,
+                550_000,
+                600_000,
+                false,
+                0));
+        ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(1L, intent));
+
+        assertTrue(
+                maximumCardinalLandStep(mountains) < 2L * ElevationField.SUBUNITS_PER_CELL,
+                "ordinary V13 mountain settings should remain broad enough to avoid multi-cell land walls");
+    }
+
+    @Test
     void plateauSelectionChangesMountainProfileWithoutChangingSeedOrBaseWorld() {
         WorldGenerationIntent normalIntent = intent(mountains(1_000_000, 650_000, 500_000, 550_000, 600_000, false, 0));
         WorldGenerationIntent plateauIntent = intent(mountains(1_000_000, 650_000, 500_000, 550_000, 600_000, true, 1_000_000));
@@ -152,6 +169,26 @@ final class MountainMorphologyElevationGenerationTest {
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 maximum = Math.max(maximum, field.elevationSubunitsAt(x, y));
+            }
+        }
+        return maximum;
+    }
+
+    private static long maximumCardinalLandStep(ElevationField field) {
+        long maximum = 0L;
+        WorldBounds bounds = field.bounds();
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                long here = field.elevationSubunitsAt(x, y);
+                if (here <= 0L) continue;
+                if (x < bounds.maxX()) {
+                    long right = field.elevationSubunitsAt(x + 1, y);
+                    if (right > 0L) maximum = Math.max(maximum, Math.abs(here - right));
+                }
+                if (y < bounds.maxY()) {
+                    long up = field.elevationSubunitsAt(x, y + 1);
+                    if (up > 0L) maximum = Math.max(maximum, Math.abs(here - up));
+                }
             }
         }
         return maximum;
