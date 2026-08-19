@@ -9,6 +9,7 @@ final class TerrainSurfaceTargetSamplers {
     private static final long MAX_TRANSITION_NEIGHBOR_DELTA = CELL * 45L / 100L;
     private static final long MAX_RAW_TRANSITION_RELIEF = CELL * 65L / 100L;
     private static final int MIN_COHERENT_BAND_WIDTH = 3;
+    private static final int V13_RAMP_LATERAL_SPACING = 5;
 
     private TerrainSurfaceTargetSamplers() {
     }
@@ -35,19 +36,51 @@ final class TerrainSurfaceTargetSamplers {
      * V12 accepts only locally coherent smooth voxel-transition bands. A candidate must have a
      * clear cardinal rise and belong to a contiguous same-direction lateral band at least three
      * cells wide. Anything else intentionally produces the neutral flat target for Shape fitting.
-     *
-     * <p>This policy is deliberately stricter than V11. V12 generated Shapes are meant to describe
-     * broad traversable surface structure, not every local precise contour fragment. The decision
-     * uses only sampled surface geometry; no concrete runtime Shape identity participates.</p>
      */
     static TerrainSurfacePatch coherentVoxelTransitionPatch(ElevationField elevation, int x, int y) {
         requireElevation(elevation);
-        TransitionIntent intent = transitionIntent(elevation, x, y, true);
-        if (intent == null
-                || coherentBandWidth(elevation, x, y, intent) < MIN_COHERENT_BAND_WIDTH) {
+        TransitionIntent intent = coherentTransitionIntent(elevation, x, y);
+        return intent == null
+                ? TerrainSurfacePatch.flatTop()
+                : normalizedCardinalPlane(intent.dx(), intent.dy());
+    }
+
+    /**
+     * V13 uses the same coherent geometric eligibility as V12, but deliberately samples only a
+     * sparse, evenly spaced set of sites along each eligible contour. This keeps ramps present across
+     * the whole mountain surface without allowing one coherent face to become almost entirely ramps.
+     * The policy still knows only surface direction, discrete level and coordinates; it never names
+     * or selects a concrete runtime Shape.
+     */
+    static TerrainSurfacePatch sparseCoherentVoxelTransitionPatch(ElevationField elevation, int x, int y) {
+        requireElevation(elevation);
+        TransitionIntent intent = coherentTransitionIntent(elevation, x, y);
+        if (intent == null || !isV13SparseSite(elevation, x, y, intent)) {
             return TerrainSurfacePatch.flatTop();
         }
         return normalizedCardinalPlane(intent.dx(), intent.dy());
+    }
+
+    private static TransitionIntent coherentTransitionIntent(ElevationField elevation, int x, int y) {
+        TransitionIntent intent = transitionIntent(elevation, x, y, true);
+        if (intent == null
+                || coherentBandWidth(elevation, x, y, intent) < MIN_COHERENT_BAND_WIDTH) {
+            return null;
+        }
+        return intent;
+    }
+
+    private static boolean isV13SparseSite(
+            ElevationField elevation,
+            int x,
+            int y,
+            TransitionIntent intent) {
+        long level = Math.floorDiv(elevation.elevationSubunitsAt(x, y), CELL);
+        int lateralCoordinate = intent.dx() != 0 ? y : x;
+        int phase = Math.floorMod(level * 2L, V13_RAMP_LATERAL_SPACING) > Integer.MAX_VALUE
+                ? 0
+                : (int) Math.floorMod(level * 2L, V13_RAMP_LATERAL_SPACING);
+        return Math.floorMod(lateralCoordinate + phase, V13_RAMP_LATERAL_SPACING) == 0;
     }
 
     private static TransitionIntent transitionIntent(
