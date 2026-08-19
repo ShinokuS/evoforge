@@ -57,9 +57,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
 
-        // Semantic mountain height consumes only the reserved V13 headroom. The surface envelope
-        // itself starts from ordinary V12 land, so width is calibrated separately from the complete
-        // absolute climb rather than pretending the mountain begins at an already elevated foot.
         long usableRadiusCells = Math.max(
                 1L,
                 (long) limitingHorizontalSpan * recipe.worldSlopeRadiusUtilizationPpm()
@@ -90,11 +87,12 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // A generated mountain can meet land arbitrarily close to sea level. Reserve enough width
-        // for that complete absolute climb up to the intended summit. This is the source-generation
-        // invariant that prevents one/two-cell Z bands; no later terrain widening pass is needed.
-        long typicalPeakAboveSea = Math.addExact(baseCeiling, typicalUplift);
-        long riseSteps = (typicalPeakAboveSea + maximumCardinalRise - 1L) / maximumCardinalRise;
+        // The source envelope rises by typicalUplift above the terrain at its own summit anchor.
+        // Reserve enough radius for that uplift before rasterization. Scale may make the mountain
+        // broader, but may never make it steeper than the shared rise law.
+        long riseSteps = typicalUplift == 0L
+                ? 0L
+                : (typicalUplift + maximumCardinalRise - 1L) / maximumCardinalRise;
         int slopeCoupledHalfWidth = Math.toIntExact(Math.max(
                 1L,
                 riseSteps * recipe.slopeWidthCouplingPpm() / PPM));
@@ -120,18 +118,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 ? intent.plateauProbability().partsPerMillion()
                 : 0;
 
-        long shorelineUplift = Math.min(
-                Math.multiplyExact(
-                        (long) recipe.maximumShorelineUpliftCells(), ElevationField.SUBUNITS_PER_CELL),
-                typicalUplift * recipe.shorelineUpliftPpm() / PPM);
-        long coastalRise = Math.max(0L, typicalUplift - shorelineUplift);
-        int coastalTransitionCells = coastalRise == 0L
-                ? recipe.minimumCoastalTransitionCells()
-                : Math.max(
-                        recipe.minimumCoastalTransitionCells(),
-                        Math.toIntExact((coastalRise + maximumCardinalRise - 1L)
-                                / maximumCardinalRise));
-
         return new MountainCalibration(
                 width,
                 height,
@@ -145,8 +131,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 maximumCardinalRise,
                 plateausEnabled,
                 plateauProbability,
-                coastalTransitionCells,
-                shorelineUplift,
                 baseCeiling,
                 mountainCeiling);
     }
