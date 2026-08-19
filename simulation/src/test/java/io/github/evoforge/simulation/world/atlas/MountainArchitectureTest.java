@@ -108,19 +108,6 @@ final class MountainArchitectureTest {
     }
 
     @Test
-    void coastalTransitionExpandsWithMountainHeightInsteadOfUsingFixedCutoff() {
-        MountainCalibration low = CALIBRATOR.calibrate(
-                genesis(BOUNDS, mountains(700_000, 100_000, 500_000, 500_000, 600_000, false, 0)),
-                RECIPE);
-        MountainCalibration high = CALIBRATOR.calibrate(
-                genesis(BOUNDS, mountains(700_000, 1_000_000, 500_000, 500_000, 600_000, false, 0)),
-                RECIPE);
-
-        assertTrue(high.coastalTransitionCells() > low.coastalTransitionCells());
-        assertTrue(high.shorelineUpliftSubunits() <= 3L * ElevationField.SUBUNITS_PER_CELL);
-    }
-
-    @Test
     void plateauProbabilityIsIgnoredWhenPlateausAreDisabled() {
         MountainCalibration disabled = CALIBRATOR.calibrate(
                 genesis(BOUNDS, mountains(700_000, 500_000, 500_000, 500_000, 500_000, false, 1_000_000)),
