@@ -125,9 +125,12 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 typicalHalfWidth,
                 Math.toIntExact((long) typicalHalfWidth * longAxisWidthPpm / PPM));
 
+        // Scale, not Height, owns the source lattice. Changing mountain height therefore preserves
+        // the same deterministic candidate centers for a fixed seed/scale; only their realized
+        // footprint and source count can change through the abundance budget.
         int candidateSpacing = Math.max(
                 1,
-                typicalHalfWidth * recipe.candidateSpacingNumerator()
+                authoredHalfWidth * recipe.candidateSpacingNumerator()
                         / recipe.candidateSpacingDenominator());
 
         int targetCoveragePpm = Math.toIntExact(
