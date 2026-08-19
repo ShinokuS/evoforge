@@ -12,12 +12,12 @@ import java.util.List;
 /**
  * Deterministic source synthesis for V13 mountain structure.
  *
- * <p>Mountains are generated with their final broad surface geometry from the start. Each system is
- * an anisotropic bounded-slope envelope over the accepted V12 land. System width is coupled directly
- * to its complete absolute climb from ordinary land to its intended summit, so discrete vertical
- * levels are broad before any later Shape fitting happens. Multiple systems are composed by maximum
- * height; there is no after-the-fact terrace widening, slope repair, morphology cleanup, or
- * Shape-aware mountain pass.</p>
+ * <p>Each mountain is born as one bounded-slope anisotropic envelope above the accepted V12 terrain.
+ * Its actual uplift is chosen first, then its axes are made wide enough for that uplift before any
+ * rasterization occurs. The envelope is allowed to keep descending past its nominal anchor level
+ * until it naturally falls below the existing terrain, so there is no hard terrace edge to repair.
+ * Multiple systems compose by maximum height. There is deliberately no post-generation widening,
+ * smoothing, terrace cleanup, or Shape-aware mountain repair.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -63,7 +63,6 @@ final class MountainMorphologyAlgorithm {
         }
 
         long[] result = baseHeights.clone();
-        int[] coastalDistance = distanceFromOceanCells(land, width, height);
         GenerationRandom random = GenerationRandom.from(genesis);
         for (MountainSystem system : createSystems(random, bounds, calibration, recipe)) {
             rasterize(
@@ -73,7 +72,6 @@ final class MountainMorphologyAlgorithm {
                     height,
                     baseHeights,
                     land,
-                    coastalDistance,
                     result,
                     calibration,
                     recipe);
@@ -136,12 +134,9 @@ final class MountainMorphologyAlgorithm {
         long uplift = Math.max(0L, Math.round(calibration.typicalUpliftSubunits() * upliftScale));
 
         long maximumRise = calibration.maximumCardinalRiseSubunits();
-        long absolutePeakAboveSea = Math.min(
-                calibration.mountainCeilingSubunits(),
-                Math.addExact(calibration.baseTerrainCeilingSubunits(), uplift));
         int requiredHalfWidth = Math.toIntExact(Math.max(
                 1L,
-                (absolutePeakAboveSea + maximumRise - 1L) / maximumRise));
+                uplift == 0L ? 1L : (uplift + maximumRise - 1L) / maximumRise));
 
         double widthVariation = recipe.widthVariationPpm() / (double) PPM;
         double baseWidth = calibration.typicalHalfWidthCells();
@@ -188,45 +183,45 @@ final class MountainMorphologyAlgorithm {
             int height,
             long[] baseHeights,
             boolean[] land,
-            int[] coastalDistance,
             long[] result,
             MountainCalibration calibration,
             MountainRecipe recipe) {
         if (system.upliftSubunits() <= 0L) return;
+
+        long anchorXLong = Math.round(system.centerX());
+        long anchorYLong = Math.round(system.centerY());
+        if (anchorXLong < bounds.minX() || anchorXLong > bounds.maxX()
+                || anchorYLong < bounds.minY() || anchorYLong > bounds.maxY()) {
+            return;
+        }
+        int anchorX = (int) anchorXLong;
+        int anchorY = (int) anchorYLong;
+        int anchorCell = (anchorY - bounds.minY()) * width + (anchorX - bounds.minX());
+        if (!land[anchorCell]) return;
+
+        long anchorHeight = baseHeights[anchorCell];
+        long rawPeak = Math.min(
+                calibration.mountainCeilingSubunits(),
+                Math.addExact(anchorHeight, system.upliftSubunits()));
+        long peakHeight = stabilizeSummitBand(
+                rawPeak,
+                anchorHeight,
+                calibration.maximumCardinalRiseSubunits());
+        long effectiveUplift = peakHeight - anchorHeight;
+        if (effectiveUplift <= 0L) return;
+
+        // The nominal axes describe the climb from the local summit anchor to its base level. The
+        // same linear envelope continues below that level until it reaches sea level, preventing a
+        // hard ring where local terrain happens to sit below the anchor height.
+        double supportFactor = peakHeight / (double) effectiveUplift;
         double support = Math.max(
                 system.longAxis(),
-                Math.max(system.leftWidth(), system.rightWidth()));
+                Math.max(system.leftWidth(), system.rightWidth())) * supportFactor;
         int minX = Math.max(bounds.minX(), (int) StrictMath.floor(system.centerX() - support));
         int maxX = Math.min(bounds.maxX(), (int) StrictMath.ceil(system.centerX() + support));
         int minY = Math.max(bounds.minY(), (int) StrictMath.floor(system.centerY() - support));
         int maxY = Math.min(bounds.maxY(), (int) StrictMath.ceil(system.centerY() + support));
         if (minX > maxX || minY > maxY) return;
-
-        long footHeight = regionalFootHeight(
-                system,
-                bounds,
-                width,
-                height,
-                baseHeights,
-                land,
-                minX,
-                maxX,
-                minY,
-                maxY);
-        if (footHeight == Long.MAX_VALUE) return;
-
-        // Mountain height is authored in the V13 headroom above ordinary V12 terrain. The absolute
-        // summit therefore does not collapse merely because this particular system happens to touch
-        // low land. Width was already reserved against the more conservative sea-level climb.
-        long rawPeak = Math.min(
-                calibration.mountainCeilingSubunits(),
-                Math.addExact(calibration.baseTerrainCeilingSubunits(), system.upliftSubunits()));
-        long peakHeight = stabilizeSummitBand(
-                rawPeak,
-                footHeight,
-                calibration.maximumCardinalRiseSubunits());
-        long effectiveUplift = peakHeight - footHeight;
-        if (effectiveUplift <= 0L) return;
 
         for (int y = minY; y <= maxY; y++) {
             int localY = y - bounds.minY();
@@ -238,46 +233,20 @@ final class MountainMorphologyAlgorithm {
                 if (!land[cell]) continue;
 
                 double profile = boundedProfile(system, x, y, recipe);
-                if (profile <= 0.0) continue;
-                long rise = Math.max(0L, Math.round(effectiveUplift * profile));
-                long coastalCap = coastalRiseCap(cell, coastalDistance, calibration, effectiveUplift);
-                rise = Math.min(rise, coastalCap);
-                long candidate = Math.addExact(footHeight, rise);
+                double candidateDouble = anchorHeight + effectiveUplift * profile;
+                if (!(candidateDouble > 0.0)) continue;
+                long candidate = Math.min(
+                        calibration.mountainCeilingSubunits(),
+                        Math.round(candidateDouble));
                 if (candidate > result[cell]) result[cell] = candidate;
             }
         }
     }
 
-    private static long regionalFootHeight(
-            MountainSystem system,
-            WorldBounds bounds,
-            int width,
-            int height,
-            long[] baseHeights,
-            boolean[] land,
-            int minX,
-            int maxX,
-            int minY,
-            int maxY) {
-        long minimum = Long.MAX_VALUE;
-        for (int y = minY; y <= maxY; y++) {
-            int localY = y - bounds.minY();
-            if (localY < 0 || localY >= height) continue;
-            for (int x = minX; x <= maxX; x++) {
-                int localX = x - bounds.minX();
-                if (localX < 0 || localX >= width) continue;
-                int cell = localY * width + localX;
-                if (!land[cell] || normalizedRadius(system, x, y) >= 1.0) continue;
-                minimum = Math.min(minimum, baseHeights[cell]);
-            }
-        }
-        return minimum;
-    }
-
     /**
-     * Linear radial descent has a bounded derivative everywhere. Plateau systems simply reserve a
-     * wider source footprint before applying the same descent, so their outer slope obeys the same
-     * source-generation budget instead of being repaired afterwards.
+     * Linear radial descent has a bounded derivative everywhere, including outside the nominal
+     * radius. Plateau systems reserve a proportionally wider footprint first, so their outer descent
+     * obeys exactly the same source slope law.
      */
     private static double boundedProfile(
             MountainSystem system,
@@ -285,7 +254,6 @@ final class MountainMorphologyAlgorithm {
             double y,
             MountainRecipe recipe) {
         double radius = normalizedRadius(system, x, y);
-        if (radius >= 1.0) return 0.0;
         if (!system.plateau()) return 1.0 - radius;
 
         double plateauCore = recipe.plateauCorePpm() / (double) PPM;
@@ -305,7 +273,7 @@ final class MountainMorphologyAlgorithm {
         return StrictMath.sqrt(normalizedAlong * normalizedAlong + normalizedAcross * normalizedAcross);
     }
 
-    private static long stabilizeSummitBand(long peakHeight, long footHeight, long maximumRise) {
+    private static long stabilizeSummitBand(long peakHeight, long anchorHeight, long maximumRise) {
         long cell = ElevationField.SUBUNITS_PER_CELL;
         long minimumDepth = Math.min(cell - 1L, maximumRise * MINIMUM_SUMMIT_BAND_CELLS);
         long layer = Math.floorDiv(peakHeight, cell);
@@ -314,58 +282,7 @@ final class MountainMorphologyAlgorithm {
         if (fraction >= minimumDepth) return peakHeight;
 
         long lowered = layerFloor - (cell - minimumDepth);
-        return lowered > footHeight ? lowered : peakHeight;
-    }
-
-    private static long coastalRiseCap(
-            int cell,
-            int[] coastalDistance,
-            MountainCalibration calibration,
-            long effectiveUplift) {
-        long inlandSteps = Math.max(0, coastalDistance[cell] - 1);
-        long permitted = calibration.shorelineUpliftSubunits()
-                + inlandSteps * calibration.maximumCardinalRiseSubunits();
-        return Math.min(effectiveUplift, permitted);
-    }
-
-    /** Exact cardinal distance from ocean/world edge. */
-    private static int[] distanceFromOceanCells(boolean[] land, int width, int height) {
-        int infinity = Math.addExact(width, height) + 1;
-        int[] distance = new int[land.length];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
-                if (!land[cell]) {
-                    distance[cell] = 0;
-                } else if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
-                    distance[cell] = 1;
-                } else {
-                    distance[cell] = infinity;
-                }
-            }
-        }
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
-                if (!land[cell]) continue;
-                int best = distance[cell];
-                if (x > 0) best = Math.min(best, distance[cell - 1] + 1);
-                if (y > 0) best = Math.min(best, distance[cell - width] + 1);
-                distance[cell] = best;
-            }
-        }
-        for (int y = height - 1; y >= 0; y--) {
-            for (int x = width - 1; x >= 0; x--) {
-                int cell = y * width + x;
-                if (!land[cell]) continue;
-                int best = distance[cell];
-                if (x + 1 < width) best = Math.min(best, distance[cell + 1] + 1);
-                if (y + 1 < height) best = Math.min(best, distance[cell + width] + 1);
-                distance[cell] = best;
-            }
-        }
-        return distance;
+        return lowered > anchorHeight ? lowered : peakHeight;
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
