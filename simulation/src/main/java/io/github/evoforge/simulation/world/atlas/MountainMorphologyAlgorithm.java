@@ -12,10 +12,11 @@ import java.util.List;
 /**
  * Deterministic spatial synthesis for V13 mountain structure.
  *
- * <p>Mountains are explicit ridge systems with rounded end caps, repeated peak/saddle hierarchy,
- * optional secondary branches, asymmetric side widths, broad foothills and per-system plateau
- * selection. Systems rasterize into a max-composed uplift field; they are never summed into
- * intersection spikes and they never change V12 ocean/land membership.</p>
+ * <p>The accepted V12 hills are the visual reference: every mountain system is now one very large
+ * anisotropic smooth hill rather than a narrow ridge wall. Chaininess stretches that hill along one
+ * stable axis. A gentle coastal gate allows real coastal cliffs while preventing an offshore mask
+ * boundary from slicing a tall mountain into a vertical wall. Overlapping systems still use a
+ * maximum uplift field so intersections cannot create additive super-peaks.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -25,10 +26,9 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId WIDTH = GenerationPurposeId.of("mountain:width");
     private static final GenerationPurposeId HEIGHT = GenerationPurposeId.of("mountain:height");
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
-    private static final GenerationPurposeId PHASE = GenerationPurposeId.of("mountain:peak-phase");
-    private static final GenerationPurposeId BRANCH = GenerationPurposeId.of("mountain:branch");
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
+    private static final int UPLIFT_SMOOTHING_PASSES = 2;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -61,11 +61,34 @@ final class MountainMorphologyAlgorithm {
             return new DenseElevationField(bounds, baseHeights);
         }
 
+        int[] coastalInteriority = coastalInteriorityPpm(
+                land,
+                width,
+                height,
+                recipe.coastalTransitionCells(),
+                recipe.shorelineUpliftPpm());
         long[] maximumUplift = new long[calibration.area()];
         GenerationRandom random = GenerationRandom.from(genesis);
-        for (MountainSystem system : createSystems(random, bounds, calibration, recipe)) {
-            rasterize(system, bounds, width, height, land, maximumUplift, calibration, recipe);
+        for (MountainSystem system : createSystems(
+                random,
+                bounds,
+                land,
+                width,
+                height,
+                calibration,
+                recipe)) {
+            rasterize(
+                    system,
+                    bounds,
+                    width,
+                    height,
+                    land,
+                    coastalInteriority,
+                    maximumUplift,
+                    calibration,
+                    recipe);
         }
+        smoothUplift(maximumUplift, land, width, height, UPLIFT_SMOOTHING_PASSES);
 
         long[] result = baseHeights.clone();
         long ceiling = calibration.mountainCeilingSubunits();
@@ -79,21 +102,20 @@ final class MountainMorphologyAlgorithm {
     private static List<MountainSystem> createSystems(
             GenerationRandom random,
             WorldBounds bounds,
+            boolean[] land,
+            int width,
+            int height,
             MountainCalibration calibration,
             MountainRecipe recipe) {
         int spacing = calibration.candidateSpacingCells();
+        double variation = recipe.widthVariationPpm() / (double) PPM;
         int maximumWidth = Math.max(
                 1,
-                (int) StrictMath.ceil(calibration.typicalHalfWidthCells()
-                        * (1.0 + recipe.widthVariationPpm() / (double) PPM)));
-        int branchLength = Math.max(
-                1,
-                (int) ((long) maximumWidth * recipe.branchLengthWidthPpm() / PPM));
-        int foothillWidth = Math.max(
+                (int) StrictMath.ceil(calibration.typicalHalfWidthCells() * (1.0 + variation)));
+        int maximumLongAxis = Math.max(
                 maximumWidth,
-                (int) ((long) maximumWidth * recipe.foothillWidthPpm() / PPM));
-        int support = calibration.ridgeHalfLengthCells() + branchLength + foothillWidth;
-        int margin = Math.max(1, (support + spacing - 1) / spacing + 1);
+                (int) StrictMath.ceil(calibration.typicalLongAxisCells() * (1.0 + variation)));
+        int margin = Math.max(1, (maximumLongAxis + spacing - 1) / spacing + 1);
 
         long minimumLatticeX = Math.floorDiv((long) bounds.minX(), spacing) - margin;
         long maximumLatticeX = Math.floorDiv((long) bounds.maxX(), spacing) + margin;
@@ -105,7 +127,9 @@ final class MountainMorphologyAlgorithm {
             for (long latticeX = minimumLatticeX; latticeX <= maximumLatticeX; latticeX++) {
                 int activation = samplePpm(random, ACTIVE, latticeX, latticeY, 0L);
                 if (activation >= calibration.candidateActivationPpm()) continue;
-                systems.add(createSystem(random, latticeX, latticeY, calibration, recipe));
+                MountainSystem system = createSystem(random, latticeX, latticeY, calibration, recipe);
+                if (!centerIsLand(system, bounds, land, width, height)) continue;
+                systems.add(system);
             }
         }
         return systems;
@@ -128,8 +152,8 @@ final class MountainMorphologyAlgorithm {
         double axisX = StrictMath.cos(angle);
         double axisY = StrictMath.sin(angle);
 
-        double baseWidth = calibration.typicalHalfWidthCells();
         double widthVariation = recipe.widthVariationPpm() / (double) PPM;
+        double baseWidth = calibration.typicalHalfWidthCells();
         double leftWidth = variedPositive(
                 baseWidth,
                 centeredPpm(random, WIDTH, latticeX, latticeY, 0L),
@@ -138,6 +162,12 @@ final class MountainMorphologyAlgorithm {
                 baseWidth,
                 centeredPpm(random, WIDTH, latticeX, latticeY, 1L),
                 widthVariation);
+        double longAxisVariation = 1.0
+                + centeredPpm(random, WIDTH, latticeX, latticeY, 2L) / (double) PPM
+                        * widthVariation * 0.5;
+        double longAxis = Math.max(
+                Math.max(leftWidth, rightWidth),
+                calibration.typicalLongAxisCells() * longAxisVariation);
 
         double heightVariation = recipe.heightVariationPpm() / (double) PPM;
         double upliftScale = 1.0
@@ -150,55 +180,34 @@ final class MountainMorphologyAlgorithm {
         boolean plateau = calibration.plateausEnabled()
                 && samplePpm(random, PLATEAU, latticeX, latticeY, 0L)
                         < calibration.plateauProbabilityPpm();
-        double phase = samplePpm(random, PHASE, latticeX, latticeY, 0L) * TWO_PI / PPM;
-
-        List<Branch> branches = new ArrayList<>(recipe.maximumBranches());
-        for (int branchIndex = 0; branchIndex < recipe.maximumBranches(); branchIndex++) {
-            if (samplePpm(random, BRANCH, latticeX, latticeY, branchIndex * 8L)
-                    >= calibration.branchProbabilityPpm()) {
-                continue;
-            }
-            double anchorCoordinate = centeredPpm(
-                    random, BRANCH, latticeX, latticeY, branchIndex * 8L + 1L) / (double) PPM;
-            double anchorAlong = anchorCoordinate * calibration.ridgeHalfLengthCells() * 0.72;
-            double anchorX = centerX + axisX * anchorAlong;
-            double anchorY = centerY + axisY * anchorAlong;
-
-            double turnCoordinate = samplePpm(
-                    random, BRANCH, latticeX, latticeY, branchIndex * 8L + 2L) / (double) PPM;
-            double turnDegrees = 35.0 + turnCoordinate * 35.0;
-            double turnSign = (branchIndex & 1) == 0 ? 1.0 : -1.0;
-            double branchAngle = angle + turnSign * turnDegrees * StrictMath.PI / 180.0;
-            double branchAxisX = StrictMath.cos(branchAngle);
-            double branchAxisY = StrictMath.sin(branchAngle);
-            double branchHalfLength = Math.max(
-                    1.0,
-                    baseWidth * recipe.branchLengthWidthPpm() / PPM);
-            double branchWidth = Math.max(1.0, baseWidth * 0.68);
-            double branchPhase = samplePpm(
-                    random, BRANCH, latticeX, latticeY, branchIndex * 8L + 3L) * TWO_PI / PPM;
-            branches.add(new Branch(
-                    anchorX,
-                    anchorY,
-                    branchAxisX,
-                    branchAxisY,
-                    branchHalfLength,
-                    branchWidth,
-                    branchPhase));
-        }
 
         return new MountainSystem(
                 centerX,
                 centerY,
                 axisX,
                 axisY,
-                calibration.ridgeHalfLengthCells(),
+                longAxis,
                 leftWidth,
                 rightWidth,
                 uplift,
-                phase,
-                plateau,
-                branches.toArray(Branch[]::new));
+                plateau);
+    }
+
+    private static boolean centerIsLand(
+            MountainSystem system,
+            WorldBounds bounds,
+            boolean[] land,
+            int width,
+            int height) {
+        int x = (int) StrictMath.round(system.centerX());
+        int y = (int) StrictMath.round(system.centerY());
+        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
+            return false;
+        }
+        int localX = x - bounds.minX();
+        int localY = y - bounds.minY();
+        return localX >= 0 && localX < width && localY >= 0 && localY < height
+                && land[localY * width + localX];
     }
 
     private static void rasterize(
@@ -207,13 +216,13 @@ final class MountainMorphologyAlgorithm {
             int width,
             int height,
             boolean[] land,
+            int[] coastalInteriority,
             long[] maximumUplift,
             MountainCalibration calibration,
             MountainRecipe recipe) {
-        double sideWidth = Math.max(system.leftWidth(), system.rightWidth());
-        double foothillWidth = sideWidth * recipe.foothillWidthPpm() / PPM;
-        double branchReach = sideWidth * recipe.branchLengthWidthPpm() / PPM;
-        double support = system.halfLength() + foothillWidth + branchReach;
+        double support = Math.max(
+                system.longAxis(),
+                Math.max(system.leftWidth(), system.rightWidth()));
         int minX = Math.max(bounds.minX(), (int) StrictMath.floor(system.centerX() - support));
         int maxX = Math.min(bounds.maxX(), (int) StrictMath.ceil(system.centerX() + support));
         int minY = Math.max(bounds.minY(), (int) StrictMath.floor(system.centerY() - support));
@@ -229,18 +238,17 @@ final class MountainMorphologyAlgorithm {
                 int cell = localY * width + localX;
                 if (!land[cell]) continue;
 
-                double profile = mainProfile(system, x, y, calibration, recipe);
-                for (Branch branch : system.branches()) {
-                    profile = Math.max(profile, 0.76 * branchProfile(branch, x, y, calibration, recipe));
-                }
+                double profile = elongatedHillProfile(system, x, y, calibration, recipe);
                 if (profile <= 0.0) continue;
                 long uplift = Math.max(0L, Math.round(system.upliftSubunits() * profile));
+                uplift = uplift * coastalInteriority[cell] / PPM;
                 if (uplift > maximumUplift[cell]) maximumUplift[cell] = uplift;
             }
         }
     }
 
-    private static double mainProfile(
+    /** Same smooth radial law as a V12 hill, evaluated in an anisotropic ellipse. */
+    private static double elongatedHillProfile(
             MountainSystem system,
             double x,
             double y,
@@ -251,84 +259,126 @@ final class MountainMorphologyAlgorithm {
         double along = dx * system.axisX() + dy * system.axisY();
         double across = -dx * system.axisY() + dy * system.axisX();
         double sideWidth = across < 0.0 ? system.leftWidth() : system.rightWidth();
-        return ridgeProfile(
-                along,
-                across,
-                system.halfLength(),
-                sideWidth,
-                system.phase(),
-                system.plateau(),
-                calibration,
-                recipe);
-    }
+        if (sideWidth <= 0.0 || system.longAxis() <= 0.0) return 0.0;
 
-    private static double branchProfile(
-            Branch branch,
-            double x,
-            double y,
-            MountainCalibration calibration,
-            MountainRecipe recipe) {
-        double dx = x - branch.anchorX();
-        double dy = y - branch.anchorY();
-        double along = dx * branch.axisX() + dy * branch.axisY();
-        double across = -dx * branch.axisY() + dy * branch.axisX();
-        return ridgeProfile(
-                along,
-                across,
-                branch.halfLength(),
-                branch.halfWidth(),
-                branch.phase(),
-                false,
-                calibration,
-                recipe);
-    }
+        double normalizedAlong = along / system.longAxis();
+        double normalizedAcross = across / sideWidth;
+        double distanceSquared = normalizedAlong * normalizedAlong
+                + normalizedAcross * normalizedAcross;
+        if (distanceSquared >= 1.0) return 0.0;
 
-    private static double ridgeProfile(
-            double along,
-            double across,
-            double halfLength,
-            double halfWidth,
-            double phase,
-            boolean plateau,
-            MountainCalibration calibration,
-            MountainRecipe recipe) {
-        if (halfWidth <= 0.0) return 0.0;
-        double beyondEnd = Math.max(0.0, StrictMath.abs(along) - halfLength);
-        double normalized = StrictMath.hypot(across / halfWidth, beyondEnd / halfWidth);
-        double sharpness = calibration.sharpnessMilli() / 1_000.0;
-        double core = profile(normalized, sharpness, plateau, recipe.plateauCorePpm());
-
-        double foothillWidth = halfWidth * recipe.foothillWidthPpm() / PPM;
-        double foothillNormalized = StrictMath.hypot(
-                across / foothillWidth,
-                beyondEnd / foothillWidth);
-        double foothill = profile(foothillNormalized, 1.15, false, 0)
-                * recipe.foothillWeightPpm() / PPM;
-
-        if (core <= 0.0) return foothill;
-        double peakWave = 0.5 + 0.5 * StrictMath.cos(
-                along / calibration.peakSpacingCells() * TWO_PI + phase);
-        double saddleFloor = recipe.saddleFloorPpm() / (double) PPM;
-        double peakFactor = saddleFloor + (1.0 - saddleFloor) * peakWave;
-        if (plateau && peakFactor >= 0.88) peakFactor = 1.0;
-        return Math.max(core * peakFactor, foothill);
-    }
-
-    private static double profile(
-            double normalizedDistance,
-            double sharpness,
-            boolean plateau,
-            int plateauCorePpm) {
-        if (normalizedDistance >= 1.0) return 0.0;
-        double distance = Math.max(0.0, normalizedDistance);
-        if (plateau) {
-            double core = plateauCorePpm / (double) PPM;
-            if (distance <= core) distance = 0.0;
-            else distance = (distance - core) / (1.0 - core);
+        if (system.plateau()) {
+            double distance = StrictMath.sqrt(Math.max(0.0, distanceSquared));
+            double plateauCore = recipe.plateauCorePpm() / (double) PPM;
+            if (distance <= plateauCore) return 1.0;
+            double remapped = (distance - plateauCore) / (1.0 - plateauCore);
+            distanceSquared = remapped * remapped;
         }
-        double t = Math.max(0.0, Math.min(1.0, 1.0 - distance));
-        double smooth = t * t * (3.0 - 2.0 * t);
+
+        double coordinate = Math.max(0.0, Math.min(1.0, 1.0 - distanceSquared));
+        double smooth = coordinate * coordinate * (3.0 - 2.0 * coordinate);
+        double sharpness = calibration.sharpnessMilli() / 1_000.0;
         return StrictMath.pow(smooth, sharpness);
+    }
+
+    /**
+     * Distance from ocean mapped to a smooth mountain-uplift gate. Shoreline cells retain a small
+     * fraction of uplift, so coastal cliffs remain possible without producing full-height cut faces.
+     */
+    private static int[] coastalInteriorityPpm(
+            boolean[] land,
+            int width,
+            int height,
+            int transitionCells,
+            int shorelineUpliftPpm) {
+        int[] distance = new int[land.length];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int cell = y * width + x;
+                if (!land[cell]) {
+                    distance[cell] = 0;
+                } else if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
+                    distance[cell] = 1;
+                } else {
+                    distance[cell] = transitionCells;
+                }
+            }
+        }
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int cell = y * width + x;
+                if (!land[cell]) continue;
+                int best = distance[cell];
+                if (x > 0) best = Math.min(best, distance[cell - 1] + 1);
+                if (y > 0) best = Math.min(best, distance[cell - width] + 1);
+                distance[cell] = Math.min(transitionCells, best);
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int cell = y * width + x;
+                if (!land[cell]) continue;
+                int best = distance[cell];
+                if (x + 1 < width) best = Math.min(best, distance[cell + 1] + 1);
+                if (y + 1 < height) best = Math.min(best, distance[cell + width] + 1);
+                distance[cell] = Math.min(transitionCells, best);
+            }
+        }
+
+        int[] gate = new int[land.length];
+        for (int cell = 0; cell < gate.length; cell++) {
+            if (!land[cell]) {
+                gate[cell] = 0;
+                continue;
+            }
+            if (transitionCells <= 1 || distance[cell] >= transitionCells) {
+                gate[cell] = PPM;
+                continue;
+            }
+            int coordinate = (int) ((long) Math.max(0, distance[cell] - 1) * PPM
+                    / (transitionCells - 1L));
+            int smooth = smoothStepPpm(coordinate);
+            gate[cell] = shorelineUpliftPpm
+                    + (int) ((long) (PPM - shorelineUpliftPpm) * smooth / PPM);
+        }
+        return gate;
+    }
+
+    /** Two conservative low-pass passes remove max-composition seams without changing the base V12 field. */
+    private static void smoothUplift(
+            long[] uplift,
+            boolean[] land,
+            int width,
+            int height,
+            int passes) {
+        if (passes <= 0) return;
+        long[] scratch = new long[uplift.length];
+        for (int pass = 0; pass < passes; pass++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int cell = y * width + x;
+                    if (!land[cell]) {
+                        scratch[cell] = 0L;
+                        continue;
+                    }
+                    long sum = uplift[cell] * 4L;
+                    if (x > 0 && land[cell - 1]) sum += uplift[cell - 1];
+                    if (x + 1 < width && land[cell + 1]) sum += uplift[cell + 1];
+                    if (y > 0 && land[cell - width]) sum += uplift[cell - width];
+                    if (y + 1 < height && land[cell + width]) sum += uplift[cell + width];
+                    scratch[cell] = sum / 8L;
+                }
+            }
+            System.arraycopy(scratch, 0, uplift, 0, uplift.length);
+        }
+    }
+
+    private static int smoothStepPpm(long coordinatePpm) {
+        long coordinate = Math.max(0L, Math.min((long) PPM, coordinatePpm));
+        long squared = coordinate * coordinate;
+        return (int) (squared * (3L * PPM - 2L * coordinate)
+                / ((long) PPM * PPM));
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
@@ -366,22 +416,10 @@ final class MountainMorphologyAlgorithm {
             double centerY,
             double axisX,
             double axisY,
-            double halfLength,
+            double longAxis,
             double leftWidth,
             double rightWidth,
             long upliftSubunits,
-            double phase,
-            boolean plateau,
-            Branch[] branches) {
-    }
-
-    private record Branch(
-            double anchorX,
-            double anchorY,
-            double axisX,
-            double axisY,
-            double halfLength,
-            double halfWidth,
-            double phase) {
+            boolean plateau) {
     }
 }
