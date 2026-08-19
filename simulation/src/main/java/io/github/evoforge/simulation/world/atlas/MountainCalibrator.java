@@ -19,6 +19,8 @@ public interface MountainCalibrator {
 final class StandardMountainCalibrator implements MountainCalibrator {
     static final StandardMountainCalibrator INSTANCE = new StandardMountainCalibrator();
     private static final int PPM = NormalizedValue.SCALE;
+    private static final double PROFILE_GRADIENT_BOUND = 1.30;
+    private static final double MAXIMUM_ABUNDANCE_COVERAGE = 0.75;
 
     private StandardMountainCalibrator() {
     }
@@ -57,9 +59,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
 
-        // World-size vertical law: a mountain can only climb as high as the narrower horizontal span
-        // can support at the calibrated geometric slope. The 0.85 radius utilization leaves room for
-        // foothills instead of requiring the summit to sit exactly at a world boundary.
         long usableRadiusCells = Math.max(
                 1L,
                 (long) limitingHorizontalSpan * recipe.worldSlopeRadiusUtilizationPpm()
@@ -71,7 +70,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 recipe.minimumHeightOfWorldSlopeCapPpm(),
                 recipe.maximumHeightOfWorldSlopeCapPpm(),
                 intent.height().partsPerMillion());
-        long typicalUplift = worldHeightCap * heightFractionPpm / PPM;
+        long desiredUplift = worldHeightCap * heightFractionPpm / PPM;
 
         int worldMinimumHalfWidth = clamp(
                 Math.toIntExact(Math.max(
@@ -90,15 +89,31 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // A tall mountain is automatically broad even when authored Scale is small. This coupling
-        // deliberately uses only elevation geometry; it is not a promise about any concrete Shape.
-        long riseSteps = typicalUplift == 0L
-                ? 0L
-                : (typicalUplift + maximumCardinalRise - 1L) / maximumCardinalRise;
-        int slopeCoupledHalfWidth = Math.toIntExact(Math.max(
-                1L,
-                riseSteps * recipe.slopeWidthCouplingPpm() / PPM));
-        int typicalHalfWidth = Math.max(authoredHalfWidth, slopeCoupledHalfWidth);
+        // Height may ask for a broader source, but it may only enlarge the scale-authored mountain
+        // by a bounded amount. This keeps Height from turning one source into a continent-wide dome.
+        int maximumHeightCoupledWidth = Math.min(
+                recipe.absoluteMaximumHalfWidthCells(),
+                Math.toIntExact(Math.max(
+                        authoredHalfWidth,
+                        Math.round(authoredHalfWidth
+                                * (1.0 + recipe.slopeWidthCouplingPpm() / (double) PPM)))));
+        int widthNeededForDesiredHeight = desiredUplift == 0L
+                ? authoredHalfWidth
+                : Math.toIntExact(Math.max(
+                        1L,
+                        (long) StrictMath.ceil(
+                                desiredUplift * PROFILE_GRADIENT_BOUND
+                                        / Math.max(1.0, maximumCardinalRise))));
+        int typicalHalfWidth = clamp(
+                widthNeededForDesiredHeight,
+                authoredHalfWidth,
+                maximumHeightCoupledWidth);
+
+        long widthSupportedHeight = Math.max(
+                0L,
+                (long) StrictMath.floor(
+                        typicalHalfWidth * maximumCardinalRise / PROFILE_GRADIENT_BOUND));
+        long typicalUplift = Math.min(desiredUplift, widthSupportedHeight);
 
         int chaininessPpm = intent.chaininess().partsPerMillion();
         int longAxisWidthPpm = interpolate(
@@ -115,6 +130,15 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                         / recipe.candidateSpacingDenominator());
         int candidateSpacing = Math.max(baseSpacing, typicalLongAxis);
 
+        // Abundance means expected mountain footprint, not probability of an arbitrary lattice node.
+        // Scale/chaininess alter ellipse area; activation is recalibrated so their changes do not
+        // silently turn the same abundance into a mountain carpet.
+        int candidateActivation = calibratedActivationPpm(
+                intent.abundance().partsPerMillion(),
+                typicalHalfWidth,
+                typicalLongAxis,
+                candidateSpacing);
+
         int sharpnessMilli = interpolate(
                 recipe.minimumSharpnessMilli(),
                 recipe.maximumSharpnessMilli(),
@@ -129,19 +153,19 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                         (long) recipe.maximumShorelineUpliftCells(), ElevationField.SUBUNITS_PER_CELL),
                 typicalUplift * recipe.shorelineUpliftPpm() / PPM);
         long coastalRise = Math.max(0L, typicalUplift - shorelineUplift);
-        int coastalTransitionCells = coastalRise == 0L
-                ? recipe.minimumCoastalTransitionCells()
-                : Math.max(
-                        recipe.minimumCoastalTransitionCells(),
-                        Math.toIntExact((coastalRise + maximumCardinalRise - 1L)
-                                / maximumCardinalRise));
+        long riseSteps = coastalRise == 0L
+                ? 0L
+                : (coastalRise + maximumCardinalRise - 1L) / maximumCardinalRise;
+        int coastalTransitionCells = Math.max(
+                recipe.minimumCoastalTransitionCells(),
+                Math.toIntExact(Math.max(0L, (riseSteps * 45L + 99L) / 100L)));
 
         return new MountainCalibration(
                 width,
                 height,
                 area,
                 candidateSpacing,
-                intent.abundance().partsPerMillion(),
+                candidateActivation,
                 typicalHalfWidth,
                 typicalLongAxis,
                 typicalUplift,
@@ -155,6 +179,24 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 shorelineUplift,
                 baseCeiling,
                 mountainCeiling);
+    }
+
+    private static int calibratedActivationPpm(
+            int abundancePpm,
+            int halfWidth,
+            int longAxis,
+            int spacing) {
+        if (abundancePpm <= 0) return 0;
+        double targetCoverage = Math.min(
+                MAXIMUM_ABUNDANCE_COVERAGE,
+                abundancePpm / (double) PPM * MAXIMUM_ABUNDANCE_COVERAGE);
+        if (targetCoverage <= 0.0) return 0;
+
+        double expectedFootprint = StrictMath.PI * halfWidth * (double) longAxis;
+        double latticeArea = Math.max(1.0, spacing * (double) spacing);
+        double footprintLoad = Math.max(1.0e-6, expectedFootprint / latticeArea);
+        double activation = -StrictMath.log(1.0 - targetCoverage) / footprintLoad;
+        return (int) Math.round(Math.max(0.0, Math.min(1.0, activation)) * PPM);
     }
 
     private static int interpolate(int minimum, int maximum, int coordinatePpm) {
