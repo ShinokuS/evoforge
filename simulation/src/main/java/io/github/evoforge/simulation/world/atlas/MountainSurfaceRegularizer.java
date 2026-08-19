@@ -14,8 +14,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 final class MountainSurfaceRegularizer {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
     private static final long NO_SUGGESTION = Long.MIN_VALUE;
-    private static final int TRANSITION_HALO_CELLS = 2;
-    private static final int MAX_SURFACE_RELAXATION_PASSES = 96;
+    private static final int TRANSITION_HALO_CELLS = 4;
+    private static final int MAX_SURFACE_RELAXATION_PASSES = 128;
 
     private MountainSurfaceRegularizer() {
     }
@@ -60,9 +60,9 @@ final class MountainSurfaceRegularizer {
         }
         if (!anyMountainInfluence) return generated;
 
-        // A tiny halo makes the mountain/V12 boundary itself adjustable. Without it, a perfectly
-        // legal V12 local slope can be frozen immediately beside a mountain cell and force a narrow
-        // one-cell transition regardless of how smooth the mountain profile is internally.
+        // The generic coherent surface fitter requires local support across several cells. A four
+        // cell halo lets a dedicated mountain absorb the last small V12 undulations at its boundary
+        // instead of creating a one-cell seam where the two surfaces meet.
         dilateInfluence(
                 mountainInfluence,
                 land,
@@ -138,6 +138,20 @@ final class MountainSurfaceRegularizer {
             surface = scratch;
             scratch = swap;
         }
+
+        // Cleanup proposals are evaluated against one immutable pass snapshot. Two neighbouring
+        // proposals may therefore both be locally legal yet move apart when committed together.
+        // Project the cleaned result onto the same geometry-only rise budget once more so the final
+        // authoritative surface, not merely each intermediate proposal, owns the contract.
+        relaxFinalSurface(
+                surface,
+                land,
+                mountainInfluence,
+                width,
+                height,
+                maximumCardinalRise,
+                ceiling,
+                MAX_SURFACE_RELAXATION_PASSES);
         return new DenseElevationField(bounds, surface);
     }
 
@@ -148,30 +162,27 @@ final class MountainSurfaceRegularizer {
             int height,
             int cells) {
         if (cells <= 0) return;
-        boolean[] scratch = new boolean[influence.length];
+        boolean[] source = influence.clone();
+        boolean[] target = new boolean[influence.length];
         for (int pass = 0; pass < cells; pass++) {
-            System.arraycopy(influence, 0, scratch, 0, influence.length);
+            System.arraycopy(source, 0, target, 0, source.length);
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     int cell = y * width + x;
-                    if (!land[cell] || influence[cell]) continue;
-                    if ((x > 0 && influence[cell - 1])
-                            || (x + 1 < width && influence[cell + 1])
-                            || (y > 0 && influence[cell - width])
-                            || (y + 1 < height && influence[cell + width])) {
-                        scratch[cell] = true;
+                    if (!land[cell] || source[cell]) continue;
+                    if ((x > 0 && source[cell - 1])
+                            || (x + 1 < width && source[cell + 1])
+                            || (y > 0 && source[cell - width])
+                            || (y + 1 < height && source[cell + width])) {
+                        target[cell] = true;
                     }
                 }
             }
-            boolean[] swap = influence;
-            influence = scratch;
-            scratch = swap;
+            boolean[] swap = source;
+            source = target;
+            target = swap;
         }
-
-        // The caller owns the original array reference, so copy the final dilation result back when
-        // an odd number of swaps left it in the scratch allocation.
-        System.arraycopy(influence, 0, scratch, 0, influence.length);
-        System.arraycopy(scratch, 0, influence, 0, influence.length);
+        System.arraycopy(source, 0, influence, 0, influence.length);
     }
 
     /**
