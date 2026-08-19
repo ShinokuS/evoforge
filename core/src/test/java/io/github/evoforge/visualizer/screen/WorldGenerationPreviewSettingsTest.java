@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationPreviewSettingsTest {
 
     @Test
-    void defaultsMatchCurrentV12PreviewInputs() {
+    void defaultsMatchCurrentV13PreviewInputs() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
         WorldGenerationPreviewConfig snapshot = settings.snapshot();
 
@@ -26,8 +26,15 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(450_000, snapshot.localReliefPpm());
         assertEquals(500_000, snapshot.landformScalePpm());
         assertEquals(350_000, snapshot.ruggednessPpm());
+        assertEquals(350_000, snapshot.mountainAbundancePpm());
+        assertEquals(520_000, snapshot.mountainHeightPpm());
+        assertEquals(500_000, snapshot.mountainScalePpm());
+        assertEquals(550_000, snapshot.mountainChaininessPpm());
+        assertEquals(600_000, snapshot.mountainSharpnessPpm());
+        assertTrue(snapshot.mountainPlateausEnabled());
+        assertEquals(180_000, snapshot.mountainPlateauProbabilityPpm());
         assertEquals(4_096L, snapshot.columnCount());
-        assertEquals(new WorldBounds(-32, 31, -32, 31, -12, 12), snapshot.bounds());
+        assertEquals(new WorldBounds(-32, 31, -32, 31, -12, 96), snapshot.bounds());
     }
 
     @Test
@@ -41,7 +48,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(300, snapshot.width());
         assertEquals(175, snapshot.length());
         assertEquals(52_500L, snapshot.columnCount());
-        assertEquals(new WorldBounds(-150, 149, -87, 87, -12, 12), snapshot.bounds());
+        assertEquals(new WorldBounds(-150, 149, -87, 87, -12, 96), snapshot.bounds());
     }
 
     @Test
@@ -56,6 +63,13 @@ final class WorldGenerationPreviewSettingsTest {
         settings.localReliefPpm(800_000);
         settings.landformScalePpm(250_000);
         settings.ruggednessPpm(900_000);
+        settings.mountainAbundancePpm(900_000);
+        settings.mountainHeightPpm(850_000);
+        settings.mountainScalePpm(250_000);
+        settings.mountainChaininessPpm(950_000);
+        settings.mountainSharpnessPpm(800_000);
+        settings.mountainPlateausEnabled(false);
+        settings.mountainPlateauProbabilityPpm(700_000);
         settings.seed(44L);
 
         assertEquals(64, generated.width());
@@ -65,6 +79,9 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(450_000, generated.localReliefPpm());
         assertEquals(500_000, generated.landformScalePpm());
         assertEquals(350_000, generated.ruggednessPpm());
+        assertEquals(350_000, generated.mountainAbundancePpm());
+        assertEquals(520_000, generated.mountainHeightPpm());
+        assertTrue(generated.mountainPlateausEnabled());
         assertEquals(1L, generated.seed());
 
         WorldGenerationPreviewConfig next = settings.snapshot();
@@ -75,6 +92,13 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(800_000, next.localReliefPpm());
         assertEquals(250_000, next.landformScalePpm());
         assertEquals(900_000, next.ruggednessPpm());
+        assertEquals(900_000, next.mountainAbundancePpm());
+        assertEquals(850_000, next.mountainHeightPpm());
+        assertEquals(250_000, next.mountainScalePpm());
+        assertEquals(950_000, next.mountainChaininessPpm());
+        assertEquals(800_000, next.mountainSharpnessPpm());
+        assertFalse(next.mountainPlateausEnabled());
+        assertEquals(700_000, next.mountainPlateauProbabilityPpm());
         assertEquals(44L, next.seed());
     }
 
@@ -126,8 +150,12 @@ final class WorldGenerationPreviewSettingsTest {
         assertThrows(IllegalArgumentException.class, () -> settings.localReliefPpm(-1));
         assertThrows(IllegalArgumentException.class, () -> settings.localReliefPpm(1_000_001));
         assertThrows(IllegalArgumentException.class, () -> settings.landformScalePpm(-1));
-        assertThrows(IllegalArgumentException.class, () -> settings.landformScalePpm(1_000_001));
-        assertThrows(IllegalArgumentException.class, () -> settings.ruggednessPpm(-1));
         assertThrows(IllegalArgumentException.class, () -> settings.ruggednessPpm(1_000_001));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainAbundancePpm(-1));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainHeightPpm(1_000_001));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainScalePpm(-1));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainChaininessPpm(1_000_001));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainSharpnessPpm(-1));
+        assertThrows(IllegalArgumentException.class, () -> settings.mountainPlateauProbabilityPpm(1_000_001));
     }
 }
