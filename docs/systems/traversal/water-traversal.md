@@ -1,28 +1,55 @@
 # Water Traversal
 
-## Purpose
+## In plain language
 
-Let current finite Water influence terrestrial movement without turning Water into Navigation topology or invalidating pathfinding on every hydraulic micro-change.
+Water Traversal lets the **same structural path** be usable by one mover and unusable by another because of current Water depth.
 
-The current slice models mover-specific **wading passability** end to end: current Water informs advisory MoveTo planning and is revalidated authoritatively when a real Movement edge starts and commits. Swimming, boats, drowning, current forces and shallow-Water speed penalties remain outside this slice.
+A shallow puddle may be walkable for a Cow; a deeper cell may be too deep. Navigation still describes the structural ground connection. Water remains finite liquid. The mover's definition says how much Water it can wade through.
+
+This keeps “where a path physically exists” separate from “whether this particular actor can use it right now”.
+
+## Current status
+
+The implemented slice models terrestrial **wading passability** end-to-end:
+
+- mover definition can opt into a maximum Water depth;
+- current finite Water + Geometry convert volume into local depth;
+- MoveTo can avoid already-too-deep destinations while planning;
+- Movement checks the exact same semantic constraint at edge start;
+- Movement checks it again at completion if Water changed during travel.
+
+Not implemented here: swimming, boats, drowning, current forces or shallow-Water speed penalties.
 
 ## Ownership
 
 ```text
-Navigation              structural edge exists
-Water                   finite liquid quantity
-Geometry                free-space height profile
-WaterWadingProfile      mover-definition tolerance
-MoverTraversalConstraint may this mover use this edge now?
-Movement                authoritative edge execution
-Pathfinding             disposable advisory route
+Navigation
+  structural edge exists
+
+Liquid/Water
+  finite current Water quantity
+
+Geometry / CellSpace
+  free-space shape and volume -> depth conversion
+
+WaterWadingProfile
+  mover-definition tolerance
+
+WaterWadingConstraint
+  current mover/environment passability
+
+Pathfinding / MoveTo
+  advisory route filtering
+
+Movement
+  authoritative edge start + commit
 ```
 
-Water does not publish Navigation edges and raw Water changes do not increment the landscape traversal revision.
+Water never edits Navigation topology just because one mover dislikes the depth.
 
-## Definition-driven capability
+## Definition-driven tolerance
 
-An object definition may opt into terrestrial Water restrictions with:
+A mover can define:
 
 ```json
 {
@@ -34,110 +61,156 @@ An object definition may opt into terrestrial Water restrictions with:
 }
 ```
 
-Scenario/runtime composition exposes the same fact through:
+or equivalent assembly configuration.
 
-```java
-assembly.waterWading(definitionId, 250_000);
-```
-
-`maxDepth` uses normalized `CellSpace` height units:
+`maxDepth` uses normalized `CellSpace` local-height units:
 
 ```text
-0         dry destinations only
-1_000_000 one full standing cell of Water
+0         = only dry destinations
+1_000_000 = one full standing-cell height
 ```
 
-The profile is explicit. A mover with no `waterWading` aspect keeps Water-neutral traversal behavior; there is no hidden species/material fallback.
+No `waterWading` aspect means Water-neutral traversal under the current contract. There is no hidden species-name fallback.
 
-This capability represents terrestrial wading, not universal fluid locomotion. Swimming and waterborne movement require different support/Navigation semantics and should be introduced by real consumers rather than overloading `maxDepth`.
+This is explicitly a terrestrial wading capability. Swimming/water-surface locomotion requires different support/topology semantics and should not be represented as an enormous `maxDepth` hack.
 
-## Destination depth
+## Water amount is not automatically depth
 
-`WaterWadingConstraint` reads Water at the destination standing coordinate and converts finite volume into local surface height through neutral `CellSpace.surfaceHeight(...)` Geometry.
+Free Water is stored as finite volume. Geometry may have nontrivial internal free-space shape, so equal volume can correspond to different heights.
 
-Therefore `Water amount` is not blindly treated as depth: nontrivial Shape free-space profiles can map equal volume to different heights.
-
-If the destination standing cell is full and the cell above also contains Water, the destination is treated as deeper than one cell. Water that temporarily exceeds newly changed Geometry capacity is classified conservatively as too deep until hydraulic redistribution resolves it.
-
-Only the **destination** is constrained. A mover already standing in Water deeper than its tolerance may still leave toward a shallower/dry destination instead of becoming mechanically trapped by rising Water.
-
-## Authoritative execution
-
-The same `WaterWadingConstraint` instance is checked at both concrete Movement boundaries:
+The constraint therefore uses:
 
 ```text
-MovementSystem.startStep
+current Water volume at destination
         ↓
-authoritative start validation
-
-MovementActionProcessor.complete
+CellSpace.surfaceHeight(destinationShape, volume)
         ↓
-authoritative commit revalidation
+local Water surface/depth height
 ```
 
-If Water is already too deep, the edge is not scheduled. If Water rises while a timed edge is in progress, commit is rejected and Spatial remains at the source.
+For a normal empty/full free standing cell this behaves intuitively. For a ramp-shaped cell, the `freeVolumeBelow(h)` profile changes the volume-to-height relationship.
 
-The compatibility/default Movement constructors preserve `ALLOW_ALL`, so tests or runtimes that do not opt into a dynamic traversal constraint retain earlier behavior.
+This keeps fluid depth calculation in neutral Geometry rather than putting Shape-specific branches inside Water Traversal.
 
-## Advisory MoveTo planning
+## More than one cell deep
 
-`MoveToSystem` remains a Movement-domain orchestrator and deliberately does not import Water/Traversal internals. It owns the narrow `MoveToQueryConstraintProvider` extension point.
+If the destination standing cell is filled to full local height and the cell above also contains Water, the destination is treated as deeper than one cell.
 
-Production composition adapts the same live mover constraint through `MoverTraversalQueryConstraintProvider`:
+If Geometry changes so existing Water temporarily exceeds the new capacity/profile, traversal is conservative: the destination is considered too deep until hydraulic redistribution resolves the state.
+
+## Destination-only rule
+
+The current constraint checks the **destination** depth.
+
+It does not reject an actor merely because its current source cell has become deeper than its tolerance.
+
+That means rising Water does not mechanically trap an actor forever:
+
+```text
+actor stands in now-overdeep Water
+        ↓
+neighbor destination is shallower/dry
+        ↓
+leaving edge can still be allowed
+```
+
+This is intentional current wading semantics.
+
+## Authoritative Movement checks
+
+The same production `WaterWadingConstraint` instance is supplied to both concrete Movement boundaries:
+
+```text
+MovementSystem.startStep(...)
+        ↓
+check destination depth now
+
+... simulation time passes ...
+
+MovementActionProcessor completion
+        ↓
+check destination depth again
+```
+
+Consequences:
+
+- if Water is already too deep, the edge never starts;
+- if Water rises during the timed edge, final Spatial commit is rejected and the actor remains at source;
+- if planning predicted an allowed edge but the world changes, execution remains safe.
+
+Compatibility/test Movement composition can use `ALLOW_ALL` when no dynamic mover constraint is configured.
+
+## MoveTo advisory filtering
+
+MoveTo owns a narrow query-constraint provider extension rather than importing Water directly.
+
+Production composition is:
 
 ```text
 Water + Geometry + mover definition
-              ↓
+           ↓
 WaterWadingConstraint
-              ↓
+           ↓
 MoverTraversalQueryConstraintProvider
-              ↓
+           ↓
 MoveToQueryConstraintProvider
-              ↓
+           ↓
 PathQuery.constraint
 ```
 
-The adapter composes the mover restriction with any caller-provided `PathTransitionConstraint`; it does not replace an existing query constraint.
+If a caller already supplied another `PathTransitionConstraint`, mover Water restriction is composed with it rather than replacing it.
 
-A route planned while a destination is already too deep can therefore avoid it when an alternative exists. The route remains disposable advice: every chosen edge still passes through authoritative Movement start/commit checks.
+Pathfinding can therefore avoid currently-too-deep destinations when a dry/shallow detour exists.
 
-## Revisions and high-churn Water
+The returned route is still disposable; Movement rechecks each real edge.
 
-Mover/environment facts are intentionally not folded into the landscape traversal revision. Hydraulic relaxation may change Water every simulation tick while a mover's semantic passability remains on the same side of its depth threshold.
+## Why raw Water changes do not invalidate Navigation
 
-Current production MoveTo searches run synchronously to a terminal search result without advancing simulation time between expansion chunks. They therefore read current Water during the query and immediately hand the resulting route to Movement.
+Hydraulic simulation may adjust Water volumes frequently. Many tiny volume changes do not cross the mover's semantic wading threshold.
 
-If path search later becomes genuinely resumable across authoritative world ticks, invalidation should be local/semantic: relevant threshold crossings should stale affected work rather than every raw Water quantity change everywhere.
+EvoForge therefore does not increment Landscape/Navigation traversal revision for every Water change.
 
-## Runtime composition
+Current production MoveTo search runs to a terminal computational result without simulation-time advancement between search chunks, so it reads one current Water state for that planning episode and immediately begins execution.
 
-`SimulationAssembly` creates one `WaterWadingConstraint` from object definitions, current Water and shared Geometry. The same instance is supplied to:
+If path search later truly spans authoritative ticks, invalidation should be threshold/region-aware through the query constraint's revision semantics—not “all paths stale whenever any Water cell changes anywhere”.
 
-```text
-MovementSystem
-MovementActionProcessor
-MoverTraversalQueryConstraintProvider -> MoveToSystem
-```
+## Finite bounds
 
-Planning and execution therefore use one semantic rule without moving Water into Navigation or duplicating threshold logic.
+Water Traversal has no special map-edge rule.
 
-## World bounds
+Shared `WorldGeometryLookup` closes space outside configured `WorldBounds`, so Navigation/Movement/liquid systems naturally agree on containment.
 
-Water traversal has no separate map-bound rule. If the runtime configures finite `WorldBounds`, the shared `WorldGeometryLookup` presents outside coordinates as closed `FullShape`, and Navigation/Movement/Water all observe that same boundary through their ordinary Geometry dependency.
+## Invariants
 
-An unbounded runtime remains valid when no bounds are configured. Generated/unloaded/streamed world containment is still a separate future problem.
+- Water quantity and Navigation topology remain separate facts.
+- Wading tolerance is definition data, not a content-name switch.
+- Volume is converted to depth through neutral Geometry.
+- Only destination Water depth is constrained by current wading semantics.
+- Planning and execution share one semantic rule.
+- Advisory planning never replaces authoritative Movement revalidation.
+- Raw Water micro-changes do not become structural traversal revision churn.
 
-## Deliberately absent
+## Current limitations
 
-- shallow-Water movement cost/speed penalties;
-- swimming locomotion;
-- boat/water-surface Navigation;
-- current force, slipping or knockback;
+Deliberately absent:
+
+- shallow-Water speed/cost penalty;
+- swimming;
+- water-surface/boat Navigation;
+- current-force/slip/knockback;
 - drowning/breathing;
-- mover body-volume collision with Water;
-- global path-cache invalidation from raw Water amounts;
-- temporal/space-time fluid traversal planning.
+- actor body-volume interaction;
+- global fluid-based path invalidation;
+- temporal fluid forecasting/planning.
 
-## Tests
+## Code and tests
 
-Headless/integration coverage includes mover-specific depth thresholds, optional Water-neutral behavior, deeper-than-one-cell detection, escape from over-deep source Water, generic Shape depth conversion, definition validation, Movement start rejection, Movement commit revalidation after Water changes, MoveTo query-constraint composition, preservation of caller constraint semantics, rain-created deep Water being avoided by MoveTo when a dry detour exists, and Water arriving during a timed edge preventing commit.
+Primary code lives with mover traversal/Water-wading integration and is composed in `SimulationAssembly` into Movement and MoveTo query adapters.
+
+Coverage includes depth thresholds, missing-profile Water-neutral behavior, >1-cell detection, escape from overdeep source Water, ramp/Shape depth conversion, Movement start and completion rejection, composed path constraints and rain-created detour cases.
+
+## Sources
+
+**Internal EvoForge design.** This is a deliberately simple finite-Water wading mechanic, not a biomechanical swimming/drag model.
+
+See [Water](../environment/water.md), [Geometry](../foundations/geometry.md), [Movement](movement.md), [Pathfinding](pathfinding.md), and [Definitions](../foundations/definitions.md).

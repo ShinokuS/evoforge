@@ -1,35 +1,40 @@
 # Occupancy
 
-## Purpose
+## In plain language
 
-Describe present-tense dynamic availability of discrete object space without duplicating authoritative object position and without absorbing structural Navigation rules.
+Occupancy answers: **can an exclusive object use this cell right now?**
 
-Occupancy answers a different question from Spatial:
+That is different from asking where an object is. Spatial owns position. Occupancy observes current positions and additionally owns temporary destination reservations for actions that have already started.
 
-```text
-Spatial    where is this object now?
-Occupancy  may an exclusive object claim this cell now?
-```
-
-## Ownership
-
-`SpatialSystem` remains the sole authoritative owner of `ObjectId → XYZ`.
-
-`OccupancySystem` owns only **execution-time destination reservations** and the identity of those reservations. It does not store a second occupied-position grid.
-
-`OCCUPIED` is derived from:
+A useful example:
 
 ```text
-CellObjectLookup
-    + ObjectLookup
-    + immutable OccupancyDefinitions
+Cow A is physically in cell 1
+Cow A starts moving to cell 2
+
+cell 1 -> OCCUPIED  (derived from Spatial)
+cell 2 -> RESERVED  (owned by Occupancy for the accepted move)
 ```
 
-`RESERVED` is authoritative state owned by Occupancy.
+Cow B cannot claim cell 2, but Occupancy has not pretended Cow A is already physically there.
+
+## Current status
+
+The read projection exposes three states:
+
+```text
+FREE
+OCCUPIED
+RESERVED
+```
+
+`OCCUPIED` is derived from current Spatial objects + immutable definition capability. `RESERVED` is authoritative temporary state owned by `OccupancySystem`.
+
+Occupancy does not store a second object-position grid.
 
 ## Definition capability
 
-An object definition may opt into the `occupancy` aspect:
+An object definition may opt into exclusive-cell occupancy:
 
 ```json
 {
@@ -39,179 +44,209 @@ An object definition may opt into the `occupancy` aspect:
 }
 ```
 
-The compiled fact is conceptually:
+Conceptually:
 
 ```text
-ObjectDefinitionId → requires exclusive cell?
+ObjectDefinitionId -> requires exclusive cell?
 ```
 
-Absence of the aspect means the object is transparent to exclusive occupancy.
+Absence means the object is transparent to exclusive occupancy under the current model.
 
-This is deliberately independent from other mechanics. A future bush may be spatially present, occupancy-transparent, slow traversal and provide concealment at the same time. Those are separate mechanic contributions rather than one universal physical flag.
+This is deliberately independent from movement, visibility, traversal cost or other mechanics.
 
-During `SimulationAssembly` setup, exclusive occupancy for a definition must be configured before instances of that definition are spatially placed. Object creation alone does not lock this choice; placement does, because placement already consumes the occupancy semantics.
+A bush can therefore be Spatially present but non-exclusive while a Cow is exclusive. The system does not branch on “Cow” or “Bush”; it reads definition capability.
 
-## Read projection
+## Meaning of the three states
 
-`OccupancyLookup` exposes exactly three current states:
+### `OCCUPIED`
+
+An exclusive object is physically present according to authoritative Spatial state.
+
+### `RESERVED`
+
+No exclusive object is physically present, but an accepted execution action owns an exclusive destination claim.
+
+### `FREE`
+
+Neither physical exclusive occupancy nor reservation exists.
+
+Structural impossibility is **not** another Occupancy state. Navigation separately determines whether an edge exists.
+
+## Asymmetric admission
+
+Non-exclusive objects do not require exclusive claims and may share cells with exclusive/reserved space.
+
+An exclusive object may share a cell with any number of non-exclusive objects, but not with another exclusive occupant/reservation.
+
+Examples:
 
 ```text
-FREE
-OCCUPIED
-RESERVED
+exclusive Cow + transparent Bush -> allowed
+exclusive Cow + transparent item -> allowed
+exclusive Cow + exclusive Cow    -> rejected
 ```
 
-Their meanings are:
+This rule applies during ordinary placement as well as Movement admission.
+
+## Reservation identity
+
+A successful exclusive claim mints an opaque monotonic `OccupancyReservationId`.
+
+The owning action stores that exact handle. Release requires matching:
 
 ```text
-OCCUPIED
-    an exclusive object is physically present in Spatial now
-
-RESERVED
-    no exclusive object is present, but an accepted execution action
-    owns the destination claim
-
-FREE
-    neither condition applies
+reservationId
+objectId
+destination coordinate
 ```
 
-Structural impossibility is **not** an Occupancy state. Navigation owns directed structural edges, so a destination may be structurally reachable from one direction and unreachable from another.
+A stale action therefore cannot accidentally release a newer action's reservation for the same object/cell.
 
-## Candidate admission
+Occupancy owns this reservation identity; it does not use Movement process IDs as its own identity model.
 
-Occupancy is asymmetric with respect to transparent objects.
+## Immediate destination only
 
-A non-exclusive object does not require an exclusive claim and may share a cell with exclusive or reserved space. An exclusive object may share a cell with any number of non-exclusive objects but may not enter a cell containing another exclusive occupant or another execution reservation.
+Occupancy reservations are **execution reservations**, not path reservations.
 
-Therefore examples such as these are valid:
+For a MoveTo route:
 
 ```text
-cow + bush      allowed if bush is non-exclusive
-cow + sword     allowed if sword is non-exclusive
-cow + cow       rejected
+current Spatial cell       OCCUPIED
+currently accepted next cell RESERVED
+all later path cells       unclaimed advice
 ```
 
-The system never branches on concrete object classes; definition capabilities select the behavior.
+A pathfinder route never locks an entire future corridor.
 
-## Execution reservations
+Future space-time/path-wide reservation is a separate multi-agent planning problem.
 
-A reservation protects only the **immediate destination of an already starting concrete action**. It is not a route reservation.
+## Movement start interaction
 
-For timed Movement:
+For an exclusive mover, after structural/cost/duration validation:
 
 ```text
-Spatial source        = OCCUPIED
-immediate destination = RESERVED
-later path cells      = not claimed
+try reserve immediate destination
+    ├─ physically exclusive occupant -> destination_occupied
+    ├─ another reservation           -> destination_reserved
+    └─ free                          -> return reservation handle
 ```
 
-`OccupancySystem` mints a monotonic opaque `OccupancyReservationId` when an exclusive destination claim is successfully acquired. The owner action stores that exact handle for its lifetime. Occupancy therefore owns reservation identity without depending on Movement-specific process ids.
+Only after successful admission does Movement create/schedule its action.
 
-Release requires the exact reservation identity, object id and destination. A stale action therefore cannot release another action's claim.
+Rejected claims do not:
 
-## Movement interaction
+- create Movement action state;
+- mutate Spatial;
+- consume movement timing carry;
+- leave a reservation behind.
 
-For an exclusive mover, start of one adjacent step is conceptually:
+If an exceptional later setup step fails, Movement releases the exact acquired reservation before propagating failure.
+
+## Completion interaction
+
+While the action sleeps:
 
 ```text
-validate Movement capability/source/adjacency/Navigation
-    ↓
-calculate shared TransitionCost and duration
-    ↓
-try to claim immediate destination
-    ├─ OCCUPIED → structured movement:destination_occupied rejection
-    ├─ RESERVED → structured movement:destination_reserved rejection
-    └─ FREE     → Occupancy returns a reservation handle
-                  create MovementAction
-                  store handle with the active action
-                  schedule completion
+source        = physically OCCUPIED
+reserved dest = RESERVED
+Spatial       = source
 ```
 
-A rejected occupancy claim therefore never creates Movement action state, never leaves a reservation and never mutates timing carry.
+At completion Movement revalidates source/topology/mover constraints and exact reservation ownership.
 
-If later action creation or scheduling fails exceptionally after a claim was acquired, Movement rolls the exact claim back before propagating the failure.
-
-During the timed action Spatial remains at the source, preserving the existing Movement contract.
-
-At completion Movement revalidates source, Navigation and exact reservation ownership. Successful completion commits `Spatial.move`, then releases the reservation and removes the action. Interrupted completion leaves Spatial unchanged, releases the reservation and removes the action.
-
-World changes do not currently wake a sleeping movement action immediately. Existing completion-time revalidation remains the lifecycle boundary.
-
-## Object placement
-
-Exclusive occupancy must also apply to initial/runtime placement; otherwise setup could create a state that Movement itself would never permit.
-
-`ObjectPlacementSystem` is the coordinated semantic mutation boundary:
+Successful commit:
 
 ```text
-object placement request
+Spatial.move(destination)
+release reservation
+remove MovementAction
+```
+
+Interrupted/invalid completion:
+
+```text
+Spatial unchanged
+release reservation
+remove MovementAction
+```
+
+This lifecycle is why `RESERVED` and later `OCCUPIED` are different observable states.
+
+## Placement interaction
+
+Initial/runtime object placement must obey the same exclusive rule; otherwise setup could create a state Movement itself would never allow.
+
+`ObjectPlacementSystem` is the coordinated semantic mutation:
+
+```text
+placement request
     ↓
 Occupancy admission
-    ↓ accepted
+    ↓
 SpatialSystem.place
 ```
 
-`SpatialSystem` itself remains a low-level position owner and does not learn Occupancy semantics.
+Spatial remains the low-level position owner and does not learn Occupancy policy.
 
-Non-exclusive objects may be placed into occupied/reserved cells. Exclusive objects receive structured `DESTINATION_OCCUPIED` / `DESTINATION_RESERVED` placement rejection.
+Exclusive occupancy configuration for a definition must be settled before instances of that definition are Spatially placed during assembly.
 
-## Determinism
+## Deterministic contention
 
-Current authoritative mutation is single-threaded and command delivery is synchronous. Competing claims therefore resolve by ordinary deterministic execution order:
+Current authoritative mutation is single-threaded and synchronous.
+
+For two competing reservation attempts:
 
 ```text
-first successful tryReserve → owns destination
-later tryReserve            → RESERVED
+first successfully executed tryReserve -> owns claim
+later attempt                          -> sees RESERVED
 ```
 
-There is no additional ObjectId priority, random arbitration or fairness policy in this milestone.
+There is currently no random arbitration, ObjectId priority, fairness queue or yielding policy.
 
-## Known consequence of current Movement semantics
+## Conservative corridor consequence
 
-Because an exclusive mover stays physically at its source while reserving its destination, narrow corridors have conservative throughput: a follower cannot claim the leader's source until the leader actually completes its step.
+Because a moving exclusive actor remains physically at its source until completion while reserving the destination, a follower in a narrow corridor cannot claim the leader's source early.
 
-This “caterpillar” behavior is currently intentional. Early source release, coordinated following, yielding and group movement would change multi-agent execution semantics and are deferred until real agents demonstrate the need.
+This produces conservative “caterpillar” throughput.
 
-## Does not own
+That behavior is intentional for the current atomic-edge model. Early source release, coordinated following, swaps and yielding would change multi-agent execution semantics and are deferred until real agents need them.
 
-Occupancy does not own:
+## Invariants
 
-- structural passability or directed transitions;
-- TransitionCost or terrain/object traversal modifiers;
-- object XYZ;
-- pathfinding or route lifecycle;
-- AI decisions to wait, replan, yield, push or swap;
-- concealment/visibility;
-- future space-time planning reservations.
+- Spatial is the only owner of actual object position.
+- `OCCUPIED` is derived; `RESERVED` is Occupancy-owned state.
+- Transparent objects do not block exclusive occupancy.
+- Exclusive objects never share with another exclusive occupant/reservation.
+- Reservation release requires exact owner identity.
+- Only the immediately executing destination is reserved.
+- Normal start/completion/cancellation paths do not orphan reservations.
+- Occupancy does not decide structural topology or pathfinding.
 
-Execution reservation and future planning reservation are distinct concerns. A path remains advice; only the next edge becomes authoritative when Movement successfully starts it.
+## Current limitations
 
-## Diagnostics and tests
+Deferred:
 
-The visualizer exposes an F5 Occupancy overlay and the cell inspector reports `FREE / OCCUPIED / RESERVED`.
-
-Headless coverage includes:
-
-- occupancy definition compilation/freeze;
-- transparent objects sharing cells with exclusive objects;
-- rejection of two exclusive occupants in one cell;
-- Occupancy-owned reservation identity and exact-owner release;
-- same-destination Movement contention;
-- source remaining physically `OCCUPIED` while destination is `RESERVED`;
-- rejected claims leaving Movement/timing behavior unchanged;
-- distinction between `RESERVED` and later physical `OCCUPIED`;
-- transparent movers sharing a cell with an exclusive object;
-- release after completion-time structural interruption;
-- setup ordering that prevents occupancy semantics changing after placement.
-
-## Deferred
-
-- path-wide / space-time reservations;
-- multi-cell footprints and capacity rules;
-- swap/displacement and pushing;
-- yielding, priorities, fairness and deadlock resolution;
-- coordinated following/group movement;
+- multi-cell footprints/capacity;
+- path-wide or space-time reservations;
+- swaps/pushing/displacement;
+- priority/fairness/yield/deadlock policy;
+- group movement/formation reservation;
 - early source release while in transit;
-- crowd-aware planning costs.
+- crowd-aware planning cost.
 
-These become active only when a real multi-agent consumer demonstrates which semantics are needed.
+## Code and tests
+
+Primary code:
+
+```text
+simulation/.../world/mechanics/occupancy/
+simulation/.../world/object/placement/
+```
+
+Coverage includes definition freeze, transparent sharing, exclusive conflicts, reservation identity/release, Movement contention, source/destination state during timed movement, interrupted completion cleanup and setup-order constraints.
+
+## Sources
+
+**Internal EvoForge design.** The derived-occupied + explicit-reservation model is project-specific.
+
+See [Spatial](../foundations/spatial.md), [Movement](movement.md), [Navigation](navigation.md), and [Architecture](../../architecture.md).

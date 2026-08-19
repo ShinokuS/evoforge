@@ -1,94 +1,89 @@
 # Movement
 
-## Purpose
+## In plain language
 
-Execute concrete actor movement as deterministic timed simulation work and compose long-range `MoveTo` intent over the same one-edge execution primitive.
+Movement is the system that turns “go to the neighboring cell” into a **real timed physical action**.
+
+Pathfinding may suggest a route, but a route is only advice. For every individual step Movement checks that the structural edge still exists, the actor is allowed to use it, the destination can be claimed, calculates how long the step takes, waits through simulation time, then checks everything important again before committing the object's authoritative Spatial position.
+
+`MoveTo` builds long-distance travel by repeating that same one-edge primitive. It never teleports an actor along a precomputed route.
+
+## Current status
+
+The production traversal chain is:
 
 ```text
-Pathfinder        disposable route advice
-        ↓
-MoveTo            route-level locomotion intent
-        ↓
-Movement          one concrete timed edge
-        ↓
-Navigation        structural edge exists
-TransitionCost    intrinsic edge price
-Traversal constraint current mover/environment restriction
-Occupancy         immediate destination claim
-MovementRate      price -> actor time
-Spatial           authoritative position commit
+Pathfinder          disposable long-range route advice
+     ↓
+MoveToSystem        owns route-level locomotion intent
+     ↓
+MovementSystem      owns one concrete timed edge
+     ↓
+Navigation          structural edge exists?
+TransitionCost      intrinsic edge price
+Mover constraint    actor/environment currently allows edge?
+Occupancy           immediate destination can be claimed?
+MovementRate        convert price into actor time
+Spatial             commit authoritative position
 ```
 
-Movement does not own topology, object identity, Spatial storage, Scheduler internals, pathfinding algorithms, Occupancy state, rendering or AI policy.
+Movement does not own topology, path search, Spatial storage, Occupancy storage, Scheduler internals, rendering or AI policy.
 
-## Result model
+## External movement intents
 
-Expected impossibility is structured data. Movement operations expose the common floor:
-
-```text
-accepted
-ResultCode
-```
-
-`ResultCode` is open namespaced data such as `movement:started`, `movement:destination_reserved` or `movement:traversal_restricted`. Generic Control and route orchestration do not maintain an exhaustive enum of every reason.
-
-Broken programming/configuration/ownership invariants remain exceptions.
-
-## External intent
-
-Current command-level locomotion intents are:
+Current Control-facing intents are:
 
 ```text
-MoveStepCommand(objectId, destination XYZ)
-MoveToCommand(objectId, goal XYZ)
+MoveStepCommand(objectId, destinationXYZ)
+MoveToCommand(objectId, goalXYZ)
 CancelMoveToCommand(objectId)
 ```
 
-`MoveStep` starts one adjacent timed attempt; it never teleports.
+### `MoveStep`
 
-`MoveTo` accepts one long-range locomotion intent. Acceptance is not the same as eventual arrival: the route may be `NO_PATH`, become unusable later, or be cancelled. `MoveToCompletion` retains the bounded latest terminal observation for that object.
+Starts at most one adjacent structural edge. Accepted means the timed edge was started, not that it already completed.
 
-`CancelMoveTo` requests route-level cancellation. It does not tear an already scheduled atomic edge out of Scheduler/Occupancy state.
+### `MoveTo`
 
-## One-edge start sequence
+Accepts route-level locomotion intent. It may later reach the goal, return `NO_PATH`, fail on a later changed edge, or be cancelled.
 
-A concrete edge is accepted only after:
+### `CancelMoveTo`
+
+Stops future route continuation. If an atomic edge is already accepted/scheduled, that edge may still complete; cancellation prevents the next route edge from starting.
+
+## One-edge start algorithm
+
+A concrete edge is accepted only after this order of checks/work:
 
 ```text
-object exists + is placed
-    ↓
-definition has MovementRate
-    ↓
-caller owns locomotion / no conflicting active action
-    ↓
-destination is one immediate neighbor
-    ↓
-Navigation exposes source -> destination
-    ↓
-current mover traversal constraint allows the edge
-    ↓
-shared TransitionCost is calculated
-    ↓
-MovementRate + fractional carry -> duration
-    ↓
-exclusive mover reserves the immediate destination through Occupancy
-    ↓
-MovementAction identity/state is created
-    ↓
-completion is scheduled
+1. object exists and is spatially placed
+2. object definition has MovementRate
+3. locomotion ownership is available / caller owns required claim
+4. destination is one immediate neighboring coordinate
+5. Navigation exposes source -> destination
+6. current mover traversal constraint allows the edge
+7. TransitionCost is calculated from authoritative structural/material facts
+8. MovementRate + timing carry calculate duration
+9. exclusive mover attempts immediate destination Occupancy reservation
+10. MovementAction state is created
+11. completion activation is scheduled
 ```
 
-Rejected starts create no action state and consume no timing carry. If exceptional scheduling fails after an Occupancy claim, Movement rolls back the exact reservation before propagating the failure.
+If an expected check fails, Movement returns a structured rejection and does not mutate timing carry or leave action/reservation state.
+
+If an exceptional scheduling/action-creation failure happens after a reservation was acquired, Movement rolls back the exact reservation before propagating the exception.
 
 ## Movement capability
 
-`MovementRate` is immutable definition data measured in transition-cost units per simulation tick. Absence of the definition aspect means ordinary self-propelled Movement is unavailable.
+`MovementRate` is immutable definition data measured in **transition-cost units per simulation tick**.
 
-Actor-specific environmental restrictions are separate. Current production composition supplies a `MoverTraversalConstraint` for Water wading; swimming/flying/climbing are not hidden inside MovementRate.
+A definition with no Movement rate does not have ordinary self-propelled Movement under the current model.
 
-## MovementAction and authoritative position
+Movement rate is independent from dynamic environmental restrictions. Current production separately composes Water wading; future swimming/climbing/flying would be separate locomotion semantics rather than hidden multipliers inside `MovementRate`.
 
-A `MovementAction` represents exactly one scheduled edge:
+## MovementAction state
+
+One in-flight edge owns a `MovementAction` containing:
 
 ```text
 MovementActionId
@@ -97,154 +92,243 @@ source XYZ
 destination XYZ
 ```
 
-`MovementStateStore` owns per-object timing carry, the active one-edge action, any attached Occupancy reservation identity and long-lived movement claim identity.
+`MovementStateStore` also owns per-object fractional timing carry and the exact reservation/claim identities associated with Movement-owned work.
 
-Spatial remains authoritative while the action is in flight:
+## Authoritative position while moving
 
-```text
-before completion  Spatial = source
-                   source derives OCCUPIED
-                   immediate destination may be RESERVED
-
-successful completion
-                   Spatial = destination
-                   reservation released
-```
-
-There is no authoritative fractional coordinate. Rendering interpolation, if used, is presentation-only.
-
-## Long-lived MovementClaim
-
-A route-level controller needs exclusive locomotion ownership even while no concrete edge is currently active, for example during planning or between child edges.
-
-`MovementClaimId` is an opaque token with:
+Spatial does not slide continuously between cells.
 
 ```text
-ObjectId -> 0..1 active MovementClaim
+edge starts
+    Spatial = source
+    source is physically OCCUPIED
+    destination may be RESERVED
+
+edge is in flight
+    Spatial still = source
+
+completion succeeds
+    Spatial = destination
+    reservation released
 ```
 
-`MoveTo` acquires one claim for its whole lifetime. Standalone `MoveStep` does not create a long-lived claim; its active edge supplies one-step exclusivity. A stale owner cannot release a newer claim because release requires the exact claim identity and object.
+Any interpolation is presentation-only.
 
-This contract is generic enough for future route-level controllers without adding `if MoveTo/Follow/Flee` branches to Movement state.
+This means all authoritative systems see one unambiguous discrete position at every tick.
 
-## Timing and carry
+## Long-lived locomotion claim
 
-Repeated per-edge ceiling would bias long-run speed. Movement carries integer remainder across accepted concrete edges.
-
-The current deterministic timing is equivalent to accumulating transition-cost remainder against the actor's `MovementRate`, with every edge clamped to at least one simulation tick.
-
-For `cost = 1000` and `rate = 300`, repeated equal edges produce:
+`MoveTo` needs to retain locomotion ownership while planning and between child edges. A route-level `MovementClaimId` provides exactly that.
 
 ```text
-step 1: 3 ticks, carry 100
-step 2: 3 ticks, carry 200
-step 3: 4 ticks, carry   0
+ObjectId -> zero or one active MovementClaim
 ```
 
-Carry belongs to the object's Movement state, so a MoveTo route and the equivalent sequence of manual concrete edges use the same timing physics.
+`MoveTo` acquires a claim for its whole lifetime. A standalone `MoveStep` does not need a long-lived claim because the active edge itself supplies immediate exclusivity.
+
+Release requires the exact claim identity so stale route/controller state cannot release a newer claim.
+
+This is a generic movement-ownership concept rather than a `MoveTo`-specific boolean.
+
+## Timing and fractional carry
+
+A naïve calculation that independently rounds every edge upward would systematically slow actors. EvoForge instead preserves integer remainder between accepted edges.
+
+For intrinsic edge cost `c`, actor rate `r`, and previous carry `q`, the implementation is equivalent in behavior to accumulating exact cost against the rate and retaining the remainder while requiring at least one tick per edge.
+
+A representative equal-edge sequence:
+
+```text
+cost = 1000
+rate = 300
+
+edge 1 -> 3 ticks, carry 100
+edge 2 -> 3 ticks, carry 200
+edge 3 -> 4 ticks, carry   0
+```
+
+Across the three edges:
+
+```text
+total cost = 3000
+total time = 10 ticks
+```
+
+which matches the long-run ratio `3000 / 300 = 10` rather than repeatedly applying an independent ceiling.
+
+Timing carry belongs to Movement state, so a route executed through `MoveTo` and the same accepted edge sequence issued manually share the same movement-time physics.
+
+Rejected starts do not consume carry.
 
 ## Completion-time revalidation
 
-Scheduled completion reloads the active action and revalidates current execution facts, including:
+A scheduled Movement completion does not blindly commit an old promise. It reloads the active action and rechecks current authoritative facts including:
 
-- object still exists and remains at the recorded source;
-- Navigation still exposes the edge;
-- current mover traversal constraint still allows the edge;
-- exact Occupancy reservation/commit conditions remain valid.
+- the object still exists;
+- the object is still at the recorded source;
+- Navigation still exposes the directed edge;
+- current mover/environment traversal policy still allows the edge;
+- the exact Occupancy reservation/commit conditions still belong to this action.
 
-Only a valid completion commits Spatial. Otherwise the object stays at its last committed cell. Normal terminal paths still release Movement-owned reservation/action state before completion is observed.
-
-A sleeping action currently discovers world invalidation at its scheduled completion rather than through reactive early wake-up.
-
-## Synchronous child completion
-
-`MovementActionProcessor` finishes Movement-owned work first:
+If all checks succeed:
 
 ```text
-commit Spatial if valid
-release exact reservation
+Spatial.move(source -> destination)
+release reservation
 remove MovementAction
+publish step completion
 ```
 
-Only then does it publish a narrow synchronous `MovementStepCompletion` through `MovementStepCompletionRelay`.
-
-A committed child edge may let MoveTo start the next edge in the same simulation tick. This adds no artificial route idle tick and remains safe because every concrete edge lasts at least one tick and Scheduler processes a fixed due batch.
-
-## Long-range MoveTo
-
-`MoveToSystem` orchestrates existing systems; it is not a second physical movement implementation.
+If an expected world change invalidates the action:
 
 ```text
-MoveToCommand
+Spatial remains at source
+release Movement-owned reservation
+remove MovementAction
+publish unsuccessful completion
+```
+
+The current model discovers such invalidation when the sleeping action wakes at its scheduled completion. Reactive early wake-up is deferred.
+
+## Completion relay and same-tick chaining
+
+`MovementActionProcessor` finishes Movement-owned state first:
+
+```text
+commit if valid
+release reservation
+remove action
+```
+
+Only then does it publish a narrow synchronous `MovementStepCompletion` through the completion relay.
+
+`MoveTo` may respond to a committed step by starting the next child edge in the same simulation tick. That does not recursively complete the new edge, because every edge duration is at least one tick and Scheduler dispatch uses a fixed due batch.
+
+## MoveTo algorithm
+
+`MoveToSystem` is route orchestration, not another movement engine:
+
+```text
+MoveTo request
     ↓
 acquire MovementClaim
     ↓
 Pathfinder.begin(PathQuery)
     ↓
+advance deterministic search until terminal
+    ↓
 PathRoute
     ↓
-start next edge through MovementSystem
+MovementSystem.startStep(next edge)
     ↓
 MovementStepCompletion
-    ├─ committed     -> next edge
-    └─ not committed -> terminal unsuccessful MoveTo
+    ├─ committed -> start next advised edge
+    └─ failed    -> terminate MoveTo
 ```
 
-It never mutates Spatial and does not bypass Movement to reach Navigation/TransitionCost/Occupancy execution APIs.
+`MoveTo` never mutates Spatial directly and does not execute Navigation/Occupancy transitions itself.
 
-### Mover-aware advisory planning
+### Computational search does not consume actor travel time
 
-Production MoveTo composes query-local mover constraints (currently Water wading) into `PathQuery`. This can avoid currently restricted edges during route advice.
+Current production MoveTo advances resumable `PathSearch` in deterministic expansion chunks but continues those chunks to a terminal search result without advancing simulation ticks between them.
 
-The route is still disposable. Every real edge is revalidated by Movement at start and completion; later cells are not reservations or promises.
+Pathfinder CPU work is not actor movement time.
 
-`MoverDestinationAccessResolver` exposes a cheaper local necessary-condition query for consumers that own candidate destinations. A non-current destination is locally enterable only when at least one structural incoming Navigation edge also passes the current mover traversal policy. This can discard obviously impossible destination cells before starting an expensive path search.
+If future profiling justifies asynchronous/background path computation, its simulation-time visibility must be designed explicitly rather than allowing machine speed to change actor speed.
 
-That helper is deliberately not a second pathfinder: it does not prove connectivity from the actor's current position, inspect a whole route, reserve Occupancy, or authorize movement. A locally enterable destination may still produce `NO_PATH`; MoveTo remains the global route authority.
+## Advisory mover-aware routing
 
-### Computational search versus simulation time
+MoveTo can compose query-local `PathTransitionConstraint`s. Production uses the same mover Water-wading semantics to avoid already-overdeep destinations during planning.
 
-The first production consumer advances a `PathSearch` in deterministic expansion chunks until terminal without advancing simulation time between chunks. Pathfinder CPU cost is not actor travel time.
+This remains **advice**:
 
-If representative profiling later requires background/resumable computation across simulation ticks, that scheduling must be designed explicitly rather than making actor speed depend on algorithm runtime.
+```text
+query-time constraint can avoid a currently bad edge
+        ↓
+route returned
+        ↓
+Movement still rechecks each edge at start and completion
+```
+
+A route never reserves every future cell.
+
+`MoverDestinationAccessResolver` provides an even cheaper local necessary-condition check: a non-current destination is locally enterable only if at least one structural incoming edge also passes current mover policy. It does not prove connectivity from the actor's location and is not a second pathfinder.
 
 ## Cancellation semantics
 
-`MoveToSystem.cancel(objectId)` implements safe route-level cancellation.
+If no child edge is active, route cancellation completes immediately and releases the route claim.
 
-If no concrete child edge is active, cancellation completes immediately and releases the MovementClaim.
-
-If an atomic edge is already scheduled:
+If one edge is already in flight:
 
 ```text
 cancel requested
-    ↓
-current MovementAction is allowed to complete normally
-    ↓
-no next route edge is started
-    ↓
-MoveTo finishes with movement:move_to_cancelled
-    ↓
-route claim is released
+     ↓
+current atomic edge may finish normally
+     ↓
+no next child edge starts
+     ↓
+MoveTo terminal = cancelled
+     ↓
+MovementClaim released
 ```
 
-Therefore a cancellation may move the object by **at most the already accepted current edge**. It never leaves an Occupancy reservation or scheduled Movement action orphaned.
+Therefore cancellation may move the actor by **at most the already accepted current edge**.
 
-Mid-edge cancellation that would revoke/rewrite already scheduled atomic work is not implemented.
+This avoids orphaned scheduler work/reservations and preserves the atomic-edge contract.
 
-## Diagnostics and tests
+## Result model
 
-Headless coverage includes deterministic edge timing/carry, Occupancy reservation lifecycle, topology and traversal revalidation, MoveTo ownership and chaining, `NO_PATH`/source-equals-goal terminals, stale/blocked later route edges, multi-Z Ramp execution, Water-aware planning/commit checks, local mover-destination eligibility, open result propagation and safe route-level cancellation.
+Expected Movement impossibility is structured data using the common `accepted + ResultCode` model. Codes are open namespaced values such as:
 
-The visualizer exposes Move/Cancel Move through cell-centric object interaction and reads active MoveTo routes through the authoritative read projection rather than invoking its own execution logic.
+```text
+movement:started
+movement:destination_reserved
+movement:traversal_restricted
+movement:move_to_cancelled
+```
 
-## Deferred
+Broken internal/configuration invariants remain exceptions.
 
-- mid-edge atomic-action cancellation and retained Scheduler task handles;
-- immediate/reactive wake-up on world mutation;
-- automatic waiting/replanning/yielding inside MoveTo;
-- actor-specific terrain affinity beyond current Water-wading constraints;
-- falling, climbing, jumping, swimming and flying;
+## Invariants
+
+- Movement executes one immediate edge at a time.
+- Pathfinding/MoveTo never teleport or mutate Spatial directly.
+- In-flight Spatial remains at source until successful completion.
+- Accepted exclusive edges own only the immediate destination reservation.
+- Rejected starts leave no reservation/action and consume no timing carry.
+- Start and completion both revalidate current structural/mover facts.
+- Timing uses persistent remainder so long-run speed is unbiased by per-edge rounding.
+- Route advice is disposable; each real edge is authoritative only when Movement accepts it.
+- Route cancellation never orphans an already scheduled atomic edge.
+
+## Current limitations
+
+Not yet implemented:
+
+- mid-edge interruption/task cancellation;
+- reactive early wake-up from world mutation;
+- automatic wait/replan/yield inside MoveTo;
+- falling, climbing, jumping, swimming or flying;
+- actor-specific surface affinities beyond current Water wading;
 - path-wide/space-time reservations;
-- swap/displacement, pushing, deadlock resolution and coordinated multi-agent movement;
-- persistent route caches and moving-target tracking.
+- swaps/pushing/displacement/deadlock policy;
+- persistent/moving-target route tracking.
+
+## Code and tests
+
+Primary code lives under:
+
+```text
+simulation/.../world/mechanics/movement/
+simulation/.../world/pathfinding/   route advice
+```
+
+Headless coverage includes timing/carry, reservation lifecycle, start/commit revalidation, route ownership/chaining, cancellation, ramps, mover constraints and multi-agent contention. Visualizer movement tools invoke the same Control/domain path and only observe active state.
+
+## Sources
+
+**Internal EvoForge design.** Timed atomic-edge execution, carry, ownership and route orchestration are project mechanics.
+
+Path search itself follows A* lineage; see [Pathfinding](pathfinding.md) and [References](../../references.md).
+
+See [Navigation](navigation.md), [Transition Cost](traversal-cost.md), [Occupancy](occupancy.md), [Water Traversal](water-traversal.md), [Spatial](../foundations/spatial.md), and [Time](../foundations/time.md).
