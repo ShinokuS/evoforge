@@ -8,12 +8,10 @@ public record MountainCalibration(
         int candidateSpacingCells,
         int candidateActivationPpm,
         int typicalHalfWidthCells,
+        int typicalLongAxisCells,
         long typicalUpliftSubunits,
-        int ridgeHalfLengthCells,
-        int peakSpacingCells,
         int peakSharpnessPpm,
         int sharpnessMilli,
-        int branchProbabilityPpm,
         boolean plateausEnabled,
         int plateauProbabilityPpm,
         long baseTerrainCeilingSubunits,
@@ -23,13 +21,14 @@ public record MountainCalibration(
         if (width <= 0 || height <= 0 || area <= 0 || (long) width * height != area) {
             throw new IllegalArgumentException("mountain calibration dimensions must be positive and consistent");
         }
-        if (candidateSpacingCells <= 0 || typicalHalfWidthCells <= 0
-                || ridgeHalfLengthCells < 0 || peakSpacingCells <= 0 || sharpnessMilli <= 0) {
+        if (candidateSpacingCells <= 0
+                || typicalHalfWidthCells <= 0
+                || typicalLongAxisCells < typicalHalfWidthCells
+                || sharpnessMilli <= 0) {
             throw new IllegalArgumentException("mountain calibrated spatial values are invalid");
         }
         requireNormalized(candidateActivationPpm, "candidateActivationPpm");
         requireNormalized(peakSharpnessPpm, "peakSharpnessPpm");
-        requireNormalized(branchProbabilityPpm, "branchProbabilityPpm");
         requireNormalized(plateauProbabilityPpm, "plateauProbabilityPpm");
         if (typicalUpliftSubunits < 0L) {
             throw new IllegalArgumentException("typicalUpliftSubunits must be non-negative");
