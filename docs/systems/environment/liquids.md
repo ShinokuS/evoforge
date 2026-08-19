@@ -1,279 +1,336 @@
 # Liquids
 
-## Purpose
+## In plain language
 
-Provide deterministic liquid mechanics that are not defined by Water-specific gameplay.
+EvoForge models liquid as **finite volume that must actually fit somewhere**. Water is the first real liquid, but the storage/flow/Soil-retention foundation is generic: the hydraulic solver does not contain a list saying “if Water do this, if blood do that”.
 
-The current architecture separates two physical states:
+The model distinguishes two physical states:
 
 ```text
 free liquid
-    -> occupies world-cell free volume
-    -> moves through Geometry
+  occupies open cell volume and can flow through Geometry
 
 retained Soil liquid
-    -> occupies pore capacity inside porous terrain
-    -> does not participate in free hydraulic flow while retained
+  occupies pore capacity inside porous Terrain and does not participate in free flow while retained
 ```
 
-Water is the first production liquid identity. Other identities can reuse the same storage, transport and Soil-retention mechanics without copying Water code.
+A puddle, lake or falling column is therefore free liquid. Water held inside Soil is retained constituent state owned by a different system.
+
+## Current status
+
+Implemented now:
+
+- one open `LiquidTypeId` identity per occupied free-liquid cell;
+- finite normalized free-liquid volume;
+- deterministic Geometry-aware hydraulic redistribution;
+- explicit kinematic-viscosity transport property;
+- generic porous-Soil infiltration for any configured liquid;
+- several retained constituents sharing one Soil pore capacity;
+- generic material-owned surface retention before same-level runoff;
+- sparse mutation-maintained surface/active-frontier projections;
+- deterministic dormancy when no meaningful hydraulic transfer remains;
+- source-neutral flow diagnostics that can be filtered by liquid identity.
+
+Free-liquid mixtures, density/buoyancy, pressure/inertia, surface tension and chemistry are deliberately not implemented.
 
 ## Free-liquid ownership
 
-`LiquidSystem` is the single authoritative owner of free-liquid quantity:
+`LiquidSystem` is the single authoritative owner of free liquid:
 
 ```text
 XYZ -> dry
-   or
-XYZ -> one LiquidTypeId + finite volume
+or
+XYZ -> LiquidTypeId + finite volume
 ```
 
-`LiquidLookup` is read-only. `LiquidStorage` is an implementation boundary; the current `SparseLiquidStorage` allocates state only for wet cells.
+`LiquidLookup` is read-only. Current `SparseLiquidStorage` is an implementation detail that allocates state only for wet cells.
 
-Liquid volume uses the normalized `CellVolume` scale:
+One runtime liquid world has one shared `LiquidSystem` and one shared `LiquidFlowSystem`. Typed facades such as `WaterSystem` filter/adapt that truth; they do not create another hydraulic authority.
+
+## Volume units
+
+Free-liquid quantity uses normalized `CellVolume`:
 
 ```text
 EMPTY = 0
 FULL  = 1_000_000
 ```
 
-The scale is a fraction of one discrete cell volume, not litres.
+This is a fraction of one simulation cell's free volume, **not litres**.
 
-One runtime free-liquid world composes one `LiquidSystem` and one shared `LiquidFlowSystem`. Typed facades may filter this state, but must not create a second hydraulic authority over the same cells.
+When a mechanic needs real physical volume (for example Water drinking), `PhysicalSpaceScale` provides the cell's real size and the mechanic performs the conversion explicitly.
 
-## Identity and transport definitions
+## Liquid identity and transport properties
 
-`LiquidTypeId` is an open semantic identifier, not a central enum of known liquids. Concrete identities remain domain-owned; Water owns `WaterSystem.TYPE`.
+`LiquidTypeId` is an open semantic identifier. Water owns its own `WaterSystem.TYPE`; generic liquid code does not maintain a central enum of all possible liquids.
 
-A liquid that participates in transport must have explicit `LiquidTransportProperties`. The current physical property is kinematic viscosity, stored as square micrometres per second. `LiquidTransportDefinitions` is mutable only during composition and frozen for runtime use.
+A transported liquid must have explicit `LiquidTransportProperties`. The current property is **kinematic viscosity**, stored in square micrometres per second.
 
-There is no silent transport default for arbitrary liquid identities. Missing transport data is a configuration error.
+Reference viscosity:
 
-`LiquidTransportProperties.reference()` represents the reference viscosity of `1 mm²/s`. Water is registered with this reference value in `SimulationAssembly`, preserving the previously accepted Water cadence.
+```text
+1 mm²/s
+```
 
-Transport uses deterministic fixed-point inverse-viscosity scaling:
+is represented by `LiquidTransportProperties.reference()`. Production Water uses that reference value, preserving the accepted baseline cadence.
+
+Missing transport data is invalid configuration; there is no silent “assume Water” fallback.
+
+## Viscosity and mobility
+
+The current deterministic inverse-viscosity scaling is conceptually:
 
 ```text
 mobility(nominal, liquid)
     = nominal * referenceViscosity / liquidViscosity
 ```
 
-with `CellVolume` bounds and integer arithmetic.
+where:
 
-The factor is applied once to the planned hydraulic edge transfer. Aggregate source limiting remains a numerical conservation/stability bound and does not apply viscosity a second time.
+- `nominal` is the amount/rate the reference-viscosity model would allow;
+- `referenceViscosity` is the model reference;
+- `liquidViscosity` is the configured constituent property.
 
-The same mobility function converts Soil material permeability into a liquid-specific infiltration rate. This keeps material permeability and liquid viscosity independent rather than encoding identity-pair tables.
+A more viscous liquid therefore transfers/infiltrates more slowly under otherwise identical conditions.
 
-## Current free-liquid composition invariant
+The viscosity factor is applied once to the physical transfer rate. Aggregate source limiting later enforces conservation/stability and must not apply viscosity a second time.
 
-An occupied free-liquid cell currently contains one liquid type.
+## Current free-liquid composition rule
+
+One occupied free-liquid cell currently contains **one** liquid type.
 
 ```text
 wine + dry cell   -> allowed
-wine + wine       -> allowed within capacity
-wine + blood      -> no implicit transfer/mixing
+wine + wine       -> allowed up to capacity
+wine + blood      -> no implicit mixing/overwrite
 ```
 
-`LiquidSystem.addAtMost(...)` never overwrites another resident type. The flow solver also rejects transfer across unlike occupied cells.
+`LiquidSystem.addAtMost(...)` never replaces another resident type.
 
-If several unlike sources simultaneously target the same dry destination, every contested inflow is suppressed for that step. Stable iteration order therefore cannot become an accidental mixing-priority rule.
+If unlike occupied cells meet, transfer across that interface is blocked. If several unlike sources target the same dry destination in one solve, contested inflows are suppressed rather than letting iteration order decide which identity “wins”.
 
-This is an explicit temporary boundary, not a claim that real liquids cannot mix. Multi-component free-liquid composition remains a separate milestone.
+This is a deterministic temporary boundary, not a physical claim that real liquids cannot mix.
 
-## Generic hydraulic flow
+## Geometry-aware hydraulic model
 
-`LiquidFlowSystem` owns deterministic redistribution of free-liquid quantity while `LiquidSystem` remains the state owner.
+`LiquidFlowSystem` redistributes free-liquid volume while `LiquidSystem` remains the quantity owner.
 
-The solver uses:
+The solver uses neutral Geometry facts:
 
-- Shape-derived free capacity;
-- shared face opening floors;
-- hydraulic head from world Z and local liquid surface height;
-- two-phase plan / limit / commit updates;
-- exact finite-volume conservation;
-- deterministic proportional limiting;
-- fixed-point relaxation;
-- explicit liquid transport properties;
-- sparse active frontier and dormancy;
-- aggregate coherent latest-step flow diagnostics.
+- cell free capacity;
+- `freeVolumeBelow(height)` profiles;
+- physical face opening floors;
+- world-space Z;
+- current local liquid surface height.
 
-Hydraulic Geometry does not switch on concrete identities such as Water, blood or wine.
+It never branches on concrete Shape classes.
 
-`LiquidFlowProcess` owns scheduled cadence. It runs while the shared activity frontier contains work and stops at dormancy. A narrow `LiquidFlowPreparation` hook allows deterministic work immediately before transport; current hydrology uses it for Soil infiltration.
+### Hydraulic head
 
-### Flow diagnostics and visible motion
+The useful scalar for current local transfer is conceptually:
 
-The hydraulic solver may execute several simultaneous edge transfers through one cell in the same deterministic step. Diagnostics do not expose whichever individual edge happened to have the largest amount. They first sum the signed transfer vectors for that cell and publish the dominant axis of the resulting **coherent net transfer**.
+```text
+hydraulicHead = worldCellBaseHeight + localLiquidSurfaceHeight
+```
 
-This matters for a settling pool. Equal or nearly equal flows arriving from opposite sides are real hydraulic work, but they do not imply a strong surface current in either direction:
+Two adjacent compatible free regions can exchange liquid when their heads differ enough and the shared face is physically open at the relevant level.
+
+Local liquid surface height is derived by inverting the Shape's free-volume profile through `CellSpace.surfaceHeight(...)`; equal volume can therefore produce different height on different geometry.
+
+### Vertical falling
+
+A valid downward physical opening allows falling into lower free capacity. Surface-retention reserve does not reduce valid vertical falling.
+
+### Two-phase plan / limit / commit
+
+A hydraulic step is structured so iteration order cannot spend volume twice:
+
+```text
+1. inspect one stable pre-step state
+2. plan candidate directed transfers
+3. apply per-source aggregate limits proportionally
+4. resolve unsupported unlike-liquid contention
+5. commit all accepted transfers
+6. publish diagnostics / next active frontier
+```
+
+No destination is incrementally filled while later neighbors are still planning against a different state.
+
+### Conservation
+
+For pure transport, total free-liquid volume is exactly conserved:
+
+```text
+Σ volume_before = Σ volume_after
+```
+
+Sources/sinks such as precipitation, evaporation, drinking or Soil retention report their own exact transferred amount separately.
+
+### Fixed-point relaxation and dormancy
+
+The solver uses deterministic integer/fixed-point transfer rules and a small transfer deadband/relaxation policy to converge to a stable local state rather than oscillating forever around sub-unit differences.
+
+Only cells in the sparse active frontier are reconsidered. When no candidate work remains:
+
+```text
+active frontier empty
+→ LiquidFlowProcess becomes dormant
+→ no periodic hydraulic task remains
+```
+
+A later successful free-liquid mutation activates the affected region again.
+
+This is simulation scheduling behavior, not renderer LOD.
+
+## Generic Soil retention
+
+`SoilLiquidSystem` owns retained constituent amounts inside porous Terrain.
+
+Multiple constituents can coexist because retained state is a composition map sharing one material-owned capacity:
+
+```text
+pore capacity        = 100_000
+retained Water       =  60_000
+retained constituent B = 25_000
+retained constituent C =  5_000
+remaining capacity  =  10_000
+```
+
+This represents finite pore occupancy only. It does not simulate chemical mixing, diffusion, reactions, phase separation or displacement.
+
+## Soil infiltration
+
+Porous Terrain supplies current `SoilProperties`:
+
+```text
+capacity      total retained-liquid pore volume
+permeability  nominal reference-viscosity uptake per tick
+```
+
+A material without Soil properties is non-absorbing.
+
+For an incoming liquid:
+
+```text
+effectiveRate
+  = permeability * referenceViscosity / liquidViscosity
+
+accepted
+  = min(requestedFreeVolume,
+        remainingPoreCapacity,
+        effectiveRate)
+```
+
+`SoilLiquidInfiltrationSystem` runs immediately before hydraulic transport for active free-liquid cells:
+
+```text
+free liquid touching supporting porous Terrain
+        ↓
+retain accepted amount in SoilLiquidSystem
+        ↓
+remove exactly same accepted amount from LiquidSystem
+        ↓
+excess remains free and may flow/run off
+```
+
+The identity is preserved; this is not a Water-only exchange path.
+
+## Surface retention before horizontal runoff
+
+A supporting landscape material may declare generic microtopographic surface-retention capacity.
+
+This reserve is:
+
+- still **free liquid**;
+- different from Soil pore retention;
+- material-owned and currently liquid-neutral;
+- applied to same-level horizontal runoff;
+- not applied to vertical falling.
+
+Conceptually, horizontal transfer may spend only the source volume above its supporting-surface reserve.
+
+A future contact-angle/surface-tension model would need explicit physical properties rather than another Water-specific storage subsystem.
+
+## Liquid surfaces and diagnostics
+
+### Surface projection
+
+`LiquidSurfaceLookup` maintains sparse highest-liquid information by XY column. It can return the highest free liquid overall or the highest cell of a requested `LiquidTypeId` without scanning world space.
+
+It owns no quantity.
+
+### Coherent flow diagnostics
+
+A solver step can contain several simultaneous edge transfers through one cell. Diagnostics aggregate signed transfer vectors before choosing a dominant direction.
+
+Example:
 
 ```text
 400 east + 400 west -> no coherent net direction
 500 east + 480 west -> small eastward net direction
 ```
 
-`LiquidFlowSample` is therefore a read-side diagnostic projection, not a second velocity state and not part of conservation math.
+`LiquidFlowSample` is an observation of the latest authoritative transfer step, not persistent velocity state.
 
-Water presentation adds one further read-side distinction: a horizontal coherent flux is animated only when it is significant relative to the Water currently occupying that cell. The same small absolute flux can remain visible in a shallow puddle while being visually calm in a deep lake. Downward falling remains visible whenever an actual downward net transfer exists.
-
-This visual significance rule never stops or modifies authoritative hydraulic work. The solver continues until its fixed-point transfer deadband produces no more work and the sparse activity frontier becomes dormant. Multi-cell regression coverage removes a localized volume from a 9×9 pool and proves exact mass accounting, local integer hydraulic equilibrium, dormancy and state stability after dormancy.
-
-## Generic Soil retention
-
-`SoilLiquidSystem` is the authoritative owner of retained liquid composition inside porous terrain.
-
-Several constituents may occupy one Soil cell, but all compete for one material-owned pore capacity:
-
-```text
-Soil pore capacity = 100_000
-retained Water     =  60_000
-retained blood     =  25_000
-retained wine      =   5_000
-remaining capacity =  10_000
-```
-
-This retained composition is bookkeeping for porous occupancy. It does not implement molecular mixing, reactions, displacement, diffusion, phase separation or derived mixture properties.
-
-`SparseSoilLiquidStorage` is the current sparse implementation. `SoilLiquidLookup` exposes constituent amounts and total retained volume. `SoilLiquidCellsLookup` exposes deterministic occupied-cell iteration.
-
-## Soil physical properties
-
-Porous behavior belongs to the terrain material through `SoilProperties`:
-
-```text
-capacity      -> total pore volume available to all retained liquids
-permeability  -> nominal per-tick uptake conductance for the reference-viscosity liquid
-```
-
-A landscape definition without `SoilProperties` is non-absorbing.
-
-`TerrainSoilPropertiesLookup` resolves material properties and optional deterministic coordinate-local capacity variation. Variation changes capacity only; it does not randomize retained contents or permeability and consumes no runtime RNG stream.
-
-Infiltration for one contact step is bounded by:
-
-```text
-requested free volume
-remaining shared pore capacity
-viscosity-adjusted material permeability
-```
-
-Conceptually:
-
-```text
-effectiveRate
-    = permeability * referenceViscosity / liquidViscosity
-
-accepted
-    = min(requested, remainingCapacity, effectiveRate)
-```
-
-All arithmetic is deterministic fixed-point integer math.
-
-This replaces the old Water-only `SoilHydrology` / `SoilMoistureSystem` model and the speculative liquid×material interaction table. Different liquid uptake now emerges from independent physical inputs: material permeability and liquid viscosity.
-
-## Free liquid -> Soil infiltration
-
-`SoilLiquidInfiltrationSystem` handles every active free-liquid identity through the same mechanism before the hydraulic solve:
-
-```text
-active free liquid
-       |
-       v
-supporting porous terrain
-       |
-       v
-SoilLiquidSystem
-       |
-       +--> accepted constituent retained
-       |
-       `--> excess remains free
-```
-
-The amount successfully retained is exactly the amount removed from free-liquid authority. If pore capacity or the current permeability/viscosity rate is exhausted, the remainder stays free and can run off or form a puddle.
-
-No Water-specific exchange adapter exists in the final composition. Runtime wiring uses `SoilLiquidInfiltrationSystem` directly.
-
-## Surface retention before horizontal runoff
-
-Supporting terrain may declare a generic `SurfaceRetentionDefinitions` capacity. `TerrainSurfaceRetentionLookup` exposes that material-owned microtopographic reserve through:
-
-```java
-capacityAt(x, y, z)
-```
-
-This is free-liquid volume retained on the supporting surface before same-Z horizontal runoff. It is distinct from Soil pore retention and remains part of authoritative free-liquid quantity.
-
-The current capability is intentionally material-owned and liquid-neutral. If future wetting physics requires surface tension, contact angle or another liquid-dependent effect, add the physical capability that the mechanic actually needs rather than a concrete liquid/material pair switch.
-
-Vertical falling is not reduced by this surface reserve.
-
-The former Water-only `SurfaceWaterStorage*` definitions/lookups were removed; there is one generic surface-retention capability.
-
-## Derived free-liquid surfaces
-
-`LiquidSurfaceLookup` is a mutation-maintained sparse projection by XY column. It can resolve the highest free liquid overall or the highest cell of a requested `LiquidTypeId` without scanning world space.
-
-Derived surfaces own no quantity. They exist for exposure, presentation and other read-side consumers.
+Water presentation may additionally suppress visually insignificant horizontal coherent flux relative to local Water amount while still showing real downward falling. That is presentation-only; it never suppresses solver work.
 
 ## Water integration
 
-Water remains a narrow semantic integration over the generic foundation:
-
 ```text
-shared mechanics
+shared generic owners
   LiquidSystem
   LiquidFlowSystem
   SoilLiquidSystem
   SoilLiquidInfiltrationSystem
-          |
-          v
-      WaterSystem
-          |
-          +-- precipitation source semantics
-          +-- Water evaporation semantics
-          +-- Water wading constraint
-          `-- Water presentation/diagnostics
+        ↓
+WaterSystem typed facade
+        ├─ precipitation
+        ├─ evaporation
+        ├─ drinking provider
+        ├─ wading constraint
+        └─ Water presentation/diagnostics
 ```
 
-`WaterSystem` owns only the Water identity and typed read/mutation facade. `WaterFlowLookup.from(...)` filters generic coherent-flow diagnostics for Water; there is no second Water transport solver.
+Water-specific semantics do not automatically apply to another liquid merely because it shares generic transport.
 
-Current precipitation and evaporation remain Water-specific because atmosphere semantics are not automatically shared by every liquid. Reusing generic transport or Soil retention does not imply that another constituent satisfies Thirst, evaporates on Water's schedule, uses Water wading rules or shares Water presentation.
+## Invariants
 
-See [Water](water.md) and [Surface Hydrology](hydrology.md).
+- Free-liquid quantity has one authoritative owner.
+- One runtime free-liquid world has one shared hydraulic solver.
+- Liquid identities are open; generic mechanics contain no concrete-liquid catalog/switch.
+- Every transported liquid has explicit transport properties.
+- Viscosity affects transfer exactly once through the mobility calculation.
+- Current free cells are single-component and unsupported unlike contact blocks deterministically.
+- Pure transport conserves exact total volume.
+- Retained constituents share one Soil pore capacity.
+- Soil infiltration combines independent Terrain permeability and liquid viscosity.
+- Surface retention is free-liquid reserve, not Soil moisture.
+- Dormant hydraulics schedule no work until a relevant mutation wakes them.
+- Read-side surfaces/flow samples never become second authorities.
 
-## Deliberately deferred
+## Current limitations
 
-This foundation does not yet define:
+Not implemented:
 
-- multi-component free-liquid cells;
-- miscibility or phase separation;
-- density layering and buoyancy;
-- surface tension/contact-angle wetting physics;
-- temperature, freezing or boiling;
-- chemical reactions or biological decay;
-- diffusion, displacement or leaching between retained Soil constituents;
-- generic precipitation/evaporation for arbitrary liquids;
-- generic traversal hazards or presentation for arbitrary liquids.
+- multi-component free-liquid mixtures;
+- miscibility/phase separation;
+- density/buoyancy layering;
+- pressure/inertia/turbulence/viscous momentum solver;
+- surface tension/contact-angle wetting;
+- temperature/freezing/boiling;
+- chemistry/biological decay;
+- diffusion/displacement/leaching between retained constituents;
+- arbitrary-liquid precipitation/evaporation/traversal semantics;
+- automatic arbitrary Geometry-change displacement/wake coordination.
 
-Kinematic viscosity is **not** deferred: it is already an explicit transport property used by free flow and porous infiltration.
+## Code and tests
 
-## Engineering rules
+Primary runtime code lives in the liquid/Soil mechanic packages and is wired once by `SimulationAssembly`.
 
-1. Free-liquid quantity has one authoritative owner.
-2. One free-liquid world has one shared hydraulic solver.
-3. Liquid identities are open and domain-owned; generic code contains no concrete-liquid catalog or switches.
-4. Every transported liquid has explicit transport properties; missing definitions fail rather than silently default.
-5. Kinematic viscosity changes mobility once per physical transfer calculation.
-6. Soil pore capacity and permeability belong to terrain material data.
-7. All retained constituents share one Soil pore capacity.
-8. Generic Soil infiltration accepts arbitrary liquid identities and combines material permeability with liquid viscosity.
-9. Surface microtopographic retention is a separate free-liquid capability from Soil pore retention.
-10. Unsupported free-liquid composition blocks explicitly instead of depending on collection ordering.
-11. Retained multi-constituent state must not be mistaken for implemented chemistry.
-12. Free-liquid flow and free-to-retained transfer remain deterministic and exactly volume-accounted.
-13. Scheduling stops at hydraulic dormancy.
-14. Flow diagnostics aggregate coherent net transfer and never become an alternative hydraulic state.
-15. Presentation may suppress insignificant coherent motion but must never suppress authoritative flow work.
-16. Presentation and typed facades are observers/adapters, never alternative liquid authorities.
+Headless tests cover finite mutations, capacity, vertical/horizontal Geometry flow, conservation, deterministic no-mix contact, viscosity-dependent mobility, run-on Soil infiltration, shared pore capacity, surface retention, dormancy/reactivation and multi-cell fixed-point stability.
 
-See [Decision 007](../decisions/007-liquid-transport-and-composition-boundary.md) for the architectural boundary.
+## Sources
+
+**Internal EvoForge model:** the current local finite-volume head-relaxation solver, active-frontier scheduling, single-component contact rule and surface-retention mechanism are project-specific deterministic mechanics. EvoForge does not claim to implement Navier–Stokes or a published CFD solver.
+
+See [Water](water.md), [Surface Hydrology](hydrology.md), [Soil Hydraulics](soil-hydraulics.md), [Geometry](../foundations/geometry.md), [ADR-007](../../decisions/007-liquid-transport-and-composition-boundary.md), and [References](../../references.md).

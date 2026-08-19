@@ -38,7 +38,21 @@ Important conceptual reference for separating large-scale uplift from hydraulic 
 
 K. E. Saxton, W. J. Rawls. **“Soil Water Characteristic Estimates by Texture and Organic Matter for Hydrologic Solutions.”** *Soil Science Society of America Journal* 70, 1569–1578, 2006. DOI: [10.2136/sssaj2005.0117](https://doi.org/10.2136/sssaj2005.0117).
 
-The production `SaxtonRawls2006SoilHydraulicCalibrator` is explicitly based on this model family. The surrounding EvoForge semantic-definition and local Soil-formation layers are project-specific composition around that calibration.
+The production `SaxtonRawls2006SoilHydraulicCalibrator` is explicitly based on this model family. Its exact equations are reproduced in the Soil Hydraulics system page. The surrounding EvoForge semantic-definition, geomorphic formation and runtime ownership layers are project-specific composition around that calibration.
+
+## Rainfall occurrence and weather-generation context
+
+### Katz — chain-dependent precipitation
+
+Richard W. Katz. **“Precipitation as a Chain-Dependent Process.”** *Journal of Applied Meteorology* 16(7), 671–676, 1977. DOI: [10.1175/1520-0450(1977)016<0671:PAACDP>2.0.CO;2](https://doi.org/10.1175/1520-0450(1977)016%3C0671:PAACDP%3E2.0.CO;2).
+
+Classic lineage for treating precipitation occurrence/persistence as a stochastic process while modeling positive precipitation amount separately. EvoForge's current rainfall-regime contract adopts that **separation of concerns**, not the full chain-dependent stochastic algorithm.
+
+### Richardson — stochastic daily weather generation
+
+C. W. Richardson. **“Stochastic simulation of daily precipitation, temperature, and solar radiation.”** *Water Resources Research* 17(1), 182–190, 1981. DOI: [10.1029/WR017i001p00182](https://doi.org/10.1029/WR017i001p00182).
+
+Uses a Markov-chain/exponential precipitation model and is useful context for separating wet/dry occurrence from event amount. EvoForge's current alternating rectangular-pulse compiler is intentionally much simpler and mean-preserving; it is not a direct WGEN implementation.
 
 ## Deterministic generation randomness
 
@@ -63,8 +77,10 @@ The following current mechanics are intentionally documented as EvoForge-specifi
 - surface-retention reserve used to prevent perpetual one-cell thin-film runoff;
 - simulation scheduling/process ownership conventions;
 - multi-owner movement/occupancy semantics and completion-time revalidation;
-- deterministic agent utility/intention lifecycle;
-- generated-world preparation/materialization/bootstrap ownership boundaries.
+- deterministic Agent Utility/intention/search lifecycle;
+- bounded integer Consumable Stock, Growth and Need Progression;
+- generated-world preparation/materialization/bootstrap ownership boundaries;
+- current mean-preserving alternating rainfall-pulse compiler.
 
 For these systems, the production code, headless tests and the corresponding System page are the primary source.
 

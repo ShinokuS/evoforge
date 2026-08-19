@@ -1,10 +1,14 @@
 # Landscape and Terrain
 
-## Purpose
+## In plain language
 
-Own base environmental terrain independently from runtime objects, liquid state and Shape geometry.
+Landscape is the authoritative owner of the world's **solid Terrain cells and their material identity**.
 
-## Core representation
+A coordinate can contain Terrain such as topsoil, sand or granite, or it can have no Terrain at all. Terrain material answers “what solid material is here?”; Geometry answers “what shape does that solid occupy?”; liquids answer “what finite fluid is here?”. EvoForge keeps those facts separate even when they share the same XYZ coordinate.
+
+There is no fake `air` material used to represent ordinary empty space.
+
+## Current status
 
 Terrain state is conceptually:
 
@@ -12,149 +16,244 @@ Terrain state is conceptually:
 XYZ -> LandscapeDefinitionId | absence
 ```
 
-A present cell stores material/content identity. Ordinary absence is not represented by a fake definition such as `core:air` or `core:empty`.
+`TerrainSystem` owns presence/material identity. `LandscapeMutations` coordinates semantic Terrain mutations that also have Geometry lifecycle consequences.
 
-A future streaming world may need to distinguish absent from unloaded/unknown. That would require a richer read-state contract rather than turning absence into a material today.
+Current storage is sparse, but sparse storage is an implementation choice rather than public semantics.
 
 ## Terrain ownership
 
-`TerrainSystem` is the authoritative owner of terrain presence/material identity and terrain-specific mutation invariants. Consumers read through terrain lookup capabilities.
+### Owns
 
-Concrete storage is replaceable. The current sparse representation is an implementation choice; future region/chunk storage must preserve the same semantic reads and mutations.
+- whether solid Terrain exists at an XYZ;
+- which `LandscapeDefinitionId` that Terrain uses;
+- Terrain-specific mutation invariants;
+- derived Terrain extents/revision facts maintained from accepted mutations.
 
-Expected mutation conflicts are structured results, for example placing into an occupied coordinate or replacing/removing absent terrain. Invalid definitions/programming inputs remain exceptional.
+### Does not own
 
-## Coordinated landscape mutation
+- object identity/position;
+- Shape geometry override state;
+- Navigation/path routes;
+- free liquid;
+- retained Soil-liquid composition;
+- generated Atlas facts after runtime materialization.
 
-Terrain and Geometry are separate authoritative owners, but one terrain cell lifetime has Geometry consequences. `LandscapeMutations`, coordinated above both owners, owns that semantic operation.
+Consumers read through narrow Terrain/lookups rather than mutable storage.
+
+## Empty space is absence
+
+Ordinary open space is represented by no Terrain:
 
 ```text
-external command handler ─┐
-future generation ────────┤
-future erosion/process ───┤
-                         ↓
-                 LandscapeMutations
-                  /              \
-           Terrain owner     Geometry owner
+terrainAt(x,y,z) = absent
 ```
 
-Current lifecycle:
+not by:
 
 ```text
-placeTerrain
-    empty -> terrain
-    clear any stale geometry override
-    present terrain resolves to default FullShape
-
-replaceTerrain
-    existing definition changes
-    preserve current geometry override
-
-removeTerrain
-    terrain removed
-    associated geometry override removed
+LandscapeDefinitionId("core:air")
 ```
 
-A custom Shape therefore belongs to the lifetime of the terrain cell. It does not survive remove/re-place merely because the same XYZ is reused.
+Why this matters: `air`, `unloaded`, `unknown` and `solid material` are different concepts. A future streaming world may need a richer loaded/unknown state, but that should be designed explicitly rather than turning every empty coordinate into a material cell today.
 
-Terrain itself does not depend on Geometry. Cross-owner lifecycle semantics are coordinated above both owners rather than creating a reverse dependency from the terrain owner into Geometry.
+## Coordinated Landscape mutation
 
-## Result boundary
+Terrain and Geometry are different owners, but changing the lifetime of one Terrain anchor has Shape consequences. `LandscapeMutations` is the semantic coordinator above both owners:
 
-Landscape mutation results implement the common operation-result floor (`accepted` + namespaced result code). A caller may treat normal world-state conflicts as expected data.
+```text
+external command ─┐
+generation/bootstrap├─> LandscapeMutations
+future erosion ────┘         │
+                       ┌──────┴──────┐
+                       ↓             ↓
+                  Terrain owner   Geometry owner
+```
 
-An internal deterministic producer whose invariant requires success can assert acceptance through the generic operation-result helper; this expresses caller expectation without converting ordinary landscape conflicts into exception-based API semantics.
+### Place Terrain
 
-## Read capabilities and traversal revisions
+```text
+empty coordinate -> present Terrain
+clear any stale Shape override
+present Terrain therefore resolves default FullShape unless a new override is applied
+```
 
-Normal terrain lookup exposes definition identity for present terrain and absence otherwise.
+### Replace Terrain material
 
-Derived consumers currently use:
+```text
+existing Terrain definition changes
+current Shape override is preserved
+```
 
-- `TerrainExtentLookup` — exact occupied global min/max Z;
-- terrain/surface indexes used by presentation/atmosphere;
-- traversal revision/change facts used to stale exact Pathfinding work and invalidate derived hierarchy cache when accepted landscape/Shape mutation can change traversal semantics.
+Changing material does not automatically flatten a ramp.
 
-These are read/cache facts. Presentation never drives them.
+### Remove Terrain
 
-## Material, geometry and mechanic data stay separate
+```text
+Terrain removed
+associated Shape override removed
+```
+
+A custom Shape belongs to the lifetime of the anchored Terrain cell. Removing/replacing the entire cell and later reusing the coordinate does not resurrect old geometry.
+
+Terrain itself does not depend backwards on Geometry; the cross-owner lifecycle rule lives above both owners.
+
+## Mutation result semantics
+
+Expected current-world conflicts are structured operation results, for example:
+
+- placing where Terrain already exists;
+- replacing/removing absent Terrain.
+
+Invalid definition IDs, null dependencies or violated trusted invariants remain exceptional.
+
+A deterministic internal producer whose model requires a mutation to succeed may assert the accepted result, but that assertion is a caller expectation—not a change to the public domain-result semantics.
+
+## Material identity, Geometry and mechanic properties
+
+One Terrain cell may participate in several independent facts:
 
 ```text
 LandscapeDefinitionId
-    material/content identity
+    what material/content identity this Terrain uses
 
 Shape
-    local physical geometry + structural traversal roles
+    local solid/free geometry and structural traversal roles
 
-LandscapeTraversalDefinitions
-    actor-independent traversal price for the material
+SurfaceTraversalCost
+    actor-independent intrinsic traversal contribution
 
-SoilPropertiesDefinitions
-    shared pore capacity + material permeability
-
-SoilPropertiesVariationDefinitions
-    deterministic coordinate-local pore-capacity variation
+SoilProperties
+    pore capacity + reference-liquid permeability
 
 SurfaceRetentionDefinitions
-    material microtopographic free-liquid reserve
+    microtopographic free-liquid reserve before horizontal runoff
 ```
 
-Two materials may use identical Geometry. The same material may receive a non-default Shape override without changing material identity.
+These are not collapsed into one mutable Terrain record.
 
-Traversal cost is definition data resolved from `LandscapeDefinitionId`; it is not duplicated on every terrain cell. It cannot create a missing Navigation edge and does not encode actor-specific affinity.
+Two materials can share the same Shape. One material can be used by both full cells and ramps. A material can be porous without defining a new Geometry class.
 
-Soil properties and surface retention are mechanic-specific material capabilities. Terrain identity itself never becomes mutable retained-liquid or free-liquid quantity.
-
-Liquid-specific transport behavior is also not stored on terrain. `LiquidTransportProperties` belongs to the liquid identity. Generic Soil infiltration combines material permeability with liquid viscosity at runtime, keeping both sides independently owned.
-
-## Relationship to Navigation, Movement and Hydrology
+## Traversal relationship
 
 ```text
-TerrainLookup
-    ↓
+Terrain material + Shape
+       ↓
 GeometryLookup
-    ↓
+       ↓
 NavigationLookup
-        structural edge?
+  structural edge?
 
-TerrainLookup + GeometryLookup
-    ↓
+Terrain material + Shape
+       ↓
 TransitionCostLookup
-        price of valid edge
+  intrinsic edge price?
 
-Navigation + dynamic mover constraints + Occupancy
-    ↓
+Navigation + mover constraints + Occupancy
+       ↓
 Movement
 ```
 
-Hydrology reads Terrain material/Geometry through narrow lookups to resolve porous `SoilProperties`, generic surface retention and exposed/supporting surfaces. `SoilLiquidSystem` owns retained liquid composition; `LiquidSystem` owns free liquid; `WaterSystem` is only a typed Water facade over that shared free-liquid owner.
+Terrain material never creates an otherwise absent Navigation edge. Actor-specific preferences do not belong in Landscape traversal price.
 
-Current Geometry/Navigation reads observe accepted landscape mutation on their next query. A sleeping Movement action may therefore discover removed support during completion-time revalidation. Pathfinding uses traversal revision facts so suspended exact search cannot mix topology/cost snapshots from different accepted landscape revisions.
+Accepted Terrain/Shape changes update traversal revision/change facts so suspended Pathfinding can refuse to combine incompatible snapshots and the hierarchy cache can invalidate derived data.
+
+## Hydrology relationship
+
+Hydrology reads supporting Terrain to resolve material-owned Soil/surface-retention capabilities, but mutable liquid state belongs elsewhere:
+
+```text
+Terrain identity
+    ↓
+SoilPropertiesLookup / SurfaceRetentionLookup
+
+SoilLiquidSystem
+    retained constituent composition
+
+LiquidSystem
+    free-liquid identity + quantity
+```
+
+A Terrain cell does not become “wet terrain state” merely because Water is present. Wetness is derived from separate Water/Soil owners.
+
+Liquid-specific transport properties belong to liquid identity. Effective porous uptake combines Terrain permeability with liquid viscosity at runtime rather than storing a material×liquid table in Landscape.
+
+## Generated-world relationship
+
+Generation produces immutable semantic material/elevation/Shape/Soil facts. Runtime bootstrap resolves/materializes them once into ordinary Landscape/Geometry/Soil owners.
+
+After startup:
+
+```text
+Landscape = mutable runtime Terrain truth
+Atlas/prepared fields = immutable provenance/preparation facts
+```
+
+A later Terrain mutation does not rewrite the original Atlas.
+
+See [World Materialization](../world-generation/world-materialization.md).
 
 ## Optional finite world bounds
 
-Finite runtime containment is configured by `SimulationAssembly`, not stored as fake boundary Terrain.
+Finite containment is configured by `SimulationAssembly`, not by placing fake wall Terrain around the map.
 
-Inside configured `WorldBounds`, `WorldGeometryLookup` delegates to ordinary landscape Geometry. Outside, it exposes closed `FullShape` geometry. Setup terrain/liquid placement outside the box is rejected.
+`WorldGeometryLookup` behaves as:
 
-This boundary does not make outside cells part of `TerrainSystem` and does not answer future generated/unloaded/streamed world-state questions.
+```text
+inside WorldBounds  -> ordinary Landscape Geometry
+outside WorldBounds -> closed FullShape geometry
+```
 
-## Landscape is not WorldObject
+Setup Terrain/liquid placement outside configured bounds is rejected.
 
-Base terrain does not receive one `WorldObject` identity per cell. Objects and Landscape share XYZ addressing, not lifecycle/identity ownership.
+The outside coordinates are not inserted into `TerrainSystem`. This is physical containment, not streaming/generated-state policy.
 
-Free liquid and retained Soil liquid demonstrate the same rule for environmental state: they use specialized authoritative owners rather than fields on a universal mutable terrain cell. Future temperature, light or contamination should follow the same ownership discipline unless a real consumer proves a different contract is needed.
+## Landscape is not a WorldObject
 
-Physical storage may later be co-located for performance without merging semantic ownership.
+Terrain cells do not receive one runtime `WorldObject` identity each.
 
-## Deferred world-storage questions
+Objects and Terrain share spatial coordinates but have different lifecycle/identity semantics. Liquids, retained Soil constituents and future environmental fields follow the same specialized-owner principle.
 
-Chunk/region dimensions, streaming state, generation boundaries and persistence are intentionally not fixed yet. They must be designed together when real world-generation/scale consumers exist.
+Physical storage may someday be co-located for performance without merging semantic ownership.
 
-A future loaded-state model must not silently treat `UNLOADED/UNKNOWN` as true empty terrain, because doing so could corrupt Geometry, Navigation, Pathfinding, Movement and liquid semantics.
+## Invariants
 
-## Diagnostics and tests
+- `TerrainSystem` is the only mutable owner of Terrain presence/material identity.
+- Ordinary open space is absence, not a fake material definition.
+- Cross-owner Terrain/Shape lifecycle uses `LandscapeMutations`.
+- Place clears stale Shape; replace preserves current Shape; remove clears Shape.
+- Material identity and Shape geometry remain independent facts.
+- Mutable free/retained liquid never becomes a Terrain field.
+- Traversal revision changes only through accepted Landscape/Shape mutations that affect traversal semantics.
+- Runtime Landscape does not synchronize lived changes back into generated Atlas facts.
+- Finite bounds use shared Geometry closure rather than fake boundary Terrain.
 
-Tests cover place/replace/remove result semantics, typed definition ids, Geometry lifecycle, extents/revisions, traversal invalidation and integration through Geometry/Navigation/Movement. Supporting-terrain removal during a timed action is covered so stale Movement cannot commit through changed Landscape. World-bound integration separately proves that explicit runtime containment does not require fake boundary Terrain.
+## Current limitations
 
-Liquid/Soil tests independently cover material pore properties, deterministic capacity variation, generic surface retention and the separation between terrain identity and mutable liquid quantity.
+Not yet defined:
+
+- chunk/region storage dimensions;
+- loaded/unloaded/unknown state;
+- streaming generation boundaries;
+- persistence/save representation;
+- runtime erosion/material transformation models;
+- cave/open-volume materialization semantics beyond current solid-column worldgen.
+
+A future loaded-state model must not silently treat `UNLOADED/UNKNOWN` as real empty Terrain, because that would corrupt Geometry, Navigation, Movement, Pathfinding and liquids.
+
+## Code and tests
+
+Primary code lives under:
+
+```text
+simulation/.../world/landscape/
+```
+
+Generated initial Terrain enters through `world/materialization/` and runtime bootstrap.
+
+Tests cover place/replace/remove results, definition identity, Geometry lifecycle, extents/revisions, Navigation/Movement invalidation, finite-world containment and the separation between material capabilities and liquid state.
+
+## Sources
+
+**Internal EvoForge design.** Landscape ownership and cross-owner mutation coordination are project architecture.
+
+See [Definitions](../foundations/definitions.md), [Geometry](../foundations/geometry.md), [Navigation](../traversal/navigation.md), [Liquids](liquids.md), [Soil Hydraulics](soil-hydraulics.md), and [World Materialization](../world-generation/world-materialization.md).
