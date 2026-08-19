@@ -89,8 +89,8 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // Height may ask for a broader source, but it may only enlarge the scale-authored mountain
-        // by a bounded amount. This keeps Height from turning one source into a continent-wide dome.
+        // Height can broaden a source only within a bounded multiplier. When that is not enough,
+        // realized height is capped instead of silently turning the source into a continent-wide dome.
         int maximumHeightCoupledWidth = Math.min(
                 recipe.absoluteMaximumHalfWidthCells(),
                 Math.toIntExact(Math.max(
@@ -124,11 +124,12 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 typicalHalfWidth,
                 Math.toIntExact((long) typicalHalfWidth * longAxisWidthPpm / PPM));
 
-        int baseSpacing = Math.max(
+        // Keep a reasonably dense source lattice. Abundance calibration below decides how many of
+        // those candidates activate; long chains therefore do not make the whole world one lattice cell.
+        int candidateSpacing = Math.max(
                 1,
                 typicalHalfWidth * recipe.candidateSpacingNumerator()
                         / recipe.candidateSpacingDenominator());
-        int candidateSpacing = Math.max(baseSpacing, typicalLongAxis);
 
         // Abundance means expected mountain footprint, not probability of an arbitrary lattice node.
         // Scale/chaininess alter ellipse area; activation is recalibrated so their changes do not
