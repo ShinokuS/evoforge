@@ -8,15 +8,15 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.PriorityQueue;
 
 /**
- * Deterministic spatial synthesis for V13 mountain structure.
+ * Deterministic source synthesis for V13 mountain structure.
  *
- * <p>The accepted V12 hills remain the visual reference. Each mountain starts as one very large
- * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. The result
- * is then constrained only by abstract surface geometry: cardinal mountain uplift may not change
- * faster than the calibrated rise budget. No concrete runtime Shape participates in this stage.</p>
+ * <p>Mountains are generated with their final broad surface geometry from the start. Each system is
+ * an anisotropic bounded-slope envelope over the accepted V12 land. System width is coupled directly
+ * to its actual uplift, so a discrete vertical level has enough horizontal room before any later
+ * Shape fitting happens. Multiple systems are composed by maximum height; there is no after-the-fact
+ * terrace widening, slope repair, morphology cleanup, or Shape-aware mountain pass.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -28,6 +28,7 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
+    private static final int MINIMUM_SUMMIT_BAND_CELLS = 3;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -60,52 +61,21 @@ final class MountainMorphologyAlgorithm {
             return new DenseElevationField(bounds, baseHeights);
         }
 
-        long[] mountainUplift = new long[calibration.area()];
+        long[] result = baseHeights.clone();
+        int[] coastalDistance = distanceFromOceanCells(land, width, height);
         GenerationRandom random = GenerationRandom.from(genesis);
         for (MountainSystem system : createSystems(random, bounds, calibration, recipe)) {
-            rasterize(system, bounds, width, height, land, mountainUplift, calibration, recipe);
-        }
-
-        smoothUplift(
-                mountainUplift,
-                land,
-                width,
-                height,
-                recipe.upliftSmoothingPasses());
-
-        long maximumRawUplift = maximum(mountainUplift);
-        if (maximumRawUplift > 0L) {
-            int requiredCoastalDistance = requiredCoastalDistance(
-                    maximumRawUplift,
-                    calibration.shorelineUpliftSubunits(),
-                    calibration.maximumCardinalRiseSubunits(),
-                    calibration.coastalTransitionCells());
-            int[] coastalDistance = distanceFromOceanCells(
-                    land,
+            rasterize(
+                    system,
+                    bounds,
                     width,
                     height,
-                    requiredCoastalDistance);
-            long[] coastalCaps = coastalUpliftCaps(
+                    baseHeights,
                     land,
                     coastalDistance,
-                    maximumRawUplift,
-                    calibration.shorelineUpliftSubunits(),
-                    calibration.maximumCardinalRiseSubunits());
-            clampToCaps(mountainUplift, coastalCaps, land);
-            enforceCardinalRiseBudget(
-                    mountainUplift,
-                    coastalCaps,
-                    land,
-                    width,
-                    height,
-                    calibration.maximumCardinalRiseSubunits());
-        }
-
-        long[] result = baseHeights.clone();
-        long ceiling = calibration.mountainCeilingSubunits();
-        for (int cell = 0; cell < result.length; cell++) {
-            if (!land[cell] || mountainUplift[cell] <= 0L) continue;
-            result[cell] = Math.min(ceiling, Math.addExact(result[cell], mountainUplift[cell]));
+                    result,
+                    calibration,
+                    recipe);
         }
         return new DenseElevationField(bounds, result);
     }
@@ -158,34 +128,42 @@ final class MountainMorphologyAlgorithm {
         double axisX = StrictMath.cos(angle);
         double axisY = StrictMath.sin(angle);
 
+        double heightVariation = recipe.heightVariationPpm() / (double) PPM;
+        double upliftScale = 1.0
+                + centeredPpm(random, HEIGHT, latticeX, latticeY, 0L) / (double) PPM
+                        * heightVariation;
+        long uplift = Math.max(0L, Math.round(calibration.typicalUpliftSubunits() * upliftScale));
+
+        long maximumRise = calibration.maximumCardinalRiseSubunits();
+        int requiredHalfWidth = Math.toIntExact(Math.max(
+                1L,
+                uplift == 0L ? 1L : (uplift + maximumRise - 1L) / maximumRise));
+
         double widthVariation = recipe.widthVariationPpm() / (double) PPM;
         double baseWidth = calibration.typicalHalfWidthCells();
-        double leftWidth = variedPositive(
-                baseWidth,
-                centeredPpm(random, WIDTH, latticeX, latticeY, 0L),
-                widthVariation);
-        double rightWidth = variedPositive(
-                baseWidth,
-                centeredPpm(random, WIDTH, latticeX, latticeY, 1L),
-                widthVariation);
+        double leftWidth = Math.max(
+                requiredHalfWidth,
+                variedPositive(baseWidth, centeredPpm(random, WIDTH, latticeX, latticeY, 0L), widthVariation));
+        double rightWidth = Math.max(
+                requiredHalfWidth,
+                variedPositive(baseWidth, centeredPpm(random, WIDTH, latticeX, latticeY, 1L), widthVariation));
         double longAxisVariation = 1.0
                 + centeredPpm(random, WIDTH, latticeX, latticeY, 2L) / (double) PPM
                         * widthVariation * 0.5;
         double longAxis = Math.max(
                 Math.max(leftWidth, rightWidth),
-                calibration.typicalLongAxisCells() * longAxisVariation);
-
-        double heightVariation = recipe.heightVariationPpm() / (double) PPM;
-        double upliftScale = 1.0
-                + centeredPpm(random, HEIGHT, latticeX, latticeY, 0L) / (double) PPM
-                        * heightVariation;
-        long uplift = Math.max(
-                0L,
-                Math.round(calibration.typicalUpliftSubunits() * upliftScale));
+                Math.max(requiredHalfWidth, calibration.typicalLongAxisCells() * longAxisVariation));
 
         boolean plateau = calibration.plateausEnabled()
                 && samplePpm(random, PLATEAU, latticeX, latticeY, 0L)
                         < calibration.plateauProbabilityPpm();
+        if (plateau) {
+            double descentFraction = 1.0 - recipe.plateauCorePpm() / (double) PPM;
+            double widthScale = 1.0 / descentFraction;
+            leftWidth *= widthScale;
+            rightWidth *= widthScale;
+            longAxis *= widthScale;
+        }
 
         return new MountainSystem(
                 centerX,
@@ -204,10 +182,13 @@ final class MountainMorphologyAlgorithm {
             WorldBounds bounds,
             int width,
             int height,
+            long[] baseHeights,
             boolean[] land,
-            long[] maximumUplift,
+            int[] coastalDistance,
+            long[] result,
             MountainCalibration calibration,
             MountainRecipe recipe) {
+        if (system.upliftSubunits() <= 0L) return;
         double support = Math.max(
                 system.longAxis(),
                 Math.max(system.leftWidth(), system.rightWidth()));
@@ -216,6 +197,29 @@ final class MountainMorphologyAlgorithm {
         int minY = Math.max(bounds.minY(), (int) StrictMath.floor(system.centerY() - support));
         int maxY = Math.min(bounds.maxY(), (int) StrictMath.ceil(system.centerY() + support));
         if (minX > maxX || minY > maxY) return;
+
+        long footHeight = regionalFootHeight(
+                system,
+                bounds,
+                width,
+                height,
+                baseHeights,
+                land,
+                minX,
+                maxX,
+                minY,
+                maxY);
+        if (footHeight == Long.MAX_VALUE) return;
+
+        long rawPeak = Math.min(
+                calibration.mountainCeilingSubunits(),
+                Math.addExact(footHeight, system.upliftSubunits()));
+        long peakHeight = stabilizeSummitBand(
+                rawPeak,
+                footHeight,
+                calibration.maximumCardinalRiseSubunits());
+        long effectiveUplift = peakHeight - footHeight;
+        if (effectiveUplift <= 0L) return;
 
         for (int y = minY; y <= maxY; y++) {
             int localY = y - bounds.minY();
@@ -226,92 +230,100 @@ final class MountainMorphologyAlgorithm {
                 int cell = localY * width + localX;
                 if (!land[cell]) continue;
 
-                double profile = elongatedHillProfile(system, x, y, calibration, recipe);
+                double profile = boundedProfile(system, x, y, recipe);
                 if (profile <= 0.0) continue;
-                long uplift = Math.max(0L, Math.round(system.upliftSubunits() * profile));
-                if (uplift > maximumUplift[cell]) maximumUplift[cell] = uplift;
+                long rise = Math.max(0L, Math.round(effectiveUplift * profile));
+                long coastalCap = coastalRiseCap(cell, coastalDistance, calibration, effectiveUplift);
+                rise = Math.min(rise, coastalCap);
+                long candidate = Math.addExact(footHeight, rise);
+                if (candidate > result[cell]) result[cell] = candidate;
             }
         }
     }
 
+    private static long regionalFootHeight(
+            MountainSystem system,
+            WorldBounds bounds,
+            int width,
+            int height,
+            long[] baseHeights,
+            boolean[] land,
+            int minX,
+            int maxX,
+            int minY,
+            int maxY) {
+        long minimum = Long.MAX_VALUE;
+        for (int y = minY; y <= maxY; y++) {
+            int localY = y - bounds.minY();
+            if (localY < 0 || localY >= height) continue;
+            for (int x = minX; x <= maxX; x++) {
+                int localX = x - bounds.minX();
+                if (localX < 0 || localX >= width) continue;
+                int cell = localY * width + localX;
+                if (!land[cell] || normalizedRadius(system, x, y) >= 1.0) continue;
+                minimum = Math.min(minimum, baseHeights[cell]);
+            }
+        }
+        return minimum;
+    }
+
     /**
-     * Broad V12-like hill plus a subordinate smooth inner core. The core increases vertical presence
-     * without introducing peak waves, branches or any high-frequency ridge structure.
+     * Linear radial descent has a bounded derivative everywhere. Plateau systems simply reserve a
+     * wider source footprint before applying the same descent, so their outer slope obeys the same
+     * source-generation budget instead of being repaired afterwards.
      */
-    private static double elongatedHillProfile(
+    private static double boundedProfile(
             MountainSystem system,
             double x,
             double y,
-            MountainCalibration calibration,
             MountainRecipe recipe) {
+        double radius = normalizedRadius(system, x, y);
+        if (radius >= 1.0) return 0.0;
+        if (!system.plateau()) return 1.0 - radius;
+
+        double plateauCore = recipe.plateauCorePpm() / (double) PPM;
+        if (radius <= plateauCore) return 1.0;
+        return (1.0 - radius) / (1.0 - plateauCore);
+    }
+
+    private static double normalizedRadius(MountainSystem system, double x, double y) {
         double dx = x - system.centerX();
         double dy = y - system.centerY();
         double along = dx * system.axisX() + dy * system.axisY();
         double across = -dx * system.axisY() + dy * system.axisX();
         double sideWidth = across < 0.0 ? system.leftWidth() : system.rightWidth();
-        if (sideWidth <= 0.0 || system.longAxis() <= 0.0) return 0.0;
-
+        if (sideWidth <= 0.0 || system.longAxis() <= 0.0) return Double.POSITIVE_INFINITY;
         double normalizedAlong = along / system.longAxis();
         double normalizedAcross = across / sideWidth;
-        double distanceSquared = normalizedAlong * normalizedAlong
-                + normalizedAcross * normalizedAcross;
-        if (distanceSquared >= 1.0) return 0.0;
-
-        double sharpness = calibration.sharpnessMilli() / 1_000.0;
-        double base = smoothHill(distanceSquared, sharpness, false, recipe.plateauCorePpm());
-
-        double coreRadius = recipe.coreRadiusPpm() / (double) PPM;
-        double coreDistanceSquared = distanceSquared / (coreRadius * coreRadius);
-        double core = coreDistanceSquared >= 1.0
-                ? 0.0
-                : smoothHill(
-                        coreDistanceSquared,
-                        Math.min(1.45, sharpness * 1.05),
-                        system.plateau(),
-                        recipe.plateauCorePpm());
-        double coreWeight = recipe.coreWeightPpm() / (double) PPM;
-
-        // Keep the original broad hill untouched at the outer slope and progressively add the core
-        // only where vertical headroom exists. Center remains normalized to exactly 1.
-        return Math.min(1.0, base + coreWeight * core * (1.0 - base));
+        return StrictMath.sqrt(normalizedAlong * normalizedAlong + normalizedAcross * normalizedAcross);
     }
 
-    private static double smoothHill(
-            double distanceSquared,
-            double sharpness,
-            boolean plateau,
-            int plateauCorePpm) {
-        double adjustedDistanceSquared = Math.max(0.0, distanceSquared);
-        if (plateau) {
-            double distance = StrictMath.sqrt(adjustedDistanceSquared);
-            double plateauCore = plateauCorePpm / (double) PPM;
-            if (distance <= plateauCore) return 1.0;
-            double remapped = (distance - plateauCore) / (1.0 - plateauCore);
-            adjustedDistanceSquared = remapped * remapped;
-        }
+    private static long stabilizeSummitBand(long peakHeight, long footHeight, long maximumRise) {
+        long cell = ElevationField.SUBUNITS_PER_CELL;
+        long minimumDepth = Math.min(cell - 1L, maximumRise * MINIMUM_SUMMIT_BAND_CELLS);
+        long layer = Math.floorDiv(peakHeight, cell);
+        long layerFloor = Math.multiplyExact(layer, cell);
+        long fraction = peakHeight - layerFloor;
+        if (fraction >= minimumDepth) return peakHeight;
 
-        double coordinate = Math.max(0.0, Math.min(1.0, 1.0 - adjustedDistanceSquared));
-        double smooth = coordinate * coordinate * (3.0 - 2.0 * coordinate);
-        return StrictMath.pow(smooth, sharpness);
+        long lowered = layerFloor - (cell - minimumDepth);
+        return lowered > footHeight ? lowered : peakHeight;
     }
 
-    private static int requiredCoastalDistance(
-            long maximumUplift,
-            long shorelineUplift,
-            long maximumRise,
-            int minimumDistance) {
-        if (maximumUplift <= shorelineUplift) return minimumDistance;
-        long riseDistance = (maximumUplift - shorelineUplift + maximumRise - 1L) / maximumRise;
-        return Math.max(minimumDistance, Math.toIntExact(Math.min(Integer.MAX_VALUE - 1L, riseDistance + 1L)));
+    private static long coastalRiseCap(
+            int cell,
+            int[] coastalDistance,
+            MountainCalibration calibration,
+            long effectiveUplift) {
+        long inlandSteps = Math.max(0, coastalDistance[cell] - 1);
+        long permitted = calibration.shorelineUpliftSubunits()
+                + inlandSteps * calibration.maximumCardinalRiseSubunits();
+        return Math.min(effectiveUplift, permitted);
     }
 
-    /** Cardinal distance from ocean/world edge, capped once no mountain uplift needs more room. */
-    private static int[] distanceFromOceanCells(
-            boolean[] land,
-            int width,
-            int height,
-            int distanceCap) {
-        int cap = Math.max(1, distanceCap);
+    /** Exact cardinal distance from ocean/world edge. */
+    private static int[] distanceFromOceanCells(boolean[] land, int width, int height) {
+        int infinity = Math.addExact(width, height) + 1;
         int[] distance = new int[land.length];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -321,7 +333,7 @@ final class MountainMorphologyAlgorithm {
                 } else if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
                     distance[cell] = 1;
                 } else {
-                    distance[cell] = cap;
+                    distance[cell] = infinity;
                 }
             }
         }
@@ -333,7 +345,7 @@ final class MountainMorphologyAlgorithm {
                 int best = distance[cell];
                 if (x > 0) best = Math.min(best, distance[cell - 1] + 1);
                 if (y > 0) best = Math.min(best, distance[cell - width] + 1);
-                distance[cell] = Math.min(cap, best);
+                distance[cell] = best;
             }
         }
         for (int y = height - 1; y >= 0; y--) {
@@ -343,164 +355,10 @@ final class MountainMorphologyAlgorithm {
                 int best = distance[cell];
                 if (x + 1 < width) best = Math.min(best, distance[cell + 1] + 1);
                 if (y + 1 < height) best = Math.min(best, distance[cell + width] + 1);
-                distance[cell] = Math.min(cap, best);
+                distance[cell] = best;
             }
         }
         return distance;
-    }
-
-    /**
-     * Shore cells may retain a small cliff uplift. Moving inland, the allowed mountain uplift grows
-     * by at most the same cardinal rise budget used everywhere else, so the coast cannot create a
-     * hidden vertical discontinuity in the dry mountain surface.
-     */
-    private static long[] coastalUpliftCaps(
-            boolean[] land,
-            int[] coastalDistance,
-            long maximumRawUplift,
-            long shorelineUplift,
-            long maximumRise) {
-        long[] caps = new long[land.length];
-        for (int cell = 0; cell < caps.length; cell++) {
-            if (!land[cell]) {
-                caps[cell] = 0L;
-                continue;
-            }
-            long inlandSteps = Math.max(0, coastalDistance[cell] - 1);
-            long permitted = shorelineUplift + inlandSteps * maximumRise;
-            caps[cell] = Math.min(maximumRawUplift, permitted);
-        }
-        return caps;
-    }
-
-    private static void clampToCaps(long[] uplift, long[] caps, boolean[] land) {
-        for (int cell = 0; cell < uplift.length; cell++) {
-            if (!land[cell]) {
-                uplift[cell] = 0L;
-            } else if (uplift[cell] > caps[cell]) {
-                uplift[cell] = caps[cell];
-            }
-        }
-    }
-
-    /**
-     * Expands only slopes that violate the abstract cardinal rise budget. Lower neighboring cells
-     * are raised; peaks are not shaved down. This keeps high mountains possible while guaranteeing
-     * broad horizontal elevation bands. Priority ordering is deterministic for equal uplift values.
-     */
-    private static void enforceCardinalRiseBudget(
-            long[] uplift,
-            long[] caps,
-            boolean[] land,
-            int width,
-            int height,
-            long maximumRise) {
-        PriorityQueue<UpliftNode> queue = new PriorityQueue<>((first, second) -> {
-            int byHeight = Long.compare(second.uplift(), first.uplift());
-            return byHeight != 0 ? byHeight : Integer.compare(first.cell(), second.cell());
-        });
-
-        for (int cell = 0; cell < uplift.length; cell++) {
-            if (land[cell] && hasTooLowNeighbor(uplift, land, width, height, cell, maximumRise)) {
-                queue.add(new UpliftNode(cell, uplift[cell]));
-            }
-        }
-
-        while (!queue.isEmpty()) {
-            UpliftNode node = queue.poll();
-            int cell = node.cell();
-            if (node.uplift() != uplift[cell]) continue;
-            long propagated = uplift[cell] - maximumRise;
-            if (propagated <= 0L) continue;
-
-            int x = cell % width;
-            int y = cell / width;
-            if (x > 0) propagate(cell - 1, propagated, uplift, caps, land, queue);
-            if (x + 1 < width) propagate(cell + 1, propagated, uplift, caps, land, queue);
-            if (y > 0) propagate(cell - width, propagated, uplift, caps, land, queue);
-            if (y + 1 < height) propagate(cell + width, propagated, uplift, caps, land, queue);
-        }
-    }
-
-    private static boolean hasTooLowNeighbor(
-            long[] uplift,
-            boolean[] land,
-            int width,
-            int height,
-            int cell,
-            long maximumRise) {
-        long value = uplift[cell];
-        if (value <= maximumRise) return false;
-        int x = cell % width;
-        int y = cell / width;
-        if (x > 0 && land[cell - 1] && value - uplift[cell - 1] > maximumRise) return true;
-        if (x + 1 < width && land[cell + 1] && value - uplift[cell + 1] > maximumRise) return true;
-        if (y > 0 && land[cell - width] && value - uplift[cell - width] > maximumRise) return true;
-        return y + 1 < height
-                && land[cell + width]
-                && value - uplift[cell + width] > maximumRise;
-    }
-
-    private static void propagate(
-            int target,
-            long propagated,
-            long[] uplift,
-            long[] caps,
-            boolean[] land,
-            PriorityQueue<UpliftNode> queue) {
-        if (!land[target]) return;
-        long candidate = Math.min(caps[target], propagated);
-        if (candidate <= uplift[target]) return;
-        uplift[target] = candidate;
-        queue.add(new UpliftNode(target, candidate));
-    }
-
-    /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
-    private static void smoothUplift(
-            long[] uplift,
-            boolean[] land,
-            int width,
-            int height,
-            int passes) {
-        if (passes <= 0) return;
-        long[] scratch = new long[uplift.length];
-        for (int pass = 0; pass < passes; pass++) {
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int cell = y * width + x;
-                    if (!land[cell]) {
-                        scratch[cell] = 0L;
-                        continue;
-                    }
-                    long sum = uplift[cell] * 4L;
-                    int weight = 4;
-                    if (x > 0 && land[cell - 1]) {
-                        sum += uplift[cell - 1];
-                        weight++;
-                    }
-                    if (x + 1 < width && land[cell + 1]) {
-                        sum += uplift[cell + 1];
-                        weight++;
-                    }
-                    if (y > 0 && land[cell - width]) {
-                        sum += uplift[cell - width];
-                        weight++;
-                    }
-                    if (y + 1 < height && land[cell + width]) {
-                        sum += uplift[cell + width];
-                        weight++;
-                    }
-                    scratch[cell] = sum / weight;
-                }
-            }
-            System.arraycopy(scratch, 0, uplift, 0, uplift.length);
-        }
-    }
-
-    private static long maximum(long[] values) {
-        long maximum = 0L;
-        for (long value : values) maximum = Math.max(maximum, value);
-        return maximum;
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
@@ -543,8 +401,5 @@ final class MountainMorphologyAlgorithm {
             double rightWidth,
             long upliftSubunits,
             boolean plateau) {
-    }
-
-    private record UpliftNode(int cell, long uplift) {
     }
 }
