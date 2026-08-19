@@ -19,12 +19,11 @@ final class MountainArchitectureTest {
     private static final MountainCalibrator CALIBRATOR = MountainCalibrator.standard();
 
     @Test
-    void zeroAbundanceCalibratesToNoMountainCandidates() {
+    void zeroAbundanceCalibratesToZeroMountainCoverage() {
         MountainCalibration calibration = CALIBRATOR.calibrate(
                 genesis(BOUNDS, mountains(0, 500_000, 500_000, 500_000, 500_000, false, 0)),
                 RECIPE);
 
-        assertEquals(0, calibration.candidateActivationPpm());
         assertEquals(0, calibration.targetCoveragePpm());
     }
 

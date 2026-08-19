@@ -136,11 +136,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 (long) intent.abundance().partsPerMillion()
                         * recipe.maximumAbundanceCoveragePpm()
                         / PPM);
-        int candidateActivation = calibratedActivationPpm(
-                targetCoveragePpm,
-                typicalHalfWidth,
-                typicalLongAxis,
-                candidateSpacing);
 
         int sharpnessMilli = interpolate(
                 recipe.minimumSharpnessMilli(),
@@ -168,7 +163,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 height,
                 area,
                 candidateSpacing,
-                candidateActivation,
                 targetCoveragePpm,
                 typicalHalfWidth,
                 typicalLongAxis,
@@ -183,20 +177,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 shorelineUplift,
                 baseCeiling,
                 mountainCeiling);
-    }
-
-    private static int calibratedActivationPpm(
-            int targetCoveragePpm,
-            int halfWidth,
-            int longAxis,
-            int spacing) {
-        if (targetCoveragePpm <= 0) return 0;
-        double targetCoverage = targetCoveragePpm / (double) PPM;
-        double expectedFootprint = StrictMath.PI * halfWidth * (double) longAxis;
-        double latticeArea = Math.max(1.0, spacing * (double) spacing);
-        double footprintLoad = Math.max(1.0e-6, expectedFootprint / latticeArea);
-        double activation = -StrictMath.log(1.0 - targetCoverage) / footprintLoad;
-        return (int) Math.round(Math.max(0.0, Math.min(1.0, activation)) * PPM);
     }
 
     private static int interpolate(int minimum, int maximum, int coordinatePpm) {
