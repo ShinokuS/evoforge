@@ -37,6 +37,9 @@ public record MountainRecipe(
         int minimumSharpnessMilli,
         int maximumSharpnessMilli,
         int upliftSmoothingPasses,
+        int foundationSmoothingPasses,
+        int foundationFullBlendUpliftCells,
+        int finalSurfaceRelaxationPasses,
         int singleCellLevelCleanupPasses) {
 
     private static final int PPM = NormalizedValue.SCALE;
@@ -89,14 +92,21 @@ public record MountainRecipe(
         if (maximumSharpnessMilli < minimumSharpnessMilli) {
             throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
         }
-        requirePassCount(upliftSmoothingPasses, "upliftSmoothingPasses");
-        requirePassCount(singleCellLevelCleanupPasses, "singleCellLevelCleanupPasses");
+        requireSmallPassCount(upliftSmoothingPasses, "upliftSmoothingPasses");
+        requireSmallPassCount(foundationSmoothingPasses, "foundationSmoothingPasses");
+        requirePositive(foundationFullBlendUpliftCells, "foundationFullBlendUpliftCells");
+        if (finalSurfaceRelaxationPasses < 0 || finalSurfaceRelaxationPasses > 128) {
+            throw new IllegalArgumentException("finalSurfaceRelaxationPasses must be in [0, 128]");
+        }
+        requireSmallPassCount(singleCellLevelCleanupPasses, "singleCellLevelCleanupPasses");
     }
 
     /**
      * Smooth-hill mountains with a geometry-only slope budget. The authored mountain surface aims
      * for roughly three to four horizontal cells per vertical level: about 4.2 cells at the soft
-     * end and about 3.1 even at maximum sharpness. Concrete Shape identity is deliberately absent.
+     * end and about 3.1 even at maximum sharpness. Inside the mountain body, small V12 undulations
+     * are absorbed into a softly filtered foundation before the macro hill is applied; the blend
+     * fades to zero at the mountain edge so unrelated V12 terrain remains untouched.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -127,6 +137,9 @@ public record MountainRecipe(
                 850,
                 1_250,
                 1,
+                4,
+                2,
+                64,
                 2);
     }
 
@@ -140,9 +153,9 @@ public record MountainRecipe(
         }
     }
 
-    private static void requirePassCount(int value, String name) {
-        if (value < 0 || value > 4) {
-            throw new IllegalArgumentException(name + " must be in [0, 4]");
+    private static void requireSmallPassCount(int value, String name) {
+        if (value < 0 || value > 8) {
+            throw new IllegalArgumentException(name + " must be in [0, 8]");
         }
     }
 }
