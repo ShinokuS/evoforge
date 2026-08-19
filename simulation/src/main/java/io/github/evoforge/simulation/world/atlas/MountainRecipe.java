@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  * Immutable model choices for the V13 structural mountain stage.
  *
  * <p>The model deliberately knows nothing about concrete runtime Shapes. Its readability contract
- * is geometric: mountain elevation changes slowly enough across horizontal cells that the later
- * generic surface fitter can choose whatever geometry represents that surface well.</p>
+ * is geometric: each mountain is one bounded hill profile whose cardinal rise is calibrated before
+ * the later generic surface fitter chooses whatever geometry represents that surface well.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
@@ -28,15 +28,12 @@ public record MountainRecipe(
         int minimumCoastalTransitionCells,
         int shorelineUpliftPpm,
         int maximumShorelineUpliftCells,
-        int coreRadiusPpm,
-        int coreWeightPpm,
         int plateauCorePpm,
         int centerJitterPpm,
         int widthVariationPpm,
         int heightVariationPpm,
         int minimumSharpnessMilli,
-        int maximumSharpnessMilli,
-        int upliftSmoothingPasses) {
+        int maximumSharpnessMilli) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -75,11 +72,6 @@ public record MountainRecipe(
         requirePositive(minimumCoastalTransitionCells, "minimumCoastalTransitionCells");
         requireNormalized(shorelineUpliftPpm, "shorelineUpliftPpm");
         requirePositive(maximumShorelineUpliftCells, "maximumShorelineUpliftCells");
-        requireNormalized(coreRadiusPpm, "coreRadiusPpm");
-        if (coreRadiusPpm <= 0 || coreRadiusPpm >= PPM) {
-            throw new IllegalArgumentException("coreRadiusPpm must be strictly inside (0, 1_000_000)");
-        }
-        requireNormalized(coreWeightPpm, "coreWeightPpm");
         requireNormalized(plateauCorePpm, "plateauCorePpm");
         requireNormalized(centerJitterPpm, "centerJitterPpm");
         requireNormalized(widthVariationPpm, "widthVariationPpm");
@@ -87,9 +79,6 @@ public record MountainRecipe(
         requirePositive(minimumSharpnessMilli, "minimumSharpnessMilli");
         if (maximumSharpnessMilli < minimumSharpnessMilli) {
             throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
-        }
-        if (upliftSmoothingPasses < 0 || upliftSmoothingPasses > 4) {
-            throw new IllegalArgumentException("upliftSmoothingPasses must be in [0, 4]");
         }
     }
 
@@ -114,15 +103,12 @@ public record MountainRecipe(
                 12,
                 0,
                 3,
-                500_000,
-                340_000,
                 220_000,
                 220_000,
                 220_000,
                 120_000,
                 850,
-                1_250,
-                1);
+                1_250);
     }
 
     private static void requirePositive(int value, String name) {
