@@ -14,9 +14,10 @@ import java.util.List;
  *
  * <p>Mountains are generated with their final broad surface geometry from the start. Each system is
  * an anisotropic bounded-slope envelope over the accepted V12 land. System width is coupled directly
- * to its actual uplift, so a discrete vertical level has enough horizontal room before any later
- * Shape fitting happens. Multiple systems are composed by maximum height; there is no after-the-fact
- * terrace widening, slope repair, morphology cleanup, or Shape-aware mountain pass.</p>
+ * to its complete absolute climb from ordinary land to its intended summit, so discrete vertical
+ * levels are broad before any later Shape fitting happens. Multiple systems are composed by maximum
+ * height; there is no after-the-fact terrace widening, slope repair, morphology cleanup, or
+ * Shape-aware mountain pass.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -135,9 +136,12 @@ final class MountainMorphologyAlgorithm {
         long uplift = Math.max(0L, Math.round(calibration.typicalUpliftSubunits() * upliftScale));
 
         long maximumRise = calibration.maximumCardinalRiseSubunits();
+        long absolutePeakAboveSea = Math.min(
+                calibration.mountainCeilingSubunits(),
+                Math.addExact(calibration.baseTerrainCeilingSubunits(), uplift));
         int requiredHalfWidth = Math.toIntExact(Math.max(
                 1L,
-                uplift == 0L ? 1L : (uplift + maximumRise - 1L) / maximumRise));
+                (absolutePeakAboveSea + maximumRise - 1L) / maximumRise));
 
         double widthVariation = recipe.widthVariationPpm() / (double) PPM;
         double baseWidth = calibration.typicalHalfWidthCells();
@@ -211,9 +215,12 @@ final class MountainMorphologyAlgorithm {
                 maxY);
         if (footHeight == Long.MAX_VALUE) return;
 
+        // Mountain height is authored in the V13 headroom above ordinary V12 terrain. The absolute
+        // summit therefore does not collapse merely because this particular system happens to touch
+        // low land. Width was already reserved against the more conservative sea-level climb.
         long rawPeak = Math.min(
                 calibration.mountainCeilingSubunits(),
-                Math.addExact(footHeight, system.upliftSubunits()));
+                Math.addExact(calibration.baseTerrainCeilingSubunits(), system.upliftSubunits()));
         long peakHeight = stabilizeSummitBand(
                 rawPeak,
                 footHeight,
