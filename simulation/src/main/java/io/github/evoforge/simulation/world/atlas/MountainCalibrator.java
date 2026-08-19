@@ -1,0 +1,123 @@
+package io.github.evoforge.simulation.world.atlas;
+
+import io.github.evoforge.simulation.definition.NormalizedValue;
+import io.github.evoforge.simulation.world.genesis.MountainIntent;
+import io.github.evoforge.simulation.world.genesis.WorldGenesis;
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
+
+/** Resolves semantic mountain intent into exact cell-space operating values. */
+@FunctionalInterface
+public interface MountainCalibrator {
+
+    MountainCalibration calibrate(WorldGenesis genesis, MountainRecipe recipe);
+
+    static MountainCalibrator standard() {
+        return StandardMountainCalibrator.INSTANCE;
+    }
+}
+
+final class StandardMountainCalibrator implements MountainCalibrator {
+    static final StandardMountainCalibrator INSTANCE = new StandardMountainCalibrator();
+    private static final int PPM = NormalizedValue.SCALE;
+
+    private StandardMountainCalibrator() {
+    }
+
+    @Override
+    public MountainCalibration calibrate(WorldGenesis genesis, MountainRecipe recipe) {
+        if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
+        if (recipe == null) throw new IllegalArgumentException("mountain recipe must not be null");
+
+        WorldBounds bounds = genesis.spec().bounds();
+        if (bounds.minZ() >= 0) {
+            throw new IllegalArgumentException("V13 mountain generation expects ocean-capable bounds below z=0");
+        }
+        if (bounds.maxZ() <= recipe.baseTerrainCeilingCells()) {
+            throw new IllegalArgumentException(
+                    "V13 mountain generation needs positive headroom above the V12 base-terrain ceiling");
+        }
+
+        int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
+        int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
+        int area = Math.toIntExact(Math.multiplyExact((long) width, height));
+        MountainIntent intent = genesis.generationIntent().mountains();
+
+        long baseCeiling = Math.multiplyExact(
+                (long) recipe.baseTerrainCeilingCells(), ElevationField.SUBUNITS_PER_CELL);
+        long mountainCeiling = Math.multiplyExact(
+                (long) bounds.maxZ(), ElevationField.SUBUNITS_PER_CELL);
+        long availableHeadroom = mountainCeiling - baseCeiling;
+
+        int heightPpm = interpolate(
+                recipe.minimumHeightHeadroomPpm(),
+                recipe.maximumHeightHeadroomPpm(),
+                intent.height().partsPerMillion());
+        long typicalUplift = availableHeadroom * heightPpm / PPM;
+
+        int authoredHalfWidth = interpolate(
+                recipe.minimumHalfWidthCells(),
+                recipe.maximumHalfWidthCells(),
+                intent.scale().partsPerMillion());
+
+        int allowedRisePpm = interpolate(
+                recipe.minimumAllowedRisePpm(),
+                recipe.maximumAllowedRisePpm(),
+                intent.peakSharpness().partsPerMillion());
+        long allowedRise = Math.max(
+                1L,
+                ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
+        int coupledHalfWidth = typicalUplift == 0L
+                ? recipe.minimumHalfWidthCells()
+                : Math.toIntExact(Math.max(1L, (typicalUplift + allowedRise - 1L) / allowedRise));
+        int typicalHalfWidth = Math.max(authoredHalfWidth, coupledHalfWidth);
+
+        int candidateSpacing = Math.max(
+                1,
+                typicalHalfWidth * recipe.candidateSpacingNumerator()
+                        / recipe.candidateSpacingDenominator());
+
+        int chaininessPpm = intent.chaininess().partsPerMillion();
+        long ridgeWidthPpm = recipe.minimumRidgeHalfLengthWidthPpm()
+                + (long) chaininessPpm
+                        * (recipe.maximumRidgeHalfLengthWidthPpm()
+                                - recipe.minimumRidgeHalfLengthWidthPpm())
+                        / PPM;
+        int ridgeHalfLength = Math.toIntExact(
+                Math.max(0L, (long) typicalHalfWidth * ridgeWidthPpm / PPM));
+        int peakSpacing = Math.max(
+                4,
+                Math.toIntExact((long) typicalHalfWidth * recipe.peakSpacingWidthPpm() / PPM));
+
+        int sharpnessMilli = interpolate(
+                recipe.minimumSharpnessMilli(),
+                recipe.maximumSharpnessMilli(),
+                intent.peakSharpness().partsPerMillion());
+        int branchProbability = (int) ((long) chaininessPpm * 650_000L / PPM);
+        boolean plateausEnabled = intent.plateausEnabled();
+        int plateauProbability = plateausEnabled
+                ? intent.plateauProbability().partsPerMillion()
+                : 0;
+
+        return new MountainCalibration(
+                width,
+                height,
+                area,
+                candidateSpacing,
+                intent.abundance().partsPerMillion(),
+                typicalHalfWidth,
+                typicalUplift,
+                ridgeHalfLength,
+                peakSpacing,
+                intent.peakSharpness().partsPerMillion(),
+                sharpnessMilli,
+                branchProbability,
+                plateausEnabled,
+                plateauProbability,
+                baseCeiling,
+                mountainCeiling);
+    }
+
+    private static int interpolate(int minimum, int maximum, int coordinatePpm) {
+        return minimum + (int) ((long) (maximum - minimum) * coordinatePpm / PPM);
+    }
+}
