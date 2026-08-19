@@ -1,38 +1,53 @@
-# 2026-08-12 — What the first real visualizer taught us
+# What the first real visualizer taught us
 
-**Status:** Historical development note
+- Type: Entry
+- Status: Historical record
+- Date: 2026-08-12
+- Normative: No
 
-For several architecture slices EvoForge could prove mechanics headlessly but could not simply *watch the world*. The first Z visualizer changed that: Movement, ramps, caves, shafts and transition masks became directly observable.
+## Context
 
-## Art direction changed because the constraint changed
+Early EvoForge mechanics could be proven headlessly, but developers could not simply watch Movement, ramps, caves, shafts and transition masks. The first Z-aware visualizer created that missing observation surface.
 
-We initially searched for external tilesets. Several packs either did not fit ramp geometry, orientation or the desired calm visual language. The useful lesson was not “find a better pack”; it was that the current development renderer needed a visual representation shaped by simulation geometry.
+## What was observed
 
-The project therefore adopted generated 16×16 procedural landscape art. This removed licensing/install friction and let ramp lighting stay fixed in world coordinates while geometry changed orientation.
+Several lasting lessons emerged.
 
-## Z readability required real geometry
+### Art had to follow simulation geometry
 
-A simple “show selected floor and ghost nearby floors” model was rejected. The useful mental model became a horizontal cut through actual 3D cell volume:
+External tilesets repeatedly failed to fit current ramp orientation/geometry or the desired calm visual language. The first developer renderer therefore used generated small procedural landscape art so visual representation could follow the simulation's actual geometry without adding asset/licensing/install dependencies.
 
-- solid terrain intersecting the cut remains body;
-- the supported selected surface stays primary;
-- lower terrain appears only through genuinely open space;
-- cover and exterior exposure affect how underground/open spaces read.
+### Z readability required physical meaning
 
-The deliberately difficult demo scene — mountain, side cave, flat-roof cavern, vertical opening, high cliff and deep shaft — was valuable precisely because it prevented the renderer from being tuned to one pretty case.
+A naïve “selected floor plus ghost floors” approach was rejected. The useful model was a horizontal cut through real 3D cell volume: solid Terrain intersecting the cut remains visible, supported surfaces stay primary, and lower content appears only through genuinely open space.
 
-## Performance problems appeared early and were worth fixing early
+A deliberately difficult demo scene—mountain, side cave, flat-roof cavern, vertical opening, cliff and shaft—prevented the renderer from being tuned to one pretty case.
 
-WASD initially caused visible stalls. Profiling showed repeated 3D exposure BFS allocation/rebuild and hot sparse reads allocating coordinate keys. The solution was not broad chunk infrastructure: primitive BFS storage, viewport-aware padded analysis caching, authoritative revision invalidation and allocation-free hot probes addressed the measured costs.
+### Profiling had to distinguish computation from sampling
 
-Far zoom later exposed a different problem: sampling shimmer looked like frame stutter. Pixel-snapping the render camera made movement more stepped and was reverted. Continuous camera movement plus far-zoom linear sampling worked better.
+WASD stalls exposed repeated 3D exposure analysis/allocation. The fix was targeted primitive storage, viewport-aware caching, revision invalidation and allocation-free hot probes rather than speculative chunk infrastructure.
 
-The lasting process rule is: instrument first, distinguish CPU/frame-time problems from presentation sampling problems, then fix the demonstrated path.
+Far zoom later produced sampling shimmer that looked like stutter; a pixel-snapped camera made motion worse and was reverted. The lasting rule became: measure whether a problem is simulation/CPU work, frame/render work or presentation sampling before changing architecture.
 
-## Readability is development tooling
+### Debug readability is a real tool requirement
 
-F2/F3 diagnostics and the active-Z perimeter became deliberately bold, screen-pixel-sized overlays. A debug visualizer is not the final game UI; its job is to make structural truth obvious enough that future Pathfinder/agent work can be inspected quickly.
+Transition/Shape/level-boundary overlays intentionally became visually strong because a development visualizer exists to expose structural truth, not to mimic final game UI restraint.
 
-## Architectural lesson after acceptance
+### Presentation also needs extensibility discipline
 
-The finished visualizer also exposed a code smell: `RampShape` recognition had spread into renderer, procedural art, F3 and inspector code. That led directly to the typed Shape presentation binding decision. The important lesson is that even non-authoritative presentation needs the same extension discipline as simulation if it is expected to live for years.
+Concrete `RampShape` recognition had spread into renderer, art, overlay and inspector paths. This observation directly motivated typed presentation bindings instead of repeated concrete-type switches.
+
+## Outcome
+
+The project adopted the observer-only visualizer boundary, typed Shape presentation adapters and evidence-driven presentation optimization.
+
+## What became canonical
+
+Current runtime presentation now separates `SURFACE`, `INTERIOR` and `DEBUG_SLICE` perspectives; runtime interactions use production commands; generated-world preview calls production V12 generation and applies LOD only to drawing. Presentation never owns authoritative simulation/generation truth.
+
+## Links forward
+
+- [Visualizer and Developer Inspection Tools](../../systems/tooling/visualizer.md)
+- [Geometry and Shape](../../systems/foundations/geometry.md)
+- [ADR-004: Typed presentation bindings](../../decisions/004-typed-presentation-bindings.md)
+- [Architecture](../../architecture.md)
