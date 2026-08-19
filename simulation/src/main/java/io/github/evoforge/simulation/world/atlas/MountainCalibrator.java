@@ -20,7 +20,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
     static final StandardMountainCalibrator INSTANCE = new StandardMountainCalibrator();
     private static final int PPM = NormalizedValue.SCALE;
     private static final double PROFILE_GRADIENT_BOUND = 1.30;
-    private static final double MAXIMUM_ABUNDANCE_COVERAGE = 0.75;
+    private static final int MAXIMUM_ABUNDANCE_COVERAGE_PPM = 750_000;
 
     private StandardMountainCalibrator() {
     }
@@ -89,8 +89,9 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // Height can broaden a source only within a bounded multiplier. When that is not enough,
-        // realized height is capped instead of silently turning the source into a continent-wide dome.
+        // Height may broaden a source, but only within a bounded multiplier. If the authored scale
+        // cannot carry the requested height at a readable slope, realized height is capped instead
+        // of silently inflating the mountain until it occupies a continent.
         int maximumHeightCoupledWidth = Math.min(
                 recipe.absoluteMaximumHalfWidthCells(),
                 Math.toIntExact(Math.max(
@@ -124,18 +125,15 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 typicalHalfWidth,
                 Math.toIntExact((long) typicalHalfWidth * longAxisWidthPpm / PPM));
 
-        // Keep a reasonably dense source lattice. Abundance calibration below decides how many of
-        // those candidates activate; long chains therefore do not make the whole world one lattice cell.
         int candidateSpacing = Math.max(
                 1,
                 typicalHalfWidth * recipe.candidateSpacingNumerator()
                         / recipe.candidateSpacingDenominator());
 
-        // Abundance means expected mountain footprint, not probability of an arbitrary lattice node.
-        // Scale/chaininess alter ellipse area; activation is recalibrated so their changes do not
-        // silently turn the same abundance into a mountain carpet.
+        int targetCoveragePpm = Math.toIntExact(
+                (long) intent.abundance().partsPerMillion() * MAXIMUM_ABUNDANCE_COVERAGE_PPM / PPM);
         int candidateActivation = calibratedActivationPpm(
-                intent.abundance().partsPerMillion(),
+                targetCoveragePpm,
                 typicalHalfWidth,
                 typicalLongAxis,
                 candidateSpacing);
@@ -159,7 +157,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 : (coastalRise + maximumCardinalRise - 1L) / maximumCardinalRise;
         int coastalTransitionCells = Math.max(
                 recipe.minimumCoastalTransitionCells(),
-                Math.toIntExact(Math.max(0L, (riseSteps * 45L + 99L) / 100L)));
+                Math.toIntExact(Math.max(0L, (riseSteps * 160L + 99L) / 100L)));
 
         return new MountainCalibration(
                 width,
@@ -167,6 +165,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 area,
                 candidateSpacing,
                 candidateActivation,
+                targetCoveragePpm,
                 typicalHalfWidth,
                 typicalLongAxis,
                 typicalUplift,
@@ -183,16 +182,12 @@ final class StandardMountainCalibrator implements MountainCalibrator {
     }
 
     private static int calibratedActivationPpm(
-            int abundancePpm,
+            int targetCoveragePpm,
             int halfWidth,
             int longAxis,
             int spacing) {
-        if (abundancePpm <= 0) return 0;
-        double targetCoverage = Math.min(
-                MAXIMUM_ABUNDANCE_COVERAGE,
-                abundancePpm / (double) PPM * MAXIMUM_ABUNDANCE_COVERAGE);
-        if (targetCoverage <= 0.0) return 0;
-
+        if (targetCoveragePpm <= 0) return 0;
+        double targetCoverage = targetCoveragePpm / (double) PPM;
         double expectedFootprint = StrictMath.PI * halfWidth * (double) longAxis;
         double latticeArea = Math.max(1.0, spacing * (double) spacing);
         double footprintLoad = Math.max(1.0e-6, expectedFootprint / latticeArea);
