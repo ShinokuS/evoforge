@@ -114,7 +114,7 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
             GenerationRevision revision,
             TerrainSurfaceTargetSampler fallback) {
         if (GenerationRevision.V13.equals(revision)) {
-            return TerrainSurfaceTargetSamplers::sparseCoherentVoxelTransitionPatch;
+            return TerrainSurfaceTargetSampler.sparseCoherentVoxelTransitions();
         }
         if (GenerationRevision.V12.equals(revision)) {
             return TerrainSurfaceTargetSampler.coherentVoxelTransitions();
