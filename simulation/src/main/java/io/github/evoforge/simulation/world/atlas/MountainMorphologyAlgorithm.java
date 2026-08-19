@@ -16,9 +16,9 @@ import java.util.List;
  * <p>Each source is one asymmetric elongated hill. Abundance owns the expected amount of land
  * occupied by mountain structures, while scale and chaininess own their individual size and
  * elongation. Height is capped by what that footprint can support at the calibrated geometric
- * slope. The stage knows nothing about concrete runtime Shapes.</p>
+ * slope. The algorithm knows nothing about concrete runtime Shapes.</p>
  */
-final class MountainMorphologyAlgorithm {
+final class MountainMorphologyAlgorithm implements MountainElevationAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
     private static final GenerationPurposeId ACTIVE = GenerationPurposeId.of("mountain:active");
     private static final GenerationPurposeId CENTER = GenerationPurposeId.of("mountain:center");
@@ -29,11 +29,10 @@ final class MountainMorphologyAlgorithm {
 
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
-    private static final double PROFILE_GRADIENT_BOUND = 1.30;
-    private static final double PLATEAU_PROFILE_GRADIENT_BOUND = 1.60;
     private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
 
-    ElevationField generate(
+    @Override
+    public ElevationField generate(
             WorldGenesis genesis,
             ElevationField base,
             MountainCalibration calibration,
@@ -254,9 +253,7 @@ final class MountainMorphologyAlgorithm {
                 Math.min(
                         Math.min(leftWidth, rightWidth),
                         Math.min(negativeLongAxis, positiveLongAxis)));
-        double gradientBound = plateau
-                ? PLATEAU_PROFILE_GRADIENT_BOUND
-                : PROFILE_GRADIENT_BOUND;
+        double gradientBound = recipe.profileGradientBound(plateau);
         long supportedUplift = Math.max(
                 0L,
                 (long) StrictMath.floor(
@@ -337,8 +334,7 @@ final class MountainMorphologyAlgorithm {
 
     /**
      * Layer-friendly radial profile: a long near-linear middle slope with smooth summit and foot.
-     * The derivative bound is explicit so the caller can convert an authored width into a safe
-     * cardinal-rise budget before rasterization.
+     * The derivative bound is recipe-owned so calibration and synthesis use the same model policy.
      */
     private static double layeredHill(
             double radius,
