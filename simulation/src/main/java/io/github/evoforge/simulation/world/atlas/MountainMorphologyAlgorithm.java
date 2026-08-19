@@ -7,15 +7,16 @@ import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Deterministic spatial synthesis for V13 structural mountains.
  *
- * <p>Each source is authored as one asymmetric elongated mass. Abundance controls how many source
- * footprints are expected to occupy land; scale and chaininess control the footprint geometry; and
- * height is capped by what that authored footprint can support at the requested geometric slope.
- * The stage knows nothing about concrete runtime Shapes.</p>
+ * <p>Each source is authored as one asymmetric elongated mass. Abundance owns the expected amount
+ * of land occupied by mountain structures, while scale and chaininess own their individual size and
+ * elongation. Height is capped by what that authored footprint can support at the requested
+ * geometric slope. The stage knows nothing about concrete runtime Shapes.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -31,6 +32,7 @@ final class MountainMorphologyAlgorithm {
     private static final double TWO_PI = StrictMath.PI * 2.0;
     private static final double PROFILE_GRADIENT_BOUND = 1.30;
     private static final double PLATEAU_PROFILE_GRADIENT_BOUND = 1.60;
+    private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
     private static final long MINIMUM_VISIBLE_UPLIFT_SUBUNITS = ElevationField.SUBUNITS_PER_CELL / 10L;
 
     ElevationField generate(
@@ -50,24 +52,28 @@ final class MountainMorphologyAlgorithm {
         int height = calibration.height();
         long[] baseHeights = new long[calibration.area()];
         boolean[] land = new boolean[calibration.area()];
+        int landCount = 0;
         int index = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 long value = base.elevationSubunitsAt(x, y);
                 baseHeights[index] = value;
                 land[index] = value > ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
+                if (land[index]) landCount++;
                 index++;
             }
         }
 
-        if (calibration.candidateActivationPpm() == 0 || calibration.typicalUpliftSubunits() == 0L) {
+        if (calibration.targetCoveragePpm() == 0
+                || calibration.typicalUpliftSubunits() == 0L
+                || landCount == 0) {
             return new DenseElevationField(bounds, baseHeights);
         }
 
         long[] mountainUplift = new long[calibration.area()];
         GenerationRandom random = GenerationRandom.from(genesis);
         for (MountainSystem system : createSystems(
-                random, bounds, land, width, height, calibration, recipe)) {
+                random, bounds, land, landCount, width, height, calibration, recipe)) {
             rasterize(system, bounds, width, height, land, mountainUplift, calibration, recipe);
         }
 
@@ -100,38 +106,86 @@ final class MountainMorphologyAlgorithm {
         return new DenseElevationField(bounds, result);
     }
 
+    /**
+     * Builds a deterministic ranked candidate set and selects a source count from the requested
+     * coverage budget. This avoids interpreting Abundance as a per-node Bernoulli probability,
+     * which made source size silently change total mountain coverage.
+     */
     private static List<MountainSystem> createSystems(
             GenerationRandom random,
             WorldBounds bounds,
             boolean[] land,
+            int landCount,
             int width,
             int height,
             MountainCalibration calibration,
             MountainRecipe recipe) {
         int spacing = calibration.candidateSpacingCells();
-        double variation = recipe.widthVariationPpm() / (double) PPM;
-        int maximumSupport = Math.max(
-                1,
-                (int) StrictMath.ceil(
-                        calibration.typicalLongAxisCells() * (1.0 + variation)));
-        int margin = Math.max(1, (maximumSupport + spacing - 1) / spacing + 1);
+        long minimumLatticeX = Math.floorDiv((long) bounds.minX(), spacing) - 1L;
+        long maximumLatticeX = Math.floorDiv((long) bounds.maxX(), spacing) + 1L;
+        long minimumLatticeY = Math.floorDiv((long) bounds.minY(), spacing) - 1L;
+        long maximumLatticeY = Math.floorDiv((long) bounds.maxY(), spacing) + 1L;
 
-        long minimumLatticeX = Math.floorDiv((long) bounds.minX(), spacing) - margin;
-        long maximumLatticeX = Math.floorDiv((long) bounds.maxX(), spacing) + margin;
-        long minimumLatticeY = Math.floorDiv((long) bounds.minY(), spacing) - margin;
-        long maximumLatticeY = Math.floorDiv((long) bounds.maxY(), spacing) + margin;
-
-        List<MountainSystem> systems = new ArrayList<>();
+        List<MountainCandidate> candidates = new ArrayList<>();
         for (long latticeY = minimumLatticeY; latticeY <= maximumLatticeY; latticeY++) {
             for (long latticeX = minimumLatticeX; latticeX <= maximumLatticeX; latticeX++) {
-                int activation = samplePpm(random, ACTIVE, latticeX, latticeY, 0L);
-                if (activation >= calibration.candidateActivationPpm()) continue;
                 MountainSystem system = createSystem(random, latticeX, latticeY, calibration, recipe);
                 if (!centerIsLand(system, bounds, land, width, height)) continue;
-                systems.add(system);
+                int priority = samplePpm(random, ACTIVE, latticeX, latticeY, 0L);
+                candidates.add(new MountainCandidate(priority, latticeX, latticeY, system));
             }
         }
-        return systems;
+        if (candidates.isEmpty()) return List.of();
+
+        candidates.sort(Comparator
+                .comparingInt(MountainCandidate::priority)
+                .thenComparingLong(MountainCandidate::latticeY)
+                .thenComparingLong(MountainCandidate::latticeX));
+
+        int desiredSources = desiredSourceCount(landCount, calibration);
+        List<MountainSystem> selected = new ArrayList<>(Math.min(desiredSources, candidates.size()));
+        double minimumCenterDistance = calibration.typicalHalfWidthCells() * 1.20;
+        double minimumCenterDistanceSquared = minimumCenterDistance * minimumCenterDistance;
+
+        for (MountainCandidate candidate : candidates) {
+            if (selected.size() >= desiredSources) break;
+            if (tooCloseToSelected(candidate.system(), selected, minimumCenterDistanceSquared)) continue;
+            selected.add(candidate.system());
+        }
+
+        // Small worlds or highly fragmented coastlines can leave too few well-separated centers.
+        // Fill the remaining quota from the same deterministic ranking rather than producing no
+        // mountains at all; max composition still prevents overlap from creating additive spikes.
+        if (selected.size() < desiredSources) {
+            for (MountainCandidate candidate : candidates) {
+                if (selected.size() >= desiredSources) break;
+                if (selected.contains(candidate.system())) continue;
+                selected.add(candidate.system());
+            }
+        }
+        return selected;
+    }
+
+    private static int desiredSourceCount(int landCount, MountainCalibration calibration) {
+        double targetCells = landCount * calibration.targetCoveragePpm() / (double) PPM;
+        double nominalFootprint = StrictMath.PI
+                * calibration.typicalHalfWidthCells()
+                * (double) calibration.typicalLongAxisCells()
+                * MEAN_VISIBLE_FOOTPRINT_FRACTION;
+        if (targetCells <= 0.0 || nominalFootprint <= 0.0) return 0;
+        return Math.max(1, (int) StrictMath.ceil(targetCells / nominalFootprint));
+    }
+
+    private static boolean tooCloseToSelected(
+            MountainSystem candidate,
+            List<MountainSystem> selected,
+            double minimumDistanceSquared) {
+        for (MountainSystem existing : selected) {
+            double dx = candidate.centerX() - existing.centerX();
+            double dy = candidate.centerY() - existing.centerY();
+            if (dx * dx + dy * dy < minimumDistanceSquared) return true;
+        }
+        return false;
     }
 
     private static boolean centerIsLand(
@@ -503,6 +557,13 @@ final class MountainMorphologyAlgorithm {
             long y,
             long ordinal) {
         return samplePpm(random, purpose, x, y, ordinal) * 2 - PPM;
+    }
+
+    private record MountainCandidate(
+            int priority,
+            long latticeX,
+            long latticeY,
+            MountainSystem system) {
     }
 
     private record MountainSystem(
