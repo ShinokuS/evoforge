@@ -94,9 +94,10 @@ public record MountainRecipe(
     }
 
     /**
-     * Smooth-hill mountains with a geometry-only slope budget. At ordinary sharpness the mountain
-     * layer rises by about one vertical cell per three horizontal cells; even maximum sharpness
-     * remains above two horizontal cells per vertical level.
+     * Keeps the accepted 4e0f4e3 mountain character but reserves more horizontal distance for each
+     * vertical level. Peak sharpness remains semantic character; it is not allowed to collapse the
+     * source mountain below roughly three horizontal cells per vertical level before V12 terrain is
+     * composed underneath it.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -109,8 +110,8 @@ public record MountainRecipe(
                 1,
                 100_000,
                 1_000_000,
-                220_000,
-                420_000,
+                180_000,
+                300_000,
                 850_000,
                 750_000,
                 1_150_000,
