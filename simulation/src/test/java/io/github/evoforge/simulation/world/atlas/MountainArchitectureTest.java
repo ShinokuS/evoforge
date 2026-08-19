@@ -25,6 +25,7 @@ final class MountainArchitectureTest {
                 RECIPE);
 
         assertEquals(0, calibration.candidateActivationPpm());
+        assertEquals(0, calibration.targetCoveragePpm());
     }
 
     @Test
@@ -78,7 +79,7 @@ final class MountainArchitectureTest {
     }
 
     @Test
-    void maximumMountainHeightScalesWithHorizontalWorldSize() {
+    void worldHeightBudgetScalesWithWorldSizeButRealizedHeightStillRespectsScale() {
         WorldBounds smallBounds = new WorldBounds(-32, 31, -32, 31, -12, 96);
         WorldBounds largeBounds = new WorldBounds(-250, 249, -250, 249, -12, 96);
         MountainIntent high = mountains(700_000, 1_000_000, 500_000, 550_000, 600_000, false, 0);
@@ -89,9 +90,12 @@ final class MountainArchitectureTest {
         long cell = ElevationField.SUBUNITS_PER_CELL;
         assertTrue(small.typicalUpliftSubunits() < 15L * cell,
                 "a 64x64 world must not receive a hundred-cell mountain");
-        assertTrue(large.typicalUpliftSubunits() > 50L * cell,
-                "a 500x500 world should have enough vertical budget for recognizably high mountains");
-        assertTrue(large.typicalUpliftSubunits() > small.typicalUpliftSubunits() * 5L);
+        assertTrue(large.worldHeightCapSubunits() > 50L * cell,
+                "a 500x500 world should expose enough vertical budget for genuinely high mountains");
+        assertTrue(large.typicalUpliftSubunits() > small.typicalUpliftSubunits() * 5L,
+                "the same authored scale must still grow meaningfully with world size");
+        assertTrue(large.typicalUpliftSubunits() < large.worldHeightCapSubunits(),
+                "Scale must be allowed to cap realized height before the whole world-height budget is consumed");
     }
 
     @Test
@@ -105,6 +109,8 @@ final class MountainArchitectureTest {
 
         assertTrue(high.typicalUpliftSubunits() > low.typicalUpliftSubunits());
         assertTrue(high.typicalHalfWidthCells() > low.typicalHalfWidthCells());
+        assertEquals(low.candidateSpacingCells(), high.candidateSpacingCells(),
+                "Height must not move the deterministic source lattice");
     }
 
     @Test
