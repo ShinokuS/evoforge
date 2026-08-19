@@ -14,10 +14,12 @@ import java.util.List;
  *
  * <p>Each mountain is born as one bounded-slope anisotropic envelope above the accepted V12 terrain.
  * Its actual uplift is chosen first, then its axes are made wide enough for that uplift before any
- * rasterization occurs. The envelope is allowed to keep descending past its nominal anchor level
- * until it naturally falls below the existing terrain, so there is no hard terrace edge to repair.
- * Multiple systems compose by maximum height. There is deliberately no post-generation widening,
- * smoothing, terrace cleanup, or Shape-aware mountain repair.</p>
+ * rasterization occurs. A sampled source that falls on water is resolved deterministically to the
+ * nearest accepted V12 land inside that mountain's own source radius before the envelope is built.
+ * The envelope is allowed to keep descending past its nominal anchor level until it naturally falls
+ * below the existing terrain, so there is no hard terrace edge to repair. Multiple systems compose
+ * by maximum height. There is deliberately no post-generation widening, smoothing, terrace cleanup,
+ * or Shape-aware mountain repair.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -177,7 +179,7 @@ final class MountainMorphologyAlgorithm {
     }
 
     private static void rasterize(
-            MountainSystem system,
+            MountainSystem sampledSystem,
             WorldBounds bounds,
             int width,
             int height,
@@ -186,19 +188,14 @@ final class MountainMorphologyAlgorithm {
             long[] result,
             MountainCalibration calibration,
             MountainRecipe recipe) {
-        if (system.upliftSubunits() <= 0L) return;
+        if (sampledSystem.upliftSubunits() <= 0L) return;
 
-        long anchorXLong = Math.round(system.centerX());
-        long anchorYLong = Math.round(system.centerY());
-        if (anchorXLong < bounds.minX() || anchorXLong > bounds.maxX()
-                || anchorYLong < bounds.minY() || anchorYLong > bounds.maxY()) {
-            return;
-        }
-        int anchorX = (int) anchorXLong;
-        int anchorY = (int) anchorYLong;
+        MountainSystem system = anchorToNearestLand(sampledSystem, bounds, width, height, land);
+        if (system == null) return;
+
+        int anchorX = (int) system.centerX();
+        int anchorY = (int) system.centerY();
         int anchorCell = (anchorY - bounds.minY()) * width + (anchorX - bounds.minX());
-        if (!land[anchorCell]) return;
-
         long anchorHeight = baseHeights[anchorCell];
         long rawPeak = Math.min(
                 calibration.mountainCeilingSubunits(),
@@ -241,6 +238,71 @@ final class MountainMorphologyAlgorithm {
                 if (candidate > result[cell]) result[cell] = candidate;
             }
         }
+    }
+
+    /**
+     * Resolve a sampled source onto the accepted V12 land before generating anything. This is part
+     * of source placement, not a repair of generated terrain: the mountain envelope is constructed
+     * only after its final center is known. Sources outside the requested world are not pulled in.
+     */
+    private static MountainSystem anchorToNearestLand(
+            MountainSystem sampled,
+            WorldBounds bounds,
+            int width,
+            int height,
+            boolean[] land) {
+        if (sampled.centerX() < bounds.minX() || sampled.centerX() > bounds.maxX()
+                || sampled.centerY() < bounds.minY() || sampled.centerY() > bounds.maxY()) {
+            return null;
+        }
+
+        int searchRadius = Math.max(
+                1,
+                (int) StrictMath.ceil(Math.max(sampled.leftWidth(), sampled.rightWidth())));
+        int minX = Math.max(bounds.minX(), (int) StrictMath.floor(sampled.centerX() - searchRadius));
+        int maxX = Math.min(bounds.maxX(), (int) StrictMath.ceil(sampled.centerX() + searchRadius));
+        int minY = Math.max(bounds.minY(), (int) StrictMath.floor(sampled.centerY() - searchRadius));
+        int maxY = Math.min(bounds.maxY(), (int) StrictMath.ceil(sampled.centerY() + searchRadius));
+        double maximumDistanceSquared = searchRadius * (double) searchRadius;
+
+        boolean found = false;
+        int bestX = 0;
+        int bestY = 0;
+        double bestDistanceSquared = Double.POSITIVE_INFINITY;
+        for (int y = minY; y <= maxY; y++) {
+            int localY = y - bounds.minY();
+            if (localY < 0 || localY >= height) continue;
+            for (int x = minX; x <= maxX; x++) {
+                int localX = x - bounds.minX();
+                if (localX < 0 || localX >= width || !land[localY * width + localX]) continue;
+
+                double dx = x - sampled.centerX();
+                double dy = y - sampled.centerY();
+                double distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared > maximumDistanceSquared) continue;
+                if (!found
+                        || distanceSquared < bestDistanceSquared
+                        || (Double.compare(distanceSquared, bestDistanceSquared) == 0
+                                && (y < bestY || (y == bestY && x < bestX)))) {
+                    found = true;
+                    bestX = x;
+                    bestY = y;
+                    bestDistanceSquared = distanceSquared;
+                }
+            }
+        }
+        if (!found) return null;
+
+        return new MountainSystem(
+                bestX,
+                bestY,
+                sampled.axisX(),
+                sampled.axisY(),
+                sampled.longAxis(),
+                sampled.leftWidth(),
+                sampled.rightWidth(),
+                sampled.upliftSubunits(),
+                sampled.plateau());
     }
 
     /**
