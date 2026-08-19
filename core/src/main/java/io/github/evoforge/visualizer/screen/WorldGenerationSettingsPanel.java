@@ -80,7 +80,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         rootContent.add(title).left().padBottom(4f);
         rootContent.row();
-        Label subtitle = new Label("V12 balanced multi-scale landforms", skin, "subtitle");
+        Label subtitle = new Label("V13 structural mountains over accepted V12 base", skin, "subtitle");
         rootContent.add(subtitle).left().padBottom(10f);
         rootContent.row();
 
@@ -105,9 +105,6 @@ final class WorldGenerationSettingsPanel implements Disposable {
         rootContent.add(tabRow).growX().padBottom(8f);
         rootContent.row();
 
-        // Replace the tab actor instead of stacking and hiding actors. This keeps Scene2D hit
-        // testing and preferred-size calculation deterministic when the two tabs have different
-        // heights, and fixes PERFORMANCE clicks being visually ignored on some layouts.
         Table tabHost = new Table(skin);
         tabHost.top().left();
         showTab(tabHost, worldTab, rootContent);
@@ -168,7 +165,6 @@ final class WorldGenerationSettingsPanel implements Disposable {
         return stage;
     }
 
-    /** Returns whether a screen-space pointer is inside the visible sidebar frame. */
     boolean containsScreenPoint(int screenX, int screenY) {
         int screenWidth = Gdx.graphics.getWidth();
         int screenHeight = Gdx.graphics.getHeight();
@@ -218,30 +214,38 @@ final class WorldGenerationSettingsPanel implements Disposable {
         addSeedControl(content);
         addRandomSeedControl(content);
 
-        addSection(content, "LAND SHAPE");
+        addSection(content, "BASE LAND SHAPE (V12)");
         addPercentControl(content, "Land", settings.coveragePpm(), settings::coveragePpm);
         addPercentControl(content, "Continent scale", settings.scalePpm(), settings::scalePpm);
-        addPercentControl(
-                content,
-                "Fragmentation",
-                settings.fragmentationPpm(),
-                settings::fragmentationPpm);
+        addPercentControl(content, "Fragmentation", settings.fragmentationPpm(), settings::fragmentationPpm);
         addPercentControl(content, "Macro height", settings.reliefPpm(), settings::reliefPpm);
+        addPercentControl(content, "Rolling hills", settings.localReliefPpm(), settings::localReliefPpm);
+        addPercentControl(content, "Landform size", settings.landformScalePpm(), settings::landformScalePpm);
+        addPercentControl(content, "Ruggedness", settings.ruggednessPpm(), settings::ruggednessPpm);
+
+        addSection(content, "MOUNTAINS (V13)");
+        Label mountainHint = new Label(
+                "Dedicated ridge systems are generated above the accepted V12 surface. High soft mountains automatically widen; steep or impassable faces are allowed.",
+                skin,
+                "subtitle");
+        mountainHint.setWrap(true);
+        content.add(mountainHint).growX().minWidth(0f).left().padBottom(10f);
+        content.row();
+        addPercentControl(content, "Abundance", settings.mountainAbundancePpm(), settings::mountainAbundancePpm);
+        addPercentControl(content, "Height", settings.mountainHeightPpm(), settings::mountainHeightPpm);
+        addPercentControl(content, "Scale", settings.mountainScalePpm(), settings::mountainScalePpm);
+        addPercentControl(content, "Chaininess", settings.mountainChaininessPpm(), settings::mountainChaininessPpm);
+        addPercentControl(content, "Peak sharpness", settings.mountainSharpnessPpm(), settings::mountainSharpnessPpm);
+        addGenerationToggle(
+                content,
+                "Allow plateau mountains",
+                settings.mountainPlateausEnabled(),
+                settings::mountainPlateausEnabled);
         addPercentControl(
                 content,
-                "Rolling hills",
-                settings.localReliefPpm(),
-                settings::localReliefPpm);
-        addPercentControl(
-                content,
-                "Landform size",
-                settings.landformScalePpm(),
-                settings::landformScalePpm);
-        addPercentControl(
-                content,
-                "Ruggedness",
-                settings.ruggednessPpm(),
-                settings::ruggednessPpm);
+                "Plateau chance",
+                settings.mountainPlateauProbabilityPpm(),
+                settings::mountainPlateauProbabilityPpm);
 
         addSection(content, "PREVIEW");
         addViewModeControl(content, viewMode);
@@ -411,19 +415,34 @@ final class WorldGenerationSettingsPanel implements Disposable {
         content.row();
     }
 
-    private void addPercentControl(
+    private void addGenerationToggle(
             Table content,
             String name,
-            int initialPpm,
-            IntConsumer setter) {
+            boolean initialValue,
+            Consumer<Boolean> setter) {
+        CheckBox checkBox = new CheckBox("", skin);
+        checkBox.setChecked(initialValue);
+        checkBox.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                setter.accept(checkBox.isChecked());
+                markDirty();
+            }
+        });
+
+        Table row = new Table(skin);
+        row.add(checkBox).left();
+        row.add(new Label(name, skin)).left().padLeft(8f);
+        row.add().expandX();
+        content.add(row).growX().minWidth(0f).left().padBottom(4f);
+        content.row();
+    }
+
+    private void addPercentControl(Table content, String name, int initialPpm, IntConsumer setter) {
         addPercentControl(content, name, initialPpm, setter, true);
     }
 
-    private void addLivePercentControl(
-            Table content,
-            String name,
-            int initialPpm,
-            IntConsumer setter) {
+    private void addLivePercentControl(Table content, String name, int initialPpm, IntConsumer setter) {
         addPercentControl(content, name, initialPpm, setter, false);
     }
 
@@ -433,7 +452,6 @@ final class WorldGenerationSettingsPanel implements Disposable {
             int initialPpm,
             IntConsumer setter,
             boolean marksGenerationDirty) {
-
         Slider slider = new Slider(0f, 100f, 1f, false, skin);
         slider.setValue(initialPpm / 10_000f);
         Label value = new Label(formatPercent(initialPpm), skin);
@@ -538,7 +556,6 @@ final class WorldGenerationSettingsPanel implements Disposable {
             String name,
             boolean initialValue,
             Consumer<Boolean> visibility) {
-
         CheckBox checkBox = new CheckBox("", skin);
         checkBox.setChecked(initialValue);
         checkBox.addListener(new ChangeListener() {
