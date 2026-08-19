@@ -5,7 +5,9 @@ package io.github.evoforge.simulation.world.atlas;
  *
  * <p>{@code targetCoveragePpm} is the calibrated share of V12 land that Abundance asks mountain
  * structures to occupy. It is intentionally separate from lattice activation diagnostics so Scale,
- * Height and Chaininess cannot silently take ownership of global mountain coverage.</p>
+ * Height and Chaininess cannot silently take ownership of global mountain coverage. Actual source
+ * selection is discrete and deterministic, so small worlds may approximate rather than exactly hit
+ * the requested share.</p>
  */
 public record MountainCalibration(
         int width,
