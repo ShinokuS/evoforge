@@ -6,17 +6,18 @@ import io.github.evoforge.simulation.world.genesis.GenerationRandom;
 import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.PriorityQueue;
 
 /**
  * Deterministic spatial synthesis for V13 mountain structure.
  *
  * <p>The accepted V12 hills remain the visual reference. Each mountain starts as one very large
- * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. The final
- * authored surface, not merely the mountain delta, is constrained by an abstract cardinal-rise
- * budget. This is intentionally independent of concrete runtime Shapes.</p>
+ * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. Once that
+ * macro form is composed with V12, the actual final surface inside the mountain footprint is
+ * relaxed against an abstract cardinal-rise budget. The mountain stage never queries or names a
+ * concrete runtime Shape.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -74,50 +75,58 @@ final class MountainMorphologyAlgorithm {
                 recipe.upliftSmoothingPasses());
 
         long maximumRawUplift = maximum(mountainUplift);
-        if (maximumRawUplift > 0L) {
-            int requiredCoastalDistance = requiredCoastalDistance(
-                    maximumRawUplift,
-                    calibration.shorelineUpliftSubunits(),
-                    calibration.maximumCardinalRiseSubunits(),
-                    calibration.coastalTransitionCells());
-            int[] coastalDistance = distanceFromOceanCells(
-                    land,
-                    width,
-                    height,
-                    requiredCoastalDistance);
-            long[] upliftCaps = coastalUpliftCaps(
-                    land,
-                    coastalDistance,
-                    maximumRawUplift,
-                    calibration.shorelineUpliftSubunits(),
-                    calibration.maximumCardinalRiseSubunits());
-            capForMountainCeiling(
-                    upliftCaps,
-                    baseHeights,
-                    land,
-                    calibration.mountainCeilingSubunits());
-            clampToCaps(mountainUplift, upliftCaps, land);
-
-            // Important: V12 already contains rolling relief. Limiting only the mountain delta lets
-            // V12 gradient + mountain gradient add together and still cross whole voxel levels in a
-            // single cell. Constrain the composed surface instead. Lower neighbours are raised via
-            // mountain uplift; existing V12 terrain is never rewritten and summits are not shaved.
-            enforceFinalSurfaceRiseBudget(
-                    baseHeights,
-                    mountainUplift,
-                    upliftCaps,
-                    land,
-                    width,
-                    height,
-                    calibration.maximumCardinalRiseSubunits());
+        if (maximumRawUplift <= 0L) {
+            return new DenseElevationField(bounds, baseHeights);
         }
 
+        int requiredCoastalDistance = requiredCoastalDistance(
+                maximumRawUplift,
+                calibration.shorelineUpliftSubunits(),
+                calibration.maximumCardinalRiseSubunits(),
+                calibration.coastalTransitionCells());
+        int[] coastalDistance = distanceFromOceanCells(
+                land,
+                width,
+                height,
+                requiredCoastalDistance);
+        long[] upliftCaps = coastalUpliftCaps(
+                land,
+                coastalDistance,
+                maximumRawUplift,
+                calibration.shorelineUpliftSubunits(),
+                calibration.maximumCardinalRiseSubunits());
+        capForMountainCeiling(
+                upliftCaps,
+                baseHeights,
+                land,
+                calibration.mountainCeilingSubunits());
+        clampToCaps(mountainUplift, upliftCaps, land);
+
+        boolean[] mountainInfluence = new boolean[mountainUplift.length];
         long[] result = baseHeights.clone();
+        long[] maximumSurface = baseHeights.clone();
         long ceiling = calibration.mountainCeilingSubunits();
         for (int cell = 0; cell < result.length; cell++) {
             if (!land[cell] || mountainUplift[cell] <= 0L) continue;
-            result[cell] = Math.min(ceiling, Math.addExact(result[cell], mountainUplift[cell]));
+            mountainInfluence[cell] = true;
+            result[cell] = Math.min(ceiling, Math.addExact(baseHeights[cell], mountainUplift[cell]));
+            maximumSurface[cell] = Math.min(ceiling, Math.addExact(baseHeights[cell], upliftCaps[cell]));
         }
+
+        // V12 rolling relief is excellent on its own, but inside a much larger mountain its local
+        // gradient can add to the mountain gradient and create one-cell voxel terraces. Relax the
+        // composed surface itself, just as V12 relaxes authored landforms, rather than trying to
+        // infer a concrete shape. Both local bumps and local dips may move inside the footprint;
+        // cells outside it remain exact V12 facts.
+        relaxComposedMountainSurface(
+                result,
+                maximumSurface,
+                mountainInfluence,
+                land,
+                width,
+                height,
+                calibration.maximumCardinalRiseSubunits());
+
         return new DenseElevationField(bounds, result);
     }
 
@@ -358,11 +367,6 @@ final class MountainMorphologyAlgorithm {
         return distance;
     }
 
-    /**
-     * Shore cells may retain a small cliff uplift. Moving inland, the allowed mountain uplift grows
-     * by at most the same cardinal rise budget used everywhere else, so the coast cannot create a
-     * hidden vertical discontinuity in the dry mountain surface.
-     */
     private static long[] coastalUpliftCaps(
             boolean[] land,
             int[] coastalDistance,
@@ -408,138 +412,123 @@ final class MountainMorphologyAlgorithm {
     }
 
     /**
-     * Enforces the geometric rise budget on the composed V12 + mountain surface. The previous
-     * implementation constrained only mountain uplift, so an accepted V12 slope could add to a
-     * legal mountain slope and still create one-cell voxel terraces. Here lower neighbouring cells
-     * receive additional mountain uplift until the final cardinal surface difference fits the same
-     * abstract budget. No concrete Shape is queried or selected.
+     * Queue-driven pairwise projection onto the cardinal rise constraint. If both cells belong to
+     * the mountain footprint, the excess is shared between lowering the high cell and raising the
+     * low cell, preserving the large-scale height as closely as possible. At the footprint boundary
+     * only the mountain-owned cell moves, so untouched V12 terrain remains bit-identical.
      */
-    private static void enforceFinalSurfaceRiseBudget(
-            long[] baseHeights,
-            long[] uplift,
-            long[] caps,
+    private static void relaxComposedMountainSurface(
+            long[] surface,
+            long[] maximumSurface,
+            boolean[] adjustable,
             boolean[] land,
             int width,
             int height,
             long maximumRise) {
-        PriorityQueue<SurfaceNode> queue = new PriorityQueue<>((first, second) -> {
-            int byHeight = Long.compare(second.surface(), first.surface());
-            return byHeight != 0 ? byHeight : Integer.compare(first.cell(), second.cell());
-        });
-
-        for (int cell = 0; cell < uplift.length; cell++) {
-            if (!land[cell] || uplift[cell] <= 0L) continue;
-            long surface = Math.addExact(baseHeights[cell], uplift[cell]);
-            if (hasTooLowFinalNeighbor(
-                    baseHeights,
-                    uplift,
-                    land,
-                    width,
-                    height,
-                    cell,
-                    surface,
-                    maximumRise)) {
-                queue.add(new SurfaceNode(cell, surface));
-            }
+        ArrayDeque<Integer> queue = new ArrayDeque<>();
+        boolean[] queued = new boolean[surface.length];
+        for (int cell = 0; cell < surface.length; cell++) {
+            if (!land[cell] || !adjustable[cell]) continue;
+            enqueue(cell, queue, queued);
         }
 
         while (!queue.isEmpty()) {
-            SurfaceNode node = queue.poll();
-            int cell = node.cell();
-            long currentSurface = Math.addExact(baseHeights[cell], uplift[cell]);
-            if (node.surface() != currentSurface) continue;
-            long propagatedSurface = currentSurface - maximumRise;
-
+            int cell = queue.removeFirst();
+            queued[cell] = false;
             int x = cell % width;
             int y = cell / width;
-            if (x > 0) {
-                propagateFinalSurface(
-                        cell - 1,
-                        propagatedSurface,
-                        baseHeights,
-                        uplift,
-                        caps,
-                        land,
-                        queue);
-            }
-            if (x + 1 < width) {
-                propagateFinalSurface(
-                        cell + 1,
-                        propagatedSurface,
-                        baseHeights,
-                        uplift,
-                        caps,
-                        land,
-                        queue);
-            }
-            if (y > 0) {
-                propagateFinalSurface(
-                        cell - width,
-                        propagatedSurface,
-                        baseHeights,
-                        uplift,
-                        caps,
-                        land,
-                        queue);
-            }
-            if (y + 1 < height) {
-                propagateFinalSurface(
-                        cell + width,
-                        propagatedSurface,
-                        baseHeights,
-                        uplift,
-                        caps,
-                        land,
-                        queue);
+            boolean changed = false;
+            if (x > 0) changed |= relaxPair(cell, cell - 1, surface, maximumSurface, adjustable, land, maximumRise);
+            if (x + 1 < width) changed |= relaxPair(cell, cell + 1, surface, maximumSurface, adjustable, land, maximumRise);
+            if (y > 0) changed |= relaxPair(cell, cell - width, surface, maximumSurface, adjustable, land, maximumRise);
+            if (y + 1 < height) changed |= relaxPair(cell, cell + width, surface, maximumSurface, adjustable, land, maximumRise);
+            if (changed) {
+                enqueueNeighborhood(cell, width, height, land, queue, queued);
             }
         }
     }
 
-    private static boolean hasTooLowFinalNeighbor(
-            long[] baseHeights,
-            long[] uplift,
+    private static boolean relaxPair(
+            int first,
+            int second,
+            long[] surface,
+            long[] maximumSurface,
+            boolean[] adjustable,
             boolean[] land,
+            long maximumRise) {
+        if (!land[first] || !land[second]) return false;
+        long firstHeight = surface[first];
+        long secondHeight = surface[second];
+        long difference = firstHeight - secondHeight;
+        if (absolute(difference) <= maximumRise) return false;
+
+        int high = difference > 0L ? first : second;
+        int low = difference > 0L ? second : first;
+        boolean highAdjustable = adjustable[high];
+        boolean lowAdjustable = adjustable[low];
+        if (!highAdjustable && !lowAdjustable) return false;
+
+        long excess = surface[high] - surface[low] - maximumRise;
+        long highFloor = 1L;
+        long lowCeiling = lowAdjustable ? maximumSurface[low] : surface[low];
+        long highDownCapacity = highAdjustable ? Math.max(0L, surface[high] - highFloor) : 0L;
+        long lowUpCapacity = lowAdjustable ? Math.max(0L, lowCeiling - surface[low]) : 0L;
+        if (highDownCapacity + lowUpCapacity <= 0L) return false;
+
+        long down = 0L;
+        long up = 0L;
+        if (highAdjustable && lowAdjustable) {
+            down = Math.min(highDownCapacity, (excess + 1L) / 2L);
+            up = Math.min(lowUpCapacity, excess - down);
+            long remaining = excess - down - up;
+            if (remaining > 0L) {
+                long extraDown = Math.min(highDownCapacity - down, remaining);
+                down += extraDown;
+                remaining -= extraDown;
+            }
+            if (remaining > 0L) {
+                up += Math.min(lowUpCapacity - up, remaining);
+            }
+        } else if (highAdjustable) {
+            down = Math.min(highDownCapacity, excess);
+        } else {
+            up = Math.min(lowUpCapacity, excess);
+        }
+
+        if (down <= 0L && up <= 0L) return false;
+        surface[high] -= down;
+        surface[low] += up;
+        return true;
+    }
+
+    private static void enqueueNeighborhood(
+            int cell,
             int width,
             int height,
-            int cell,
-            long surface,
-            long maximumRise) {
+            boolean[] land,
+            ArrayDeque<Integer> queue,
+            boolean[] queued) {
         int x = cell % width;
         int y = cell / width;
-        if (x > 0 && land[cell - 1]
-                && surface - finalSurfaceAt(baseHeights, uplift, cell - 1) > maximumRise) return true;
-        if (x + 1 < width && land[cell + 1]
-                && surface - finalSurfaceAt(baseHeights, uplift, cell + 1) > maximumRise) return true;
-        if (y > 0 && land[cell - width]
-                && surface - finalSurfaceAt(baseHeights, uplift, cell - width) > maximumRise) return true;
-        return y + 1 < height
-                && land[cell + width]
-                && surface - finalSurfaceAt(baseHeights, uplift, cell + width) > maximumRise;
+        enqueueIfLand(cell, land, queue, queued);
+        if (x > 0) enqueueIfLand(cell - 1, land, queue, queued);
+        if (x + 1 < width) enqueueIfLand(cell + 1, land, queue, queued);
+        if (y > 0) enqueueIfLand(cell - width, land, queue, queued);
+        if (y + 1 < height) enqueueIfLand(cell + width, land, queue, queued);
     }
 
-    private static void propagateFinalSurface(
-            int target,
-            long requiredSurface,
-            long[] baseHeights,
-            long[] uplift,
-            long[] caps,
+    private static void enqueueIfLand(
+            int cell,
             boolean[] land,
-            PriorityQueue<SurfaceNode> queue) {
-        if (!land[target]) return;
-        long currentSurface = finalSurfaceAt(baseHeights, uplift, target);
-        if (requiredSurface <= currentSurface) return;
-
-        long requiredUplift = Math.max(0L, requiredSurface - baseHeights[target]);
-        long candidateUplift = Math.min(caps[target], requiredUplift);
-        if (candidateUplift <= uplift[target]) return;
-        uplift[target] = candidateUplift;
-        queue.add(new SurfaceNode(
-                target,
-                Math.addExact(baseHeights[target], candidateUplift)));
+            ArrayDeque<Integer> queue,
+            boolean[] queued) {
+        if (land[cell]) enqueue(cell, queue, queued);
     }
 
-    private static long finalSurfaceAt(long[] baseHeights, long[] uplift, int cell) {
-        return Math.addExact(baseHeights[cell], uplift[cell]);
+    private static void enqueue(int cell, ArrayDeque<Integer> queue, boolean[] queued) {
+        if (queued[cell]) return;
+        queued[cell] = true;
+        queue.addLast(cell);
     }
 
     /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
@@ -590,6 +579,13 @@ final class MountainMorphologyAlgorithm {
         return maximum;
     }
 
+    private static long absolute(long value) {
+        if (value == Long.MIN_VALUE) {
+            throw new ArithmeticException("surface difference exceeds signed range");
+        }
+        return Math.abs(value);
+    }
+
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
         return first.minX() == second.minX()
                 && first.maxX() == second.maxX()
@@ -630,8 +626,5 @@ final class MountainMorphologyAlgorithm {
             double rightWidth,
             long upliftSubunits,
             boolean plateau) {
-    }
-
-    private record SurfaceNode(int cell, long surface) {
     }
 }
