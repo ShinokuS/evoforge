@@ -6,13 +6,16 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * Geometry-only cleanup for voxel-scale readability of the final V13 mountain surface.
  *
  * <p>This class deliberately knows nothing about runtime Shapes. It only observes authoritative
- * elevation and discrete vertical cell levels. A one-cell mountain level squeezed between the same
- * neighbouring level is treated as contour noise and replaced by the local opposite-neighbour
- * surface when that replacement still obeys the abstract cardinal-rise budget.</p>
+ * elevation, horizontal adjacency and discrete vertical cell levels. Dedicated mountains are given
+ * a small transition halo in which the composed surface may absorb V12-scale bumps or dips until it
+ * obeys the same abstract cardinal-rise budget used by mountain calibration. One-cell contour noise
+ * is then removed where doing so remains inside that budget.</p>
  */
 final class MountainSurfaceRegularizer {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
     private static final long NO_SUGGESTION = Long.MIN_VALUE;
+    private static final int TRANSITION_HALO_CELLS = 2;
+    private static final int MAX_SURFACE_RELAXATION_PASSES = 96;
 
     private MountainSurfaceRegularizer() {
     }
@@ -32,7 +35,6 @@ final class MountainSurfaceRegularizer {
         if (!sameHorizontalBounds(base.bounds(), generated.bounds())) {
             throw new IllegalArgumentException("base and generated surfaces must share horizontal bounds");
         }
-        if (passes == 0) return generated;
 
         WorldBounds bounds = generated.bounds();
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
@@ -43,6 +45,7 @@ final class MountainSurfaceRegularizer {
         long[] surface = new long[area];
         boolean[] land = new boolean[area];
         boolean[] mountainInfluence = new boolean[area];
+        boolean anyMountainInfluence = false;
         int index = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -51,9 +54,30 @@ final class MountainSurfaceRegularizer {
                 surface[index] = value;
                 land[index] = value > ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
                 mountainInfluence[index] = land[index] && value != baseValue;
+                anyMountainInfluence |= mountainInfluence[index];
                 index++;
             }
         }
+        if (!anyMountainInfluence) return generated;
+
+        // A tiny halo makes the mountain/V12 boundary itself adjustable. Without it, a perfectly
+        // legal V12 local slope can be frozen immediately beside a mountain cell and force a narrow
+        // one-cell transition regardless of how smooth the mountain profile is internally.
+        dilateInfluence(
+                mountainInfluence,
+                land,
+                width,
+                height,
+                TRANSITION_HALO_CELLS);
+        relaxFinalSurface(
+                surface,
+                land,
+                mountainInfluence,
+                width,
+                height,
+                maximumCardinalRise,
+                ceiling,
+                MAX_SURFACE_RELAXATION_PASSES);
 
         long[] scratch = new long[area];
         for (int pass = 0; pass < passes; pass++) {
@@ -115,6 +139,163 @@ final class MountainSurfaceRegularizer {
             scratch = swap;
         }
         return new DenseElevationField(bounds, surface);
+    }
+
+    private static void dilateInfluence(
+            boolean[] influence,
+            boolean[] land,
+            int width,
+            int height,
+            int cells) {
+        if (cells <= 0) return;
+        boolean[] scratch = new boolean[influence.length];
+        for (int pass = 0; pass < cells; pass++) {
+            System.arraycopy(influence, 0, scratch, 0, influence.length);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int cell = y * width + x;
+                    if (!land[cell] || influence[cell]) continue;
+                    if ((x > 0 && influence[cell - 1])
+                            || (x + 1 < width && influence[cell + 1])
+                            || (y > 0 && influence[cell - width])
+                            || (y + 1 < height && influence[cell + width])) {
+                        scratch[cell] = true;
+                    }
+                }
+            }
+            boolean[] swap = influence;
+            influence = scratch;
+            scratch = swap;
+        }
+
+        // The caller owns the original array reference, so copy the final dilation result back when
+        // an odd number of swaps left it in the scratch allocation.
+        System.arraycopy(influence, 0, scratch, 0, influence.length);
+        System.arraycopy(scratch, 0, influence, 0, influence.length);
+    }
+
+    /**
+     * Bounded bidirectional projection of the final land surface onto the cardinal rise constraint.
+     * Both cells move when both belong to the mountain transition area; at its outer boundary only
+     * the mountain-owned side changes and untouched V12 terrain remains authoritative.
+     */
+    private static void relaxFinalSurface(
+            long[] surface,
+            boolean[] land,
+            boolean[] adjustable,
+            int width,
+            int height,
+            long maximumRise,
+            long ceiling,
+            int passes) {
+        for (int pass = 0; pass < passes; pass++) {
+            boolean changed = false;
+            if ((pass & 1) == 0) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int cell = y * width + x;
+                        if (!land[cell]) continue;
+                        if (x + 1 < width) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell + 1,
+                                    surface,
+                                    land,
+                                    adjustable,
+                                    maximumRise,
+                                    ceiling);
+                        }
+                        if (y + 1 < height) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell + width,
+                                    surface,
+                                    land,
+                                    adjustable,
+                                    maximumRise,
+                                    ceiling);
+                        }
+                    }
+                }
+            } else {
+                for (int y = height - 1; y >= 0; y--) {
+                    for (int x = width - 1; x >= 0; x--) {
+                        int cell = y * width + x;
+                        if (!land[cell]) continue;
+                        if (x > 0) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell - 1,
+                                    surface,
+                                    land,
+                                    adjustable,
+                                    maximumRise,
+                                    ceiling);
+                        }
+                        if (y > 0) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell - width,
+                                    surface,
+                                    land,
+                                    adjustable,
+                                    maximumRise,
+                                    ceiling);
+                        }
+                    }
+                }
+            }
+            if (!changed) return;
+        }
+    }
+
+    private static boolean relaxPair(
+            int first,
+            int second,
+            long[] surface,
+            boolean[] land,
+            boolean[] adjustable,
+            long maximumRise,
+            long ceiling) {
+        if (!land[first] || !land[second]) return false;
+        long difference = surface[first] - surface[second];
+        if (absolute(difference) <= maximumRise) return false;
+
+        int high = difference > 0L ? first : second;
+        int low = difference > 0L ? second : first;
+        boolean highAdjustable = adjustable[high];
+        boolean lowAdjustable = adjustable[low];
+        if (!highAdjustable && !lowAdjustable) return false;
+
+        long excess = surface[high] - surface[low] - maximumRise;
+        long highDownCapacity = highAdjustable ? Math.max(0L, surface[high] - 1L) : 0L;
+        long lowUpCapacity = lowAdjustable ? Math.max(0L, ceiling - surface[low]) : 0L;
+        if (highDownCapacity + lowUpCapacity <= 0L) return false;
+
+        long down = 0L;
+        long up = 0L;
+        if (highAdjustable && lowAdjustable) {
+            down = Math.min(highDownCapacity, (excess + 1L) / 2L);
+            up = Math.min(lowUpCapacity, excess - down);
+            long remaining = excess - down - up;
+            if (remaining > 0L) {
+                long extraDown = Math.min(highDownCapacity - down, remaining);
+                down += extraDown;
+                remaining -= extraDown;
+            }
+            if (remaining > 0L) {
+                up += Math.min(lowUpCapacity - up, remaining);
+            }
+        } else if (highAdjustable) {
+            down = Math.min(highDownCapacity, excess);
+        } else {
+            up = Math.min(lowUpCapacity, excess);
+        }
+
+        if (down <= 0L && up <= 0L) return false;
+        surface[high] -= down;
+        surface[low] += up;
+        return true;
     }
 
     private static long oppositeNeighbourSuggestion(
