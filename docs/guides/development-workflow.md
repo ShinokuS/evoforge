@@ -26,6 +26,49 @@ The long-lived branches have different jobs:
 
 A branch is cheap. Use one before an uncertain architectural direction becomes entangled with unrelated work.
 
+## Green-checkpoint engineering contract
+
+Production development is a sequence of **small green checkpoints**, not one large implementation followed by late debugging.
+
+For each semantic block:
+
+```text
+one contract / invariant
+        ↓
+smallest independently meaningful component
+        ↓
+focused test / diagnostic / acceptance evidence
+        ↓
+focused check
+        ↓
+understood green checkpoint
+        ↓
+coherent commit
+        ↓
+next block
+```
+
+The rules are mandatory:
+
+1. **Define the contract first.** State what owns the behavior, what must remain unchanged and what evidence will prove the change works. For visual work, define both machine-checkable invariants and what requires manual observation.
+2. **Change one ownership boundary or behavior at a time.** Do not combine a new algorithm, a new calibration model, unrelated cleanup and presentation changes merely because they belong to one feature idea.
+3. **Test at the nearest boundary.** Prefer deterministic unit/component tests for the changed contract; add integration/audit coverage only where composition is the actual risk.
+4. **Run focused checks immediately.** A failing focused test is cheaper and more informative than a later repository-wide red build.
+5. **Do not build on unexplained red.** When a checkpoint fails, stop adding scope. Localize the failure, fix it, revert it or move the hypothesis to an experiment branch before proceeding.
+6. **Commit only coherent checkpoints.** A commit should be reviewable and revertible as one idea. Diagnostic logging, temporary probes and failed approaches do not belong in the final production history.
+7. **Do not weaken evidence to fit code.** Change a test because the intended contract deliberately changed, not because the implementation cannot satisfy the existing contract.
+8. **Separate experiments from production.** If diagnosis requires invasive probes or competing designs, use `experiment/*` or a temporary diagnostic branch. Transfer only the confirmed minimal fix or clean implementation back to the production branch.
+9. **Escalate verification with scope.** After focused tests pass, run affected-module checks; after the coherent feature is assembled, run full CI/audits/docs checks. Manual visual/performance acceptance is an additional gate when appropriate.
+10. **Split before complexity compounds.** If the commit sequence no longer explains the PR or several independent hypotheses are simultaneously in flight, stop and split/rebuild the branch instead of continuing to accumulate code.
+
+A refactor that claims to preserve behavior must preserve the existing acceptance evidence. Prefer exposing/rearranging contracts in separate commits from semantic changes.
+
+### Debugging rule
+
+When something fails, first identify **which stage first produces the wrong fact**. Instrument or test that boundary directly. Do not add a downstream repair pass until the upstream output is proven correct and the repair is itself a deliberate architectural responsibility.
+
+For deterministic generators this normally means inspecting the chain in order: semantic intent → calibration → spatial algorithm → immutable generated fact → materialization/presentation. A late visual symptom is not evidence that the presentation layer owns the defect.
+
 ## Normal feature flow
 
 ```text
@@ -33,17 +76,21 @@ update develop
     ↓
 create feature/<focused-name>
     ↓
-discuss semantic ownership and contract
+define semantic ownership + acceptance evidence
     ↓
-implementation + headless tests
+implement one small component
     ↓
-diagnostics/manual observation where relevant
+focused test/check → green commit
     ↓
-update only the normative documentation whose semantics changed
+repeat small green checkpoints
+    ↓
+feature-level diagnostics/manual observation where relevant
+    ↓
+update only normative documentation whose semantics changed
     ↓
 PR -> develop
     ↓
-CI + documentation build
+full CI + documentation build/audits as applicable
     ↓
 manual acceptance where behavior/presentation requires it
     ↓
@@ -56,13 +103,29 @@ Feature branches should answer one architectural question or deliver one indepen
 
 Draft PRs are preferred while semantics, visual acceptance or performance work are still active. A draft PR is a working integration record, not a promise that the current design will ship.
 
-## Experiments
+## Experiments and diagnostics
 
 An experiment exists to buy knowledge, not necessarily production code.
 
-Good uses include comparing reservation models, testing a different data representation, measuring a suspected hot path or proving that an architecture is unsuitable.
+Good uses include comparing reservation models, testing a different data representation, measuring a suspected hot path, isolating a deterministic generator defect or proving that an architecture is unsuitable.
 
-When an experiment succeeds, prefer implementing the learned design cleanly on a production `feature/*` branch unless the experiment itself already meets normal production quality. When it fails, record any durable lesson in a decision or Development Journal note and delete the branch. Do not merge a dead end merely to preserve the work; Git history already preserves committed investigation while the branch exists, and important conclusions belong in documentation.
+When an experiment succeeds, prefer implementing the learned design cleanly on a production `feature/*` branch unless the experiment itself already meets normal production quality. When it fails, record any durable lesson in a decision or Development Journal note and delete the branch. Do not merge a dead end merely to preserve the work.
+
+A temporary diagnostic branch may intentionally contain probes that production code should not. Once the cause is known, restore the production branch to its last understood checkpoint and transfer only the minimal verified correction. Do not drag diagnostic history into the final PR merely because it was useful during investigation.
+
+## Pull request shape
+
+A healthy feature PR should be understandable from its commit sequence. A typical non-trivial PR may look like:
+
+1. semantic contract/model;
+2. one replaceable implementation component;
+3. composition/integration wiring;
+4. focused tests or acceptance guards that could not live with an earlier component;
+5. documentation/process reconciliation.
+
+This is not a required file-count template. The invariant is that every commit is a coherent, green checkpoint and later commits do not hide unresolved defects from earlier ones.
+
+Before final acceptance, remove temporary diagnostics and dead/superseded code, review the whole diff for ownership leaks, run the full required checks and reconcile documentation with the actual final behavior.
 
 ## Milestone flow
 
@@ -112,8 +175,8 @@ An implementation-only refactor does not require editing system documentation wh
 
 Normative documentation is part of milestone acceptance. Historical Development Journal notes are not rewritten to pretend earlier uncertainty never existed.
 
-See [Documentation Guide](documentation.md) and [Development Branching Model](../decisions/005-development-branching-model.md).
+See [Documentation Guide](documentation.md), [Development Branching Model](../decisions/005-development-branching-model.md) and [Green Checkpoint Development](../decisions/022-green-checkpoint-development.md).
 
 ## Performance
 
-When a regression appears, add or inspect lightweight telemetry, reproduce it and optimize the measured hot path behind existing contracts. Keep the measurement when it remains useful as a development guard. Performance work follows the same branch and acceptance rules as semantic work.
+When a regression appears, add or inspect lightweight telemetry, reproduce it and optimize the measured hot path behind existing contracts. Keep the measurement when it remains useful as a development guard. Performance work follows the same checkpoint and acceptance rules as semantic work.

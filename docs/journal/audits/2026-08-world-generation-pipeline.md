@@ -4,7 +4,7 @@ This audit accompanies Stage 0 of the world-generation rebuild. The accepted V12
 
 The goal of Stage 0 is **not** to change the world visually. It is to establish one documented pipeline and make the accepted terrain a clean replaceable unit before mountains, dry channels/lakes and geology are implemented.
 
-The canonical plan is [`../systems/world-generation.md`](../systems/world-generation.md). This note records what currently exists and what must happen to it.
+The canonical plan is [`../../systems/world-generation/overview.md`](../../systems/world-generation/overview.md). This note records what currently exists and what must happen to it.
 
 ## Audit rubric
 

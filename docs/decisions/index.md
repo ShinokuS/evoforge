@@ -34,6 +34,7 @@ Architecture Decision Records (ADRs) preserve **why** durable project rules exis
 | 019 | Generated-world warm-up is explicit observation |
 | 020 | Terrain palettes hide generated complexity |
 | 021 | World preparation and calibration boundary |
+| 022 | Green checkpoint development |
 
 All decision files are being normalized to the common format defined in the [Documentation Guide](../guides/documentation.md).
 
