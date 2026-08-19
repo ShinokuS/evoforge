@@ -6,7 +6,6 @@ import io.github.evoforge.simulation.world.genesis.GenerationRandom;
 import io.github.evoforge.simulation.world.genesis.GenerationStageId;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +28,7 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
+    private static final int MAX_FINAL_SURFACE_RELAXATION_PASSES = 24;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -412,10 +412,10 @@ final class MountainMorphologyAlgorithm {
     }
 
     /**
-     * Queue-driven pairwise projection onto the cardinal rise constraint. If both cells belong to
-     * the mountain footprint, the excess is shared between lowering the high cell and raising the
-     * low cell, preserving the large-scale height as closely as possible. At the footprint boundary
-     * only the mountain-owned cell moves, so untouched V12 terrain remains bit-identical.
+     * Bounded V12-style pair relaxation over the composed surface. Alternating scan direction keeps
+     * the operation deterministic while allowing local corrections to propagate in every cardinal
+     * direction. The broad authored mountain profile means violations are local V12-scale noise;
+     * a fixed pass ceiling avoids seed-dependent queue convergence costs on large worlds.
      */
     private static void relaxComposedMountainSurface(
             long[] surface,
@@ -425,26 +425,64 @@ final class MountainMorphologyAlgorithm {
             int width,
             int height,
             long maximumRise) {
-        ArrayDeque<Integer> queue = new ArrayDeque<>();
-        boolean[] queued = new boolean[surface.length];
-        for (int cell = 0; cell < surface.length; cell++) {
-            if (!land[cell] || !adjustable[cell]) continue;
-            enqueue(cell, queue, queued);
-        }
-
-        while (!queue.isEmpty()) {
-            int cell = queue.removeFirst();
-            queued[cell] = false;
-            int x = cell % width;
-            int y = cell / width;
+        for (int pass = 0; pass < MAX_FINAL_SURFACE_RELAXATION_PASSES; pass++) {
             boolean changed = false;
-            if (x > 0) changed |= relaxPair(cell, cell - 1, surface, maximumSurface, adjustable, land, maximumRise);
-            if (x + 1 < width) changed |= relaxPair(cell, cell + 1, surface, maximumSurface, adjustable, land, maximumRise);
-            if (y > 0) changed |= relaxPair(cell, cell - width, surface, maximumSurface, adjustable, land, maximumRise);
-            if (y + 1 < height) changed |= relaxPair(cell, cell + width, surface, maximumSurface, adjustable, land, maximumRise);
-            if (changed) {
-                enqueueNeighborhood(cell, width, height, land, queue, queued);
+            if ((pass & 1) == 0) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int cell = y * width + x;
+                        if (!land[cell]) continue;
+                        if (x + 1 < width) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell + 1,
+                                    surface,
+                                    maximumSurface,
+                                    adjustable,
+                                    land,
+                                    maximumRise);
+                        }
+                        if (y + 1 < height) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell + width,
+                                    surface,
+                                    maximumSurface,
+                                    adjustable,
+                                    land,
+                                    maximumRise);
+                        }
+                    }
+                }
+            } else {
+                for (int y = height - 1; y >= 0; y--) {
+                    for (int x = width - 1; x >= 0; x--) {
+                        int cell = y * width + x;
+                        if (!land[cell]) continue;
+                        if (x > 0) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell - 1,
+                                    surface,
+                                    maximumSurface,
+                                    adjustable,
+                                    land,
+                                    maximumRise);
+                        }
+                        if (y > 0) {
+                            changed |= relaxPair(
+                                    cell,
+                                    cell - width,
+                                    surface,
+                                    maximumSurface,
+                                    adjustable,
+                                    land,
+                                    maximumRise);
+                        }
+                    }
+                }
             }
+            if (!changed) return;
         }
     }
 
@@ -469,10 +507,10 @@ final class MountainMorphologyAlgorithm {
         if (!highAdjustable && !lowAdjustable) return false;
 
         long excess = surface[high] - surface[low] - maximumRise;
-        long highFloor = 1L;
-        long lowCeiling = lowAdjustable ? maximumSurface[low] : surface[low];
-        long highDownCapacity = highAdjustable ? Math.max(0L, surface[high] - highFloor) : 0L;
-        long lowUpCapacity = lowAdjustable ? Math.max(0L, lowCeiling - surface[low]) : 0L;
+        long highDownCapacity = highAdjustable ? Math.max(0L, surface[high] - 1L) : 0L;
+        long lowUpCapacity = lowAdjustable
+                ? Math.max(0L, maximumSurface[low] - surface[low])
+                : 0L;
         if (highDownCapacity + lowUpCapacity <= 0L) return false;
 
         long down = 0L;
@@ -499,36 +537,6 @@ final class MountainMorphologyAlgorithm {
         surface[high] -= down;
         surface[low] += up;
         return true;
-    }
-
-    private static void enqueueNeighborhood(
-            int cell,
-            int width,
-            int height,
-            boolean[] land,
-            ArrayDeque<Integer> queue,
-            boolean[] queued) {
-        int x = cell % width;
-        int y = cell / width;
-        enqueueIfLand(cell, land, queue, queued);
-        if (x > 0) enqueueIfLand(cell - 1, land, queue, queued);
-        if (x + 1 < width) enqueueIfLand(cell + 1, land, queue, queued);
-        if (y > 0) enqueueIfLand(cell - width, land, queue, queued);
-        if (y + 1 < height) enqueueIfLand(cell + width, land, queue, queued);
-    }
-
-    private static void enqueueIfLand(
-            int cell,
-            boolean[] land,
-            ArrayDeque<Integer> queue,
-            boolean[] queued) {
-        if (land[cell]) enqueue(cell, queue, queued);
-    }
-
-    private static void enqueue(int cell, ArrayDeque<Integer> queue, boolean[] queued) {
-        if (queued[cell]) return;
-        queued[cell] = true;
-        queue.addLast(cell);
     }
 
     /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
