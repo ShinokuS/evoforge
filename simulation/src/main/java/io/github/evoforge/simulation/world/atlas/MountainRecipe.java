@@ -22,6 +22,7 @@ public record MountainRecipe(
         int minimumAllowedRisePpm,
         int maximumAllowedRisePpm,
         int worldSlopeRadiusUtilizationPpm,
+        int slopeWidthCouplingPpm,
         int minimumLongAxisWidthPpm,
         int maximumLongAxisWidthPpm,
         int minimumCoastalTransitionCells,
@@ -66,6 +67,7 @@ public record MountainRecipe(
                     "maximumAllowedRisePpm must be in [minimumAllowedRisePpm, 1_000_000]");
         }
         requireNormalized(worldSlopeRadiusUtilizationPpm, "worldSlopeRadiusUtilizationPpm");
+        requireNormalized(slopeWidthCouplingPpm, "slopeWidthCouplingPpm");
         requirePositive(minimumLongAxisWidthPpm, "minimumLongAxisWidthPpm");
         if (maximumLongAxisWidthPpm < minimumLongAxisWidthPpm) {
             throw new IllegalArgumentException("maximumLongAxisWidthPpm must be >= minimumLongAxisWidthPpm");
@@ -110,6 +112,7 @@ public record MountainRecipe(
                 220_000,
                 420_000,
                 850_000,
+                750_000,
                 1_150_000,
                 2_350_000,
                 12,
