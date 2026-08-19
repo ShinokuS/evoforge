@@ -52,7 +52,7 @@ record WorldGenerationPreviewConfig(
                 minX + width - 1,
                 minY,
                 minY + length - 1,
-                -12,
+                -96,
                 96);
     }
 
