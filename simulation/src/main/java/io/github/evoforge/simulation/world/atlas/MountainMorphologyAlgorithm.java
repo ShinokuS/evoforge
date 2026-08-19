@@ -13,10 +13,11 @@ import java.util.List;
  * Deterministic spatial synthesis for V13 mountain structure.
  *
  * <p>The accepted V12 hills remain the visual reference. Each mountain starts as one very large
- * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. Once that
- * macro form is composed with V12, the actual final surface inside the mountain footprint is
- * relaxed against an abstract cardinal-rise budget. The mountain stage never queries or names a
- * concrete runtime Shape.</p>
+ * anisotropic smooth hill, with a subordinate smooth inner core for vertical presence. Inside the
+ * mountain body, V12-scale undulations are softly absorbed into a filtered foundation so the macro
+ * mountain becomes the dominant landform instead of inheriting every small underlying bump. The
+ * final composed surface is then relaxed against an abstract cardinal-rise budget. The mountain
+ * stage never queries or names a concrete runtime Shape.</p>
  */
 final class MountainMorphologyAlgorithm {
     private static final GenerationStageId STAGE_ID = GenerationStageId.of("world:mountains");
@@ -28,7 +29,6 @@ final class MountainMorphologyAlgorithm {
     private static final GenerationPurposeId PLATEAU = GenerationPurposeId.of("mountain:plateau");
     private static final int PPM = NormalizedValue.SCALE;
     private static final double TWO_PI = StrictMath.PI * 2.0;
-    private static final int MAX_FINAL_SURFACE_RELAXATION_PASSES = 24;
 
     ElevationField generate(
             WorldGenesis genesis,
@@ -102,30 +102,57 @@ final class MountainMorphologyAlgorithm {
                 calibration.mountainCeilingSubunits());
         clampToCaps(mountainUplift, upliftCaps, land);
 
+        long[] smoothedFoundation = smoothLandFoundation(
+                baseHeights,
+                land,
+                width,
+                height,
+                recipe.foundationSmoothingPasses());
+        long fullFoundationBlendUplift = Math.multiplyExact(
+                (long) recipe.foundationFullBlendUpliftCells(),
+                ElevationField.SUBUNITS_PER_CELL);
+
         boolean[] mountainInfluence = new boolean[mountainUplift.length];
         long[] result = baseHeights.clone();
+        long[] minimumSurface = baseHeights.clone();
         long[] maximumSurface = baseHeights.clone();
         long ceiling = calibration.mountainCeilingSubunits();
         for (int cell = 0; cell < result.length; cell++) {
             if (!land[cell] || mountainUplift[cell] <= 0L) continue;
             mountainInfluence[cell] = true;
-            result[cell] = Math.min(ceiling, Math.addExact(baseHeights[cell], mountainUplift[cell]));
-            maximumSurface[cell] = Math.min(ceiling, Math.addExact(baseHeights[cell], upliftCaps[cell]));
+
+            int foundationBlendPpm = foundationBlendPpm(
+                    mountainUplift[cell],
+                    fullFoundationBlendUplift);
+            long foundation = interpolateSubunits(
+                    baseHeights[cell],
+                    smoothedFoundation[cell],
+                    foundationBlendPpm);
+            foundation = Math.max(1L, Math.min(ceiling, foundation));
+
+            minimumSurface[cell] = foundation;
+            result[cell] = Math.min(
+                    ceiling,
+                    Math.addExact(foundation, mountainUplift[cell]));
+            maximumSurface[cell] = Math.min(
+                    ceiling,
+                    Math.addExact(foundation, upliftCaps[cell]));
         }
 
-        // V12 rolling relief is excellent on its own, but inside a much larger mountain its local
-        // gradient can add to the mountain gradient and create one-cell voxel terraces. Relax the
-        // composed surface itself, just as V12 relaxes authored landforms, rather than trying to
-        // infer a concrete shape. Both local bumps and local dips may move inside the footprint;
-        // cells outside it remain exact V12 facts.
+        // V12 rolling relief is excellent on ordinary ground. Inside a much larger mountain,
+        // however, preserving every small V12 bump makes its gradient add to the mountain gradient
+        // and produces one-cell voxel terraces. The foundation blend removes that microrelief
+        // progressively, then this bounded pair relaxation finishes the composed surface itself.
         relaxComposedMountainSurface(
                 result,
+                minimumSurface,
                 maximumSurface,
                 mountainInfluence,
                 land,
                 width,
                 height,
-                calibration.maximumCardinalRiseSubunits());
+                calibration.maximumCardinalRiseSubunits(),
+                recipe.finalSurfaceRelaxationPasses());
 
         return new DenseElevationField(bounds, result);
     }
@@ -414,18 +441,20 @@ final class MountainMorphologyAlgorithm {
     /**
      * Bounded V12-style pair relaxation over the composed surface. Alternating scan direction keeps
      * the operation deterministic while allowing local corrections to propagate in every cardinal
-     * direction. The broad authored mountain profile means violations are local V12-scale noise;
-     * a fixed pass ceiling avoids seed-dependent queue convergence costs on large worlds.
+     * direction. The filtered foundation makes violations local enough that a bounded number of
+     * passes is sufficient without seed-dependent queue convergence costs on large worlds.
      */
     private static void relaxComposedMountainSurface(
             long[] surface,
+            long[] minimumSurface,
             long[] maximumSurface,
             boolean[] adjustable,
             boolean[] land,
             int width,
             int height,
-            long maximumRise) {
-        for (int pass = 0; pass < MAX_FINAL_SURFACE_RELAXATION_PASSES; pass++) {
+            long maximumRise,
+            int passes) {
+        for (int pass = 0; pass < passes; pass++) {
             boolean changed = false;
             if ((pass & 1) == 0) {
                 for (int y = 0; y < height; y++) {
@@ -437,6 +466,7 @@ final class MountainMorphologyAlgorithm {
                                     cell,
                                     cell + 1,
                                     surface,
+                                    minimumSurface,
                                     maximumSurface,
                                     adjustable,
                                     land,
@@ -447,6 +477,7 @@ final class MountainMorphologyAlgorithm {
                                     cell,
                                     cell + width,
                                     surface,
+                                    minimumSurface,
                                     maximumSurface,
                                     adjustable,
                                     land,
@@ -464,6 +495,7 @@ final class MountainMorphologyAlgorithm {
                                     cell,
                                     cell - 1,
                                     surface,
+                                    minimumSurface,
                                     maximumSurface,
                                     adjustable,
                                     land,
@@ -474,6 +506,7 @@ final class MountainMorphologyAlgorithm {
                                     cell,
                                     cell - width,
                                     surface,
+                                    minimumSurface,
                                     maximumSurface,
                                     adjustable,
                                     land,
@@ -490,6 +523,7 @@ final class MountainMorphologyAlgorithm {
             int first,
             int second,
             long[] surface,
+            long[] minimumSurface,
             long[] maximumSurface,
             boolean[] adjustable,
             boolean[] land,
@@ -507,7 +541,9 @@ final class MountainMorphologyAlgorithm {
         if (!highAdjustable && !lowAdjustable) return false;
 
         long excess = surface[high] - surface[low] - maximumRise;
-        long highDownCapacity = highAdjustable ? Math.max(0L, surface[high] - 1L) : 0L;
+        long highDownCapacity = highAdjustable
+                ? Math.max(0L, surface[high] - minimumSurface[high])
+                : 0L;
         long lowUpCapacity = lowAdjustable
                 ? Math.max(0L, maximumSurface[low] - surface[low])
                 : 0L;
@@ -537,6 +573,70 @@ final class MountainMorphologyAlgorithm {
         surface[high] -= down;
         surface[low] += up;
         return true;
+    }
+
+    /**
+     * Land-only low-pass filter for the mountain foundation. Ocean never enters the average, so the
+     * coastline mask remains exact. This field is not globally authoritative: it is blended into
+     * the final surface only where dedicated mountain uplift is already present.
+     */
+    private static long[] smoothLandFoundation(
+            long[] base,
+            boolean[] land,
+            int width,
+            int height,
+            int passes) {
+        long[] current = base.clone();
+        if (passes <= 0) return current;
+        long[] scratch = new long[base.length];
+        for (int pass = 0; pass < passes; pass++) {
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int cell = y * width + x;
+                    if (!land[cell]) {
+                        scratch[cell] = base[cell];
+                        continue;
+                    }
+                    long sum = current[cell] * 4L;
+                    int weight = 4;
+                    if (x > 0 && land[cell - 1]) {
+                        sum += current[cell - 1];
+                        weight++;
+                    }
+                    if (x + 1 < width && land[cell + 1]) {
+                        sum += current[cell + 1];
+                        weight++;
+                    }
+                    if (y > 0 && land[cell - width]) {
+                        sum += current[cell - width];
+                        weight++;
+                    }
+                    if (y + 1 < height && land[cell + width]) {
+                        sum += current[cell + width];
+                        weight++;
+                    }
+                    scratch[cell] = Math.max(1L, sum / weight);
+                }
+            }
+            long[] swap = current;
+            current = scratch;
+            scratch = swap;
+        }
+        return current;
+    }
+
+    private static int foundationBlendPpm(long uplift, long fullBlendUplift) {
+        if (uplift <= 0L) return 0;
+        if (uplift >= fullBlendUplift) return PPM;
+        long coordinate = uplift * PPM / fullBlendUplift;
+        long squared = coordinate * coordinate;
+        return (int) (squared * (3L * PPM - 2L * coordinate)
+                / ((long) PPM * PPM));
+    }
+
+    private static long interpolateSubunits(long from, long to, int coordinatePpm) {
+        long delta = Math.subtractExact(to, from);
+        return Math.addExact(from, delta * coordinatePpm / PPM);
     }
 
     /** Normalized low-pass smoothing removes max-composition seams without damping coast cells. */
