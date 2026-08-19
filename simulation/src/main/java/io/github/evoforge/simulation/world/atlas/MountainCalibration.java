@@ -14,8 +14,6 @@ public record MountainCalibration(
         long maximumCardinalRiseSubunits,
         boolean plateausEnabled,
         int plateauProbabilityPpm,
-        int coastalTransitionCells,
-        long shorelineUpliftSubunits,
         long baseTerrainCeilingSubunits,
         long mountainCeilingSubunits) {
 
@@ -25,23 +23,18 @@ public record MountainCalibration(
         }
         if (candidateSpacingCells <= 0
                 || typicalHalfWidthCells <= 0
-                || typicalLongAxisCells < typicalHalfWidthCells
-                || coastalTransitionCells <= 0) {
+                || typicalLongAxisCells < typicalHalfWidthCells) {
             throw new IllegalArgumentException("mountain calibrated spatial values are invalid");
         }
         requireNormalized(candidateActivationPpm, "candidateActivationPpm");
         requireNormalized(plateauProbabilityPpm, "plateauProbabilityPpm");
         if (typicalUpliftSubunits < 0L
                 || worldHeightCapSubunits < 0L
-                || maximumCardinalRiseSubunits <= 0L
-                || shorelineUpliftSubunits < 0L) {
+                || maximumCardinalRiseSubunits <= 0L) {
             throw new IllegalArgumentException("mountain calibrated vertical values are invalid");
         }
         if (typicalUpliftSubunits > worldHeightCapSubunits) {
             throw new IllegalArgumentException("typical mountain uplift must not exceed the world-size height cap");
-        }
-        if (shorelineUpliftSubunits > typicalUpliftSubunits && typicalUpliftSubunits > 0L) {
-            throw new IllegalArgumentException("shoreline mountain uplift must not exceed typical uplift");
         }
         if (baseTerrainCeilingSubunits <= 0L || mountainCeilingSubunits <= baseTerrainCeilingSubunits) {
             throw new IllegalArgumentException("mountain ceiling must leave positive headroom above V12 base terrain");
