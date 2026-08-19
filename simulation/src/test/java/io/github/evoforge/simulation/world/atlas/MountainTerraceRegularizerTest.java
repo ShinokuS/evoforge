@@ -148,6 +148,9 @@ final class MountainTerraceRegularizerTest {
             }
         }
 
+        long rawOneCellBands = countOneCellMountainBands(base, raw, raw);
+        long correctedOneCellBands = countOneCellMountainBands(base, corrected, raw);
+
         assertTrue(mountainCells > 0L, "representative world must contain dedicated mountain terrain");
         assertTrue(changed > 0L, "representative world must exercise the narrow-level correction");
         assertTrue(changed < mountainCells, "correction must remain selective rather than replacing mountain morphology");
@@ -157,12 +160,64 @@ final class MountainTerraceRegularizerTest {
                         + ", correctedMax=" + maximumInteriorStep
                         + ", rawCompressedEdges=" + rawCompressedEdges
                         + ", correctedCompressedEdges=" + compressedEdges
+                        + ", rawOneCellBands=" + rawOneCellBands
+                        + ", correctedOneCellBands=" + correctedOneCellBands
                         + ", changedCells=" + changed
                         + ", mountainCells=" + mountainCells);
         assertTrue(
                 maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
                 "terrace correction must preserve the accepted mountain-uplift slope budget; max="
                         + maximumUpliftStep + ", budget=" + calibration.maximumCardinalRiseSubunits());
+    }
+
+    private static long countOneCellMountainBands(
+            ElevationField base,
+            ElevationField surface,
+            ElevationField rawMountainFootprint) {
+        WorldBounds bounds = surface.bounds();
+        long count = 0L;
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX() + 1; x < bounds.maxX(); x++) {
+                if (isMountain(base, rawMountainFootprint, x - 1, y)
+                        && isMountain(base, rawMountainFootprint, x, y)
+                        && isMountain(base, rawMountainFootprint, x + 1, y)
+                        && isStrictIntermediateLevel(
+                                surface.elevationSubunitsAt(x - 1, y),
+                                surface.elevationSubunitsAt(x, y),
+                                surface.elevationSubunitsAt(x + 1, y))) {
+                    count++;
+                }
+            }
+        }
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            for (int y = bounds.minY() + 1; y < bounds.maxY(); y++) {
+                if (isMountain(base, rawMountainFootprint, x, y - 1)
+                        && isMountain(base, rawMountainFootprint, x, y)
+                        && isMountain(base, rawMountainFootprint, x, y + 1)
+                        && isStrictIntermediateLevel(
+                                surface.elevationSubunitsAt(x, y - 1),
+                                surface.elevationSubunitsAt(x, y),
+                                surface.elevationSubunitsAt(x, y + 1))) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static boolean isMountain(
+            ElevationField base,
+            ElevationField rawMountainFootprint,
+            int x,
+            int y) {
+        return rawMountainFootprint.elevationSubunitsAt(x, y) > base.elevationSubunitsAt(x, y);
+    }
+
+    private static boolean isStrictIntermediateLevel(long firstHeight, long middleHeight, long lastHeight) {
+        long first = Math.floorDiv(firstHeight, CELL);
+        long middle = Math.floorDiv(middleHeight, CELL);
+        long last = Math.floorDiv(lastHeight, CELL);
+        return (first < middle && middle < last) || (first > middle && middle > last);
     }
 
     private static WorldGenerationIntent intent(MountainIntent mountains) {
