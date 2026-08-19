@@ -12,8 +12,6 @@ public record MountainCalibration(
         long typicalUpliftSubunits,
         long worldHeightCapSubunits,
         long maximumCardinalRiseSubunits,
-        int peakSharpnessPpm,
-        int sharpnessMilli,
         boolean plateausEnabled,
         int plateauProbabilityPpm,
         int coastalTransitionCells,
@@ -28,12 +26,10 @@ public record MountainCalibration(
         if (candidateSpacingCells <= 0
                 || typicalHalfWidthCells <= 0
                 || typicalLongAxisCells < typicalHalfWidthCells
-                || sharpnessMilli <= 0
                 || coastalTransitionCells <= 0) {
             throw new IllegalArgumentException("mountain calibrated spatial values are invalid");
         }
         requireNormalized(candidateActivationPpm, "candidateActivationPpm");
-        requireNormalized(peakSharpnessPpm, "peakSharpnessPpm");
         requireNormalized(plateauProbabilityPpm, "plateauProbabilityPpm");
         if (typicalUpliftSubunits < 0L
                 || worldHeightCapSubunits < 0L
