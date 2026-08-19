@@ -106,9 +106,11 @@ final class MountainMorphologyElevationGenerationTest {
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(mountainGenesis);
 
         long maximumFinalStep = maximumInteriorAffectedFinalStep(base, mountains);
+        long budget = calibration.maximumCardinalRiseSubunits() + 1L;
         assertTrue(
-                maximumFinalStep <= calibration.maximumCardinalRiseSubunits() + 1L,
-                "V13 must constrain the composed V12 + mountain surface, not only the uplift delta");
+                maximumFinalStep <= budget,
+                "V13 must constrain the composed V12 + mountain surface, not only the uplift delta; "
+                        + "maxStep=" + maximumFinalStep + ", budget=" + budget);
     }
 
     @Test
@@ -130,10 +132,12 @@ final class MountainMorphologyElevationGenerationTest {
                 intent));
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(seed, intent));
 
+        long maximumFinalStep = maximumInteriorAffectedFinalStep(base, mountains);
+        long limit = ElevationField.SUBUNITS_PER_CELL / 2L;
         assertTrue(
-                maximumInteriorAffectedFinalStep(base, mountains)
-                        < ElevationField.SUBUNITS_PER_CELL / 2L,
-                "ordinary mountain terrain should expose broad voxel-transition bands to generic Shape fitting");
+                maximumFinalStep < limit,
+                "ordinary mountain terrain should expose broad voxel-transition bands to generic Shape fitting; "
+                        + "maxStep=" + maximumFinalStep + ", limit=" + limit);
     }
 
     @Test
