@@ -1,31 +1,56 @@
-# 2026-08-12 — Documentation should not tax every feature
+# Documentation should not tax every feature
 
-**Status:** Historical development note
+- Type: Entry
+- Status: Historical record
+- Date: 2026-08-12
+- Normative: No
 
-The first documentation system was intentionally strict: a normative architecture file, a current technical reference, many explanatory Wiki pages, a full Russian mirror with blob-SHA freshness tracking, VitePress publication and a generated GitHub Wiki.
+## Context
 
-It successfully prevented some forms of silent translation drift, but the project reached a point where updating documentation required enough synchronized edits that the process itself became a source of mistakes.
+The first EvoForge documentation setup deliberately used several synchronized surfaces: normative architecture, a technical reference, many explanatory pages, a complete Russian mirror with freshness tracking, VitePress and generated GitHub Wiki content.
 
-The clearest signal was semantic duplication: CI could prove that an English page and its Russian translation were synchronized while another authoritative-looking page could still describe an already completed visualizer milestone as active.
+That strictness caught some drift, but eventually documentation maintenance itself became a source of mistakes. CI could prove a translation matched an English file while another authoritative-looking page still described an already completed milestone as active.
 
-## What changed
+## What was observed
 
-We decided that correctness comes primarily from **single ownership of meaning**, not from more synchronization machinery.
+The problem was not lack of documentation; it was **duplicate ownership of meaning**.
 
-The new model uses one English canonical tree and one publication target (VitePress). Each subsystem owns one page. Global Architecture only owns global rules. Decisions preserve rationale. The Development Journal preserves thoughts that matter but are not contracts.
+Keeping the same semantic truth in several trees meant every feature required unrelated synchronization work. The larger the project became, the easier it was for one copy to be technically “fresh” but semantically wrong.
 
-`TECHNICAL_REFERENCE.md` was removed because exact implementation structure is better represented by source, Javadoc and tests. GitHub Wiki and the Russian translation mirror were removed because VitePress already served the reading/navigation need with much lower maintenance cost.
+## Outcome
 
-## Desired editing experience
+The project moved toward one canonical repository documentation tree and one generated reading surface (VitePress). The old standalone technical-reference/Wiki/translation-mirror model was removed.
 
-Adding a future subsystem should usually mean:
+The desired editing cost became:
 
 ```text
 implement + test
-create systems/new-system.md
-update roadmap status if useful
+update the owning System page
+update Roadmap only if milestone state changed
+record durable rationale only when an ADR is justified
 ```
 
-It should **not** require touching Movement, Navigation or other completed pages unless their own semantics actually changed.
+rather than editing many parallel copies.
 
-The journal is intentionally part of the public VitePress site. It gives future work — human or AI-assisted — access to the evolution of project thinking without allowing old thoughts to masquerade as current architecture.
+## What became canonical
+
+Stage 0 later made this principle more explicit:
+
+```text
+Project Context     current-state recovery
+Architecture        only global cross-system laws
+Systems             current subsystem semantics/algorithms
+Decisions           durable rationale
+Guides              contributor procedures
+Development Journal historical/exploratory/acceptance/audit context
+References          reusable external sources
+```
+
+The Journal remains public because old reasoning is useful, but it is explicitly non-normative.
+
+## Links forward
+
+- [Documentation Guide](../../guides/documentation.md)
+- [Project Context](../../project-context.md)
+- [Architecture](../../architecture.md)
+- [Systems](../../systems/)
