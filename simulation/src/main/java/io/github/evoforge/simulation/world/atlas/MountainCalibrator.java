@@ -57,15 +57,15 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
 
-        // A mountain may only climb as high as the narrower horizontal span can support at the
-        // calibrated source slope. Radius utilization is explicit model data rather than a later
-        // morphology repair budget.
+        // Semantic mountain height consumes only the reserved V13 headroom. The surface envelope
+        // itself starts from ordinary V12 land, so width is calibrated separately from the complete
+        // absolute climb rather than pretending the mountain begins at an already elevated foot.
         long usableRadiusCells = Math.max(
                 1L,
                 (long) limitingHorizontalSpan * recipe.worldSlopeRadiusUtilizationPpm()
                         / (2L * PPM));
-        long slopeSupportedHeight = Math.multiplyExact(usableRadiusCells, maximumCardinalRise);
-        long worldHeightCap = Math.min(availableHeadroom, slopeSupportedHeight);
+        long slopeSupportedHeadroom = Math.multiplyExact(usableRadiusCells, maximumCardinalRise);
+        long worldHeightCap = Math.min(availableHeadroom, slopeSupportedHeadroom);
 
         int heightFractionPpm = interpolate(
                 recipe.minimumHeightOfWorldSlopeCapPpm(),
@@ -90,11 +90,11 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // Width is derived from the same rise law that is used by source synthesis. A tall mountain
-        // therefore reserves its horizontal space before rasterization rather than expanding later.
-        long riseSteps = typicalUplift == 0L
-                ? 0L
-                : (typicalUplift + maximumCardinalRise - 1L) / maximumCardinalRise;
+        // A generated mountain can meet land arbitrarily close to sea level. Reserve enough width
+        // for that complete absolute climb up to the intended summit. This is the source-generation
+        // invariant that prevents one/two-cell Z bands; no later terrain widening pass is needed.
+        long typicalPeakAboveSea = Math.addExact(baseCeiling, typicalUplift);
+        long riseSteps = (typicalPeakAboveSea + maximumCardinalRise - 1L) / maximumCardinalRise;
         int slopeCoupledHalfWidth = Math.toIntExact(Math.max(
                 1L,
                 riseSteps * recipe.slopeWidthCouplingPpm() / PPM));
