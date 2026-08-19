@@ -1,48 +1,46 @@
-# Decision 010 — World Atlas owns durable generated facts
+# ADR-010: World Atlas owns durable generated facts
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: World-generation fact ownership
+- Decision: Durable pre-runtime generation results are immutable typed Atlas facts with representation hidden behind semantic field contracts; precise macro facts remain separate from runtime/materialized projections.
 
-## Problem
+## Context
 
-World generation needs facts such as elevation, geology, climate normals and drainage before detailed terrain, Water or objects are materialized. Putting those facts directly into runtime domain storage would collapse generation, representation and simulation ownership into one step. Treating them as disposable generator intermediates would also make persistence and cross-stage causality unclear.
+Generation needs durable facts such as elevation, geology, climate normals and drainage before detailed Terrain/Water/runtime state exists. Writing those facts directly into runtime owners would collapse generation and simulation. Treating them as disposable intermediates would make causal dependencies/provenance unclear.
 
-A further representation problem appears immediately with elevation: integer terrain Z is appropriate for cell materialization, but quantizing the generated surface to that same integer before later macro stages destroys real gradients. Drainage would then see large artificial flats and sinks that exist only because presentation/materialization uses cells.
+Elevation exposed the first critical representation issue: integer Terrain Z is suitable for materialization but can destroy real sub-cell gradients needed by later macro algorithms.
 
 ## Decision
 
-`WorldAtlas` is the immutable composition boundary for durable generated world facts that exist before detailed world materialization.
+`WorldAtlas` is the immutable composition boundary for durable generated world facts. Each layer exposes a typed semantic read interface while hiding dense/sparse/internal representation.
 
-Atlas layers expose semantic read contracts and hide their representation. The first layer is `ElevationField`, which answers surface elevation for each global XY world column. Its current dense bounded representation is package-private and is not a storage promise.
+Elevation retains precise fixed-point subunits (`1 cell = 1_000_000 subunits`) plus a discrete floor-derived surface-cell view. Macro consumers use precise elevation when their model depends on gradients; materialization may use the discrete view.
 
-Elevation owns a precise generated value measured in fixed-point elevation subunits (`1 world Z cell = 1_000_000 subunits`) and a floor-derived integer surface-cell view. Macro generation consumers that depend on gradients use the precise value; terrain materialization may use the discrete cell value. The discrete representation therefore does not become accidental macro-world physics.
+Generation remains causal and staged. `WorldAtlasGenerator` orchestrates typed algorithms and dependencies but does not absorb domain algorithms or runtime materialization.
 
-Generation is causal and staged. `ElevationGenerationStage` authors elevation from `WorldGenesis`; later stages explicitly consume earlier facts when their algorithms require them. `WorldAtlasGenerator` is only a thin orchestration boundary and must delegate domain algorithms to stages rather than accumulate generation logic itself.
+## Why
 
-Elevation generation remains deterministic multi-scale value noise addressed by the versioned generation RNG. Its lattice is global rather than rebased to the requested XY bounds, so overlapping worlds with the same seed, generation/RNG revisions and vertical bounds produce the same elevation at the same global XY coordinates.
-
-The accepted `evoforge:worldgen-v1` semantics remain representable as cell-quantized elevation. `evoforge:worldgen-v2` is current and preserves the same discrete V1 surface while retaining the deterministic fractional elevation information that V1 discarded. This is a `GenerationRevision` change because the durable authored fact changed; the RNG remains `evoforge:rng-v1` because its sampling contract did not.
-
-The generated elevation fact is not Landscape terrain. Future materialization consumes Atlas facts and commits detailed terrain through the Landscape-owned mutation boundary.
+This preserves causal pre-runtime facts, avoids making materialization resolution accidental macro physics, and keeps future representation changes behind stable contracts.
 
 ## Consequences
 
-- generated macro/world facts have an explicit owner before runtime materialization;
-- drainage can distinguish a real downhill gradient even when neighbouring columns materialize to the same integer Z;
-- later geology, climate and drainage can depend on earlier facts without reading detailed terrain as accidental generation input;
-- Atlas consumers depend on semantic layer contracts rather than dense arrays;
-- storage can later become tiled, compressed or streamed behind the same fact contract when profiling justifies it;
-- generation remains deterministic across iteration order and cropping of world XY bounds;
-- historical V1 recipe semantics remain explicit instead of being silently rewritten by V2;
-- materialization does not become a second generator or a second owner of Atlas facts.
+- Later generated layers can depend on earlier facts explicitly.
+- Storage may change without redefining public generated semantics.
+- Generation revisions protect intentional changes to durable facts.
+- Atlas remains provenance/preparation truth rather than live runtime Terrain/Water ownership.
+- Biome/content labels are not allowed to become unexplained primary causes of elevation/geology/hydrology.
 
-## Rejected directions
+## Alternatives considered
 
-Generating terrain blocks directly from the seed was rejected because it skips the durable causal facts needed by later generation stages and future persistence.
+Generating runtime Terrain blocks directly from the seed was rejected because later causal stages need durable macro facts. Integer-only elevation was rejected because quantization creates false flats/sinks. Exposing current dense arrays was rejected as representation leakage. Biome-first generation was rejected for this foundation.
 
-Using integer terrain Z as the only elevation fact was rejected because quantization would create artificial macro flats and sinks and make drainage depend on materialization resolution.
+## Current implementation
 
-Exposing the current dense elevation array was rejected because it would turn a prototype representation into public world semantics.
+The Atlas now contains seven typed facts: Genesis, Elevation, Geology, Climate Normals, Drainage, Hydrography and Surface Hydrology. Historical generation revisions span V1–V12; V12 is the accepted base-terrain generation baseline. Geology/hydrography/initial-Water algorithms behind some current fields are explicitly provisional, but the typed fact ownership boundary remains canonical.
 
-Biome-first generation was rejected for this foundation: biome will be derived from causal facts such as elevation, climate and soil rather than acting as the unexplained source of those facts.
+## Related documentation
 
-Chunk and region identity remain deferred. The Atlas layer does not need either concept to be correct or deterministic.
+- [World Atlas](../systems/world-generation/world-atlas.md)
+- [World Genesis](../systems/world-generation/world-genesis.md)
+- [World Generation](../systems/world-generation/overview.md)
+- [World Materialization](../systems/world-generation/world-materialization.md)

@@ -1,65 +1,46 @@
-# Decision 016 — Atlas elevation materializes through a one-way Terrain ownership boundary
+# ADR-016: Atlas facts materialize through a one-way Terrain ownership boundary
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: Generated Terrain materialization
+- Decision: Prepared/generated elevation and semantic material facts are validated and copied once into Landscape-owned solid Terrain through `LandscapeMutations`; materialization is initial construction, not synchronization.
 
-## Problem
+## Context
 
-`ElevationField` is a durable generated world fact: it describes the authored surface height of every XY column. Runtime geometry, traversal, liquids and later actors, however, consume concrete Terrain owned by `LandscapeSystem`.
-
-The first generated-world runtime needs a bridge between those layers without making `WorldAtlasGenerator` write runtime storage, making `LandscapeSystem` know how a world was generated, or inventing a geology/material taxonomy before there is a real geology model.
-
-A surface-only shell is also insufficient for the current solid-cell geometry model. Present Terrain resolves to solid geometry by default, while absent cells are open. Materializing only the surface cell would therefore create an artificial open volume immediately below generated ground.
+Atlas elevation describes generated surface height, but runtime Geometry/Navigation/liquids need concrete Terrain owned by Landscape. Writing runtime storage from generators would blur ownership. Materializing only the surface shell would also leave artificial open underground volume because absent Terrain is open under current Geometry semantics.
 
 ## Decision
 
-`WorldTerrainMaterializer` is a one-way initialization bridge:
+`WorldTerrainMaterializer` consumes the exact generated facts it needs. For every XY column it creates solid Terrain from finite `WorldBounds.minZ` through discrete `surfaceZ` inclusive.
 
-```text
-ElevationField
-      ↓ discrete elevationAt(x,y)
-solid generated column [WorldBounds.minZ .. surfaceZ]
-      ↓ TerrainMaterialResolver(x,y,z)
-LandscapeDefinitionId
-      ↓ LandscapeMutations.placeTerrain(...)
-LandscapeSystem-owned runtime Terrain
-```
+Generated material identity is resolved through stable semantic `TerrainMaterialKey`/bindings to runtime `LandscapeDefinitionId`; runtime registry ordering is not generated-world semantics.
 
-Every XY column is filled from the finite world floor through the Atlas surface cell, inclusive. Cells above the surface remain absent/open inside the finite world.
+Materialization requires an empty target and performs a complete preflight before mutation: generated heights must be in bounds, each material must resolve, and each runtime definition must exist. Accepted writes go only through `LandscapeMutations.placeTerrain(...)`.
 
-The materializer accepts only the Atlas fact it consumes (`ElevationField`), rather than the whole `WorldAtlas`. It does not depend on Drainage or HydroClimate facts and does not grow `WorldAtlasGenerator` into a runtime composition object.
+After materialization, Landscape is the mutable runtime owner. The Atlas/prepared fields remain immutable provenance and are not synchronized when lived Terrain later changes.
 
-`TerrainMaterialResolver` is a pure deterministic lookup. It chooses material identity per generated solid XYZ coordinate but owns no Terrain state. The initial vertical slice may use `TerrainMaterialResolver.uniform(id)` explicitly. That is a composition choice, not a claim that the world has one geological material. A future geology-derived resolver can replace it without changing materialization mechanics.
+## Why
 
-The target Terrain must be empty. Materialization is initial world construction, not Atlas/Terrain synchronization, replacement or regeneration. Merge/patch semantics are intentionally absent.
-
-Before mutation, the materializer performs a preflight over the source surface and resolved materials. Surface heights must lie inside the vertical `WorldBounds`, every material id must be non-null, and every material id must exist in the supplied immutable definition catalog. Only after successful preflight are cells placed.
-
-Every runtime mutation goes through `LandscapeMutations`; the materializer never receives or writes `TerrainStorage`.
-
-## Ownership after materialization
-
-Atlas remains the immutable authored/generated fact source. Landscape becomes the authoritative owner of the concrete runtime Terrain cells.
-
-Runtime erosion, construction or another future terrain-changing process must mutate Landscape through its own domain rules. Such runtime mutation does not silently rewrite Atlas history or provenance.
+The boundary reuses all existing Landscape mutation invariants/index/revision behavior while keeping generators independent from runtime storage and preserving a solid current world model.
 
 ## Consequences
 
-- generated elevation can now become real runtime geometry without an ownership leak;
-- the discrete surface contract of `ElevationField.elevationAt` has its first production consumer;
-- generated ground is physically solid down to the finite world floor;
-- future subsurface material variation has a narrow seam without premature geology types;
-- Landscape surface indexes, geometry defaults and traversal revisions continue to be maintained by their existing owner;
-- materialization has explicit fail-fast semantics instead of partially merging with pre-existing runtime Terrain;
-- no chunk/storage representation is promoted into public generation semantics.
+- Generated worlds use ordinary runtime Terrain/Geometry after startup.
+- Solid ground exists through the full generated column, not as a hollow shell.
+- Semantic generated keys are stable across runtime registration order.
+- Initial construction fails before partial writes when preflight detects invalid input.
+- Future geology/material algorithms can replace prepared material fields without changing the runtime ownership bridge.
 
-## Rejected directions
+## Alternatives considered
 
-Writing directly to `TerrainStorage` was rejected because it bypasses Landscape-owned indexes, geometry cleanup and traversal revisions.
+Direct `TerrainStorage` writes were rejected because they bypass Landscape invariants. Atlas generator writing runtime state was rejected because it merges generation and simulation. Surface-only materialization was rejected as physically hollow. Hard-coded ground material and merge/replace semantics were rejected as separate problems.
 
-Adding materialization to `WorldAtlasGenerator` was rejected because generation authors world-scale facts; it should not own runtime state construction.
+## Current implementation
 
-Materializing only one surface Terrain cell per XY column was rejected because absent cells below that shell are open under current geometry semantics and would create an artificial hollow world.
+`WorldTerrainMaterializer` preflights and fills generated columns through `LandscapeMutations`. `GeneratedWorldRuntimeBootstrap` then applies prepared surface Shape overrides and generated Soil properties before runtime start. Stage 4 caves will require an explicit generated solid/open-volume model rather than treating “air” as another material.
 
-Hard-coding `soil`, `stone`, `sand` or another current definition in production materialization was rejected because material identity should eventually come from causal generated facts, not from an arbitrary bridge default.
+## Related documentation
 
-Replacing or merging existing Terrain was rejected because initial materialization and runtime world editing have different invariants and failure semantics.
+- [World Materialization](../systems/world-generation/world-materialization.md)
+- [Generated World Runtime](../systems/world-generation/generated-world-runtime.md)
+- [Landscape and Terrain](../systems/environment/landscape.md)
+- [Terrain Generation](../systems/world-generation/terrain-generation.md)

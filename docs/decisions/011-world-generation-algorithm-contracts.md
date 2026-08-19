@@ -1,53 +1,46 @@
-# Decision 011 — World generation algorithms compose behind typed contracts
+# ADR-011: World-generation algorithms compose behind typed contracts
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: World-generation algorithm extensibility
+- Decision: Every generation/preparation layer exposes the narrowest typed algorithm contract for its real inputs/outputs; orchestration depends on those contracts and generated facts, not concrete implementations or ambient mutable contexts.
 
-## Problem
+## Context
 
-World generation will accumulate multiple algorithms for elevation, drainage, climate, materials and later evaluators. If orchestration stores concrete implementation classes or passes one universal mutable generation context everywhere, replacing one algorithm couples unrelated stages and makes experimentation unsafe.
-
-The opposite extreme is also harmful: a generic plugin framework invented before concrete semantics exist would erase useful type information and predict extension needs we do not yet understand.
+World generation grows through elevation, geology, climate, drainage, hydrography, materials, Soil and later mountain/cave/depositional algorithms. Hard-wiring concrete stages couples experiments/refactors to orchestration. A universal plugin interface plus mutable context would hide causal dependencies and erase useful domain types.
 
 ## Decision
 
-Each generation layer exposes the narrowest typed algorithm contract required by its semantic input and output. Orchestration depends on that contract, not on a concrete implementation.
+Each layer has a typed interface such as `ElevationGenerator`, `DrainageGenerator`, `GeologyGenerator` or a preparation counterpart. Java signatures expose the exact upstream facts required by the layer. Downstream consumers read fact interfaces rather than generator classes.
 
-The first two proven seams are:
+`WorldAtlasGenerator` and preparation orchestration compose contracts in causal order. Alternate implementations may be injected without changing downstream fact consumers.
 
-```text
-ElevationGenerator
-    generate(WorldGenesis) -> ElevationField
+`GenerationRevision` describes authored-world compatibility, not Java class identity: implementations claiming the same revision must preserve declared semantics; intentional changes to durable facts require explicit revision handling.
 
-DrainageGenerator
-    generate(ElevationField) -> DrainageField
-```
+A global algorithm/service registry or universal evaluator/context is introduced only if a real selection/discovery consumer later proves it necessary.
 
-`ElevationGenerationStage` is the default elevation implementation and interprets the supported `GenerationRevision` carried by `WorldGenesis`. `DrainageGenerationStage` consumes only the precise elevation fact it actually needs. `WorldAtlasGenerator` composes both contracts in causal order; alternate implementations may be injected without changing Atlas consumers.
+## Why
 
-Future layers follow the same rule when their real dependencies are known. A climate or geology algorithm receives the exact upstream facts required by its semantics; it does not receive a universal mutable `WorldGeneratorContext` merely for convenience.
-
-Evaluators and selectors follow the same discipline: introduce a typed evaluator contract when an evaluator has a concrete semantic question to answer. Do not create one universal evaluator interface or service locator in advance.
-
-Generated fact contracts remain independent from algorithm contracts. Downstream systems read `ElevationField`, `DrainageField` or future fact interfaces, never the Java class that authored them.
-
-`GenerationRevision` describes authored-world compatibility, not Java implementation identity. Replacing an algorithm with an implementation that intentionally changes already-declared generated facts for the same declared inputs requires a new generation revision. Refactors or alternate implementations claiming the same revision must preserve the declared semantics and frozen compatibility expectations.
+Typed contracts make dependencies reviewable, allow isolated deterministic tests/experiments and keep replaceability local without building speculative generic infrastructure.
 
 ## Consequences
 
-- generation algorithms can be replaced, decorated, compared or tested in isolation;
-- orchestration remains small as the pipeline grows;
-- downstream stages depend on semantic facts instead of concrete generators;
-- one implementation may preserve several historical generation revisions when their compatibility behavior remains executable;
-- causal dependencies are visible in Java signatures rather than hidden in ambient context;
-- new algorithms do not require central `instanceof`, enum switches or edits to unrelated stages;
-- validators can remain outside algorithms and continue protecting layer invariants;
-- plugin registries or discovery mechanisms are added only if real runtime/configuration selection requires them;
-- persistence stores world provenance and facts, not generator class names.
+- Algorithms can be replaced/decorated/compared in isolation.
+- Orchestration remains small and domain-neutral.
+- Fact contracts can outlive concrete algorithms.
+- New algorithms do not require `instanceof`/central enums in unrelated consumers.
+- Validators and calibrators remain layer/domain specific.
 
-## Rejected directions
+## Alternatives considered
 
-Hard-wiring `ElevationGenerationStage` into `WorldAtlasGenerator` was rejected because it made the first Atlas algorithm non-substitutable.
+Hard-wiring concrete stages in Atlas orchestration was rejected. A universal `WorldGenerationAlgorithm<T>` with ambient mutable context was rejected because different domains have different causal contracts. A global registry was deferred until dynamic discovery/selection is genuinely needed.
 
-A universal `WorldGenerationAlgorithm<T>` plus ambient mutable context was rejected because different layers have different causal inputs and outputs, and a generic context would hide those dependencies.
+## Current implementation
 
-A global algorithm registry is deliberately deferred until there is an actual need to discover or select implementations dynamically.
+`WorldGenerationAlgorithms` composes Elevation, Geology, Climate Normals, Drainage, Hydrography and Surface Hydrology generators. `WorldPreparationAlgorithms` similarly composes Surface Morphology, Terrain Shape, Terrain Material and Soil Formation algorithms. Stage 0 V12 also separates `V12LandformCalibrator`, immutable calibration/recipe data and the replaceable spatial elevation algorithm behind `ElevationGenerator`.
+
+## Related documentation
+
+- [World Generation](../systems/world-generation/overview.md)
+- [World Atlas](../systems/world-generation/world-atlas.md)
+- [Terrain Generation](../systems/world-generation/terrain-generation.md)
+- [Generated World Runtime](../systems/world-generation/generated-world-runtime.md)

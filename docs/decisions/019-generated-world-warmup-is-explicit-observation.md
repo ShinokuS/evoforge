@@ -1,58 +1,50 @@
-# Decision 019 — Generated-world warmup is explicit advancement and observation
+# ADR-019: Generated-world warm-up is explicit observation
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: Generated-world developer tooling
+- Decision: Warm-up advances an already started generated world only through the ordinary production stepper to explicit absolute checkpoints and records diagnostics; it does not define equilibrium, balance or alternate physics.
 
-## Problem
+## Context
 
-A newly materialized generated world may need simulation time for existing hydrology and later environmental systems to evolve before developers can judge its behavior. If warmup itself decides when the world is “healthy”, adjusts parameters, or runs alternate simplified physics, it becomes a hidden balancing engine and a second simulation mode.
-
-We also need identical evidence in CI and developer/manual runs so terrain and Water changes can be compared against the same seeds and checkpoints.
+A newly generated runtime may need simulation time for Water/Soil/other scheduled systems to evolve before developers compare states. If warm-up directly calls domain systems, uses simplified rules or decides when the world is “healthy”, it becomes a second simulation/balancing engine.
 
 ## Decision
 
-`GeneratedWorldWarmup` is a deterministic control/tooling boundary over an already started `GeneratedWorldRuntime`.
-
-It accepts explicit, strictly increasing **absolute simulation ticks**, advances only through `SimulationRuntime.stepper()`, and captures `GeneratedWorldDiagnostics` at those checkpoints.
+`GeneratedWorldWarmup` accepts strictly increasing non-negative absolute simulation ticks. It repeatedly calls `SimulationRuntime.stepper().advance()` and captures `GeneratedWorldDiagnostics` at requested checkpoints.
 
 ```text
 GeneratedWorldRuntime
-        ↓
-ordinary SimulationStepper
-        ↓
-checkpoint tick
-        ↓
+       ↓ ordinary SimulationStepper
+requested checkpoint
+       ↓
 GeneratedWorldDiagnosticsProbe
-        ↓
-immutable trace of observed facts
+       ↓
+immutable observation trace
 ```
 
-Warmup does not define equilibrium, viability, desired Water level, acceptable flooding, climate targets or calibration parameters. It does not mutate Atlas facts and it does not call domain systems directly.
+Warm-up contains no equilibrium/viability/flood threshold or calibration mutation. Representative fixed seeds/rates/ticks are developer audit inputs, not gameplay presets.
 
-The first mandatory CI matrix uses several fixed seeds and internal engine-test HydroClimate specifications. Those exact rates are verification inputs, not user-facing climate presets or gameplay configuration.
+## Why
 
-An opt-in Gradle task, `:simulation:generatedWorldAudit`, runs representative warmups and prints the same canonical `event=world.generated.audit` snapshot format used by runtime logging. This is diagnostic presentation only; tests and evaluators consume the structured snapshot rather than parsing text.
+Using the exact production execution path makes checkpoint traces reproducible and prevents tooling from creating hidden world laws.
 
 ## Consequences
 
-- warmup cannot silently introduce different world laws from normal runtime;
-- a checkpoint trace is reproducible from seed, content setup and requested ticks;
-- CI can compare complete traces across replay and across future implementation changes;
-- developers can run a verbose audit without enabling per-tick logging;
-- future viability/calibration code receives observed facts rather than being embedded in warmup;
-- there is no universal production warmup duration yet.
+- CI and manual audits can compare the same deterministic observations.
+- Larger audits can remain opt-in without redefining production semantics.
+- Future evaluators may interpret the trace separately.
+- There is no universal production warm-up duration.
 
-## Performance
+## Alternatives considered
 
-The required CI matrix is deliberately small and correctness-oriented. Larger or longer audits remain opt-in until profiling shows they are appropriate for normal CI.
+Automatic stop-on-small-Water-delta, built-in PASS/FAIL balance rules and direct Water/precipitation/evaporation calls were rejected.
 
-Wall-clock time is not part of `GeneratedWorldDiagnostics` and is not a viability criterion. Performance profiling remains a separate measurement concern.
+## Current implementation
 
-## Rejected directions
+Warm-up code/tests live under `world.diagnostics.warmup` after the Stage 0 package cleanup. The `:simulation:generatedWorldAudit` Gradle task runs representative ordinary runtime stepping and prints the same diagnostic vocabulary used elsewhere.
 
-Stopping warmup automatically when Water changes fall below an arbitrary threshold was rejected because no accepted equilibrium model exists yet.
+## Related documentation
 
-Embedding PASS/FAIL balance rules in `GeneratedWorldWarmup` was rejected because observation and evaluation have different ownership.
-
-Calling Water, precipitation or evaporation systems directly from warmup was rejected because generated worlds must evolve through the same production scheduler as any ordinary runtime.
-
-Exposing the internal matrix HydroClimate rates as user presets was rejected because human-facing world generation controls must remain semantic and minimal; generator/calibration layers derive technical rates.
+- [Generated World Warm-up](../systems/tooling/generated-world-warmup.md)
+- [Generated World Diagnostics](../systems/tooling/generated-world-diagnostics.md)
+- [Time and Scheduling](../systems/foundations/time.md)
