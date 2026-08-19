@@ -21,7 +21,7 @@ public final class V13MountainTerrainGenerator implements ElevationGenerator {
             ElevationGenerator baseGenerator,
             MountainCalibrator calibrator,
             MountainRecipe recipe) {
-        this(baseGenerator, calibrator, recipe, new MountainMorphologyAlgorithm()::generate);
+        this(baseGenerator, calibrator, recipe, new MountainMorphologyAlgorithm());
     }
 
     public V13MountainTerrainGenerator(
