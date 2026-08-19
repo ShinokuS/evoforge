@@ -19,7 +19,7 @@ final class MountainTerraceRegularizerTest {
     private static final WorldBounds V12_BASE_BOUNDS = new WorldBounds(-64, 63, -64, 63, -12, 12);
 
     @Test
-    void correctionOnlyRaisesExistingMountainCellsAndNeverMovesTheSummit() {
+    void correctionOnlyRaisesLandAndNeverMovesTheSummit() {
         WorldBounds bounds = new WorldBounds(0, 6, 0, 0, -2, 8);
         ElevationField base = new DenseElevationField(bounds, new long[] {
                 2 * CELL, 2 * CELL, 2 * CELL, 2 * CELL, 2 * CELL, 2 * CELL, 2 * CELL
@@ -39,20 +39,18 @@ final class MountainTerraceRegularizerTest {
                 generated,
                 2 * CELL);
 
-        assertEquals(generated.elevationSubunitsAt(0, 0), corrected.elevationSubunitsAt(0, 0));
-        assertEquals(generated.elevationSubunitsAt(6, 0), corrected.elevationSubunitsAt(6, 0));
         assertEquals(maximum(generated), maximum(corrected), "terrace correction must not shave or raise the summit");
         for (int x = 0; x <= 6; x++) {
             assertTrue(
                     corrected.elevationSubunitsAt(x, 0) >= generated.elevationSubunitsAt(x, 0),
-                    "correction may only fill compressed lower slope cells");
+                    "correction may only raise compressed lower slope cells");
         }
         for (int x = 1; x < 5; x++) {
             assertTrue(
                     Math.abs(corrected.elevationSubunitsAt(x + 1, 0)
                                     - corrected.elevationSubunitsAt(x, 0))
                             <= MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE,
-                    "adjacent cells already inside the mountain footprint must not retain a one-cell-scale rise");
+                    "adjacent mountain cells must not retain a one-cell-scale rise when widening is feasible");
         }
     }
 
@@ -90,7 +88,9 @@ final class MountainTerraceRegularizerTest {
         assertEquals(maximum(raw), maximum(corrected), "accepted mountain summit morphology must remain unchanged");
 
         long changed = 0L;
+        long apronChangedCells = 0L;
         long mountainCells = 0L;
+        long finalMountainCells = 0L;
         long rawMaximumInteriorStep = 0L;
         long maximumInteriorStep = 0L;
         long rawCompressedEdges = 0L;
@@ -103,13 +103,16 @@ final class MountainTerraceRegularizerTest {
                 long correctedHeight = corrected.elevationSubunitsAt(x, y);
                 boolean mountain = rawHeight > baseHeight;
                 if (mountain) mountainCells++;
+                if (correctedHeight > baseHeight) finalMountainCells++;
 
-                if (!mountain) {
-                    assertEquals(rawHeight, correctedHeight, "correction must not grow the mountain footprint");
-                } else {
-                    assertTrue(correctedHeight >= rawHeight, "correction may not reshape the mountain by lowering it");
+                assertTrue(correctedHeight >= rawHeight, "terrace correction may never lower accepted terrain");
+                if (correctedHeight != rawHeight) {
+                    changed++;
+                    if (!mountain) {
+                        apronChangedCells++;
+                        assertTrue(baseHeight > 0L, "bounded widening apron may use dry land only");
+                    }
                 }
-                if (correctedHeight != rawHeight) changed++;
 
                 if (baseHeight > 0L && x < V13_BOUNDS.maxX()
                         && base.elevationSubunitsAt(x + 1, y) > 0L) {
@@ -153,7 +156,6 @@ final class MountainTerraceRegularizerTest {
 
         assertTrue(mountainCells > 0L, "representative world must contain dedicated mountain terrain");
         assertTrue(changed > 0L, "representative world must exercise the narrow-level correction");
-        assertTrue(changed < mountainCells, "correction must remain selective rather than replacing mountain morphology");
         assertTrue(
                 maximumInteriorStep <= MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE,
                 "residual compressed mountain slope: rawMax=" + rawMaximumInteriorStep
@@ -163,7 +165,9 @@ final class MountainTerraceRegularizerTest {
                         + ", rawOneCellBands=" + rawOneCellBands
                         + ", correctedOneCellBands=" + correctedOneCellBands
                         + ", changedCells=" + changed
-                        + ", mountainCells=" + mountainCells);
+                        + ", apronChangedCells=" + apronChangedCells
+                        + ", rawMountainCells=" + mountainCells
+                        + ", finalMountainCells=" + finalMountainCells);
         assertTrue(
                 maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
                 "terrace correction must preserve the accepted mountain-uplift slope budget; max="
