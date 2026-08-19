@@ -56,14 +56,7 @@ final class MountainTerraceRegularizerTest {
 
     @Test
     void representativeV13RemovesNarrowLevelsWithoutReplacingAcceptedMountainMorphology() {
-        WorldGenerationIntent intent = intent(new MountainIntent(
-                normalized(350_000),
-                normalized(520_000),
-                normalized(500_000),
-                normalized(550_000),
-                normalized(600_000),
-                false,
-                normalized(180_000)));
+        WorldGenerationIntent intent = screenshotIntent();
         long seed = 1L;
         WorldGenesis genesis = new WorldGenesis(
                 new WorldSpec(V13_BOUNDS),
@@ -174,6 +167,46 @@ final class MountainTerraceRegularizerTest {
                         + maximumUpliftStep + ", budget=" + calibration.maximumCardinalRiseSubunits());
     }
 
+    @Test
+    void screenshotScaleWorldsAlsoRemoveMostLiteralOneCellMountainBands() {
+        assertScreenshotScale(new WorldBounds(-50, 49, -50, 49, -12, 96), "100x100");
+        assertScreenshotScale(new WorldBounds(-250, 249, -250, 249, -12, 96), "500x500");
+    }
+
+    private static void assertScreenshotScale(WorldBounds bounds, String label) {
+        WorldGenerationIntent intent = screenshotIntent();
+        long seed = 1L;
+        WorldGenesis genesis = new WorldGenesis(
+                new WorldSpec(bounds),
+                seed,
+                GenerationRevision.V13,
+                RngRevision.V1,
+                intent);
+        MountainRecipe recipe = MountainRecipe.balanced();
+        MountainCalibration calibration = MountainCalibrator.standard().calibrate(genesis, recipe);
+        WorldBounds baseBounds = new WorldBounds(
+                bounds.minX(), bounds.maxX(), bounds.minY(), bounds.maxY(), bounds.minZ(), 12);
+        ElevationField base = V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
+                new WorldSpec(baseBounds),
+                seed,
+                GenerationRevision.V12,
+                RngRevision.V1,
+                intent));
+        ElevationField raw = new MountainMorphologyAlgorithm().generate(genesis, base, calibration, recipe);
+        ElevationField corrected = MountainTerraceRegularizer.widenNarrowLevels(
+                base,
+                raw,
+                calibration.maximumCardinalRiseSubunits());
+
+        long rawBands = countOneCellMountainBands(base, raw, raw);
+        long correctedBands = countOneCellMountainBands(base, corrected, raw);
+        assertTrue(rawBands > 0L, label + " fixture must reproduce literal one-cell mountain bands");
+        assertTrue(correctedBands * 4L <= rawBands,
+                label + " must remove at least 75% of literal one-cell mountain bands; raw="
+                        + rawBands + ", corrected=" + correctedBands);
+        assertEquals(maximum(raw), maximum(corrected), label + " mountain summit must remain unchanged");
+    }
+
     private static long countOneCellMountainBands(
             ElevationField base,
             ElevationField surface,
@@ -222,6 +255,17 @@ final class MountainTerraceRegularizerTest {
         long middle = Math.floorDiv(middleHeight, CELL);
         long last = Math.floorDiv(lastHeight, CELL);
         return (first < middle && middle < last) || (first > middle && middle > last);
+    }
+
+    private static WorldGenerationIntent screenshotIntent() {
+        return intent(new MountainIntent(
+                normalized(350_000),
+                normalized(520_000),
+                normalized(500_000),
+                normalized(550_000),
+                normalized(600_000),
+                false,
+                normalized(180_000)));
     }
 
     private static WorldGenerationIntent intent(MountainIntent mountains) {
