@@ -6,8 +6,8 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  * Immutable model choices for the V13 structural mountain stage.
  *
  * <p>The model deliberately knows nothing about concrete runtime Shapes. Its readability contract
- * is geometric: mountain systems are born wide enough for their own vertical rise, so later surface
- * fitting consumes an already valid mountain instead of repairing one.</p>
+ * is geometric: mountain systems are born with a bounded source slope and later Shape fitting only
+ * samples that already-valid surface.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
@@ -25,9 +25,6 @@ public record MountainRecipe(
         int slopeWidthCouplingPpm,
         int minimumLongAxisWidthPpm,
         int maximumLongAxisWidthPpm,
-        int minimumCoastalTransitionCells,
-        int shorelineUpliftPpm,
-        int maximumShorelineUpliftCells,
         int plateauCorePpm,
         int centerJitterPpm,
         int widthVariationPpm,
@@ -67,9 +64,6 @@ public record MountainRecipe(
         if (maximumLongAxisWidthPpm < minimumLongAxisWidthPpm) {
             throw new IllegalArgumentException("maximumLongAxisWidthPpm must be >= minimumLongAxisWidthPpm");
         }
-        requirePositive(minimumCoastalTransitionCells, "minimumCoastalTransitionCells");
-        requireNormalized(shorelineUpliftPpm, "shorelineUpliftPpm");
-        requirePositive(maximumShorelineUpliftCells, "maximumShorelineUpliftCells");
         requireNormalized(plateauCorePpm, "plateauCorePpm");
         requireNormalized(centerJitterPpm, "centerJitterPpm");
         requireNormalized(widthVariationPpm, "widthVariationPpm");
@@ -77,9 +71,8 @@ public record MountainRecipe(
     }
 
     /**
-     * Direct bounded-slope mountain synthesis. The steepest authored mountain rises by at most
-     * 0.235 vertical cell per cardinal step. Even a diagonal cut therefore spends about three grid
-     * cells on one vertical level, while actual per-system width is coupled 1:1 to its varied uplift.
+     * Direct bounded-slope mountain synthesis. Maximum sharpness rises by at most 0.235 vertical
+     * cell per cardinal step, so even an oblique cut keeps roughly three cells per Z level.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -98,9 +91,6 @@ public record MountainRecipe(
                 1_000_000,
                 1_150_000,
                 2_350_000,
-                12,
-                120_000,
-                3,
                 220_000,
                 140_000,
                 100_000,
