@@ -66,33 +66,36 @@ final class StandardMountainCalibrator implements MountainCalibrator {
         long allowedRise = Math.max(
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
+
+        // A smoothstep hill can have a steeper middle band than simple height / radius suggests.
+        // Reserve 1.5x horizontal room so ordinary settings predominantly compile to coherent ramps
+        // instead of full-cell walls.
         int coupledHalfWidth = typicalUplift == 0L
                 ? recipe.minimumHalfWidthCells()
-                : Math.toIntExact(Math.max(1L, (typicalUplift + allowedRise - 1L) / allowedRise));
+                : Math.toIntExact(Math.max(
+                        1L,
+                        (typicalUplift * 3L + allowedRise * 2L - 1L) / (allowedRise * 2L)));
         int typicalHalfWidth = Math.max(authoredHalfWidth, coupledHalfWidth);
 
-        int candidateSpacing = Math.max(
+        int chaininessPpm = intent.chaininess().partsPerMillion();
+        int longAxisWidthPpm = interpolate(
+                recipe.minimumLongAxisWidthPpm(),
+                recipe.maximumLongAxisWidthPpm(),
+                chaininessPpm);
+        int typicalLongAxis = Math.max(
+                typicalHalfWidth,
+                Math.toIntExact((long) typicalHalfWidth * longAxisWidthPpm / PPM));
+
+        int baseSpacing = Math.max(
                 1,
                 typicalHalfWidth * recipe.candidateSpacingNumerator()
                         / recipe.candidateSpacingDenominator());
-
-        int chaininessPpm = intent.chaininess().partsPerMillion();
-        long ridgeWidthPpm = recipe.minimumRidgeHalfLengthWidthPpm()
-                + (long) chaininessPpm
-                        * (recipe.maximumRidgeHalfLengthWidthPpm()
-                                - recipe.minimumRidgeHalfLengthWidthPpm())
-                        / PPM;
-        int ridgeHalfLength = Math.toIntExact(
-                Math.max(0L, (long) typicalHalfWidth * ridgeWidthPpm / PPM));
-        int peakSpacing = Math.max(
-                4,
-                Math.toIntExact((long) typicalHalfWidth * recipe.peakSpacingWidthPpm() / PPM));
+        int candidateSpacing = Math.max(baseSpacing, typicalLongAxis * 6 / 5);
 
         int sharpnessMilli = interpolate(
                 recipe.minimumSharpnessMilli(),
                 recipe.maximumSharpnessMilli(),
                 intent.peakSharpness().partsPerMillion());
-        int branchProbability = (int) ((long) chaininessPpm * 650_000L / PPM);
         boolean plateausEnabled = intent.plateausEnabled();
         int plateauProbability = plateausEnabled
                 ? intent.plateauProbability().partsPerMillion()
@@ -105,12 +108,10 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 candidateSpacing,
                 intent.abundance().partsPerMillion(),
                 typicalHalfWidth,
+                typicalLongAxis,
                 typicalUplift,
-                ridgeHalfLength,
-                peakSpacing,
                 intent.peakSharpness().partsPerMillion(),
                 sharpnessMilli,
-                branchProbability,
                 plateausEnabled,
                 plateauProbability,
                 baseCeiling,
