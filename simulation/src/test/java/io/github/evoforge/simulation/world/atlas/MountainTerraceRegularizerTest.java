@@ -91,7 +91,10 @@ final class MountainTerraceRegularizerTest {
 
         long changed = 0L;
         long mountainCells = 0L;
+        long rawMaximumInteriorStep = 0L;
         long maximumInteriorStep = 0L;
+        long rawCompressedEdges = 0L;
+        long compressedEdges = 0L;
         long maximumUpliftStep = 0L;
         for (int y = V13_BOUNDS.minY(); y <= V13_BOUNDS.maxY(); y++) {
             for (int x = V13_BOUNDS.minX(); x <= V13_BOUNDS.maxX(); x++) {
@@ -111,27 +114,35 @@ final class MountainTerraceRegularizerTest {
                 if (baseHeight > 0L && x < V13_BOUNDS.maxX()
                         && base.elevationSubunitsAt(x + 1, y) > 0L) {
                     long rightBase = base.elevationSubunitsAt(x + 1, y);
+                    long rightRaw = raw.elevationSubunitsAt(x + 1, y);
                     long rightCorrected = corrected.elevationSubunitsAt(x + 1, y);
                     maximumUpliftStep = Math.max(
                             maximumUpliftStep,
                             Math.abs((correctedHeight - baseHeight) - (rightCorrected - rightBase)));
-                    if (mountain && raw.elevationSubunitsAt(x + 1, y) > rightBase) {
-                        maximumInteriorStep = Math.max(
-                                maximumInteriorStep,
-                                Math.abs(rightCorrected - correctedHeight));
+                    if (mountain && rightRaw > rightBase) {
+                        long rawStep = Math.abs(rightRaw - rawHeight);
+                        long correctedStep = Math.abs(rightCorrected - correctedHeight);
+                        rawMaximumInteriorStep = Math.max(rawMaximumInteriorStep, rawStep);
+                        maximumInteriorStep = Math.max(maximumInteriorStep, correctedStep);
+                        if (rawStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) rawCompressedEdges++;
+                        if (correctedStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) compressedEdges++;
                     }
                 }
                 if (baseHeight > 0L && y < V13_BOUNDS.maxY()
                         && base.elevationSubunitsAt(x, y + 1) > 0L) {
                     long upperBase = base.elevationSubunitsAt(x, y + 1);
+                    long upperRaw = raw.elevationSubunitsAt(x, y + 1);
                     long upperCorrected = corrected.elevationSubunitsAt(x, y + 1);
                     maximumUpliftStep = Math.max(
                             maximumUpliftStep,
                             Math.abs((correctedHeight - baseHeight) - (upperCorrected - upperBase)));
-                    if (mountain && raw.elevationSubunitsAt(x, y + 1) > upperBase) {
-                        maximumInteriorStep = Math.max(
-                                maximumInteriorStep,
-                                Math.abs(upperCorrected - correctedHeight));
+                    if (mountain && upperRaw > upperBase) {
+                        long rawStep = Math.abs(upperRaw - rawHeight);
+                        long correctedStep = Math.abs(upperCorrected - correctedHeight);
+                        rawMaximumInteriorStep = Math.max(rawMaximumInteriorStep, rawStep);
+                        maximumInteriorStep = Math.max(maximumInteriorStep, correctedStep);
+                        if (rawStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) rawCompressedEdges++;
+                        if (correctedStep > MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE) compressedEdges++;
                     }
                 }
             }
@@ -142,10 +153,16 @@ final class MountainTerraceRegularizerTest {
         assertTrue(changed < mountainCells, "correction must remain selective rather than replacing mountain morphology");
         assertTrue(
                 maximumInteriorStep <= MountainTerraceRegularizer.MAXIMUM_COMPOSED_CARDINAL_RISE,
-                "the final composed mountain interior must reserve more than two horizontal cells per Z level");
+                "residual compressed mountain slope: rawMax=" + rawMaximumInteriorStep
+                        + ", correctedMax=" + maximumInteriorStep
+                        + ", rawCompressedEdges=" + rawCompressedEdges
+                        + ", correctedCompressedEdges=" + compressedEdges
+                        + ", changedCells=" + changed
+                        + ", mountainCells=" + mountainCells);
         assertTrue(
                 maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
-                "terrace correction must preserve the accepted mountain-uplift slope budget");
+                "terrace correction must preserve the accepted mountain-uplift slope budget; max="
+                        + maximumUpliftStep + ", budget=" + calibration.maximumCardinalRiseSubunits());
     }
 
     private static WorldGenerationIntent intent(MountainIntent mountains) {
