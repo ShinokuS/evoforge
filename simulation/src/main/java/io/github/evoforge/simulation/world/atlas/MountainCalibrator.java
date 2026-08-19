@@ -57,9 +57,9 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1L,
                 ElevationField.SUBUNITS_PER_CELL * (long) allowedRisePpm / PPM);
 
-        // World-size vertical law: a mountain can only climb as high as the narrower horizontal span
-        // can support at the calibrated geometric slope. The 0.85 radius utilization leaves room for
-        // foothills instead of requiring the summit to sit exactly at a world boundary.
+        // A mountain may only climb as high as the narrower horizontal span can support at the
+        // calibrated source slope. Radius utilization is explicit model data rather than a later
+        // morphology repair budget.
         long usableRadiusCells = Math.max(
                 1L,
                 (long) limitingHorizontalSpan * recipe.worldSlopeRadiusUtilizationPpm()
@@ -90,8 +90,8 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 worldMaximumHalfWidth,
                 intent.scale().partsPerMillion());
 
-        // A tall mountain is automatically broad even when authored Scale is small. This coupling
-        // deliberately uses only elevation geometry; it is not a promise about any concrete Shape.
+        // Width is derived from the same rise law that is used by source synthesis. A tall mountain
+        // therefore reserves its horizontal space before rasterization rather than expanding later.
         long riseSteps = typicalUplift == 0L
                 ? 0L
                 : (typicalUplift + maximumCardinalRise - 1L) / maximumCardinalRise;
@@ -115,10 +115,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                         / recipe.candidateSpacingDenominator());
         int candidateSpacing = Math.max(baseSpacing, typicalLongAxis);
 
-        int sharpnessMilli = interpolate(
-                recipe.minimumSharpnessMilli(),
-                recipe.maximumSharpnessMilli(),
-                intent.peakSharpness().partsPerMillion());
         boolean plateausEnabled = intent.plateausEnabled();
         int plateauProbability = plateausEnabled
                 ? intent.plateauProbability().partsPerMillion()
@@ -147,8 +143,6 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 typicalUplift,
                 worldHeightCap,
                 maximumCardinalRise,
-                intent.peakSharpness().partsPerMillion(),
-                sharpnessMilli,
                 plateausEnabled,
                 plateauProbability,
                 coastalTransitionCells,
