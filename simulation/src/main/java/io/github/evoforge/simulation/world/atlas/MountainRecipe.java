@@ -94,9 +94,9 @@ public record MountainRecipe(
     }
 
     /**
-     * Smooth-hill mountains with a geometry-only slope budget. At ordinary sharpness the mountain
-     * layer rises by about one vertical cell per three horizontal cells; even maximum sharpness
-     * remains above two horizontal cells per vertical level.
+     * Smooth-hill mountains with a geometry-only slope budget. The authored mountain surface aims
+     * for roughly three to four horizontal cells per vertical level: about 4.2 cells at the soft
+     * end and about 3.1 even at maximum sharpness. Concrete Shape identity is deliberately absent.
      */
     public static MountainRecipe balanced() {
         return new MountainRecipe(
@@ -109,8 +109,8 @@ public record MountainRecipe(
                 1,
                 100_000,
                 1_000_000,
-                220_000,
-                420_000,
+                240_000,
+                320_000,
                 850_000,
                 750_000,
                 1_150_000,
