@@ -7,9 +7,11 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
  *
  * <p>The values describe desired outcomes and spatial character, not implementation thresholds or
  * physical constants. Generation stages are responsible for calibrating their algorithms to these
- * coordinates. {@code relief} controls large vertical structure, {@code localRelief} controls the
- * strength of ordinary rolling hills and depressions, {@code landformScale} controls their typical
- * horizontal size, and {@code ruggedness} controls ridge prominence and tolerated local slope.</p>
+ * coordinates. {@code relief} controls large ordinary vertical structure, {@code localRelief}
+ * controls rolling hills and depressions, {@code landformScale} controls their typical horizontal
+ * size, {@code ruggedness} controls ridge prominence and tolerated local slope, and
+ * {@code mountains} describes the separate dedicated mountain stage introduced after the accepted
+ * V12 base morphology.</p>
  */
 public record WorldGenerationIntent(
         NormalizedValue landCoverage,
@@ -18,7 +20,8 @@ public record WorldGenerationIntent(
         NormalizedValue relief,
         NormalizedValue localRelief,
         NormalizedValue landformScale,
-        NormalizedValue ruggedness) {
+        NormalizedValue ruggedness,
+        MountainIntent mountains) {
 
     private static final NormalizedValue DEFAULT_LANDFORM_SCALE =
             NormalizedValue.ofPartsPerMillion(500_000);
@@ -32,9 +35,30 @@ public record WorldGenerationIntent(
                 || relief == null
                 || localRelief == null
                 || landformScale == null
-                || ruggedness == null) {
+                || ruggedness == null
+                || mountains == null) {
             throw new IllegalArgumentException("world generation intent values must not be null");
         }
+    }
+
+    /** Compatibility constructor for callers that predate the dedicated V13 mountain stage. */
+    public WorldGenerationIntent(
+            NormalizedValue landCoverage,
+            NormalizedValue landmassScale,
+            NormalizedValue fragmentation,
+            NormalizedValue relief,
+            NormalizedValue localRelief,
+            NormalizedValue landformScale,
+            NormalizedValue ruggedness) {
+        this(
+                landCoverage,
+                landmassScale,
+                fragmentation,
+                relief,
+                localRelief,
+                landformScale,
+                ruggedness,
+                MountainIntent.balanced());
     }
 
     /** Compatibility constructor for the first V12 drafts that predate terrain character controls. */
@@ -51,7 +75,8 @@ public record WorldGenerationIntent(
                 relief,
                 localRelief,
                 DEFAULT_LANDFORM_SCALE,
-                DEFAULT_RUGGEDNESS);
+                DEFAULT_RUGGEDNESS,
+                MountainIntent.balanced());
     }
 
     /** Compatibility constructor for V11 and older callers that predate local relief. */
@@ -67,7 +92,8 @@ public record WorldGenerationIntent(
                 relief,
                 NormalizedValue.ofPartsPerMillion(0),
                 DEFAULT_LANDFORM_SCALE,
-                DEFAULT_RUGGEDNESS);
+                DEFAULT_RUGGEDNESS,
+                MountainIntent.balanced());
     }
 
     /** Compatibility constructor for V9 and older callers that do not author relief explicitly. */
@@ -82,7 +108,8 @@ public record WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(500_000),
                 NormalizedValue.ofPartsPerMillion(0),
                 DEFAULT_LANDFORM_SCALE,
-                DEFAULT_RUGGEDNESS);
+                DEFAULT_RUGGEDNESS,
+                MountainIntent.balanced());
     }
 
     /** Neutral intent used by compatibility constructors and simple tooling. */
@@ -94,6 +121,7 @@ public record WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(600_000),
                 NormalizedValue.ofPartsPerMillion(450_000),
                 DEFAULT_LANDFORM_SCALE,
-                DEFAULT_RUGGEDNESS);
+                DEFAULT_RUGGEDNESS,
+                MountainIntent.balanced());
     }
 }
