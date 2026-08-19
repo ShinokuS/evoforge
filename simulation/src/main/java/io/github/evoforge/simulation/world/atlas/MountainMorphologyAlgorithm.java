@@ -69,14 +69,7 @@ final class MountainMorphologyAlgorithm {
                 recipe.shorelineUpliftPpm());
         long[] maximumUplift = new long[calibration.area()];
         GenerationRandom random = GenerationRandom.from(genesis);
-        for (MountainSystem system : createSystems(
-                random,
-                bounds,
-                land,
-                width,
-                height,
-                calibration,
-                recipe)) {
+        for (MountainSystem system : createSystems(random, bounds, calibration, recipe)) {
             rasterize(
                     system,
                     bounds,
@@ -102,9 +95,6 @@ final class MountainMorphologyAlgorithm {
     private static List<MountainSystem> createSystems(
             GenerationRandom random,
             WorldBounds bounds,
-            boolean[] land,
-            int width,
-            int height,
             MountainCalibration calibration,
             MountainRecipe recipe) {
         int spacing = calibration.candidateSpacingCells();
@@ -127,9 +117,7 @@ final class MountainMorphologyAlgorithm {
             for (long latticeX = minimumLatticeX; latticeX <= maximumLatticeX; latticeX++) {
                 int activation = samplePpm(random, ACTIVE, latticeX, latticeY, 0L);
                 if (activation >= calibration.candidateActivationPpm()) continue;
-                MountainSystem system = createSystem(random, latticeX, latticeY, calibration, recipe);
-                if (!centerIsLand(system, bounds, land, width, height)) continue;
-                systems.add(system);
+                systems.add(createSystem(random, latticeX, latticeY, calibration, recipe));
             }
         }
         return systems;
@@ -191,23 +179,6 @@ final class MountainMorphologyAlgorithm {
                 rightWidth,
                 uplift,
                 plateau);
-    }
-
-    private static boolean centerIsLand(
-            MountainSystem system,
-            WorldBounds bounds,
-            boolean[] land,
-            int width,
-            int height) {
-        int x = (int) StrictMath.round(system.centerX());
-        int y = (int) StrictMath.round(system.centerY());
-        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
-            return false;
-        }
-        int localX = x - bounds.minX();
-        int localY = y - bounds.minY();
-        return localX >= 0 && localX < width && localY >= 0 && localY < height
-                && land[localY * width + localX];
     }
 
     private static void rasterize(
