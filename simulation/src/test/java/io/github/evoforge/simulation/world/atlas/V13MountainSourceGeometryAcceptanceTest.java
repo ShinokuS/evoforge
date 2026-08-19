@@ -17,9 +17,10 @@ import org.junit.jupiter.api.Test;
 /** Visual-review fixture expressed as source-generation invariants rather than a repair pass. */
 final class V13MountainSourceGeometryAcceptanceTest {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
+    private static final int PATCH_SIZE = 50;
 
     @Test
-    void reviewedPeakFixtureIsBornBroadAndKeepsRampsSparseAcrossTheMountain() {
+    void reviewedPeakFixtureIsBornBroadAndKeepsRampsSparseAcrossEligibleSurface() {
         WorldBounds bounds = new WorldBounds(-200, 199, -200, 199, -12, 96);
         WorldGenerationIntent intent = screenshotIntent();
         long seed = 1L;
@@ -40,15 +41,22 @@ final class V13MountainSourceGeometryAcceptanceTest {
                 RngRevision.V1,
                 intent));
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis);
-        TerrainShapeField shapes = TerrainShapeGenerationStage
+        TerrainShapeField coherentShapes = TerrainShapeGenerationStage
+                .forRevision(GenerationRevision.V12)
+                .generate(mountains);
+        TerrainShapeField sparseShapes = TerrainShapeGenerationStage
                 .forRevision(GenerationRevision.V13)
                 .generate(mountains);
 
+        int patchColumns = Math.toIntExact(((long) bounds.maxX() - bounds.minX() + 1L) / PATCH_SIZE);
+        int patchRows = Math.toIntExact(((long) bounds.maxY() - bounds.minY() + 1L) / PATCH_SIZE);
+        long[] patchEligible = new long[patchColumns * patchRows];
+        long[] patchSparse = new long[patchEligible.length];
         long mountainCells = 0L;
-        long mountainOverrides = 0L;
+        long coherentMountainOverrides = 0L;
+        long sparseMountainOverrides = 0L;
         long maximumCardinalMountainStep = 0L;
-        long[] quadrantMountainCells = new long[4];
-        long[] quadrantOverrides = new long[4];
+        long maximumMountainHeight = Long.MIN_VALUE;
 
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -57,11 +65,17 @@ final class V13MountainSourceGeometryAcceptanceTest {
                 if (here <= baseHere) continue;
 
                 mountainCells++;
-                int quadrant = (x >= 0 ? 1 : 0) + (y >= 0 ? 2 : 0);
-                quadrantMountainCells[quadrant]++;
-                if (shapes.shapeOverrideAt(x, y) != null) {
-                    mountainOverrides++;
-                    quadrantOverrides[quadrant]++;
+                maximumMountainHeight = Math.max(maximumMountainHeight, here);
+                int patchX = (x - bounds.minX()) / PATCH_SIZE;
+                int patchY = (y - bounds.minY()) / PATCH_SIZE;
+                int patch = patchY * patchColumns + patchX;
+                if (coherentShapes.shapeOverrideAt(x, y) != null) {
+                    coherentMountainOverrides++;
+                    patchEligible[patch]++;
+                }
+                if (sparseShapes.shapeOverrideAt(x, y) != null) {
+                    sparseMountainOverrides++;
+                    patchSparse[patch]++;
                 }
 
                 if (x < bounds.maxX()
@@ -80,37 +94,49 @@ final class V13MountainSourceGeometryAcceptanceTest {
         }
 
         String diagnostics = "mountainCells=" + mountainCells
-                + ", mountainOverrides=" + mountainOverrides
+                + ", coherentMountainOverrides=" + coherentMountainOverrides
+                + ", sparseMountainOverrides=" + sparseMountainOverrides
+                + ", maximumMountainHeight=" + maximumMountainHeight
                 + ", maximumCardinalMountainStep=" + maximumCardinalMountainStep
                 + ", calibratedRise=" + calibration.maximumCardinalRiseSubunits();
 
         assertTrue(mountainCells > 1_000L, "fixture must contain a substantial mountain surface; " + diagnostics);
+        assertTrue(
+                maximumMountainHeight > 12L * CELL,
+                "reviewed 400x400 fixture must actually use V13 mountain headroom; " + diagnostics);
         assertTrue(
                 calibration.maximumCardinalRiseSubunits() <= 235_000L,
                 "source mountain law must reserve more than four cardinal cells per vertical level");
         assertTrue(
                 maximumCardinalMountainStep <= calibration.maximumCardinalRiseSubunits() + 2L,
                 "generated mountain surface itself must obey the source width law; " + diagnostics);
-        assertTrue(mountainOverrides > 0L, "ramps must remain present on the generated mountain; " + diagnostics);
+        assertTrue(coherentMountainOverrides > 0L, "fixture must contain ramp-eligible mountain surface; " + diagnostics);
+        assertTrue(sparseMountainOverrides > 0L, "ramps must remain present on the generated mountain; " + diagnostics);
         assertTrue(
-                mountainOverrides * 10L <= mountainCells,
+                sparseMountainOverrides * 10L <= mountainCells,
                 "ramps must remain a small minority of the mountain surface; " + diagnostics);
+        assertTrue(
+                sparseMountainOverrides * 3L <= coherentMountainOverrides,
+                "V13 must discard most otherwise coherent ramp sites; " + diagnostics);
+        assertTrue(
+                sparseMountainOverrides * 10L >= coherentMountainOverrides,
+                "V13 must not make ramps so sparse that coherent mountain faces lose them; " + diagnostics);
 
-        int substantialQuadrants = 0;
-        for (int quadrant = 0; quadrant < quadrantMountainCells.length; quadrant++) {
-            long cells = quadrantMountainCells[quadrant];
-            if (cells < 500L) continue;
-            substantialQuadrants++;
+        int eligiblePatches = 0;
+        for (int patch = 0; patch < patchEligible.length; patch++) {
+            if (patchEligible[patch] < 10L) continue;
+            eligiblePatches++;
             assertTrue(
-                    quadrantOverrides[quadrant] > 0L,
-                    "every substantial mountain region must retain some ramps; quadrant=" + quadrant + "; " + diagnostics);
+                    patchSparse[patch] > 0L,
+                    "every spatial patch with meaningful coherent slope must retain ramps; patch="
+                            + patch + "; " + diagnostics);
             assertTrue(
-                    quadrantOverrides[quadrant] * 5L <= cells,
-                    "no substantial mountain region may become ramp-dominated; quadrant=" + quadrant + "; " + diagnostics);
+                    patchSparse[patch] * 2L <= patchEligible[patch],
+                    "no coherent patch may remain ramp-dominated; patch=" + patch + "; " + diagnostics);
         }
         assertTrue(
-                substantialQuadrants >= 3,
-                "review fixture must exercise ramp distribution across several mountain regions; " + diagnostics);
+                eligiblePatches >= 3,
+                "review fixture must exercise ramp distribution across several eligible surface patches; " + diagnostics);
     }
 
     private static WorldGenerationIntent screenshotIntent() {
