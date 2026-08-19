@@ -75,7 +75,7 @@ public record MountainRecipe(
                 12,
                 24,
                 72,
-                3,
+                2,
                 1,
                 80_000,
                 400_000,
