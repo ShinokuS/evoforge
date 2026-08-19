@@ -1,50 +1,53 @@
-# Decision 013 — Long-term environmental rates use exact simulation dimensions
+# ADR-013: Environmental rates use explicit exact dimensions
 
-**Status:** Accepted
+- Status: Superseded
+- Scope: Environmental rate representation
+- Decision: The original exact `CellVolumeRate`-per-simulation-tick climate representation has been superseded for generated physical climate by explicit physical depth/time plus `PhysicalSpaceScale` and `SimulationTimeScale`; exact rational simulation rates remain valid where they are still the owning runtime/scenario representation.
 
-## Problem
+## Context
 
-World generation needs climate normals before it can derive meaningful water availability, initial hydrology or ecology. Existing precipitation and evaporation are operational pulse schedules expressed as a finite cell-volume amount plus an interval in simulation ticks.
-
-Using an arbitrary reference period such as “amount per 1,000 ticks” for climate would make that chosen period part of world physics. Assigning one tick a real-world duration such as one second or one minute would also introduce a physical claim that existing simulation mechanics do not yet require or support.
+The original climate slice needed exact long-term finite-volume rates without inventing an arbitrary “per N ticks” reference period or assigning a real-world duration to every existing simulation tick prematurely.
 
 ## Decision
 
-Long-term finite-volume rates are represented exactly as a rational number of `CellVolume` units per simulation tick.
-
-`CellVolumeRate` stores:
+The historical decision introduced reduced non-negative rational `CellVolumeRate` values:
 
 ```text
 volumeUnitsNumerator / tickDenominator
 ```
 
-in canonical reduced form. It is non-negative and uses integer arithmetic only. Event-derived rates reduce factors before multiplication so a large cycle does not overflow merely because an unreduced cumulative amount would be large.
-
-The simulation tick is the current explicit time dimension. This decision does **not** assign a real-world duration to a tick and does not introduce calendar, day, season or year semantics.
-
-Existing `PrecipitationSchedule` and `EvaporationSchedule` expose the exact long-run rate represented by their operational pulse timing. Their scheduling behavior is unchanged.
-
-For cyclic precipitation, the mean supply is derived from the actual number of pulses in the active window:
+and derived exact long-run rates from operational precipitation/evaporation schedules. For cyclic precipitation the mean was:
 
 ```text
 amountPerPulse * floor(activeTicks / intervalTicks) / cycleTicks
 ```
 
-Evaporation's exposed rate is potential atmospheric removal forcing. Actual runtime removal remains limited by exposed Water/retained Water and existing hydrology rules.
+At that time the simulation tick was the only explicit time dimension and no physical tick duration was assumed.
+
+The project later gained an explicit physical-space/time calibration boundary for generated environmental physics. Generated climate now uses physical `WaterDepthRate`/`ClimateSpec` facts and requires explicit `PhysicalSpaceScale` + `SimulationTimeScale` when converting to runtime cell-volume/tick quantities.
+
+## Why
+
+The original exact-rational principle prevented hidden arbitrary cadence. The later physical-scale model became necessary once generated Soil/climate algorithms genuinely needed real dimensions. Superseding the old universal representation is safer than pretending a tick-only rate still represents all climate semantics.
 
 ## Consequences
 
-- climate normals can use a stable dimension without inventing a reference period;
-- runtime pulse schedules can be compared to generated long-term forcing without losing exactness;
-- UI simulation speed remains unrelated to authoritative rates because throughput does not change tick semantics;
-- no real-world seconds/minutes are claimed prematurely;
-- future calendar or physical-time mapping can be added as a separate contract if a real consumer requires it;
-- the rate type describes quantity over simulation time and does not own scheduling or mutable environmental state.
+- Existing exact rational simulation-rate types remain useful for mechanics/scenario schedules that are explicitly expressed in simulation units.
+- Generated physical climate uses physical dimensions and an explicit conversion boundary.
+- UI/render speed remains unrelated to authoritative simulation time.
+- No implicit physical duration is assigned when the owning subsystem has not declared one.
 
-## Rejected directions
+## Alternatives considered
 
-Fixed “per N ticks” climate constants were rejected because N would be an arbitrary hidden balance period.
+Floating-point long-term rates and arbitrary fixed “per N ticks” reference periods were rejected. Declaring one universal real-world duration for every tick before a consumer required physical scale was also rejected.
 
-Floating-point rates were rejected because exact deterministic ratios are simple here and avoid representation drift.
+## Current implementation
 
-Declaring a tick equal to a real-world second/minute/day was rejected because current mechanics are calibrated in simulation ticks and no accepted physical-time scale exists yet.
+`CellVolumeRate` still exists for simulation-unit rate contracts. Generated-world physical climate/Soil paths instead use `WaterDepthRate`, `PhysicalSpaceScale` and `SimulationTimeScale`, with conversion performed before runtime where required. Current generated-world docs and ADR-021 describe the newer canonical preparation/calibration boundary.
+
+## Related documentation
+
+- [Time and Scheduling](../systems/foundations/time.md)
+- [Surface Hydrology](../systems/environment/hydrology.md)
+- [Soil Hydraulics](../systems/environment/soil-hydraulics.md)
+- [ADR-021](021-world-preparation-and-calibration-boundary.md)

@@ -1,44 +1,50 @@
-# Decision 014 — Hydrologic climate normals are generated facts, not runtime weather
+# ADR-014: Hydrologic climate normals are prepared facts, not runtime weather
 
-**Status:** Accepted
+- Status: Superseded
+- Scope: Generated climate representation
+- Decision: The durable principle that long-term climate conditions are prepared/generated facts distinct from current runtime Weather remains; the historical `HydroClimateSpec/HydroClimateField` representation has been superseded by current `ClimateSpec/ClimateNormalsField` physical climate contracts.
 
-## Problem
+## Context
 
-Elevation and drainage define where Water can move, but not how much atmospheric Water the world receives or how strongly exposed Water can be removed. Deriving initial hydrology or later ecological potential from drainage alone would require arbitrary channel thresholds and quantities.
-
-Existing precipitation and evaporation schedules are operational runtime pulse timing. Treating those schedules as climate would mix long-term environmental conditions with the mechanism used to realize them during simulation.
+Elevation/drainage alone cannot determine how much atmospheric Water a world receives or how strongly exposed Water can be removed. Runtime precipitation/evaporation schedules also describe operational event timing, not long-term climate meaning.
 
 ## Decision
 
-`WorldSpec` includes `HydroClimateSpec`, containing two exact long-term rates:
+The historical slice introduced explicit long-term precipitation supply and potential evaporation as generated climate-normal facts, separate from Weather/runtime mutation. The important architectural decision was the separation:
 
-- precipitation supply;
-- potential evaporative demand.
+```text
+long-term prepared climate condition
+        ≠
+current weather/event schedule
+        ≠
+mutable Water/Soil state
+```
 
-Both use `CellVolumeRate` (`cell-volume units / simulation tick`). These rates are a normalized internal generation contract, **not a world-creation UI contract**. A player or world author should express a small number of semantic intentions such as overall wetness, stability/variability or extremity. A future balancer/calibration stage translates those human-scale controls into coherent `WorldSpec` facts and rates. Raw cell-volume rates, solver intervals and pulse sizes must not become required user tuning knobs.
+The original concrete types (`HydroClimateSpec`, `HydroClimateField`, exact cell-volume/tick rates) were later replaced by a physical climate model based on `ClimateSpec`, `ClimateNormalsField`, `WaterDepthRate` and explicit physical-space/time conversion when runtime quantities are required.
 
-`WorldAtlas` owns the resulting immutable `HydroClimateField`. The first authoring algorithm is deliberately uniform: each XY column receives the requested normal unchanged. This is not a claim that climate must remain spatially uniform. It avoids inventing latitude, wind, temperature or random climate noise before those have causal models and consumers.
+## Why
 
-The compatibility `WorldSpec(WorldBounds)` constructor uses `HydroClimateSpec.UNFORCED` (zero supply and zero demand). It introduces no hidden baseline climate into existing callers.
-
-Climate normals are not weather events. They do not schedule rain, remove Water or mutate Soil. A runtime-forcing bridge realizes these normals through precipitation/evaporation processes while preserving the existing authoritative hydrology systems.
+Climate is environmental provenance/input; Weather is current process/state; Water/Soil are physical runtime owners. Keeping those layers separate allows eventful weather algorithms to change without rewriting long-term climate facts or Water ownership.
 
 ## Consequences
 
-- hydrologic supply/demand become explicit generation inputs and provenance through `WorldSpec`;
-- Atlas can reason about long-term water availability without owning runtime Water;
-- no arbitrary reference period or real-world tick duration is needed;
-- old `WorldSpec(bounds)` callers remain deterministic and explicitly unforced;
-- user-facing world creation remains semantic and minimal while internal calibration may stay exact and technical;
-- spatial climate variation is deferred until a real causal input such as atmospheric circulation, temperature or another accepted model exists;
-- temperature, seasonality, wind, biome and weather anomalies remain separate future semantics.
+- Generated climate remains immutable preparation data.
+- Runtime atmosphere realizes prepared conditions through its own replaceable plan/forcing seam.
+- No climate-normal field directly mutates Water/Soil.
+- User-facing generation should remain semantic rather than exposing internal pulse/rate solver knobs.
+- Spatial climate variation can be added through explicit causal models instead of arbitrary noise.
 
-## Rejected directions
+## Alternatives considered
 
-Random climate noise was rejected because variation without a causal model would make visual texture into simulation physics.
+Random climate noise without causal inputs was rejected. Embedding runtime precipitation/evaporation schedules directly in Atlas was rejected because schedules are one realization, not climate meaning. Inferring atmospheric Water supply from drainage was rejected because drainage routes Water; it does not create it.
 
-Embedding `PrecipitationSchedule` or `EvaporationSchedule` in Atlas was rejected because schedules are runtime realization, not long-term generated facts.
+## Current implementation
 
-Exposing `HydroClimateSpec` rates as the primary generation UI was rejected because it would force users to balance simulation units instead of describing the world they want.
+`WorldSpec` currently carries `ClimateSpec`; `WorldAtlas` carries `ClimateNormalsField`; `AtmosphericRuntimePlan` composes runtime Weather/Water forcing from immutable prepared facts. Rainfall occurrence/regime calibration is a separate prepared layer. Historical `HydroClimate*` terminology should be treated as superseded design history rather than current normative vocabulary.
 
-Inferring water supply from drainage contributing area was rejected because drainage routes supplied Water; it does not create atmospheric Water.
+## Related documentation
+
+- [World Atlas](../systems/world-generation/world-atlas.md)
+- [Generated World Runtime](../systems/world-generation/generated-world-runtime.md)
+- [Rainfall Regime Calibration](../systems/environment/rainfall-calibration.md)
+- [Surface Hydrology](../systems/environment/hydrology.md)

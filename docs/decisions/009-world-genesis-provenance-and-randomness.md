@@ -1,52 +1,56 @@
-# Decision 009 — World genesis provenance and deterministic randomness
+# ADR-009: World genesis provenance and deterministic randomness
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: World-generation provenance and RNG compatibility
+- Decision: World creation records immutable specification/intent/seed/revisions, and generation randomness is an addressable pure function rather than a mutable call-order-dependent stream.
 
-## Problem
+## Context
 
-Generated worlds need reproducible initial conditions without making generation order, Java library RNG behavior, chunk layout or a future save format part of simulation truth.
-
-A single mutable pseudo-random sequence is fragile: inserting one unrelated generation call shifts every later result. Treating a seed as the whole world is also insufficient once generated facts evolve or generator code changes.
+Procedural worlds must be reproducible without making Java RNG implementation, generator call order, chunk layout or a future save schema hidden generation state. A seed alone is also insufficient once generation semantics evolve.
 
 ## Decision
 
-World creation distinguishes the requested specification from the provenance of the resulting world.
+`WorldGenesis` records the immutable world request/provenance: current `WorldSpec`, master seed, `GenerationRevision`, `RngRevision` and `WorldGenerationIntent`.
 
-`WorldSpec` describes what is requested before generation. Its first contract contains only inclusive finite `WorldBounds`; additional generation settings are added only when a real generator requires them.
-
-`WorldGenesis` records the immutable `WorldSpec`, master seed, `GenerationRevision` and `RngRevision`. Generator and RNG revisions are separate compatibility dimensions.
-
-World-generation randomness is a pure scoped function. `GenerationRandom` v1 samples from:
+Generation randomness is addressed by meaning:
 
 ```text
 master seed
-+ generation stage id
-+ random purpose id
-+ three stable signed 64-bit scope coordinates
++ GenerationStageId
++ GenerationPurposeId
++ signed 64-bit scope X/Y/Z
 + non-negative ordinal
-→ deterministic long
+→ deterministic 64-bit sample
 ```
 
-Direct cell-scoped generation uses global XYZ values. Macro stages may instead use their own stable lattice coordinates; those sampling coordinates are random-scope identity, not a second authoritative world position. Stage and purpose identifiers are stable namespaced semantic keys.
+Direct cell sampling uses world coordinates; macro algorithms may use stable lattice coordinates as random-scope identity without turning those coordinates into authoritative world positions. Stage/purpose identifiers are stable namespaced semantic keys.
 
-Sampling order is not state: asking for another unrelated sample cannot shift an existing sample. `evoforge:rng-v1` is frozen by golden-vector tests. Widening the scope-coordinate API from `int` to `long` preserves every existing int-scoped v1 sample bit-for-bit. An unsupported RNG revision is rejected rather than silently interpreted with the current algorithm.
+Sample order is not state: inserting an unrelated generation sample cannot shift an existing sample. RNG revision and world-generation revision are separate compatibility dimensions. Unsupported RNG revisions fail explicitly.
 
-The seed and provenance reproduce generation inputs; they do not replace already-authored world facts in persistence. Once generation creates authoritative facts/state, later runtime mutation belongs to the relevant domain owner.
+Seed/provenance can reproduce initial generation inputs; it does not replace lived authoritative facts in persistence after runtime mutation.
+
+## Why
+
+Addressable randomness localizes change, makes deterministic tests/golden vectors meaningful and decouples generated semantics from incidental control flow.
 
 ## Consequences
 
-- adding an unrelated generation stage does not globally reshuffle random results;
-- exact RNG behavior is versioned independently from higher-level generator algorithms;
-- generation can be reproduced and debugged from stable semantic scopes;
-- macro lattices do not require inventing region/chunk identities merely to address randomness;
-- future saves can retain the provenance that authored their canonical world state;
-- global XYZ remains authoritative world addressing without making chunk identity gameplay semantics;
-- generator revisions must advance when the same declared inputs would intentionally author different facts.
+- Unrelated generator work does not globally reshuffle random output.
+- Generator semantics and RNG sampling can version independently.
+- Macro algorithms need no premature chunk/region identity merely to address randomness.
+- Historical generated-world behavior can remain explicit.
+- Persistence must store authoritative lived facts as required, with Genesis retained as provenance rather than “regenerate latest from seed”.
 
-## Rejected directions
+## Alternatives considered
 
-A process-wide mutable `Random` was rejected because call order becomes hidden generation state.
+A process-wide mutable `Random` was rejected because call order becomes hidden state. Seed-only persistence was rejected because newer generator semantics could rewrite an existing world's past. Chunk/region keys were not introduced merely for RNG scope.
 
-Seed-only persistence was rejected because generator upgrades would rewrite an existing saved world's past.
+## Current implementation
 
-Chunk/region keys, streaming lifecycle, packed storage, climate settings and calendar semantics are deliberately not defined by this decision. They require evidence from the World Atlas, materialization and time slices rather than being predicted by the genesis foundation.
+`GenerationRandom` V1 uses stable FNV-1a hashing for semantic stage/purpose strings and SplitMix-style `mix64` avalanche constants inside a call-order-independent addressable sampler. `GenerationRevision` currently spans V1–V12; `WorldGenesis.current(...)` deliberately remains a V7 compatibility convenience while current accepted V12 work constructs V12 explicitly. `WorldGenerationIntent` currently carries seven normalized semantic terrain coordinates.
+
+## Related documentation
+
+- [World Genesis](../systems/world-generation/world-genesis.md)
+- [World Generation](../systems/world-generation/overview.md)
+- [References](../references.md)

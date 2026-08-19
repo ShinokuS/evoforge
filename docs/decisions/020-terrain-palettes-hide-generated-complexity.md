@@ -1,141 +1,60 @@
-# Decision 020: Terrain palettes hide generated complexity
+# ADR-020: Terrain authoring hides generated complexity
 
-## Status
-
-Accepted.
+- Status: Accepted
+- Scope: Generated Terrain material authoring
+- Decision: Content authors choose compact semantic generation intent and material roles; causal spatial/layer placement and technical thresholds remain inside replaceable generation/calibration algorithms.
 
 ## Context
 
-Generated Terrain now needs material composition richer than the temporary uniform-material bridge. The immediate target is a familiar natural layering:
+Generated Terrain needs richer composition than one uniform material, but two easy approaches are both harmful: hard-code material names/conditions in Java, or expose the entire geomorphology rule tree/threshold vocabulary in authored JSON.
 
-```text
-topsoil / soil / bedrock
-```
-
-plus exposed rock and sand in plausible accumulation locations.
-
-A naive implementation can fail in two opposite ways:
-
-1. hard-code content identities and placement rules in Java (`if height < N -> sand`);
-2. move the same condition tree into authored JSON and force content authors to understand slope, deposition, erosion and layer-depth coefficients.
-
-Both approaches couple ordinary content authoring to generator implementation details.
+The original document called the authored composition a “Terrain palette”. The current concrete representation has evolved, but the ownership principle remains.
 
 ## Decision
 
-Terrain material generation is split into four responsibilities:
+Responsibilities are separated:
 
 ```text
 Landscape material definition
-    -> what the material does at runtime
+  runtime material behavior
 
-Terrain preset
-    -> reusable generation-process intent
+Terrain preset/capability
+  reusable semantic generation intent
 
-Terrain palette
-    -> small authored composition of presets + material choices
+Terrain profile + material set
+  compact authored composition / role bindings
 
 TerrainMaterialGenerator
-    -> derives actual spatial/depth placement from causal world facts
+  actual causal spatial/depth synthesis
 ```
 
-The authored palette must remain intentionally small. The first canonical palette selects `natural_ground` and `depositional_sand` presets and maps four understandable roles to existing Landscape definition keys.
+Preset capabilities compose explicitly; conflicting ownership of the same generation capability is rejected rather than resolved by array order. Current roles include surface, subsurface, sediment and bedrock. Generated identity uses stable semantic keys, resolved to runtime IDs only during materialization.
 
-Technical thresholds and derived layer depths are internal generated complexity. They are not required fields in authored palette JSON.
+Causal placement uses generated facts such as morphology, drainage, geology and surface hydrology. Technical slope/deposition/depth constants are algorithm policy, not required author inputs.
 
-## Preset ownership
+## Why
 
-Each resolved preset owns an explicit generation capability. Presets with different capabilities compose; multiple presets claiming the same capability are rejected.
-
-Preset array order has no conflict-resolution semantics. There is no silent `last wins` rule.
-
-The first capabilities are deliberately narrow:
-
-- `GROUND_PROFILE`;
-- `SURFACE_DEPOSITION`.
-
-This is not a generic world-generation rules framework. More capability structure is added only when a real mechanic requires it.
-
-## Causal placement
-
-Material placement must be derived from existing/generated world facts rather than absolute coordinates or material identities.
-
-The first model uses:
-
-- precise local elevation differences for slope;
-- local concavity;
-- drainage contributing area.
-
-Normal ground derives variable Soil depth and bedrock exposure from slope. Depositional sand derives shallow sediment accumulation from low slope, concavity and drainage influence.
-
-The first sand process is not named or treated as a shoreline model. Shoreline sediment remains dependent on future explicit hydrography facts.
-
-## Stable generated identity
-
-Generated material facts use stable semantic Landscape definition keys, not runtime `LandscapeDefinitionId` values.
-
-Runtime ids are resolved only at materialization through explicit `TerrainMaterialBindings` supplied by content composition.
-
-Therefore:
-
-- generator output does not depend on registry ordering;
-- Atlas/worldgen code does not register content;
-- material physics remains in ordinary Landscape definitions;
-- changing runtime storage/ids does not change generated material semantics.
-
-## Authoring invariant
-
-> Authoring surface area should be proportional to creative intent, not simulation complexity.
-
-If an author wants a normal temperate palette with natural soil, deposited sand and granite bedrock, they should identify those materials/presets, not reproduce the geomorphology algorithm.
+Authoring surface area should be proportional to creative intent, not simulation complexity. This allows algorithm sophistication to grow without forcing content authors to reproduce implementation details.
 
 ## Consequences
 
-### Positive
+- Ordinary material/content changes remain data-oriented.
+- Generator internals can evolve/version independently from authored semantic roles.
+- Generic code avoids `if material == ...`/absolute-Z special cases.
+- Multiple preset capabilities compose without order-based hidden override semantics.
+- Final Stage 5 surface synthesis can replace the provisional current material algorithm behind the same ownership direction.
 
-- common terrain definitions remain short and understandable;
-- generator sophistication can grow independently from authored JSON;
-- ordinary material changes do not require algorithm branches;
-- multiple presets can compose without hidden order dependence;
-- generated material patterns remain testable independently from runtime ids;
-- future biome authoring can compose higher-level presets without becoming direct Terrain authority.
+## Alternatives considered
 
-### Costs
+Material-specific Java branches, universal absolute-elevation bands, large authored `fit/layers` condition trees, biome-as-direct-material-painter and a generic rule DSL were rejected/deferred.
 
-- engine preset/model changes require generation-revision discipline when they change durable generated semantics;
-- the first preset catalog is engine-provided rather than a full user-extensible preset-definition language;
-- causal model constants still need evidence-driven calibration.
+## Current implementation
 
-These costs are preferred to prematurely exposing a generic rules DSL.
+The former palette concept is currently represented by `TerrainProfileDefinition` + `TerrainMaterialSetDefinition`, compiled by `TerrainProfileCompiler` into `CompiledTerrainProfile`. `TerrainPresetCatalog`/capabilities currently include ground profile and surface deposition. `TerrainMaterialGenerationStage` uses morphology/drainage/geology/surface-hydrology facts but is explicitly provisional until Stage 5; do not extend it with permanent `river -> sand` or `mountain -> granite` shortcuts.
 
-## Rejected alternatives
+## Related documentation
 
-### Material-specific generator branches
-
-Rejected because adding ordinary materials would require Java changes and violate Definition Locality.
-
-### Absolute elevation rules
-
-Rejected because beaches/deposits/soil are local environmental phenomena, not universal Z bands. Vertical translation must preserve the relative material pattern.
-
-### Large `fit` / `layers` authored JSON
-
-Rejected because it exposes generator ontology (`slope`, `deposition`, role taxonomies and depth expressions) to ordinary content authors.
-
-### Biome directly paints materials
-
-Rejected as primary authority. Biomes may later supply high-level composition intent, but causal terrain/geology/hydrography models decide the concrete generated Terrain.
-
-### Generic rule-tree DSL
-
-Deferred. It would be a declarative `if/else` framework before we have enough distinct terrain mechanics to justify one.
-
-## Follow-ups
-
-1. run representative material-distribution audits across existing fixed seeds;
-2. calibrate internal ground/deposition response from observed worlds rather than adding authored knobs;
-3. introduce generated geology/provinces when multiple bedrock families become causal facts;
-4. introduce HydrographyField before claiming shoreline-specific sand placement;
-5. introduce an independent solid/open field before cave generation.
-
-See [Terrain Generation](../systems/terrain-generation.md), [World Materialization](../systems/world-materialization.md), and [Decision 016](016-atlas-terrain-materialization.md).
+- [Terrain Generation](../systems/world-generation/terrain-generation.md)
+- [World Materialization](../systems/world-generation/world-materialization.md)
+- [Definitions](../systems/foundations/definitions.md)
+- [World Generation](../systems/world-generation/overview.md)

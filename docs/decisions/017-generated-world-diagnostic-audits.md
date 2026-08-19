@@ -1,53 +1,43 @@
-# Decision 017 — Generated-world diagnostics are deterministic audit snapshots
+# ADR-017: Generated-world diagnostics are deterministic audit snapshots
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: Generated-world observability
+- Decision: Generated-world verification uses immutable structured snapshots captured on demand from authoritative generated/runtime read capabilities; logging is only a presentation of those facts.
 
-## Problem
+## Context
 
-Generated-world work is reaching the point where Atlas facts, materialized Terrain and existing runtime hydrology must be exercised together. Manual visual inspection is insufficient for deciding whether a generated world obeys existing rules, and a CI-only test vocabulary would diverge from the information available when a real desktop generation misbehaves.
-
-Logging also cannot become authoritative simulation state. Parsing textual logs as the source of correctness would couple tests to presentation and make observability capable of influencing architecture.
+Generation, Terrain materialization and runtime hydrology must be exercised together. Manual visual inspection alone cannot prove deterministic invariants, while test-only metrics would give desktop failures a different diagnostic vocabulary. Logging cannot become authoritative state or a correctness database.
 
 ## Decision
 
-Generated-world verification uses an immutable `GeneratedWorldDiagnostics` snapshot produced on demand by `GeneratedWorldDiagnosticsProbe` from:
+`GeneratedWorldDiagnosticsProbe` captures an immutable checkpoint snapshot from `WorldAtlas` plus runtime read capabilities. `GeneratedTerrainMaterialDiagnosticsProbe` similarly observes generated/prepared material composition.
 
-```text
-WorldAtlas + SimulationRuntime read capabilities
-```
+The same typed records can be asserted in CI or formatted/logged for human inspection. Capture is explicit and may scan the finite world; it is never a per-tick scheduled simulation process and cannot mutate state.
 
-The probe performs an exact audit of the finite world at an explicit checkpoint. It is not a scheduled simulation process and cannot mutate world state.
+Wall-clock/rendering facts are excluded from deterministic snapshots. Viability/balance verdicts are separate future evaluator policy, not diagnostic facts.
 
-The same snapshot is used in two ways:
+## Why
 
-- headless CI compares/asserts the structured record directly;
-- desktop/manual runs may emit the record through `GeneratedWorldDiagnosticsLog` and the existing SLF4J logging pipeline.
-
-The initial audit covers generated/runtime surface agreement, Terrain volume, drainage topology summary, free Water and Soil-retained Water.
-
-Wall-clock performance and presentation state are intentionally absent from this deterministic record.
+One diagnostic vocabulary improves replay/debugging without turning logs or tools into another world model.
 
 ## Consequences
 
-- CI and real user runs share one diagnostic vocabulary;
-- logs remain a representation of observed facts rather than an authority;
-- deterministic replay can compare complete snapshots directly;
-- Water/Terrain debugging has exact finite-world totals before those systems are expanded;
-- adding logging cannot change scheduler order or simulation outcomes;
-- expensive full-world scans occur only at deliberate audit checkpoints, not on hot paths.
+- CI can compare exact replay snapshots.
+- Developers can inspect the same facts in audit logs.
+- Full scans happen only at deliberate checkpoints.
+- Adding/removing logging cannot affect simulation outcomes.
+- Evaluators may later consume snapshots without being embedded in the probes.
 
-## Current generated-world baseline
+## Alternatives considered
 
-The first CI scenarios use production `WorldAtlasGenerator`, `SimulationAssembly`, scheduler and hydrology mechanics. They verify that an unforced generated world does not create Water spontaneously and that configured precipitation/infiltration on generated porous Terrain is deterministic across replay.
+Per-tick INFO world dumps, parsing log text in tests, a test-only diagnostic model and built-in “healthy world” verdicts were rejected.
 
-This decision does not claim that the current generated-world bootstrap composition is final. Atlas-driven runtime HydroClimate scheduling, canonical material profiles, warmup policy and later world-generation UI remain separate composition work.
+## Current implementation
 
-## Rejected directions
+Runtime diagnostics now cover provenance, Terrain/surface agreement, drainage/geology summaries and free/retained Water facts. Terrain-material diagnostics separately report generated material composition with stable semantic keys. The Generated World Audit workflow runs the same structured probes through ordinary generated-world runtime paths.
 
-Per-tick INFO logging was rejected because it would create hot-path noise and large persistent logs.
+## Related documentation
 
-A test-only diagnostic model was rejected because CI and desktop failures would then expose different facts.
-
-Parsing log text in tests was rejected because log formatting is observability presentation, not simulation semantics.
-
-Adding balance verdicts such as “healthy world” to the snapshot was rejected because viability/calibration policy has not yet been defined. Diagnostics report facts; evaluators may later interpret them through separate contracts.
+- [Generated World Diagnostics](../systems/tooling/generated-world-diagnostics.md)
+- [Generated World Warm-up](../systems/tooling/generated-world-warmup.md)
+- [World Atlas](../systems/world-generation/world-atlas.md)

@@ -1,64 +1,52 @@
-# Decision 018 — Generated worlds enter the ordinary production runtime
+# ADR-018: Generated worlds enter the ordinary production runtime
 
-**Status:** Accepted
+- Status: Superseded
+- Scope: Generated-world bootstrap composition
+- Decision: The original one-shot `GeneratedWorldBootstrap` composition has been superseded by the explicit preparation/start split of ADR-021; the durable principle remains that generated worlds materialize once into the same ordinary `SimulationRuntime` as hand-authored worlds.
 
-## Problem
+## Context
 
-World Genesis, World Atlas, generated Terrain materialization, hydrologic climate forcing and runtime diagnostics now exist as separate correct slices. Keeping their integration only in headless test loops would create a second, test-specific way to run generated worlds and make desktop/manual behavior diverge from CI.
-
-At the same time, putting world generation logic directly into `SimulationAssembly` would turn the production composition root into a generator/content selector and blur ownership between immutable Atlas facts and lived runtime state.
+The first complete generated-world slice needed to connect Genesis/Atlas, Terrain materialization, climate forcing and runtime diagnostics without creating a test-only/generated-only simulation engine or teaching `SimulationAssembly` how to generate worlds.
 
 ## Decision
 
-`GeneratedWorldBootstrap` is the one-shot orchestration boundary that turns a `WorldGenesis` into a started production runtime.
+The historical bridge introduced one-shot `GeneratedWorldBootstrap`:
 
 ```text
-WorldGenesis
-    ↓
-WorldAtlasGenerator
-    ↓
-WorldAtlas
-    ├─ ElevationField ──> WorldTerrainMaterializer ──> Landscape-owned Terrain
-    └─ HydroClimateField ────────────────────────────> runtime forcing setup
-                                                        ↓
-                                                  SimulationAssembly.start()
-                                                        ↓
-                                                  SimulationRuntime
+WorldGenesis -> WorldAtlasGenerator -> Atlas
+                         ↓
+              Terrain/climate setup
+                         ↓
+              SimulationAssembly.start()
+                         ↓
+                SimulationRuntime
 ```
 
-The caller supplies a still-unstarted `SimulationAssembly` that already contains its content/mechanic definitions and a `TerrainMaterialResolver`. Bootstrap does not choose a hard-coded ground material, load a special generated-world content registry, or interpret user-facing world controls.
+The important accepted rule was that generated worlds enter existing Landscape, Water, Soil, Scheduler and other runtime owners rather than running under a second generated-world ruleset.
 
-`SimulationAssembly` exposes two narrow setup capabilities needed by this orchestration:
+Stage 0 later refined the exact ownership boundary into separate preparation and runtime bootstrap phases. `GeneratedWorldBootstrap` remains a compatibility/convenience facade where useful, but is no longer the canonical architectural description.
 
-- `materializeGeneratedTerrain(...)` delegates to the existing `WorldTerrainMaterializer` using Assembly-owned Landscape definitions/mutations;
-- `generatedHydroClimate(...)` records one immutable `HydroClimateField` for runtime composition.
+## Why
 
-Generated HydroClimate and legacy periodic precipitation/evaporation schedules are mutually exclusive in one runtime. This prevents accidental double atmospheric forcing.
-
-During `start()`, generated HydroClimate is realized by `HydroClimateForcingSystem` through a scheduler-bound `HydroClimateForcingProcess`. The process evaluates exactly once for every subsequently advanced simulation tick. It owns cadence only; precipitation, evaporation, Soil, Water and liquid flow keep their existing authoritative owners.
+Generated facts should initialize existing authoritative owners exactly once. A special generated-world runtime would duplicate rules and make CI/visual/manual behavior diverge.
 
 ## Consequences
 
-- CI and future desktop generation can use the same production bootstrap path;
-- Atlas remains immutable provenance/generated fact data rather than runtime state ownership;
-- generated Terrain is still created exclusively through the canonical materialization boundary;
-- content selection remains outside bootstrap, so adding ordinary content does not require editing generated-world orchestration;
-- generated climate uses the ordinary production scheduler rather than a manual test loop;
-- legacy hand-authored periodic atmospheric scenarios remain available but cannot silently stack with generated climate;
-- the bootstrap result pairs Atlas provenance, materialization accounting and the started runtime for diagnostics/persistence work.
+- Generated and hand-authored worlds share ordinary runtime mechanics after startup.
+- Generation does not remain a live runtime owner.
+- Content/material selection remains outside a hard-coded generated-world engine.
+- The newer explicit preparation phase can grow typed generated/calibrated facts without giving runtime bootstrap generator dependencies.
 
-## Deliberately deferred
+## Alternatives considered
 
-This decision does not define warmup duration, viability thresholds, user-facing climate controls, geology/material generation, initial rivers/lakes, persistence format or performance batching for HydroClimate forcing.
+A second generated-world runtime, generation inside `SimulationAssembly`, hard-coded generated Terrain material, and manual calls to runtime forcing from CI/render code were rejected.
 
-The current forcing process evaluates every simulation tick because that is the exact accepted semantic contract. If profiling shows this cadence is expensive, scheduling/analytical batching may optimize it only while preserving the same authoritative results.
+## Current implementation
 
-## Rejected directions
+Canonical composition is now `GeneratedWorldPreparation -> PreparedGeneratedWorld -> GeneratedWorldRuntimeBootstrap -> SimulationRuntime`, as defined by ADR-021. Current bootstrap still contains compatibility initial-Water materialization; final canonical initial Water belongs to world-generation Stage 7 after dry-world acceptance.
 
-A second generated-world runtime implementation was rejected because generated worlds must obey the same scheduler and mechanics as ordinary production scenarios.
+## Related documentation
 
-Making `SimulationAssembly` generate Atlas facts was rejected because the composition root should wire runtime owners, not become a world generator.
-
-Hard-coding `core:soil` or another material in bootstrap was rejected because material identity is content/generated-fact data and future geology must be replaceable behind `TerrainMaterialResolver`.
-
-Calling `HydroClimateForcingSystem.update(...)` manually from CI or rendering code was rejected because it would create an alternate execution lifecycle outside the authoritative simulation scheduler.
+- [Generated World Runtime](../systems/world-generation/generated-world-runtime.md)
+- [World Generation](../systems/world-generation/overview.md)
+- [ADR-021](021-world-preparation-and-calibration-boundary.md)

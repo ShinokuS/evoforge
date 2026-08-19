@@ -1,48 +1,51 @@
-# Decision 012 — Drainage preserves closed-world basins
+# ADR-012: Drainage preserves closed-world basins
 
-**Status:** Accepted
+- Status: Accepted
+- Scope: Generated analytical drainage topology
+- Decision: Drainage derives deterministic in-bounds topology from precise elevation and treats finite world edges as closed, preserving internal basins instead of forcing every column to drain off-map.
 
-## Problem
+## Context
 
-Drainage is the first generated fact that turns elevation into causal hydrology. Common raster preprocessing often assumes the edge of a DEM is an external outlet and may fill depressions until every cell drains to an edge. That assumption conflicts with EvoForge's finite `WorldBounds`: outside geometry is closed, and an edge column must not silently become a hole through which water leaves the world.
-
-Integer terrain Z is also too coarse for macro drainage. It creates artificial flats that do not exist in the precise generated elevation retained by World Atlas.
+Common raster preprocessing often treats DEM edges as external outlets and fills depressions until every cell drains away. EvoForge finite `WorldBounds` instead present closed physical space outside the world. Integer materialized Terrain elevation also creates artificial flats that are not present in the precise Atlas elevation.
 
 ## Decision
 
-World Atlas owns an immutable `DrainageField` derived from `ElevationField` by the narrow `DrainageGenerator` contract.
+`DrainageField` is derived from precise `ElevationField.elevationSubunitsAt(...)`.
 
-The current `DrainageGenerationStage` builds a deterministic D8-style local topology from `elevationSubunitsAt(...)`:
+The current analytical stage:
 
-1. each column first chooses the steepest strictly lower in-bounds neighbour;
-2. exact-elevation flat components that contain lower outlets are routed internally toward those outlets;
-3. an exact flat with no lower outlet receives one deterministic in-bounds terminal representative;
-4. a non-flat local minimum remains terminal;
-5. contributing area is accumulated over the resulting acyclic graph;
-6. every column records the terminal basin representative reached by its drainage path.
+1. chooses the steepest strictly lower in-bounds neighbor when one exists;
+2. routes exact-elevation flat components that have lower outlets toward those outlets deterministically;
+3. gives an outlet-less exact flat one deterministic in-bounds terminal representative;
+4. leaves a non-flat local minimum terminal;
+5. accumulates contributing area over the resulting acyclic topology;
+6. records the terminal basin representative reached by each column.
 
-Neighbours outside `WorldBounds` are never candidates. The world edge is therefore a wall in drainage topology, not an implicit ocean or external sink.
+Out-of-bounds neighbors are never candidates. Exact-flat routing is topological bookkeeping for accumulation/watershed reasoning, not a claim that physically level runtime Water has a preferred velocity.
 
-Exact-flat routing is topological, not a claim that a physically level lake has a preferred runtime flow velocity. It exists so a connected flat basin/outlet has one deterministic drainage structure for accumulation and later watershed reasoning. Runtime Water remains governed by the existing liquid simulation after materialization.
+## Why
 
-Drainage consumes precise Atlas elevation. The integer `elevationAt(...)` materialization view is not hydrologic input.
+Closed edges agree with world containment, precise elevation avoids quantization artifacts, and preserved basins are necessary inputs for later real lake/river reasoning.
 
 ## Consequences
 
-- downstream targets are always inside `WorldBounds` or absent for a terminal;
-- closed depressions and internal basins are retained rather than forcibly drained off-map;
-- contributing area gives a direct first-order river/channel potential without creating Water yet;
-- terminal coordinates provide stable basin membership without inventing a separate region/chunk identity;
-- exact discrete terrain flats do not become false drainage flats when precise elevation contains a gradient;
-- drainage depends on the finite world boundary, so changing `WorldBounds` can legitimately change topology near and upstream of that boundary even when overlapping elevation samples are identical;
-- the generated topology is immutable Atlas data, while future free Water and retained liquid remain runtime-domain state.
+- Downstream targets are always in bounds or absent at a terminal.
+- Internal depressions/basins remain represented instead of being erased.
+- Contributing area and basin identity are available without creating Water.
+- Changing finite bounds can legitimately change nearby/upstream topology.
+- Runtime liquid behavior remains separate from analytical generated drainage.
 
-## Rejected directions
+## Alternatives considered
 
-Treating every map edge as an external outlet was rejected because it contradicts closed world containment and would make rivers disappear beyond authoritative geometry.
+Implicit edge outlets were rejected as contradictory to finite-world containment. Blind depression filling was rejected because it would erase legitimate basins. Integer Terrain Z was rejected as hydrologic input because materialization quantization would become macro physics.
 
-Blind depression filling was rejected because it would erase legitimate closed basins and pre-author lake/outflow behavior that should remain explicit.
+## Current implementation
 
-Running drainage over integer terrain Z was rejected because materialization quantization would become accidental hydrologic physics.
+The current `DrainageGenerationStage` remains useful deterministic analytical topology and is consumed by Atlas/material/Soil preparation. Stage 0 explicitly classifies it as **provisional for the future carved hydrography model**: Stage 2 may replace/narrow/extend the algorithm behind the typed Drainage/Hydrography seams, but it must preserve explicit finite-world/basin semantics unless new evidence changes this decision.
 
-A universal hydrology/world-generation context was rejected. Drainage requires `ElevationField` and returns `DrainageField`; additional inputs should be added only when a real algorithm requires them.
+## Related documentation
+
+- [World Atlas](../systems/world-generation/world-atlas.md)
+- [World Generation](../systems/world-generation/overview.md)
+- [Terrain Generation](../systems/world-generation/terrain-generation.md)
+- [Project Context](../project-context.md)
