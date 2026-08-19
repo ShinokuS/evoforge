@@ -1,6 +1,12 @@
 package io.github.evoforge.simulation.world.atlas;
 
-/** Exact world-specific operating parameters consumed by the V13 mountain algorithm. */
+/**
+ * Exact world-specific operating parameters consumed by the V13 mountain algorithm.
+ *
+ * <p>{@code targetCoveragePpm} is the calibrated share of V12 land that Abundance asks mountain
+ * structures to occupy. It is intentionally separate from lattice activation diagnostics so Scale,
+ * Height and Chaininess cannot silently take ownership of global mountain coverage.</p>
+ */
 public record MountainCalibration(
         int width,
         int height,
