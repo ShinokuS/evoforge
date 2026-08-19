@@ -5,9 +5,9 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
 /**
  * Immutable model choices for the V13 structural mountain stage.
  *
- * <p>The model deliberately knows nothing about concrete runtime Shapes. Its readability contract
- * is geometric: each mountain is one bounded hill profile whose cardinal rise is calibrated before
- * the later generic surface fitter chooses whatever geometry represents that surface well.</p>
+ * <p>The recipe owns versioned model constants. Calibration resolves semantic intent against those
+ * choices, while spatial algorithms consume the resulting calibration without inventing a second
+ * copy of the same policy. The model deliberately knows nothing about concrete runtime Shapes.</p>
  */
 public record MountainRecipe(
         int baseTerrainCeilingCells,
@@ -33,7 +33,10 @@ public record MountainRecipe(
         int widthVariationPpm,
         int heightVariationPpm,
         int minimumSharpnessMilli,
-        int maximumSharpnessMilli) {
+        int maximumSharpnessMilli,
+        int maximumAbundanceCoveragePpm,
+        int profileGradientBoundMilli,
+        int plateauProfileGradientBoundMilli) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -80,6 +83,17 @@ public record MountainRecipe(
         if (maximumSharpnessMilli < minimumSharpnessMilli) {
             throw new IllegalArgumentException("maximumSharpnessMilli must be >= minimumSharpnessMilli");
         }
+        requireNormalized(maximumAbundanceCoveragePpm, "maximumAbundanceCoveragePpm");
+        requirePositive(profileGradientBoundMilli, "profileGradientBoundMilli");
+        if (plateauProfileGradientBoundMilli < profileGradientBoundMilli) {
+            throw new IllegalArgumentException(
+                    "plateauProfileGradientBoundMilli must be >= profileGradientBoundMilli");
+        }
+    }
+
+    /** Exact derivative bound used by calibration and compatible spatial algorithms. */
+    public double profileGradientBound(boolean plateau) {
+        return (plateau ? plateauProfileGradientBoundMilli : profileGradientBoundMilli) / 1_000.0;
     }
 
     /** Balanced structural-mountain defaults. Abundance owns coverage; scale owns structure size. */
@@ -108,7 +122,10 @@ public record MountainRecipe(
                 220_000,
                 120_000,
                 850,
-                1_250);
+                1_250,
+                750_000,
+                1_300,
+                1_600);
     }
 
     private static void requirePositive(int value, String name) {
