@@ -17,16 +17,13 @@ import org.junit.jupiter.api.Test;
 final class MountainMorphologyElevationGenerationTest {
     private static final WorldBounds V13_BOUNDS = new WorldBounds(-64, 63, -64, 63, -12, 96);
     private static final WorldBounds V12_BASE_BOUNDS = new WorldBounds(-64, 63, -64, 63, -12, 12);
+    private static final WorldBounds LARGE_V13_BOUNDS = new WorldBounds(-128, 127, -128, 127, -12, 96);
+    private static final WorldBounds LARGE_V12_BASE_BOUNDS = new WorldBounds(-128, 127, -128, 127, -12, 12);
 
     @Test
     void disabledMountainsPreserveAcceptedV12BaseElevationsExactly() {
         WorldGenerationIntent intent = intent(MountainIntent.none());
-        ElevationField base = V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
-                new WorldSpec(V12_BASE_BOUNDS),
-                71L,
-                GenerationRevision.V12,
-                RngRevision.V1,
-                intent));
+        ElevationField base = base(71L, intent, V12_BASE_BOUNDS);
         ElevationField v13 = V13MountainTerrainGenerator.standard().generate(genesis(71L, intent));
 
         for (int y = V13_BOUNDS.minY(); y <= V13_BOUNDS.maxY(); y++) {
@@ -42,12 +39,7 @@ final class MountainMorphologyElevationGenerationTest {
     @Test
     void mountainOverlayNeverChangesV12LandOceanMembership() {
         WorldGenerationIntent intent = intent(mountains(1_000_000, 800_000, 500_000, 750_000, 700_000, true, 300_000));
-        ElevationField base = V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
-                new WorldSpec(V12_BASE_BOUNDS),
-                913L,
-                GenerationRevision.V12,
-                RngRevision.V1,
-                intent));
+        ElevationField base = base(913L, intent, V12_BASE_BOUNDS);
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(913L, intent));
 
         for (int y = V13_BOUNDS.minY(); y <= V13_BOUNDS.maxY(); y++) {
@@ -61,26 +53,39 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     @Test
-    void dedicatedMountainsUseVerticalHeadroomAboveV12BaseRange() {
-        WorldGenerationIntent intent = intent(mountains(1_000_000, 750_000, 450_000, 650_000, 650_000, false, 0));
-        ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(117L, intent));
+    void dedicatedMountainsCanUseVerticalHeadroomBeyondTheEntireV12BaseRange() {
+        WorldGenerationIntent intent = intentWithLandCoverage(
+                1_000_000,
+                mountains(1_000_000, 1_000_000, 1_000_000, 650_000, 1_000_000, false, 0));
+        long seed = 117L;
+        ElevationField base = base(seed, intent, LARGE_V12_BASE_BOUNDS);
+        ElevationField mountains = V13MountainTerrainGenerator.standard().generate(
+                genesis(seed, intent, LARGE_V13_BOUNDS));
 
         assertTrue(
-                maximumLandHeight(mountains) > 12L * ElevationField.SUBUNITS_PER_CELL,
-                "V13 must create actual mountain elevation above the accepted V12 base ceiling");
+                maximumMountainUplift(base, mountains) > 12L * ElevationField.SUBUNITS_PER_CELL,
+                "a sufficiently large authored structure must be able to add more vertical range than V12 owns in total");
     }
 
     @Test
     void mountainHeightIsARealSemanticControl() {
-        WorldGenerationIntent lowIntent = intent(mountains(1_000_000, 150_000, 500_000, 600_000, 650_000, false, 0));
-        WorldGenerationIntent highIntent = intent(mountains(1_000_000, 850_000, 500_000, 600_000, 650_000, false, 0));
+        WorldGenerationIntent lowIntent = intentWithLandCoverage(
+                1_000_000,
+                mountains(1_000_000, 150_000, 500_000, 600_000, 650_000, false, 0));
+        WorldGenerationIntent highIntent = intentWithLandCoverage(
+                1_000_000,
+                mountains(1_000_000, 850_000, 500_000, 600_000, 650_000, false, 0));
+        long seed = 411L;
+        ElevationField base = base(seed, lowIntent, V12_BASE_BOUNDS);
+        ElevationField low = V13MountainTerrainGenerator.standard().generate(genesis(seed, lowIntent));
+        ElevationField high = V13MountainTerrainGenerator.standard().generate(genesis(seed, highIntent));
 
-        long lowMaximum = maximumLandHeight(
-                V13MountainTerrainGenerator.standard().generate(genesis(411L, lowIntent)));
-        long highMaximum = maximumLandHeight(
-                V13MountainTerrainGenerator.standard().generate(genesis(411L, highIntent)));
-
-        assertTrue(highMaximum > lowMaximum, "higher mountain height intent must increase reachable summit elevation");
+        long lowMaximum = maximumMountainUplift(base, low);
+        long highMaximum = maximumMountainUplift(base, high);
+        assertTrue(
+                highMaximum > lowMaximum,
+                "higher Height intent must increase actual mountain uplift; low="
+                        + lowMaximum + ", high=" + highMaximum);
     }
 
     @Test
@@ -97,12 +102,7 @@ final class MountainMorphologyElevationGenerationTest {
         WorldGenesis mountainGenesis = genesis(seed, intent);
         MountainRecipe recipe = MountainRecipe.balanced();
         MountainCalibration calibration = MountainCalibrator.standard().calibrate(mountainGenesis, recipe);
-        ElevationField base = V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
-                new WorldSpec(V12_BASE_BOUNDS),
-                seed,
-                GenerationRevision.V12,
-                RngRevision.V1,
-                intent));
+        ElevationField base = base(seed, intent, V12_BASE_BOUNDS);
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(mountainGenesis);
 
         long maximumUpliftStep = maximumCardinalUpliftStep(base, mountains);
@@ -129,14 +129,21 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     @Test
-    void plateauSelectionChangesMountainProfileWithoutChangingSeedOrBaseWorld() {
-        WorldGenerationIntent normalIntent = intent(mountains(1_000_000, 650_000, 500_000, 550_000, 600_000, false, 0));
-        WorldGenerationIntent plateauIntent = intent(mountains(1_000_000, 650_000, 500_000, 550_000, 600_000, true, 1_000_000));
+    void plateauSelectionChangesMountainContributionWithoutChangingSeedOrBaseWorld() {
+        WorldGenerationIntent normalIntent = intentWithLandCoverage(
+                1_000_000,
+                mountains(1_000_000, 650_000, 700_000, 550_000, 600_000, false, 0));
+        WorldGenerationIntent plateauIntent = intentWithLandCoverage(
+                1_000_000,
+                mountains(1_000_000, 650_000, 700_000, 550_000, 600_000, true, 1_000_000));
+        long seed = 5_111L;
+        ElevationField base = base(seed, normalIntent, V12_BASE_BOUNDS);
+        ElevationField normal = V13MountainTerrainGenerator.standard().generate(genesis(seed, normalIntent));
+        ElevationField plateau = V13MountainTerrainGenerator.standard().generate(genesis(seed, plateauIntent));
 
-        ElevationField normal = V13MountainTerrainGenerator.standard().generate(genesis(5_111L, normalIntent));
-        ElevationField plateau = V13MountainTerrainGenerator.standard().generate(genesis(5_111L, plateauIntent));
-
-        assertNotEquals(surfaceHash(normal), surfaceHash(plateau));
+        assertTrue(maximumMountainUplift(base, normal) > 0L);
+        assertTrue(maximumMountainUplift(base, plateau) > 0L);
+        assertNotEquals(mountainUpliftHash(base, normal), mountainUpliftHash(base, plateau));
     }
 
     @Test
@@ -148,9 +155,22 @@ final class MountainMorphologyElevationGenerationTest {
         assertEquals(surfaceHash(first), surfaceHash(second));
     }
 
+    private static ElevationField base(long seed, WorldGenerationIntent intent, WorldBounds bounds) {
+        return V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
+                new WorldSpec(bounds),
+                seed,
+                GenerationRevision.V12,
+                RngRevision.V1,
+                intent));
+    }
+
     private static WorldGenesis genesis(long seed, WorldGenerationIntent intent) {
+        return genesis(seed, intent, V13_BOUNDS);
+    }
+
+    private static WorldGenesis genesis(long seed, WorldGenerationIntent intent, WorldBounds bounds) {
         return new WorldGenesis(
-                new WorldSpec(V13_BOUNDS),
+                new WorldSpec(bounds),
                 seed,
                 GenerationRevision.V13,
                 RngRevision.V1,
@@ -158,8 +178,14 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     private static WorldGenerationIntent intent(MountainIntent mountains) {
+        return intentWithLandCoverage(650_000, mountains);
+    }
+
+    private static WorldGenerationIntent intentWithLandCoverage(
+            int landCoverage,
+            MountainIntent mountains) {
         return new WorldGenerationIntent(
-                normalized(650_000),
+                normalized(landCoverage),
                 normalized(750_000),
                 normalized(250_000),
                 normalized(600_000),
@@ -191,12 +217,14 @@ final class MountainMorphologyElevationGenerationTest {
         return NormalizedValue.ofPartsPerMillion(ppm);
     }
 
-    private static long maximumLandHeight(ElevationField field) {
-        long maximum = Long.MIN_VALUE;
-        WorldBounds bounds = field.bounds();
+    private static long maximumMountainUplift(ElevationField base, ElevationField mountains) {
+        long maximum = 0L;
+        WorldBounds bounds = mountains.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                maximum = Math.max(maximum, field.elevationSubunitsAt(x, y));
+                maximum = Math.max(
+                        maximum,
+                        mountains.elevationSubunitsAt(x, y) - base.elevationSubunitsAt(x, y));
             }
         }
         return maximum;
@@ -243,6 +271,18 @@ final class MountainMorphologyElevationGenerationTest {
             }
         }
         return maximum;
+    }
+
+    private static long mountainUpliftHash(ElevationField base, ElevationField mountains) {
+        long hash = 0xcbf29ce484222325L;
+        WorldBounds bounds = mountains.bounds();
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                hash ^= mountains.elevationSubunitsAt(x, y) - base.elevationSubunitsAt(x, y);
+                hash *= 0x100000001b3L;
+            }
+        }
+        return hash;
     }
 
     private static long surfaceHash(ElevationField field) {
