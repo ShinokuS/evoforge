@@ -7,6 +7,7 @@ public record MountainCalibration(
         int area,
         int candidateSpacingCells,
         int candidateActivationPpm,
+        int targetCoveragePpm,
         int typicalHalfWidthCells,
         int typicalLongAxisCells,
         long typicalUpliftSubunits,
@@ -33,6 +34,7 @@ public record MountainCalibration(
             throw new IllegalArgumentException("mountain calibrated spatial values are invalid");
         }
         requireNormalized(candidateActivationPpm, "candidateActivationPpm");
+        requireNormalized(targetCoveragePpm, "targetCoveragePpm");
         requireNormalized(peakSharpnessPpm, "peakSharpnessPpm");
         requireNormalized(plateauProbabilityPpm, "plateauProbabilityPpm");
         if (typicalUpliftSubunits < 0L
