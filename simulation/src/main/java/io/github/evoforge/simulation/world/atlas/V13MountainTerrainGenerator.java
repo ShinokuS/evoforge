@@ -56,6 +56,7 @@ public final class V13MountainTerrainGenerator implements ElevationGenerator {
         return MountainSurfaceRegularizer.removeIsolatedSingleCellLevels(
                 base,
                 mountains,
+                calibration.maximumCardinalRiseSubunits(),
                 recipe.singleCellLevelCleanupPasses());
     }
 
