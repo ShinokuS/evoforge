@@ -19,8 +19,6 @@ public interface MountainCalibrator {
 final class StandardMountainCalibrator implements MountainCalibrator {
     static final StandardMountainCalibrator INSTANCE = new StandardMountainCalibrator();
     private static final int PPM = NormalizedValue.SCALE;
-    private static final double PROFILE_GRADIENT_BOUND = 1.30;
-    private static final int MAXIMUM_ABUNDANCE_COVERAGE_PPM = 750_000;
 
     private StandardMountainCalibrator() {
     }
@@ -98,12 +96,13 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                         authoredHalfWidth,
                         Math.round(authoredHalfWidth
                                 * (1.0 + recipe.slopeWidthCouplingPpm() / (double) PPM)))));
+        double profileGradientBound = recipe.profileGradientBound(false);
         int widthNeededForDesiredHeight = desiredUplift == 0L
                 ? authoredHalfWidth
                 : Math.toIntExact(Math.max(
                         1L,
                         (long) StrictMath.ceil(
-                                desiredUplift * PROFILE_GRADIENT_BOUND
+                                desiredUplift * profileGradientBound
                                         / Math.max(1.0, maximumCardinalRise))));
         int typicalHalfWidth = clamp(
                 widthNeededForDesiredHeight,
@@ -113,7 +112,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
         long widthSupportedHeight = Math.max(
                 0L,
                 (long) StrictMath.floor(
-                        typicalHalfWidth * maximumCardinalRise / PROFILE_GRADIENT_BOUND));
+                        typicalHalfWidth * maximumCardinalRise / profileGradientBound));
         long typicalUplift = Math.min(desiredUplift, widthSupportedHeight);
 
         int chaininessPpm = intent.chaininess().partsPerMillion();
@@ -134,7 +133,9 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                         / recipe.candidateSpacingDenominator());
 
         int targetCoveragePpm = Math.toIntExact(
-                (long) intent.abundance().partsPerMillion() * MAXIMUM_ABUNDANCE_COVERAGE_PPM / PPM);
+                (long) intent.abundance().partsPerMillion()
+                        * recipe.maximumAbundanceCoveragePpm()
+                        / PPM);
         int candidateActivation = calibratedActivationPpm(
                 targetCoveragePpm,
                 typicalHalfWidth,
