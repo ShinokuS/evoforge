@@ -167,7 +167,7 @@ final class MountainMorphologyAlgorithm {
     }
 
     private static int desiredSourceCount(int landCount, MountainCalibration calibration) {
-        double targetCells = landCount * calibration.targetCoveragePpm() / (double) PPM;
+        double targetCells = (double) landCount * calibration.targetCoveragePpm() / PPM;
         double nominalFootprint = StrictMath.PI
                 * calibration.typicalHalfWidthCells()
                 * (double) calibration.typicalLongAxisCells()
