@@ -37,7 +37,7 @@ final class V13SparseShapeGenerationTest {
 
         @Override
         public int elevationAt(int x, int y) {
-            return Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL);
+            return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
         }
 
         @Override
