@@ -90,7 +90,7 @@ final class StandardMountainCalibrator implements MountainCalibrator {
                 1,
                 typicalHalfWidth * recipe.candidateSpacingNumerator()
                         / recipe.candidateSpacingDenominator());
-        int candidateSpacing = Math.max(baseSpacing, typicalLongAxis * 6 / 5);
+        int candidateSpacing = Math.max(baseSpacing, typicalLongAxis);
 
         int sharpnessMilli = interpolate(
                 recipe.minimumSharpnessMilli(),
