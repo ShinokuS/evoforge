@@ -84,7 +84,7 @@ final class MountainMorphologyElevationGenerationTest {
     }
 
     @Test
-    void mountainLayerObeysAbstractCardinalRiseBudget() {
+    void composedMountainSurfaceObeysAbstractCardinalRiseBudgetAwayFromCoast() {
         WorldGenerationIntent intent = intent(mountains(
                 1_000_000,
                 1_000_000,
@@ -105,14 +105,14 @@ final class MountainMorphologyElevationGenerationTest {
                 intent));
         ElevationField mountains = V13MountainTerrainGenerator.standard().generate(mountainGenesis);
 
-        long maximumUpliftStep = maximumCardinalUpliftStep(base, mountains);
+        long maximumFinalStep = maximumInteriorAffectedFinalStep(base, mountains);
         assertTrue(
-                maximumUpliftStep <= calibration.maximumCardinalRiseSubunits() + 1L,
-                "mountain synthesis must enforce its geometry-only rise budget independently of Shape fitting");
+                maximumFinalStep <= calibration.maximumCardinalRiseSubunits() + 1L,
+                "V13 must constrain the composed V12 + mountain surface, not only the uplift delta");
     }
 
     @Test
-    void ordinaryMountainSettingsAvoidMultiCellLandWalls() {
+    void ordinaryMountainSettingsKeepFinalLandStepsBelowHalfACell() {
         WorldGenerationIntent intent = intent(mountains(
                 1_000_000,
                 520_000,
@@ -121,11 +121,19 @@ final class MountainMorphologyElevationGenerationTest {
                 600_000,
                 false,
                 0));
-        ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(1L, intent));
+        long seed = 1L;
+        ElevationField base = V12BaseTerrainGenerator.standard().generate(new WorldGenesis(
+                new WorldSpec(V12_BASE_BOUNDS),
+                seed,
+                GenerationRevision.V12,
+                RngRevision.V1,
+                intent));
+        ElevationField mountains = V13MountainTerrainGenerator.standard().generate(genesis(seed, intent));
 
         assertTrue(
-                maximumCardinalLandStep(mountains) < 2L * ElevationField.SUBUNITS_PER_CELL,
-                "ordinary V13 mountain settings should remain broad enough to avoid multi-cell land walls");
+                maximumInteriorAffectedFinalStep(base, mountains)
+                        < ElevationField.SUBUNITS_PER_CELL / 2L,
+                "ordinary mountain terrain should expose broad voxel-transition bands to generic Shape fitting");
     }
 
     @Test
@@ -202,47 +210,50 @@ final class MountainMorphologyElevationGenerationTest {
         return maximum;
     }
 
-    private static long maximumCardinalLandStep(ElevationField field) {
+    private static long maximumInteriorAffectedFinalStep(ElevationField base, ElevationField mountains) {
         long maximum = 0L;
-        WorldBounds bounds = field.bounds();
+        WorldBounds bounds = mountains.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                long here = field.elevationSubunitsAt(x, y);
-                if (here <= 0L) continue;
-                if (x < bounds.maxX()) {
-                    long right = field.elevationSubunitsAt(x + 1, y);
-                    if (right > 0L) maximum = Math.max(maximum, Math.abs(here - right));
+                if (isCoastalLand(base, x, y)) continue;
+                long baseHere = base.elevationSubunitsAt(x, y);
+                if (baseHere <= 0L) continue;
+                long here = mountains.elevationSubunitsAt(x, y);
+                boolean affectedHere = here != baseHere;
+
+                if (x < bounds.maxX()
+                        && !isCoastalLand(base, x + 1, y)
+                        && base.elevationSubunitsAt(x + 1, y) > 0L) {
+                    long right = mountains.elevationSubunitsAt(x + 1, y);
+                    boolean affectedRight = right != base.elevationSubunitsAt(x + 1, y);
+                    if (affectedHere || affectedRight) {
+                        maximum = Math.max(maximum, Math.abs(here - right));
+                    }
                 }
-                if (y < bounds.maxY()) {
-                    long up = field.elevationSubunitsAt(x, y + 1);
-                    if (up > 0L) maximum = Math.max(maximum, Math.abs(here - up));
+                if (y < bounds.maxY()
+                        && !isCoastalLand(base, x, y + 1)
+                        && base.elevationSubunitsAt(x, y + 1) > 0L) {
+                    long up = mountains.elevationSubunitsAt(x, y + 1);
+                    boolean affectedUp = up != base.elevationSubunitsAt(x, y + 1);
+                    if (affectedHere || affectedUp) {
+                        maximum = Math.max(maximum, Math.abs(here - up));
+                    }
                 }
             }
         }
         return maximum;
     }
 
-    private static long maximumCardinalUpliftStep(ElevationField base, ElevationField mountains) {
-        long maximum = 0L;
-        WorldBounds bounds = mountains.bounds();
-        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                long baseHere = base.elevationSubunitsAt(x, y);
-                if (baseHere <= 0L) continue;
-                long upliftHere = mountains.elevationSubunitsAt(x, y) - baseHere;
-                if (x < bounds.maxX() && base.elevationSubunitsAt(x + 1, y) > 0L) {
-                    long upliftRight = mountains.elevationSubunitsAt(x + 1, y)
-                            - base.elevationSubunitsAt(x + 1, y);
-                    maximum = Math.max(maximum, Math.abs(upliftHere - upliftRight));
-                }
-                if (y < bounds.maxY() && base.elevationSubunitsAt(x, y + 1) > 0L) {
-                    long upliftUp = mountains.elevationSubunitsAt(x, y + 1)
-                            - base.elevationSubunitsAt(x, y + 1);
-                    maximum = Math.max(maximum, Math.abs(upliftHere - upliftUp));
-                }
-            }
+    private static boolean isCoastalLand(ElevationField base, int x, int y) {
+        if (!base.contains(x, y) || base.elevationSubunitsAt(x, y) <= 0L) return false;
+        WorldBounds bounds = base.bounds();
+        if (x == bounds.minX() || x == bounds.maxX() || y == bounds.minY() || y == bounds.maxY()) {
+            return true;
         }
-        return maximum;
+        return base.elevationSubunitsAt(x - 1, y) <= 0L
+                || base.elevationSubunitsAt(x + 1, y) <= 0L
+                || base.elevationSubunitsAt(x, y - 1) <= 0L
+                || base.elevationSubunitsAt(x, y + 1) <= 0L;
     }
 
     private static long surfaceHash(ElevationField field) {
