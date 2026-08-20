@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationPreviewSettingsTest {
 
     @Test
-    void defaultsMatchCurrentV13PreviewInputs() {
+    void defaultsMatchCurrentV14PreviewInputs() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
         WorldGenerationPreviewConfig snapshot = settings.snapshot();
 
@@ -34,7 +34,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertTrue(snapshot.mountainPlateausEnabled());
         assertEquals(180_000, snapshot.mountainPlateauProbabilityPpm());
         assertEquals(4_096L, snapshot.columnCount());
-        assertEquals(new WorldBounds(-32, 31, -32, 31, -12, 96), snapshot.bounds());
+        assertEquals(new WorldBounds(-32, 31, -32, 31, -96, 96), snapshot.bounds());
     }
 
     @Test
@@ -48,7 +48,7 @@ final class WorldGenerationPreviewSettingsTest {
         assertEquals(300, snapshot.width());
         assertEquals(175, snapshot.length());
         assertEquals(52_500L, snapshot.columnCount());
-        assertEquals(new WorldBounds(-150, 149, -87, 87, -12, 96), snapshot.bounds());
+        assertEquals(new WorldBounds(-150, 149, -87, 87, -96, 96), snapshot.bounds());
     }
 
     @Test

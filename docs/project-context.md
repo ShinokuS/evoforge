@@ -89,7 +89,8 @@ The integration line already contains working foundations for:
 - observer-only developer visualization and headless diagnostic/audit tooling;
 - deterministic world provenance and typed replaceable generation/preparation algorithms;
 - manually accepted V12 ordinary base terrain;
-- manually accepted V13 structural mountains over V12.
+- manually accepted V13 structural mountains over V12;
+- manually accepted V14 standing-water bathymetry over the existing V13 submerged footprint.
 
 The [Roadmap](roadmap.md) is the detailed status list. Individual mechanics are explained under [Systems](systems/).
 
@@ -141,31 +142,66 @@ Mountain generation does not own geology, concrete runtime Shapes, navigation co
 
 See [V13 Mountain Generation](systems/world-generation/mountain-generation.md).
 
+### Stage 2A — V14 standing-water bathymetry
+
+```text
+accepted V13 land + submerged membership
+        ↓
+BathymetryCalibrator + BathymetryRecipe
+        ↓
+StructuredBathymetryAlgorithm
+        ├─ BathymetryMorphologyAlgorithm
+        └─ DeepBathymetryStructureAlgorithm
+        ↓
+ElevationField
+```
+
+V14 preserves all V13 land elevations and the complete standing-water footprint while re-authoring negative-Z bottom geometry.
+
+The accepted Stage 2A ownership is:
+
+- V13 owns land and the 2D footprint/shoreline membership of the currently accepted standing-water bodies;
+- `BathymetryMorphologyAlgorithm` owns the accepted coastal/littoral and ordinary submerged depth profile;
+- `DeepBathymetryStructureAlgorithm` independently adds broad basins/highs only where a water body is sufficiently deep and spacious;
+- shoreline distance is a depth/clearance envelope, not the sole final deep morphology generator;
+- deep structures are broad deterministic slope-bounded surfaces, not cell-scale noise;
+- Water, rivers, geology, materials and concrete runtime Shapes remain outside bathymetry ownership.
+
+The shape and bottom morphology of the current lake/sea/ocean bodies are now protected accepted input for later work. A future genuinely new standing-water body requires a new explicit contract rather than an incidental Stage 2 change.
+
+See [V14 Standing-Water Bathymetry](systems/world-generation/bathymetry-generation.md).
+
 ## World-generation direction
 
 The causal milestone order is now:
 
 ```text
-Stage 0  V12 architecture + ordinary base morphology       COMPLETE
+Stage 0   V12 architecture + ordinary base morphology      COMPLETE
    ↓
-Stage 1  V13 mountain systems                              COMPLETE
+Stage 1   V13 mountain systems                             COMPLETE
    ↓
-Stage 2  dry drainage / basins / river and lake carving   NEXT
+Stage 2A  V14 standing-water bathymetry                    COMPLETE
    ↓
-Stage 3  coherent layered geology and required deposits
+Stage 2B  drainage + basin topology                        NEXT
    ↓
-Stage 4  caves
+Stage 2C  river network
    ↓
-Stage 5  causal surface/subsurface material synthesis
+Stage 2D  dry river / valley carving
    ↓
-Stage 6  complete dry-world acceptance
+Stage 3   coherent layered geology and required deposits
    ↓
-Stage 7  finite initial Water fill
+Stage 4   caves
    ↓
-Stage 8  runtime handoff audit
+Stage 5   causal surface/subsurface material synthesis
+   ↓
+Stage 6   complete dry-world acceptance
+   ↓
+Stage 7   finite initial Water fill
+   ↓
+Stage 8   runtime handoff audit
 ```
 
-Water remains intentionally late: river channels and lake bowls must first exist as real dry geometry. Stage 2 starts from the accepted V13 dry surface.
+Water remains intentionally late. Stage 2B starts from the accepted V14 `ElevationField`. Drainage analysis may identify watersheds, outlets and closed basins, but it must not silently reopen accepted standing-water shoreline/bottom morphology.
 
 See [World Generation](systems/world-generation/overview.md) for the full contract.
 
@@ -173,7 +209,7 @@ See [World Generation](systems/world-generation/overview.md) for the full contra
 
 Code can exist behind a useful typed seam without being the final accepted algorithm:
 
-- current drainage/hydrography is useful analytical infrastructure, not final Stage 2 carving;
+- current drainage/hydrography is useful analytical infrastructure, not final Stage 2B/2C topology;
 - current geology generation is a placeholder until Stage 3;
 - current terrain-material slope/deposition behavior is an early causal slice until Stage 5;
 - current generated initial-Water path is compatibility infrastructure; canonical generation fills finite Water only after complete dry-world acceptance.
@@ -193,6 +229,7 @@ Do not accumulate feature-specific patches in those placeholders. Replace or nar
 9. **Green checkpoints:** one independently meaningful concern is implemented and verified before the next semantic change is added.
 10. **Strict modular architecture:** classes/packages have clear single responsibilities, independently meaningful algorithms/processes are replaceable behind narrow typed seams, composition is separate from policy, and package/file structure visibly mirrors ownership.
 11. **Abstraction at boundaries, simplicity inside:** do not hard-wire replaceable implementations, but also do not create speculative interfaces/frameworks for private details without a real independent consumer.
+12. **Accepted-stage protection:** later stages consume accepted world facts; they do not incidentally rewrite a prior accepted morphology to hide a downstream defect.
 
 See [Architecture](architecture.md), [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md) and [ADR-023: Strict modular architecture](decisions/023-strict-modular-architecture.md).
 
@@ -251,17 +288,18 @@ chat history / prototypes
 
 Historical notes never override current code and normative documentation merely because they are more detailed.
 
-## Before starting Stage 2
+## Before continuing Stage 2
 
 Confirm all of the following:
 
-- Stage 1 final PR is merged into `develop` and its final head is green;
-- the accepted V13 surface is the explicit dry-morphology input;
-- Stage 2 begins with one clear drainage/basin/carving ownership contract rather than extending provisional threshold hydrography blindly;
-- drainage analysis, basin/hierarchy decisions and spatial carving are separated when they have independent ownership/replacement value;
+- Stage 2A V14 standing-water bathymetry is the protected elevation input;
+- current lake/sea/ocean footprint and bathymetry are not reopened incidentally;
+- Stage 2B begins with one clear drainage/basin-topology ownership contract rather than extending provisional threshold hydrography blindly;
+- drainage analysis, basin/hierarchy decisions, river-network semantics and spatial carving remain separate when they have independent ownership/replacement value;
 - each replaceable algorithm/process has a narrow typed seam and a package location that communicates its owner before implementation grows around it;
 - each component is built as a green checkpoint with focused tests/diagnostics before the next component;
-- river/lake geometry is observable while still completely dry;
+- river geometry is observable while still completely dry;
+- finite Water remains later than completed dry morphology/material acceptance;
 - any durable pipeline/ownership change updates normative documentation and an ADR when required.
 
 This checklist exists specifically to prevent future work from rediscovering or contradicting already accepted decisions.

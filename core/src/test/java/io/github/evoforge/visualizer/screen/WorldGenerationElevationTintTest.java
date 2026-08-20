@@ -10,6 +10,11 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationElevationTintTest {
     private static final WorldGenerationElevationRange RANGE =
             new WorldGenerationElevationRange(0L, 10L * ElevationField.SUBUNITS_PER_CELL);
+    private static final WorldGenerationElevationRange RANGE_WITH_WATER =
+            new WorldGenerationElevationRange(
+                    0L,
+                    10L * ElevationField.SUBUNITS_PER_CELL,
+                    -20L * ElevationField.SUBUNITS_PER_CELL);
 
     @Test
     void zeroSensitivityUsesOneNeutralColorAcrossZ() {
@@ -104,6 +109,114 @@ final class WorldGenerationElevationTintTest {
 
         assertEquals(0.5f, low.r, 0.0001f);
         assertEquals(Color.rgba8888(low), Color.rgba8888(high));
+    }
+
+    @Test
+    void submergedShaderExtendsBelowTheExistingLandFloorInsteadOfResettingToNeutral() {
+        Color landFloor = WorldGenerationElevationTint.shaderColor(
+                0L,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color shallow = WorldGenerationElevationTint.shaderColor(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color deep = WorldGenerationElevationTint.shaderColor(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+
+        assertEquals(landFloor.r, shallow.r, 0.0001f);
+        assertEquals(shallow.r, deep.r, 0.0001f);
+        assertTrue(shallow.b > shallow.r, "negative Z must encode extra darkening below the land floor");
+        assertTrue(deep.b > shallow.b, "deeper negative Z must encode stronger extra darkening");
+    }
+
+    @Test
+    void submerged3DColorStartsAtTheLowestLandShadeAndOnlyDarkensWithDepth() {
+        Color landFloor = WorldGenerationElevationTint.color(
+                0L,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color shallow = WorldGenerationElevationTint.color(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color deep = WorldGenerationElevationTint.color(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+
+        assertNotBrighter(shallow, landFloor);
+        assertNotBrighter(deep, shallow);
+        assertTrue(deep.r < shallow.r);
+        assertTrue(deep.g < shallow.g);
+        assertTrue(deep.b < shallow.b);
+    }
+
+    @Test
+    void shallowNegativeZIsNotBrighterThanHigherPositiveLand() {
+        Color underwater = WorldGenerationElevationTint.color(
+                -1L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color higherLand = WorldGenerationElevationTint.color(
+                1L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+
+        assertTrue(luminance(underwater) <= luminance(higherLand));
+    }
+
+    @Test
+    void zeroSensitivityLeavesSubmergedDepthAtTheSameNeutralSurfaceShade() {
+        Color land = WorldGenerationElevationTint.color(
+                0L,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color shallow = WorldGenerationElevationTint.color(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color deep = WorldGenerationElevationTint.color(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color landShader = WorldGenerationElevationTint.shaderColor(
+                0L,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color shallowShader = WorldGenerationElevationTint.shaderColor(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+
+        assertEquals(Color.rgba8888(land), Color.rgba8888(shallow));
+        assertEquals(Color.rgba8888(shallow), Color.rgba8888(deep));
+        assertEquals(Color.rgba8888(landShader), Color.rgba8888(shallowShader));
+    }
+
+    private static void assertNotBrighter(Color darker, Color lighter) {
+        assertTrue(darker.r <= lighter.r + 0.0001f);
+        assertTrue(darker.g <= lighter.g + 0.0001f);
+        assertTrue(darker.b <= lighter.b + 0.0001f);
+    }
+
+    private static float luminance(Color color) {
+        return color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f;
     }
 
     private static float colorDistance(Color first, Color second) {

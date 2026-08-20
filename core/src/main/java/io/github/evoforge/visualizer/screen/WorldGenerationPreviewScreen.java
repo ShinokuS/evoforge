@@ -31,7 +31,7 @@ import java.util.List;
 
 /** Interactive 2D/3D inspection workspace for generated world morphology and surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V13;
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V14;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
     private static final int SURFACE_CHUNK_INTERVALS = 128;
 
@@ -340,15 +340,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                         bounds.minX(), bounds.maxX(), sampleX, globalSampleWidth);
                 long heightSubunits = elevation.elevationSubunitsAt(x, y);
                 float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
-                if (heightSubunits >= 0L) {
-                    WorldGenerationElevationTint.color(
-                            heightSubunits,
-                            elevationRange,
-                            elevationTintPpm,
-                            color);
-                } else {
-                    color.set(0.16f, 0.24f, 0.30f, 1f);
-                }
+                WorldGenerationElevationTint.color(
+                        heightSubunits,
+                        elevationRange,
+                        elevationTintPpm,
+                        color);
                 vertices[cursor++] = x;
                 vertices[cursor++] = h * VERTICAL_EXAGGERATION;
                 vertices[cursor++] = -y;
@@ -456,8 +452,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE V13"
-                        : "WORLD GENERATION / STRUCTURAL MOUNTAINS V13",
+                        ? "WORLD GENERATION / 2D SURFACE V14"
+                        : "WORLD GENERATION / STANDING-WATER BATHYMETRY V14",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(

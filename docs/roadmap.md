@@ -10,15 +10,16 @@ Completed major slices include:
 - autonomous-agent living-world slice;
 - finite Water / Soil / surface-hydrology runtime slice;
 - world-generation **Stage 0 — architecture stabilization + accepted V12 base terrain**;
-- world-generation **Stage 1 — accepted V13 structural mountains**.
+- world-generation **Stage 1 — accepted V13 structural mountains**;
+- world-generation **Stage 2A — accepted V14 standing-water bathymetry**.
 
-The next world-generation implementation work is:
+World-generation Stage 2 is now **in progress**. The next implementation work is:
 
-> **Stage 2 — Dry hydrography and carving**
+> **Stage 2B — Drainage and basin topology**
 
-Stage 2 starts from the accepted V13 dry surface. It must create real dry watershed/basin/river/lake geometry before finite initial Water or final material synthesis.
+Stage 2A already closed the shape/bottom morphology of the standing-water bodies inherited from accepted V13 terrain. Stage 2B starts from accepted V14 elevation and derives real dry drainage/watershed/basin topology before river-network generation and carving. Finite initial Water remains later.
 
-For fast context recovery see [Project Context](project-context.md), [World Generation](systems/world-generation/overview.md) and [V13 Mountain Generation](systems/world-generation/mountain-generation.md).
+For fast context recovery see [Project Context](project-context.md), [World Generation](systems/world-generation/overview.md), [V13 Mountain Generation](systems/world-generation/mountain-generation.md) and [V14 Standing-Water Bathymetry](systems/world-generation/bathymetry-generation.md).
 
 ## Completed simulation foundations
 
@@ -134,6 +135,28 @@ Accepted Stage 1 properties:
 
 See [V13 Mountain Generation](systems/world-generation/mountain-generation.md).
 
+## Completed world-generation Stage 2A — V14 Standing-Water Bathymetry
+
+V14 preserves accepted V13 land and standing-water membership while re-authoring only negative-Z bottom geometry.
+
+Accepted Stage 2A properties:
+
+- no lake/sea/ocean body is created or deleted;
+- every V13 land elevation remains exact;
+- the standing-water footprint/shoreline membership remains exact;
+- shallow coastal morphology is smooth and readable;
+- broad adjacent coastal relief may causally influence ocean-connected descent;
+- competing coasts blend broadly instead of producing nearest-owner wedges;
+- narrow water remains shallow when there is insufficient horizontal room;
+- large/deep water can contain several broad basins, highs and saddles rather than one forced center bowl;
+- deep structure is deterministic and uses no cell-scale noise;
+- bathymetry remains world-floor and readable-slope bounded;
+- negative-Z preview contrast darkens progressively with depth but is presentation-only;
+- Water, river generation, geology, materials, navigation and concrete runtime Shapes remain outside bathymetry ownership;
+- deterministic tests, Generated World Audit and manual visual acceptance are complete.
+
+See [V14 Standing-Water Bathymetry](systems/world-generation/bathymetry-generation.md).
+
 ## World-generation milestone sequence
 
 ### Stage 0 — Architecture stabilization / V12 normalization **[COMPLETE]**
@@ -144,17 +167,39 @@ Protected the ordinary landscape baseline and established typed semantic/calibra
 
 Added accepted dedicated mountain morphology over V12 through independent semantic/calibration/spatial boundaries.
 
-### Stage 2 — Dry hydrography and carving **[NEXT]**
+### Stage 2 — Dry hydrography and carving **[IN PROGRESS]**
 
-From the accepted mountain-bearing dry surface:
+Stage 2 is deliberately split into independently accepted concerns.
 
-- reconcile/derive drainage, watersheds and basins;
-- create river hierarchy and outlets;
-- carve readable dry valleys/channels;
-- carve lake bowls and shore geometry;
+#### Stage 2A — Standing-water bathymetry **[COMPLETE]**
+
+Accepted V14 standing-water geometry now owns the bottom morphology of the existing V13 submerged footprint. The lake/sea/ocean footprint and bathymetry are protected input for later Stage 2 work.
+
+A future genuinely new standing-water body requires a new explicit contract; later drainage/river work must not silently regenerate the accepted V14 shoreline or bottom.
+
+#### Stage 2B — Drainage and basin topology **[NEXT]**
+
+Starting from accepted V14 elevation:
+
+- derive/reconcile drainage directions and terminals;
+- derive watersheds/catchments and closed basins;
+- establish deterministic basin/outlet topology required by the river network;
+- remain completely dry;
+- do not reopen accepted standing-water bathymetry.
+
+#### Stage 2C — River network
+
+- derive real river hierarchy from drainage/catchment facts;
+- establish tributaries, confluences and outlets;
+- keep network semantics separate from spatial carving where independently meaningful.
+
+#### Stage 2D — River / valley carving
+
+- carve readable dry valleys and channels from the accepted topology/network;
+- preserve protected V14 standing-water shore/bottom behavior except at explicitly modelled river mouths/outlets whose contract requires interaction;
 - remain completely dry.
 
-A river/lake must exist as generated geometry, not as a blue overlay. Topology/morphology tests and manual dry-geometry acceptance are required.
+A river must exist as generated geometry, not as a blue overlay. Topology/morphology tests and manual dry-geometry acceptance are required before Stage 2 closes.
 
 ### Stage 3 — Coherent layered geology
 
@@ -175,7 +220,8 @@ Accept:
 ```text
 land/ocean base
 mountains
-dry rivers/lakes
+standing-water bathymetry
+dry drainage / rivers / valleys
 geology/deposits
 caves
 surface/subsurface materials
@@ -193,7 +239,7 @@ Verify generated facts materialize exactly once and no generator/preparation/boo
 
 ## Provisional code that must not become accidental final design
 
-- current drainage/hydrography is analytical/provisional rather than final Stage 2 carving;
+- current drainage/hydrography is analytical/provisional rather than final Stage 2B/2C topology;
 - current `GeologyGenerationStage` is placeholder geology;
 - current generated initial-Water ordering is compatibility infrastructure and remains later than complete dry-world acceptance in the canonical plan;
 - current terrain material slope/deposition model is an early slice, not final Stage 5 synthesis.
