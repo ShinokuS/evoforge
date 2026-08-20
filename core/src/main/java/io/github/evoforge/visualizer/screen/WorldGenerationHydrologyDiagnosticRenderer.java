@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.utils.Disposable;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBody;
@@ -23,6 +24,10 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private static final float FIT_PADDING = 1.08f;
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
+    private static final float LABEL_SCALE = 0.85f;
+    private static final float LABEL_OFFSET_PX = 6f;
+    private static final float LEGEND_LINE_HEIGHT_PX = 16f;
+    private static final float LEGEND_TOP_OFFSET_PX = 190f;
 
     private static final Color MICRO_WATER = new Color(0.82f, 0.82f, 0.86f, 0.62f);
     private static final Color EXTERNAL_WATER = new Color(0.10f, 0.46f, 0.92f, 0.20f);
@@ -38,6 +43,7 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private final ShapeRenderer diagnostics = new ShapeRenderer(8_192);
     private final SpriteBatch labels = new SpriteBatch(256);
     private final BitmapFont font = new BitmapFont();
+    private final Matrix4 labelProjection = new Matrix4();
 
     private WorldBounds bounds;
     private int viewportWidth = 1;
@@ -48,6 +54,7 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         viewportWidth = width;
         viewportHeight = height;
         camera.resize(width, height);
+        labelProjection.setToOrtho2D(0f, 0f, width, height);
         fitToWorld();
     }
 
@@ -117,7 +124,7 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         drawSelectedRoutes(topology, visible);
 
         diagnostics.end();
-        drawLabels(topology, visible);
+        drawLabels(topology);
         Gdx.gl.glDisable(GL20.GL_BLEND);
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -262,13 +269,10 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         }
     }
 
-    private void drawLabels(
-            StandingWaterHydrologyTopology topology,
-            VisualizerCamera.VisibleRange visible) {
-        labels.setProjectionMatrix(camera.projection());
+    private void drawLabels(StandingWaterHydrologyTopology topology) {
+        labels.setProjectionMatrix(labelProjection);
         labels.begin();
-        float scale = Math.max(0.012f, camera.worldUnitsPerPixel() * 0.92f);
-        font.getData().setScale(scale);
+        font.getData().setScale(LABEL_SCALE);
         font.setColor(LABEL);
 
         int edgeBodies = 0;
@@ -276,15 +280,19 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
             StandingWaterBody body = topology.standingWater().body(bodyId);
             StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
             if (body.touchesWorldBoundary()) edgeBodies++;
-            float x = bodyCenterX(body);
-            float y = bodyCenterY(body);
-            if (!visibleContains(visible, Math.round(x), Math.round(y))) continue;
-            font.draw(labels, bodyLabel(body, route), x + 0.35f, y + 0.35f);
+            VisualizerCamera.ScreenPoint point = camera.screenAt(
+                    bodyCenterX(body),
+                    bodyCenterY(body));
+            if (!screenContains(point)) continue;
+            font.draw(
+                    labels,
+                    bodyLabel(body, route),
+                    point.x() + LABEL_OFFSET_PX,
+                    point.y() + LABEL_OFFSET_PX);
         }
 
-        float lineHeight = Math.max(0.58f, camera.worldUnitsPerPixel() * 18f);
-        float legendX = visible.minX() + 0.6f;
-        float legendY = visible.maxY() + 0.35f;
+        float legendX = 12f;
+        float legendY = Math.max(52f, viewportHeight - LEGEND_TOP_OFFSET_PX);
         int ignored = topology.rawBodyCount() - topology.bodyCount();
         font.draw(labels, String.format(
                 "F4 TOPOLOGY  raw %d  hydrologic %d  micro %d  edge %d  external %d",
@@ -298,12 +306,17 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         font.draw(labels,
                 "BLUE external sink | GREEN routed | RED closed | EDGE = geometry only | GRAY micro-water",
                 legendX,
-                legendY - lineHeight);
+                legendY - LEGEND_LINE_HEIGHT_PX);
         font.draw(labels,
                 "CYAN dashed: body route | ORANGE: spill candidate | bright cyan: selected spill | YELLOW: rim",
                 legendX,
-                legendY - lineHeight * 2f);
+                legendY - LEGEND_LINE_HEIGHT_PX * 2f);
         labels.end();
+    }
+
+    private boolean screenContains(VisualizerCamera.ScreenPoint point) {
+        return point.x() >= 0f && point.x() <= viewportWidth
+                && point.y() >= 0f && point.y() <= viewportHeight;
     }
 
     private static String bodyLabel(
