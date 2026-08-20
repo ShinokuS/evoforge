@@ -20,7 +20,8 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.ElevationGenerationStage;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBoundaryRoute;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterHydrologyTopology;
-import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterHydrologyTopologyStage;
+import io.github.evoforge.simulation.world.atlas.hydrology.WorldHydrologyTopology;
+import io.github.evoforge.simulation.world.atlas.hydrology.WorldHydrologyTopologyStage;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
@@ -77,7 +78,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private ElevationField generatedElevation;
     private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
     private TerrainShapeField generatedShapes;
-    private StandingWaterHydrologyTopology generatedHydrologyTopology;
+    private WorldHydrologyTopology generatedHydrologyTopology;
     private Mesh[] surfaceMeshes = new Mesh[0];
     private Mesh oceanMesh;
     private boolean showSurface = true;
@@ -186,14 +187,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void renderTwoDimensional() {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
+        if (showOcean || showHydrologyDiagnostics) ensureHydrologyTopology();
         shape2DRenderer.render(
                 generatedElevation,
                 generatedShapes,
+                generatedHydrologyTopology == null ? null : generatedHydrologyTopology.inlandLakes(),
                 showSurface,
                 showOcean);
-        if (showHydrologyDiagnostics) {
-            ensureHydrologyTopology();
-            hydrologyDiagnosticRenderer.render(generatedHydrologyTopology);
+        if (showHydrologyDiagnostics && generatedHydrologyTopology != null) {
+            hydrologyDiagnosticRenderer.render(generatedHydrologyTopology.standingWaterTopology());
         }
     }
 
@@ -278,8 +280,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void ensureHydrologyTopology() {
         if (generatedHydrologyTopology != null || generatedElevation == null) return;
-        generatedHydrologyTopology = StandingWaterHydrologyTopologyStage.standard()
-                .generate(generatedElevation);
+        generatedHydrologyTopology = WorldHydrologyTopologyStage.standard().generate(generatedElevation);
     }
 
     private void setElevationTintPpm(int strengthPpm) {
@@ -566,11 +567,12 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     }
 
     private String hydrologySummary() {
+        StandingWaterHydrologyTopology standing = generatedHydrologyTopology.standingWaterTopology();
         int boundary = 0;
         int routed = 0;
         int closed = 0;
-        for (int bodyId = 0; bodyId < generatedHydrologyTopology.bodyCount(); bodyId++) {
-            StandingWaterBoundaryRoute route = generatedHydrologyTopology.boundaryRoutes().route(bodyId);
+        for (int bodyId = 0; bodyId < standing.bodyCount(); bodyId++) {
+            StandingWaterBoundaryRoute route = standing.boundaryRoutes().route(bodyId);
             if (route.boundaryConnected()) {
                 boundary++;
             } else if (route.reachesBoundaryWater()) {
@@ -580,12 +582,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             }
         }
         return String.format(
-                "F4 HYDROLOGY: bodies %d   boundary %d   routed %d   closed %d   spill links %d",
-                generatedHydrologyTopology.bodyCount(),
+                "F4 HYDROLOGY: sea bodies %d   boundary %d   routed %d   closed %d   basins %d   lakes %d",
+                standing.bodyCount(),
                 boundary,
                 routed,
                 closed,
-                generatedHydrologyTopology.spills().connections().size());
+                generatedHydrologyTopology.drainageBasins().basinCount(),
+                generatedHydrologyTopology.inlandLakes().lakeCount());
     }
 
     private void disposeMeshes() {
