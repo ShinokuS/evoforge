@@ -6,6 +6,8 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 public record StandingWaterHydrologyTopology(
         StandingWaterTopology rawStandingWater,
         StandingWaterTopology standingWater,
+        StandingWaterMorphologyTopology morphology,
+        StandingWaterExternalSinkTopology externalSinks,
         StandingWaterRimTopology rims,
         StandingWaterSpillTopology spills,
         StandingWaterBoundaryRouteTopology boundaryRoutes) {
@@ -13,6 +15,8 @@ public record StandingWaterHydrologyTopology(
     public StandingWaterHydrologyTopology {
         if (rawStandingWater == null
                 || standingWater == null
+                || morphology == null
+                || externalSinks == null
                 || rims == null
                 || spills == null
                 || boundaryRoutes == null) {
@@ -21,12 +25,16 @@ public record StandingWaterHydrologyTopology(
         WorldBounds bounds = standingWater.bounds();
         int bodyCount = standingWater.bodyCount();
         if (!bounds.equals(rawStandingWater.bounds())
+                || !bounds.equals(morphology.bounds())
+                || !bounds.equals(externalSinks.bounds())
                 || !bounds.equals(rims.bounds())
                 || !bounds.equals(spills.bounds())
                 || !bounds.equals(boundaryRoutes.bounds())) {
             throw new IllegalArgumentException("standing-water hydrology facts must share world bounds");
         }
-        if (rims.bodyCount() != bodyCount
+        if (morphology.bodyCount() != bodyCount
+                || externalSinks.bodyCount() != bodyCount
+                || rims.bodyCount() != bodyCount
                 || spills.bodyCount() != bodyCount
                 || boundaryRoutes.bodyCount() != bodyCount) {
             throw new IllegalArgumentException("standing-water hydrology facts must share hydrologic body domain");

@@ -8,7 +8,7 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.PriorityQueue;
 
-/** Deterministic minimax routing over the standing-water spill graph toward boundary water. */
+/** Deterministic minimax routing over the spill graph toward selected external standing water. */
 public final class MinimaxStandingWaterBoundaryRouteResolver
         implements StandingWaterBoundaryRouteResolver {
     private static final Comparator<RouteEntry> ROUTE_ORDER =
@@ -18,12 +18,15 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
     @Override
     public StandingWaterBoundaryRouteTopology resolve(
             StandingWaterTopology standingWater,
-            StandingWaterSpillTopology spills) {
-        if (standingWater == null || spills == null) {
+            StandingWaterSpillTopology spills,
+            StandingWaterExternalSinkTopology externalSinks) {
+        if (standingWater == null || spills == null || externalSinks == null) {
             throw new IllegalArgumentException("standing-water route inputs must not be null");
         }
         if (!standingWater.bounds().equals(spills.bounds())
-                || standingWater.bodyCount() != spills.bodyCount()) {
+                || !standingWater.bounds().equals(externalSinks.bounds())
+                || standingWater.bodyCount() != spills.bodyCount()
+                || standingWater.bodyCount() != externalSinks.bodyCount()) {
             throw new IllegalArgumentException("standing-water route inputs must describe the same bodies");
         }
 
@@ -36,7 +39,7 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
         PriorityQueue<RouteEntry> frontier = new PriorityQueue<>(ROUTE_ORDER);
 
         for (int bodyId = 0; bodyId < count; bodyId++) {
-            if (standingWater.body(bodyId).touchesWorldBoundary()) {
+            if (externalSinks.isExternalSink(bodyId)) {
                 minimumBarrier[bodyId] = 0L;
                 frontier.add(new RouteEntry(0L, bodyId));
             }
@@ -69,8 +72,8 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
 
         List<StandingWaterBoundaryRoute> routes = new ArrayList<>(count);
         for (int bodyId = 0; bodyId < count; bodyId++) {
-            boolean boundaryConnected = standingWater.body(bodyId).touchesWorldBoundary();
-            if (boundaryConnected) {
+            boolean externalSink = externalSinks.isExternalSink(bodyId);
+            if (externalSink) {
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
                         true,

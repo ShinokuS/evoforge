@@ -6,6 +6,10 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 public final class StandingWaterHydrologyTopologyStage {
     private final StandingWaterTopologyAnalyzer waterAnalyzer;
     private final StandingWaterBodySelector bodySelector;
+    private final StandingWaterMorphologyAnalyzer morphologyAnalyzer;
+    private final StandingWaterExternalSinkCalibrator externalSinkCalibrator;
+    private final StandingWaterExternalSinkRecipe externalSinkRecipe;
+    private final StandingWaterExternalSinkResolver externalSinkResolver;
     private final StandingWaterRimTopologyAnalyzer rimAnalyzer;
     private final StandingWaterSpillTopologyAnalyzer spillAnalyzer;
     private final StandingWaterBoundaryRouteResolver routeResolver;
@@ -13,11 +17,19 @@ public final class StandingWaterHydrologyTopologyStage {
     public StandingWaterHydrologyTopologyStage(
             StandingWaterTopologyAnalyzer waterAnalyzer,
             StandingWaterBodySelector bodySelector,
+            StandingWaterMorphologyAnalyzer morphologyAnalyzer,
+            StandingWaterExternalSinkCalibrator externalSinkCalibrator,
+            StandingWaterExternalSinkRecipe externalSinkRecipe,
+            StandingWaterExternalSinkResolver externalSinkResolver,
             StandingWaterRimTopologyAnalyzer rimAnalyzer,
             StandingWaterSpillTopologyAnalyzer spillAnalyzer,
             StandingWaterBoundaryRouteResolver routeResolver) {
         if (waterAnalyzer == null
                 || bodySelector == null
+                || morphologyAnalyzer == null
+                || externalSinkCalibrator == null
+                || externalSinkRecipe == null
+                || externalSinkResolver == null
                 || rimAnalyzer == null
                 || spillAnalyzer == null
                 || routeResolver == null) {
@@ -25,6 +37,10 @@ public final class StandingWaterHydrologyTopologyStage {
         }
         this.waterAnalyzer = waterAnalyzer;
         this.bodySelector = bodySelector;
+        this.morphologyAnalyzer = morphologyAnalyzer;
+        this.externalSinkCalibrator = externalSinkCalibrator;
+        this.externalSinkRecipe = externalSinkRecipe;
+        this.externalSinkResolver = externalSinkResolver;
         this.rimAnalyzer = rimAnalyzer;
         this.spillAnalyzer = spillAnalyzer;
         this.routeResolver = routeResolver;
@@ -34,6 +50,10 @@ public final class StandingWaterHydrologyTopologyStage {
         return new StandingWaterHydrologyTopologyStage(
                 new ConnectedStandingWaterTopologyAnalyzer(),
                 new BroadStandingWaterBodySelector(),
+                StandingWaterMorphologyAnalyzer.standard(),
+                StandingWaterExternalSinkCalibrator.standard(),
+                StandingWaterExternalSinkRecipe.balanced(),
+                StandingWaterExternalSinkResolver.standard(),
                 new CardinalStandingWaterRimTopologyAnalyzer(),
                 new PriorityFloodStandingWaterSpillTopologyAnalyzer(),
                 new MinimaxStandingWaterBoundaryRouteResolver());
@@ -50,6 +70,15 @@ public final class StandingWaterHydrologyTopologyStage {
         if (!rawWater.bounds().equals(water.bounds())) {
             throw new IllegalStateException("standing-water body selector changed world bounds");
         }
+        StandingWaterMorphologyTopology morphology = require(
+                morphologyAnalyzer.analyze(water),
+                "standing-water morphology analyzer");
+        StandingWaterExternalSinkCalibration sinkCalibration = require(
+                externalSinkCalibrator.calibrate(water.bounds(), externalSinkRecipe),
+                "standing-water external-sink calibrator");
+        StandingWaterExternalSinkTopology externalSinks = require(
+                externalSinkResolver.resolve(water, morphology, sinkCalibration),
+                "standing-water external-sink resolver");
         StandingWaterRimTopology rims = require(
                 rimAnalyzer.analyze(elevation, water),
                 "standing-water rim analyzer");
@@ -57,9 +86,16 @@ public final class StandingWaterHydrologyTopologyStage {
                 spillAnalyzer.analyze(elevation, water),
                 "standing-water spill analyzer");
         StandingWaterBoundaryRouteTopology routes = require(
-                routeResolver.resolve(water, spills),
-                "standing-water boundary route resolver");
-        return new StandingWaterHydrologyTopology(rawWater, water, rims, spills, routes);
+                routeResolver.resolve(water, spills, externalSinks),
+                "standing-water external route resolver");
+        return new StandingWaterHydrologyTopology(
+                rawWater,
+                water,
+                morphology,
+                externalSinks,
+                rims,
+                spills,
+                routes);
     }
 
     private static <T> T require(T value, String owner) {

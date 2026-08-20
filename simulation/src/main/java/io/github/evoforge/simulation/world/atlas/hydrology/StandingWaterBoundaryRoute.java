@@ -3,10 +3,10 @@ package io.github.evoforge.simulation.world.atlas.hydrology;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
-/** Minimum-barrier potential route from one standing-water body toward boundary-connected water. */
+/** Minimum-barrier potential route from one standing-water body toward an external drainage sink. */
 public record StandingWaterBoundaryRoute(
         int bodyId,
-        boolean boundaryConnected,
+        boolean externalSink,
         OptionalInt nextBodyId,
         OptionalLong minimumBarrierElevationSubunits) {
 
@@ -15,13 +15,13 @@ public record StandingWaterBoundaryRoute(
         if (nextBodyId == null || minimumBarrierElevationSubunits == null) {
             throw new IllegalArgumentException("route optionals must not be null");
         }
-        if (boundaryConnected) {
+        if (externalSink) {
             if (nextBodyId.isPresent()) {
-                throw new IllegalArgumentException("boundary-connected water is terminal, not routed onward");
+                throw new IllegalArgumentException("external standing water is terminal, not routed onward");
             }
             if (minimumBarrierElevationSubunits.isEmpty()
                     || minimumBarrierElevationSubunits.getAsLong() != 0L) {
-                throw new IllegalArgumentException("boundary-connected water has zero barrier to itself");
+                throw new IllegalArgumentException("external standing water has zero barrier to itself");
             }
         } else if (nextBodyId.isPresent() != minimumBarrierElevationSubunits.isPresent()) {
             throw new IllegalArgumentException("non-terminal route needs both next body and barrier, or neither");
@@ -32,7 +32,17 @@ public record StandingWaterBoundaryRoute(
         }
     }
 
+    public boolean reachesExternalSink() {
+        return externalSink || nextBodyId.isPresent();
+    }
+
+    /** Compatibility accessor retained while Stage 2B.1 migrates from boundary to external semantics. */
+    public boolean boundaryConnected() {
+        return externalSink;
+    }
+
+    /** Compatibility accessor retained for current diagnostics; use {@link #reachesExternalSink()}. */
     public boolean reachesBoundaryWater() {
-        return boundaryConnected || nextBodyId.isPresent();
+        return reachesExternalSink();
     }
 }

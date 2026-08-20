@@ -16,16 +16,37 @@ final class MinimaxStandingWaterBoundaryRouteResolverTest {
     private static final WorldBounds BOUNDS = new WorldBounds(0, 4, 0, 4, -10, 10);
 
     @Test
-    void boundaryConnectedWaterIsTerminalWithZeroBarrierAndNoNextBody() {
+    void selectedExternalSinkIsTerminalWithZeroBarrierAndNoNextBody() {
         StandingWaterTopology water = topology(body(0, true));
-        StandingWaterSpillTopology spills = spillTopology(1);
 
-        StandingWaterBoundaryRoute route = resolver.resolve(water, spills).route(0);
+        StandingWaterBoundaryRoute route = resolver.resolve(
+                water,
+                spillTopology(1),
+                sinks(true)).route(0);
 
-        assertTrue(route.boundaryConnected());
-        assertTrue(route.reachesBoundaryWater());
+        assertTrue(route.externalSink());
+        assertTrue(route.reachesExternalSink());
         assertTrue(route.nextBodyId().isEmpty());
         assertEquals(0L, route.minimumBarrierElevationSubunits().orElseThrow());
+    }
+
+    @Test
+    void boundaryTouchingNonSinkCanRouteTowardLargerExternalWater() {
+        StandingWaterTopology water = topology(
+                body(0, true),
+                body(1, true));
+        StandingWaterSpillTopology spills = spillTopology(2, connection(0, 1, 3L));
+
+        StandingWaterBoundaryRouteTopology routes = resolver.resolve(
+                water,
+                spills,
+                sinks(false, true));
+
+        assertFalse(routes.route(0).externalSink());
+        assertEquals(1, routes.route(0).nextBodyId().orElseThrow(),
+                "touching the world edge must not make a small body terminal");
+        assertEquals(3L, routes.route(0).minimumBarrierElevationSubunits().orElseThrow());
+        assertTrue(routes.route(1).externalSink());
     }
 
     @Test
@@ -40,7 +61,10 @@ final class MinimaxStandingWaterBoundaryRouteResolverTest {
                 connection(0, 1, 5L),
                 connection(1, 2, 4L));
 
-        StandingWaterBoundaryRouteTopology routes = resolver.resolve(water, spills);
+        StandingWaterBoundaryRouteTopology routes = resolver.resolve(
+                water,
+                spills,
+                sinks(true, false, false));
 
         assertEquals(0, routes.route(1).nextBodyId().orElseThrow());
         assertEquals(5L, routes.route(1).minimumBarrierElevationSubunits().orElseThrow());
@@ -50,39 +74,28 @@ final class MinimaxStandingWaterBoundaryRouteResolverTest {
     }
 
     @Test
-    void inlandBodyChoosesLowerBarrierBoundaryWaterWhenSeveralTerminalsExist() {
-        StandingWaterTopology water = topology(
-                body(0, true),
-                body(1, true),
-                body(2, false));
-        StandingWaterSpillTopology spills = spillTopology(
-                3,
-                connection(0, 2, 7L),
-                connection(1, 2, 3L));
-
-        StandingWaterBoundaryRoute route = resolver.resolve(water, spills).route(2);
-
-        assertEquals(1, route.nextBodyId().orElseThrow());
-        assertEquals(3L, route.minimumBarrierElevationSubunits().orElseThrow());
-    }
-
-    @Test
-    void disconnectedInlandBodyRemainsClosedPotentialWithoutInventedOutlet() {
+    void worldEdgeContactWithoutAnyExternalSinkLeavesPotentialRoutesClosed() {
         StandingWaterTopology water = topology(
                 body(0, true),
                 body(1, false));
-        StandingWaterSpillTopology spills = spillTopology(2);
+        StandingWaterSpillTopology spills = spillTopology(2, connection(0, 1, 2L));
 
-        StandingWaterBoundaryRoute route = resolver.resolve(water, spills).route(1);
+        StandingWaterBoundaryRouteTopology routes = resolver.resolve(
+                water,
+                spills,
+                sinks(false, false));
 
-        assertFalse(route.boundaryConnected());
-        assertFalse(route.reachesBoundaryWater());
-        assertTrue(route.nextBodyId().isEmpty());
-        assertTrue(route.minimumBarrierElevationSubunits().isEmpty());
+        for (int bodyId = 0; bodyId < 2; bodyId++) {
+            StandingWaterBoundaryRoute route = routes.route(bodyId);
+            assertFalse(route.externalSink());
+            assertFalse(route.reachesExternalSink());
+            assertTrue(route.nextBodyId().isEmpty());
+            assertTrue(route.minimumBarrierElevationSubunits().isEmpty());
+        }
     }
 
     @Test
-    void equalBarrierRoutesRemainAcyclicAndAlwaysReachEarlierSettledBoundaryTree() {
+    void equalBarrierRoutesRemainAcyclicAndAlwaysReachEarlierSettledExternalTree() {
         StandingWaterTopology water = topology(
                 body(0, true),
                 body(1, false),
@@ -92,12 +105,15 @@ final class MinimaxStandingWaterBoundaryRouteResolverTest {
                 connection(0, 1, 5L),
                 connection(0, 2, 5L),
                 connection(1, 2, 5L));
-        StandingWaterBoundaryRouteTopology routes = resolver.resolve(water, spills);
+        StandingWaterBoundaryRouteTopology routes = resolver.resolve(
+                water,
+                spills,
+                sinks(true, false, false));
 
         for (int start = 0; start < routes.bodyCount(); start++) {
             int current = start;
             int steps = 0;
-            while (!routes.route(current).boundaryConnected()) {
+            while (!routes.route(current).externalSink()) {
                 assertTrue(routes.route(current).nextBodyId().isPresent());
                 current = routes.route(current).nextBodyId().orElseThrow();
                 steps++;
@@ -109,9 +125,15 @@ final class MinimaxStandingWaterBoundaryRouteResolverTest {
     @Test
     void resolverRejectsMismatchedBodyDomains() {
         StandingWaterTopology water = topology(body(0, true), body(1, false));
-        StandingWaterSpillTopology spills = spillTopology(1);
 
-        assertThrows(IllegalArgumentException.class, () -> resolver.resolve(water, spills));
+        assertThrows(IllegalArgumentException.class, () -> resolver.resolve(
+                water,
+                spillTopology(2),
+                new DenseStandingWaterExternalSinkTopology(BOUNDS, new boolean[] {true})));
+    }
+
+    private static StandingWaterExternalSinkTopology sinks(boolean... values) {
+        return new DenseStandingWaterExternalSinkTopology(BOUNDS, values);
     }
 
     private static StandingWaterBody body(int id, boolean boundary) {
