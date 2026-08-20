@@ -8,7 +8,7 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.PriorityQueue;
 
-/** Deterministic minimax routing over the spill graph toward selected external standing water. */
+/** Deterministic minimax routing over the spill graph toward oceanic standing water. */
 public final class MinimaxStandingWaterBoundaryRouteResolver
         implements StandingWaterBoundaryRouteResolver {
     private static final Comparator<RouteEntry> ROUTE_ORDER =
@@ -19,14 +19,14 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
     public StandingWaterBoundaryRouteTopology resolve(
             StandingWaterTopology standingWater,
             StandingWaterSpillTopology spills,
-            StandingWaterExternalSinkTopology externalSinks) {
-        if (standingWater == null || spills == null || externalSinks == null) {
+            StandingWaterDomainTopology domains) {
+        if (standingWater == null || spills == null || domains == null) {
             throw new IllegalArgumentException("standing-water route inputs must not be null");
         }
         if (!standingWater.bounds().equals(spills.bounds())
-                || !standingWater.bounds().equals(externalSinks.bounds())
+                || !standingWater.bounds().equals(domains.bounds())
                 || standingWater.bodyCount() != spills.bodyCount()
-                || standingWater.bodyCount() != externalSinks.bodyCount()) {
+                || standingWater.bodyCount() != domains.bodyCount()) {
             throw new IllegalArgumentException("standing-water route inputs must describe the same bodies");
         }
 
@@ -39,7 +39,7 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
         PriorityQueue<RouteEntry> frontier = new PriorityQueue<>(ROUTE_ORDER);
 
         for (int bodyId = 0; bodyId < count; bodyId++) {
-            if (externalSinks.isExternalSink(bodyId)) {
+            if (domains.isOceanic(bodyId)) {
                 minimumBarrier[bodyId] = 0L;
                 frontier.add(new RouteEntry(0L, bodyId));
             }
@@ -53,8 +53,7 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
             }
             settled[current.bodyId()] = true;
 
-            for (StandingWaterSpillConnection connection :
-                    spills.connectionsForBody(current.bodyId())) {
+            for (StandingWaterSpillConnection connection : spills.connectionsForBody(current.bodyId())) {
                 int neighbor = connection.otherBodyId(current.bodyId());
                 if (settled[neighbor]) continue;
                 long candidate = Math.max(current.barrier(), connection.barrierElevationSubunits());
@@ -72,29 +71,28 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
 
         List<StandingWaterBoundaryRoute> routes = new ArrayList<>(count);
         for (int bodyId = 0; bodyId < count; bodyId++) {
-            boolean boundaryConnected = standingWater.body(bodyId).touchesWorldBoundary();
-            boolean externalSink = externalSinks.isExternalSink(bodyId);
-            if (externalSink) {
+            boolean oceanic = domains.isOceanic(bodyId);
+            if (oceanic) {
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
-                        boundaryConnected,
+                        true,
                         true,
                         OptionalInt.empty(),
                         OptionalLong.of(0L)));
             } else if (minimumBarrier[bodyId] == Long.MAX_VALUE) {
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
-                        boundaryConnected,
+                        false,
                         false,
                         OptionalInt.empty(),
                         OptionalLong.empty()));
             } else {
                 if (nextBody[bodyId] == StandingWaterTopology.NO_BODY) {
-                    throw new IllegalStateException("reachable standing water has no next body");
+                    throw new IllegalStateException("reachable inland standing water has no next body");
                 }
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
-                        boundaryConnected,
+                        false,
                         false,
                         OptionalInt.of(nextBody[bodyId]),
                         OptionalLong.of(minimumBarrier[bodyId])));

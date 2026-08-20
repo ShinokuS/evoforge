@@ -14,14 +14,14 @@ import org.junit.jupiter.api.Test;
 final class V14BathymetryElevationGenerationTest {
 
     @Test
-    void v14PreservesAcceptedV13LandAndSubmergedFootprintWhileAuthoringDepth() {
+    void v14PreservesOceanicMountainFootprintWhileAuthoringDepth() {
         WorldBounds finalBounds = new WorldBounds(-32, 31, -32, 31, -96, 96);
-        WorldBounds v13BaseBounds = new WorldBounds(-32, 31, -32, 31, -1, 96);
+        WorldBounds baseBounds = new WorldBounds(-32, 31, -32, 31, -1, 96);
         long seed = 4_217L;
         WorldGenerationIntent intent = WorldGenerationIntent.balanced();
 
-        WorldGenesis v13Genesis = new WorldGenesis(
-                new WorldSpec(v13BaseBounds),
+        WorldGenesis baseGenesis = new WorldGenesis(
+                new WorldSpec(baseBounds),
                 seed,
                 GenerationRevision.V13,
                 RngRevision.V1,
@@ -33,24 +33,45 @@ final class V14BathymetryElevationGenerationTest {
                 RngRevision.V1,
                 intent);
 
-        ElevationField v13 = new ElevationGenerationStage().generate(v13Genesis);
+        ElevationField oceanicMountains = new V13MountainTerrainGenerator(
+                V14OceanicBaseTerrainGenerator.standard(),
+                MountainCalibrator.standard(),
+                MountainRecipe.balanced())
+                .generate(baseGenesis);
         ElevationField v14 = new ElevationGenerationStage().generate(v14Genesis);
+        LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
+                .calibrate(baseGenesis, LandmassBoundaryRecipe.balanced());
         boolean foundMeaningfulDepth = false;
+
+        assertEquals(8, boundary.minimumOceanMarginCells(),
+                "64x64 balanced worlds must reserve a broad oceanic margin");
 
         for (int y = finalBounds.minY(); y <= finalBounds.maxY(); y++) {
             for (int x = finalBounds.minX(); x <= finalBounds.maxX(); x++) {
-                long base = v13.elevationSubunitsAt(x, y);
+                long base = oceanicMountains.elevationSubunitsAt(x, y);
                 long bathymetry = v14.elevationSubunitsAt(x, y);
-                assertEquals(base < 0L, bathymetry < 0L, "V14 must preserve the V13 submerged footprint");
+                assertEquals(base < 0L, bathymetry < 0L,
+                        "V14 bathymetry must preserve the oceanic submerged footprint");
                 if (base > 0L) {
-                    assertEquals(base, bathymetry, "V14 must preserve accepted V13 land exactly");
+                    assertEquals(base, bathymetry,
+                            "V14 bathymetry must preserve oceanic mountain land exactly");
                 } else if (bathymetry < -ElevationField.SUBUNITS_PER_CELL) {
                     foundMeaningfulDepth = true;
+                }
+                if (edgeDistance(finalBounds, x, y) < boundary.minimumOceanMarginCells()) {
+                    assertTrue(bathymetry < 0L,
+                            "the guaranteed oceanic margin must remain submerged after bathymetry");
                 }
             }
         }
 
         assertTrue(foundMeaningfulDepth, "a 64x64 ocean-capable world should contain real bathymetric depth");
         assertEquals(finalBounds, v14.bounds());
+    }
+
+    private static int edgeDistance(WorldBounds bounds, int x, int y) {
+        return Math.min(
+                Math.min(x - bounds.minX(), bounds.maxX() - x),
+                Math.min(y - bounds.minY(), bounds.maxY() - y));
     }
 }

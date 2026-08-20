@@ -6,8 +6,7 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 public record StandingWaterHydrologyTopology(
         StandingWaterTopology rawStandingWater,
         StandingWaterTopology standingWater,
-        StandingWaterMorphologyTopology morphology,
-        StandingWaterExternalSinkTopology externalSinks,
+        StandingWaterDomainTopology domains,
         StandingWaterRimTopology rims,
         StandingWaterSpillTopology spills,
         StandingWaterBoundaryRouteTopology boundaryRoutes) {
@@ -15,8 +14,7 @@ public record StandingWaterHydrologyTopology(
     public StandingWaterHydrologyTopology {
         if (rawStandingWater == null
                 || standingWater == null
-                || morphology == null
-                || externalSinks == null
+                || domains == null
                 || rims == null
                 || spills == null
                 || boundaryRoutes == null) {
@@ -25,15 +23,13 @@ public record StandingWaterHydrologyTopology(
         WorldBounds bounds = standingWater.bounds();
         int bodyCount = standingWater.bodyCount();
         if (!bounds.equals(rawStandingWater.bounds())
-                || !bounds.equals(morphology.bounds())
-                || !bounds.equals(externalSinks.bounds())
+                || !bounds.equals(domains.bounds())
                 || !bounds.equals(rims.bounds())
                 || !bounds.equals(spills.bounds())
                 || !bounds.equals(boundaryRoutes.bounds())) {
             throw new IllegalArgumentException("standing-water hydrology facts must share world bounds");
         }
-        if (morphology.bodyCount() != bodyCount
-                || externalSinks.bodyCount() != bodyCount
+        if (domains.bodyCount() != bodyCount
                 || rims.bodyCount() != bodyCount
                 || spills.bodyCount() != bodyCount
                 || boundaryRoutes.bodyCount() != bodyCount) {
@@ -45,12 +41,10 @@ public record StandingWaterHydrologyTopology(
         return standingWater.bounds();
     }
 
-    /** Number of hydrologically significant bodies used by spill/routing topology. */
     public int bodyCount() {
         return standingWater.bodyCount();
     }
 
-    /** Number of raw accepted negative-Z connected components before hydrologic selection. */
     public int rawBodyCount() {
         return rawStandingWater.bodyCount();
     }

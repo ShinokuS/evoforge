@@ -23,13 +23,9 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
         StandingWaterBody selectedBody = new StandingWaterBody(0, 1L, 0L, true, 0, 0, 0, 0);
         StandingWaterTopology selectedWater =
                 new DenseStandingWaterTopology(bounds, new int[] {0}, List.of(selectedBody));
-        StandingWaterMorphologyTopology morphology = new DenseStandingWaterMorphologyTopology(
+        StandingWaterDomainTopology domains = new DenseStandingWaterDomainTopology(
                 bounds,
-                List.of(new StandingWaterMorphology(0, 1, 4L, 1)));
-        StandingWaterExternalSinkCalibration calibration =
-                new StandingWaterExternalSinkCalibration(1, 1, 1);
-        StandingWaterExternalSinkTopology externalSinks =
-                new DenseStandingWaterExternalSinkTopology(bounds, new boolean[] {true});
+                List.of(StandingWaterDomainRole.OCEANIC));
         StandingWaterRimTopology rims = new DenseStandingWaterRimTopology(bounds, List.of(List.of()));
         StandingWaterSpillTopology spills = new DenseStandingWaterSpillTopology(bounds, 1, List.of());
         StandingWaterBoundaryRouteTopology routes = new DenseStandingWaterBoundaryRouteTopology(
@@ -40,7 +36,6 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                         true,
                         OptionalInt.empty(),
                         OptionalLong.of(0L))));
-        StandingWaterExternalSinkRecipe recipe = StandingWaterExternalSinkRecipe.balanced();
         List<String> calls = new ArrayList<>();
 
         StandingWaterHydrologyTopologyStage stage = new StandingWaterHydrologyTopologyStage(
@@ -56,22 +51,8 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 },
                 water -> {
                     assertSame(selectedWater, water);
-                    calls.add("morphology");
-                    return morphology;
-                },
-                (inputBounds, inputRecipe) -> {
-                    assertSame(bounds, inputBounds);
-                    assertSame(recipe, inputRecipe);
-                    calls.add("calibrate");
-                    return calibration;
-                },
-                recipe,
-                (water, analyzedMorphology, analyzedCalibration) -> {
-                    assertSame(selectedWater, water);
-                    assertSame(morphology, analyzedMorphology);
-                    assertSame(calibration, analyzedCalibration);
-                    calls.add("sinks");
-                    return externalSinks;
+                    calls.add("domains");
+                    return domains;
                 },
                 (input, analyzedWater) -> {
                     assertSame(elevation, input);
@@ -85,10 +66,10 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                     calls.add("spills");
                     return spills;
                 },
-                (analyzedWater, analyzedSpills, analyzedSinks) -> {
+                (analyzedWater, analyzedSpills, analyzedDomains) -> {
                     assertSame(selectedWater, analyzedWater);
                     assertSame(spills, analyzedSpills);
-                    assertSame(externalSinks, analyzedSinks);
+                    assertSame(domains, analyzedDomains);
                     calls.add("routes");
                     return routes;
                 });
@@ -97,14 +78,11 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
 
         assertSame(rawWater, result.rawStandingWater());
         assertSame(selectedWater, result.standingWater());
-        assertSame(morphology, result.morphology());
-        assertSame(externalSinks, result.externalSinks());
+        assertSame(domains, result.domains());
         assertSame(rims, result.rims());
         assertSame(spills, result.spills());
         assertSame(routes, result.boundaryRoutes());
-        assertEquals(
-                List.of("water", "select", "morphology", "calibrate", "sinks", "rims", "spills", "routes"),
-                calls);
+        assertEquals(List.of("water", "select", "domains", "rims", "spills", "routes"), calls);
     }
 
     @Test
@@ -128,48 +106,19 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
         assertEquals(bounds, result.bounds());
         assertEquals(1, result.rawBodyCount());
         assertEquals(0, result.bodyCount());
-        assertEquals(0, result.externalSinks().externalSinkCount());
+        assertEquals(0, result.domains().oceanicBodyCount());
         assertEquals(0, result.spills().connections().size());
     }
 
     @Test
-    void standardCompositionDoesNotTreatSmallEdgeWaterAsExternalByContactAlone() {
-        WorldBounds bounds = new WorldBounds(0, 15, 0, 15, -4, 4);
-        ElevationField elevation = new ElevationField() {
-            @Override
-            public WorldBounds bounds() {
-                return bounds;
-            }
-
-            @Override
-            public int elevationAt(int x, int y) {
-                return x <= 1 && y <= 1 ? -1 : 1;
-            }
-        };
-
-        StandingWaterHydrologyTopology result =
-                StandingWaterHydrologyTopologyStage.standard().generate(elevation);
-
-        assertEquals(1, result.bodyCount());
-        assertEquals(0, result.externalSinks().externalSinkCount());
-        assertEquals(true, result.boundaryRoutes().route(0).boundaryConnected());
-        assertEquals(false, result.boundaryRoutes().route(0).externalSink());
-        assertEquals(false, result.boundaryRoutes().route(0).reachesExternalSink());
-    }
-
-    @Test
     void stageRejectsNullDependencyAndNullOwnerOutputAtCompositionBoundary() {
-        StandingWaterExternalSinkRecipe recipe = StandingWaterExternalSinkRecipe.balanced();
         assertThrows(IllegalArgumentException.class, () -> new StandingWaterHydrologyTopologyStage(
                 null,
                 raw -> raw,
                 water -> null,
-                (bounds, inputRecipe) -> null,
-                recipe,
-                (water, morphology, calibration) -> null,
                 (e, w) -> null,
                 (e, w) -> null,
-                (w, s, sinks) -> null));
+                (w, s, domains) -> null));
 
         ElevationField elevation = constantElevation(
                 new WorldBounds(0, 0, 0, 0, -2, 2),
@@ -178,12 +127,9 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 ignored -> null,
                 raw -> raw,
                 water -> null,
-                (bounds, inputRecipe) -> null,
-                recipe,
-                (water, morphology, calibration) -> null,
                 (e, w) -> null,
                 (e, w) -> null,
-                (w, s, sinks) -> null);
+                (w, s, domains) -> null);
 
         assertThrows(IllegalStateException.class, () -> stage.generate(elevation));
     }

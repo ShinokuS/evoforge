@@ -11,12 +11,13 @@ import java.util.Arrays;
  * Pure deterministic spatial synthesis for the accepted V12 base terrain.
  *
  * <p>All world-specific operating values arrive through {@link V12LandformCalibration}; all V12
- * model choices arrive through {@link V12LandformRecipe}. The algorithm therefore contains only
- * deterministic spatial mechanics and representation constants, not authored-world policy.</p>
+ * model choices arrive through {@link V12LandformRecipe}. Later compositions may additionally
+ * constrain the landmass domain before rank selection without changing accepted V12 behavior.</p>
  */
 final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId LANDMASS = GenerationPurposeId.of("world:landmass");
     private static final GenerationPurposeId FRAGMENT = GenerationPurposeId.of("world:fragment");
+    private static final GenerationPurposeId OCEAN_EDGE = GenerationPurposeId.of("world:v14-ocean-edge");
     private static final GenerationPurposeId UPLIFT = GenerationPurposeId.of("world:v12-uplift");
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:v12-ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:v12-ridge-b");
@@ -37,7 +38,19 @@ final class V12LandformElevationAlgorithm {
             WorldGenesis genesis,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe) {
-        if (genesis == null || calibration == null || recipe == null) {
+        return generate(
+                genesis,
+                calibration,
+                recipe,
+                LandmassBoundaryCalibration.unconstrained(calibration.area()));
+    }
+
+    ElevationField generate(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassBoundaryCalibration boundary) {
+        if (genesis == null || calibration == null || recipe == null || boundary == null) {
             throw new IllegalArgumentException("V12 generation inputs must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
@@ -46,8 +59,8 @@ final class V12LandformElevationAlgorithm {
         int area = calibration.area();
         GenerationRandom random = GenerationRandom.from(genesis);
 
-        long[] rankKeys = calibratedLandRankKeys(random, bounds, calibration, recipe);
-        int landCount = calibration.landCount();
+        long[] rankKeys = calibratedLandRankKeys(random, bounds, calibration, recipe, boundary);
+        int landCount = Math.min(calibration.landCount(), boundary.maximumLandCells());
         boolean[] land = new boolean[area];
         for (int rank = 0; rank < landCount; rank++) {
             land[(int) rankKeys[rank]] = true;
@@ -149,7 +162,8 @@ final class V12LandformElevationAlgorithm {
             GenerationRandom random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
-            V12LandformRecipe recipe) {
+            V12LandformRecipe recipe,
+            LandmassBoundaryCalibration boundary) {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
@@ -176,12 +190,53 @@ final class V12LandformElevationAlgorithm {
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
+                potential = boundaryAdjustedLandPotential(
+                        random,
+                        x,
+                        y,
+                        localX,
+                        localY,
+                        width,
+                        height,
+                        potential,
+                        boundary);
                 rankKeys[index] = rankKey(potential, index);
                 index++;
             }
         }
         Arrays.sort(rankKeys);
         return rankKeys;
+    }
+
+    private static int boundaryAdjustedLandPotential(
+            GenerationRandom random,
+            int x,
+            int y,
+            int localX,
+            int localY,
+            int width,
+            int height,
+            int potential,
+            LandmassBoundaryCalibration boundary) {
+        if (!boundary.oceanBounded()) return potential;
+        int edgeDistance = Math.min(
+                Math.min(localX, width - 1 - localX),
+                Math.min(localY, height - 1 - localY));
+        int margin = boundary.minimumOceanMarginCells();
+        if (edgeDistance < margin) return -1;
+        if (boundary.transitionCells() == 0) return potential;
+
+        int edgeSample = smoothValueNoise(
+                random,
+                OCEAN_EDGE,
+                x,
+                y,
+                boundary.edgeNoiseScale());
+        int variation = centeredSampleOffset(edgeSample, boundary.edgeVariationCells());
+        long transitionCoordinate = (long) edgeDistance - margin + variation;
+        int gatePpm = smoothStepPpm(
+                transitionCoordinate * PPM / boundary.transitionCells());
+        return (int) ((long) potential * gatePpm / PPM);
     }
 
     private static long landformFieldPpm(
@@ -471,7 +526,7 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static long rankKey(int potential, int cellIndex) {
-        long invertedPotential = SAMPLE_MAX - potential;
+        long invertedPotential = (long) SAMPLE_MAX - potential;
         return (invertedPotential << 32) | (cellIndex & 0xffff_ffffL);
     }
 
