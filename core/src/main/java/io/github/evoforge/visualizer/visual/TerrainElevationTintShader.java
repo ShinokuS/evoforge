@@ -10,8 +10,9 @@ import com.badlogic.gdx.utils.Disposable;
  * <p>The vertex color red channel carries a normalized palette position from
  * {@link TerrainElevationColorRamp#position(long, long, long, int)}. A midpoint value of 0.5
  * leaves the source terrain untouched, lower values deepen the green, and higher values blend
- * toward a brighter grass tone. This avoids the dirty global darkening caused by multiplying
- * textured terrain by an absolute palette color.</p>
+ * toward a brighter grass tone. Ordinary callers encode that position as grayscale. Preview
+ * adapters may additionally encode submerged darkening by raising the blue channel above red;
+ * grayscale callers remain unaffected.</p>
  */
 public final class TerrainElevationTintShader implements Disposable {
     private static final String VERTEX = """
@@ -49,6 +50,15 @@ public final class TerrainElevationTintShader implements Disposable {
                 // bleaching away the procedural grass texture.
                 vec3 highTarget = vec3(0.76, 0.88, 0.55);
                 result = mix(result, highTarget, high * 0.36);
+
+                // Normal elevation colors are grayscale, so blue == red and this term is zero.
+                // The generated-world preview can encode extra submerged depth in blue while
+                // keeping red at the darkest accepted land palette position. Negative Z therefore
+                // continues downward from land instead of resetting to a brighter neutral shade.
+                float depthRange = max(0.0001, 1.0 - palette);
+                float submerged = clamp((v_color.b - palette) / depthRange, 0.0, 1.0);
+                result *= mix(1.0, 0.28, submerged);
+
                 gl_FragColor = vec4(result, texel.a);
             }
             """;

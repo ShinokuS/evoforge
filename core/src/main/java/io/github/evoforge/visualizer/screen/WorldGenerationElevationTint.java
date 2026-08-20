@@ -11,8 +11,7 @@ final class WorldGenerationElevationTint {
     static final int SCALE = TerrainElevationColorRamp.SCALE;
 
     private static final float MAX_CONTRAST = 2f;
-    private static final Color SHALLOW_WATER = new Color(0.16f, 0.24f, 0.30f, 1f);
-    private static final Color DEEP_WATER = new Color(0.045f, 0.075f, 0.10f, 1f);
+    private static final float DEEPEST_BRIGHTNESS = 0.28f;
 
     private WorldGenerationElevationTint() {
     }
@@ -33,12 +32,21 @@ final class WorldGenerationElevationTint {
                     out);
         }
 
-        float palettePosition = submergedPalettePosition(elevationSubunits, range, sensitivityPpm);
-        float darkness = MathUtils.clamp((0.5f - palettePosition) * 2f, 0f, 1f);
+        // Negative Z extends the existing land ramp downward instead of starting from an unrelated
+        // water color. The shallowest submerged terrain therefore begins at the same darkest
+        // positive-land reference and can only become darker with depth.
+        TerrainElevationColorRamp.color(
+                range.minimumSubunits(),
+                range.minimumSubunits(),
+                range.maximumSubunits(),
+                sensitivityPpm,
+                out);
+        float darkness = submergedDarkness(elevationSubunits, range, sensitivityPpm);
+        float brightness = MathUtils.lerp(1f, DEEPEST_BRIGHTNESS, darkness);
         return out.set(
-                MathUtils.lerp(SHALLOW_WATER.r, DEEP_WATER.r, darkness),
-                MathUtils.lerp(SHALLOW_WATER.g, DEEP_WATER.g, darkness),
-                MathUtils.lerp(SHALLOW_WATER.b, DEEP_WATER.b, darkness),
+                out.r * brightness,
+                out.g * brightness,
+                out.b * brightness,
                 1f);
     }
 
@@ -58,17 +66,28 @@ final class WorldGenerationElevationTint {
                     out);
         }
 
-        float position = submergedPalettePosition(elevationSubunits, range, sensitivityPpm);
-        return out.set(position, position, position, 1f);
+        float landFloorPosition = TerrainElevationColorRamp.position(
+                range.minimumSubunits(),
+                range.minimumSubunits(),
+                range.maximumSubunits(),
+                sensitivityPpm);
+        float darkness = submergedDarkness(elevationSubunits, range, sensitivityPpm);
+
+        // Existing shader consumers encode a normal palette coordinate as grayscale (r == g == b).
+        // V14 preview keeps red/green at the accepted land-floor palette position and uses only the
+        // extra blue distance above that value to encode additional negative-Z darkening. The shared
+        // shader can therefore support submerged depth without changing ordinary land callers.
+        float encodedDepth = MathUtils.lerp(landFloorPosition, 1f, darkness);
+        return out.set(landFloorPosition, landFloorPosition, encodedDepth, 1f);
     }
 
-    private static float submergedPalettePosition(
+    private static float submergedDarkness(
             long elevationSubunits,
             WorldGenerationElevationRange range,
             int sensitivityPpm) {
         validateSensitivity(sensitivityPpm);
         long minimumWater = range.minimumWaterSubunits();
-        if (sensitivityPpm == 0 || elevationSubunits >= 0L || minimumWater >= 0L) return 0.5f;
+        if (sensitivityPpm == 0 || elevationSubunits >= 0L || minimumWater >= 0L) return 0f;
 
         float normalizedDepth = MathUtils.clamp(
                 (float) elevationSubunits / (float) minimumWater,
@@ -77,10 +96,7 @@ final class WorldGenerationElevationTint {
         float contrast = sensitivityPpm / (float) SCALE * MAX_CONTRAST;
         int bands = 3 + Math.round(45f * contrast);
         float quantizedDepth = Math.round(normalizedDepth * (bands - 1f)) / (bands - 1f);
-        return MathUtils.clamp(
-                0.5f - quantizedDepth * 0.5f * contrast,
-                0f,
-                0.5f);
+        return MathUtils.clamp(quantizedDepth * contrast, 0f, 1f);
     }
 
     private static void validateSensitivity(int sensitivityPpm) {
