@@ -109,7 +109,16 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         }
 
         int[] supportWidth = chamferDistanceInside(support, width, height);
-        int requiredHalfWidth = Math.max(2, calibration.minimumComponentSpanCells() / 4);
+
+        /*
+         * A valid lake needs real geometric room for its depth profile, not merely enough area to
+         * draw a water patch. Balanced policy uses a 20-cell minimum span and the lake bathymetry
+         * consumes roughly two inward cells per full Z, so requiring half that span as an actual
+         * interior radius guarantees room for the five-Z minimum without forcing a trench later.
+         */
+        int requiredHalfWidth = Math.max(
+                2,
+                (calibration.minimumComponentSpanCells() + 1) / 2);
         int requiredHalfWidthScaled = requiredHalfWidth * DISTANCE_SCALE;
         boolean[] broadCore = new boolean[area];
         for (int cell = 0; cell < area; cell++) {
