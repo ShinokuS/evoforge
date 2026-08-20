@@ -19,16 +19,17 @@ public record InlandLakeBathymetryRecipe(
     }
 
     /**
-     * Balanced lakes keep a shallow littoral edge but allow a broad inland body to develop a
-     * materially deep core. The minimum significant depth is deliberately above the former 3-4 Z
-     * puddle regime; larger bodies scale deeper with their geometric radius.
+     * Balanced lakes use the same geometric principle as accepted ocean bathymetry: depth emerges
+     * from room available away from shoreline. Unlike the ocean deep-interior layer, inland lakes do
+     * not receive authored pits/basins. One Z of additional depth requires about two cells of inward
+     * room, so visible depth bands stay broad instead of collapsing into one-cell terraces.
      */
     public static InlandLakeBathymetryRecipe balanced() {
         return new InlandLakeBathymetryRecipe(
-                4,
+                10,
                 5,
                 24,
-                3,
-                4);
+                1,
+                2);
     }
 }
