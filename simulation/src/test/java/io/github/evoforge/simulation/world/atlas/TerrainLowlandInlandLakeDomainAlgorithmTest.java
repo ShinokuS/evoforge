@@ -113,7 +113,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
     }
 
     @Test
-    void shoreConditioningChangesOnlyLakeMembershipAndLeavesDryTerrainBitExact() {
+    void shoreConditioningGradesOnlyNarrowDryCollarAndKeepsOneZCardinalApproach() {
         WorldBounds bounds = new WorldBounds(0, 20, 0, 20, -1, 12);
         long[] elevation = new long[21 * 21];
         long ordinary = 7L * ElevationField.SUBUNITS_PER_CELL;
@@ -137,12 +137,17 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
                 base, domain, V12LandformRecipe.balanced().coast());
 
         assertEquals(-1L, conditioned.elevationSubunitsAt(10, 10));
-        for (int y = 0; y <= 20; y++) {
-            for (int x = 0; x <= 20; x++) {
-                if (domain.isLakeAt(x, y)) continue;
-                assertEquals(base.elevationSubunitsAt(x, y), conditioned.elevationSubunitsAt(x, y),
-                        "dry terrain around a lake must remain owned by the terrain generator");
-            }
+        assertTrue(conditioned.elevationSubunitsAt(8, 10) > 0L);
+        assertTrue(conditioned.elevationSubunitsAt(8, 10) < ElevationField.SUBUNITS_PER_CELL);
+        assertTrue(conditioned.elevationSubunitsAt(7, 10) < 2L * ElevationField.SUBUNITS_PER_CELL);
+        assertEquals(ordinary, conditioned.elevationSubunitsAt(5, 10),
+                "terrain outside the coast-derived collar must remain bit-identical");
+
+        for (int x = 8; x <= 11; x++) {
+            long left = conditioned.elevationSubunitsAt(x, 10);
+            long right = conditioned.elevationSubunitsAt(x + 1, 10);
+            assertTrue(Math.abs(left - right) <= ElevationField.SUBUNITS_PER_CELL,
+                    "shoreline collar may not introduce a cardinal jump larger than one Z");
         }
     }
 
