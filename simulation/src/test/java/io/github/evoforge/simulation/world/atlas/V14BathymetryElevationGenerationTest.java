@@ -41,12 +41,15 @@ final class V14BathymetryElevationGenerationTest {
         ElevationField v14 = new ElevationGenerationStage().generate(v14Genesis);
         V12LandformCalibration terrain = V12LandformCalibrator.standard()
                 .calibrate(baseGenesis, V12LandformRecipe.balanced());
+        LandmassBoundaryRecipe boundaryRecipe = LandmassBoundaryRecipe.balanced();
         LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
-                .calibrate(baseGenesis, terrain, LandmassBoundaryRecipe.balanced());
+                .calibrate(baseGenesis, terrain, boundaryRecipe);
         boolean foundMeaningfulDepth = false;
 
-        assertEquals(5, boundary.minimumOceanMarginCells(),
-                "64x64 balanced worlds must keep at least five full cells of guaranteed external ocean");
+        assertEquals(
+                boundaryRecipe.boundary().minimumOceanMarginCells(),
+                boundary.minimumOceanMarginCells(),
+                "balanced finite-world guard must follow boundary policy rather than a coastline-shape constant");
 
         for (int y = finalBounds.minY(); y <= finalBounds.maxY(); y++) {
             for (int x = finalBounds.minX(); x <= finalBounds.maxX(); x++) {
@@ -62,7 +65,7 @@ final class V14BathymetryElevationGenerationTest {
                 }
                 if (edgeDistance(finalBounds, x, y) < boundary.minimumOceanMarginCells()) {
                     assertTrue(bathymetry < 0L,
-                            "the guaranteed oceanic margin must remain submerged after bathymetry");
+                            "the guaranteed oceanic guard must remain submerged after bathymetry");
                 }
             }
         }
