@@ -15,12 +15,13 @@ import org.junit.jupiter.api.Test;
 final class V15InlandLakeTerrainGeneratorTest {
 
     @Test
-    void representativeV15AddsMeaningfulInteriorStandingWaterWithoutRewritingWorldEdge() {
+    void representativeV15AddsMeaningfulDeepInteriorStandingWaterWithoutRewritingWorldEdge() {
         WorldGenesis genesis = genesis(300, 4_859_186_304_997_574_751L, GenerationRevision.V15, 830_000);
         ElevationField v14 = V14BathymetryTerrainGenerator.standard().generate(genesis);
         ElevationField v15 = V15InlandLakeTerrainGenerator.standard().generate(genesis);
 
         int landToWater = 0;
+        long deepestNewWater = 0L;
         WorldBounds bounds = v15.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -28,6 +29,7 @@ final class V15InlandLakeTerrainGeneratorTest {
                 long after = v15.elevationSubunitsAt(x, y);
                 if (before >= 0L && after < 0L) {
                     landToWater++;
+                    deepestNewWater = Math.min(deepestNewWater, after);
                     assertTrue(x > bounds.minX() && x < bounds.maxX()
                                     && y > bounds.minY() && y < bounds.maxY(),
                             "inland lake must not be a boundary rewrite");
@@ -36,6 +38,8 @@ final class V15InlandLakeTerrainGeneratorTest {
         }
         assertTrue(landToWater >= 100,
                 "representative high-land V15 world should contain a visually meaningful inland-water footprint");
+        assertTrue(deepestNewWater <= -5L * ElevationField.SUBUNITS_PER_CELL,
+                "a significant inland lake must have a bathymetric core deeper than the old 3-4 cell puddles");
 
         for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
             assertTrue(v15.elevationSubunitsAt(x, bounds.minY()) < 0L);
