@@ -16,7 +16,7 @@ final class V15InlandBasinTerrainGeneratorTest {
 
     @Test
     void basinMorphologyChangesReadableDryReliefWithoutChangingCoastOrBathymetry() {
-        WorldGenesis genesis = genesis(300, 4_859_186_304_997_574_751L);
+        WorldGenesis genesis = genesis(300, 4_859_186_304_997_574_751L, GenerationRevision.V15);
         ElevationField base = V14BathymetryTerrainGenerator.standard().generate(genesis);
         ElevationField result = V15InlandBasinTerrainGenerator.standard().generate(genesis);
 
@@ -47,18 +47,39 @@ final class V15InlandBasinTerrainGeneratorTest {
 
     @Test
     void sameGenesisReplaysBasinMorphologyExactly() {
-        WorldGenesis genesis = genesis(180, 71_337L);
+        WorldGenesis genesis = genesis(180, 71_337L, GenerationRevision.V15);
         ElevationField first = V15InlandBasinTerrainGenerator.standard().generate(genesis);
         ElevationField second = V15InlandBasinTerrainGenerator.standard().generate(genesis);
-        WorldBounds bounds = first.bounds();
+        assertFieldsEqual(first, second);
+    }
+
+    @Test
+    void elevationStageRoutesV15ToBasinOwnerWhileV14RemainsItsAcceptedGenerator() {
+        WorldGenesis v15 = genesis(140, 991_337L, GenerationRevision.V15);
+        assertFieldsEqual(
+                V15InlandBasinTerrainGenerator.standard().generate(v15),
+                new ElevationGenerationStage().generate(v15));
+
+        WorldGenesis v14 = genesis(140, 991_337L, GenerationRevision.V14);
+        assertFieldsEqual(
+                V14BathymetryTerrainGenerator.standard().generate(v14),
+                new ElevationGenerationStage().generate(v14));
+    }
+
+    private static void assertFieldsEqual(ElevationField expected, ElevationField actual) {
+        assertEquals(expected.bounds(), actual.bounds());
+        WorldBounds bounds = expected.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                assertEquals(first.elevationSubunitsAt(x, y), second.elevationSubunitsAt(x, y));
+                assertEquals(
+                        expected.elevationSubunitsAt(x, y),
+                        actual.elevationSubunitsAt(x, y),
+                        "elevation mismatch at " + x + "," + y);
             }
         }
     }
 
-    private static WorldGenesis genesis(int size, long seed) {
+    private static WorldGenesis genesis(int size, long seed, GenerationRevision revision) {
         int min = -size / 2;
         WorldBounds bounds = new WorldBounds(min, min + size - 1, min, min + size - 1, -96, 96);
         WorldGenerationIntent balanced = WorldGenerationIntent.balanced();
@@ -74,7 +95,7 @@ final class V15InlandBasinTerrainGeneratorTest {
         return new WorldGenesis(
                 new WorldSpec(bounds),
                 seed,
-                GenerationRevision.V15,
+                revision,
                 RngRevision.V1,
                 intent);
     }
