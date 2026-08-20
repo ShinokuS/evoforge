@@ -16,7 +16,8 @@ import java.util.Arrays;
  * fragmentation. World-edge sites are oceanic control sites, so finite-world ocean clearance is a
  * property of the scaffold rather than a rectangular clipping mask. The final coastline is the
  * equal-distance field between land and ocean sites after smooth coordinate warping and secondary
- * coast perturbation.</p>
+ * coast perturbation. Coast deformation fades out before the guaranteed external-ocean clearance;
+ * breaching that clearance is a generation error rather than an opportunity to clip the coast.</p>
  */
 final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgorithm {
     static final PlateLandmassSilhouetteAlgorithm INSTANCE = new PlateLandmassSilhouetteAlgorithm();
@@ -69,7 +70,7 @@ final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgori
                 landSite,
                 width,
                 height,
-                calibration,
+                boundary,
                 recipe);
         return materializeSilhouette(
                 bounds,
@@ -188,7 +189,7 @@ final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgori
             boolean[] landSite,
             int width,
             int height,
-            LandmassSilhouetteCalibration calibration,
+            LandmassBoundaryCalibration boundary,
             LandmassSilhouetteRecipe recipe) {
         int area = Math.multiplyExact(width, height);
         double[] score = new double[area];
@@ -201,12 +202,19 @@ final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgori
                 * coast.warpAmplitudeSpacingPpm() / (double) PPM;
         double detailAmplitude = grid.spacingCells()
                 * coast.detailAmplitudeSpacingPpm() / (double) PPM;
+        int guaranteedMargin = boundary.minimumOceanMarginCells();
+        double deformationRampCells = Math.max(1d, grid.spacingCells());
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
             for (int localX = 0; localX < width; localX++) {
-                double warpX = smoothNoise(random, WARP_X, localX, localY, warpScale) * warpAmplitude;
-                double warpY = smoothNoise(random, WARP_Y, localX, localY, warpScale) * warpAmplitude;
+                int edgeDistance = edgeDistance(localX, localY, width, height);
+                double deformationCoordinate = (edgeDistance - guaranteedMargin) / deformationRampCells;
+                double deformationFactor = smooth(clamp01(deformationCoordinate));
+                double warpX = smoothNoise(random, WARP_X, localX, localY, warpScale)
+                        * warpAmplitude * deformationFactor;
+                double warpY = smoothNoise(random, WARP_Y, localX, localY, warpScale)
+                        * warpAmplitude * deformationFactor;
                 double px = localX + warpX;
                 double py = localY + warpY;
                 double nearestLand = Double.POSITIVE_INFINITY;
@@ -225,10 +233,15 @@ final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgori
                     score[index++] = -Double.MAX_VALUE;
                     continue;
                 }
-                double margin = StrictMath.sqrt(nearestOcean) - StrictMath.sqrt(nearestLand);
+                double plateMargin = StrictMath.sqrt(nearestOcean) - StrictMath.sqrt(nearestLand);
                 double detail = smoothNoise(random, COAST_DETAIL, localX, localY, detailScale)
-                        * detailAmplitude;
-                score[index++] = margin + detail;
+                        * detailAmplitude * deformationFactor;
+                double coastScore = plateMargin + detail;
+                if (edgeDistance < guaranteedMargin && coastScore >= 0d) {
+                    throw new IllegalStateException(
+                            "plate scaffold breached guaranteed ocean clearance instead of ending naturally");
+                }
+                score[index++] = coastScore;
             }
         }
         return new CoastField(score);
@@ -304,6 +317,14 @@ final class PlateLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgori
 
     private static double smooth(double value) {
         return value * value * (3d - 2d * value);
+    }
+
+    private static double clamp01(double value) {
+        return Math.max(0d, Math.min(1d, value));
+    }
+
+    private static int edgeDistance(int x, int y, int width, int height) {
+        return Math.min(Math.min(x, width - 1 - x), Math.min(y, height - 1 - y));
     }
 
     private static double centeredUnit(
