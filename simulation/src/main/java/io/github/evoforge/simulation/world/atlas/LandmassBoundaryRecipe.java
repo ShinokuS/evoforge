@@ -16,26 +16,26 @@ public record LandmassBoundaryRecipe(
         }
     }
 
-    /** Balanced oceanic-domain policy for natural continents rather than an inset rectangle. */
+    /** Balanced oceanic-domain policy for continent-, peninsula- and island-scale silhouettes. */
     public static LandmassBoundaryRecipe balanced() {
         return new LandmassBoundaryRecipe(
                 new BoundaryPolicy(
                         5,
                         500),
                 new CoveragePolicy(
-                        520_000,
-                        240_000,
+                        450_000,
+                        300_000,
                         256),
                 new ShapePolicy(
-                        12,
-                        600_000,
-                        333_333,
-                        350_000,
-                        400_000,
+                        10,
                         450_000,
-                        150_000,
+                        280_000,
+                        400_000,
                         120_000,
-                        450_000));
+                        650_000,
+                        230_000,
+                        80_000,
+                        650_000));
     }
 
     /** Hard world-edge safety margin. Organic shape selection happens farther inside this guard. */
@@ -50,8 +50,9 @@ public record LandmassBoundaryRecipe(
     }
 
     /**
-     * Maximum terrestrial domain as a bounded scale law. Even 100% authored land keeps a real
-     * ocean instead of asymptotically filling the rectangular world.
+     * Maximum terrestrial domain as a bounded scale law. Compact worlds deliberately leave more
+     * geographic room for bays, island separation and an external ocean; larger worlds can carry a
+     * higher terrestrial fraction without collapsing their coastline into the map rectangle.
      */
     public record CoveragePolicy(
             int baseMaximumLandPpm,
@@ -69,7 +70,13 @@ public record LandmassBoundaryRecipe(
         }
     }
 
-    /** Broad deterministic scalar field used to author continent, island and peninsula silhouettes. */
+    /**
+     * Broad deterministic scalar field used to author geographic silhouettes. The center term is
+     * deliberately weak: it only discourages all land from drifting against one world side. The
+     * macro field owns continental lobes, while the detail field owns broad islands, peninsulas and
+     * bays. Fragmentation shifts a small amount of weight from center cohesion into that detail
+     * field; it never introduces cell-scale coastline noise.
+     */
     public record ShapePolicy(
             int minimumMacroScaleCells,
             int macroCoherentScalePpm,

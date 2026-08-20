@@ -36,6 +36,15 @@ final class OceanicLandmassGenerationTest {
         assertEquals(terrain.landCount(), countLand(elevation),
                 "ordinary authored land coverage must be preserved exactly when it fits the domain");
         assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
+        assertNoDominantAxisAlignedCoastline(elevation, 35);
+    }
+
+    @Test
+    void balanced300WorldDoesNotRegressIntoLongRectangularCoasts() {
+        ElevationField elevation = V14OceanicBaseTerrainGenerator.standard().generate(
+                genesis(bounds(300), 72_670_605_181_775_852L, 350_000));
+
+        assertNoDominantAxisAlignedCoastline(elevation, 35);
     }
 
     @Test
@@ -86,6 +95,7 @@ final class OceanicLandmassGenerationTest {
         assertEquals(boundary.maximumLandCells(), landCells,
                 "100% authored land means maximum terrestrial domain, not the rectangular world area");
         assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
+        assertNoDominantAxisAlignedCoastline(elevation, 40);
 
         int minX = bounds.maxX();
         int maxX = bounds.minX();
@@ -123,6 +133,53 @@ final class OceanicLandmassGenerationTest {
                 }
             }
         }
+    }
+
+    private static void assertNoDominantAxisAlignedCoastline(
+            ElevationField elevation,
+            int maximumRunPercent) {
+        WorldBounds bounds = elevation.bounds();
+        int width = bounds.maxX() - bounds.minX() + 1;
+        int height = bounds.maxY() - bounds.minY() + 1;
+        int maximumAllowed = Math.max(4, Math.min(width, height) * maximumRunPercent / 100);
+        int maximumObserved = 0;
+
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            int run = 0;
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                boolean coast = isLand(elevation, x, y)
+                        && (isWaterOrOutside(elevation, x, y - 1)
+                        || isWaterOrOutside(elevation, x, y + 1));
+                run = coast ? run + 1 : 0;
+                maximumObserved = Math.max(maximumObserved, run);
+            }
+        }
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            int run = 0;
+            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                boolean coast = isLand(elevation, x, y)
+                        && (isWaterOrOutside(elevation, x - 1, y)
+                        || isWaterOrOutside(elevation, x + 1, y));
+                run = coast ? run + 1 : 0;
+                maximumObserved = Math.max(maximumObserved, run);
+            }
+        }
+
+        assertTrue(maximumObserved <= maximumAllowed,
+                "coastline contains an implausibly dominant axis-aligned run: "
+                        + maximumObserved + " cells, allowed " + maximumAllowed);
+    }
+
+    private static boolean isLand(ElevationField elevation, int x, int y) {
+        return elevation.elevationSubunitsAt(x, y) > 0L;
+    }
+
+    private static boolean isWaterOrOutside(ElevationField elevation, int x, int y) {
+        WorldBounds bounds = elevation.bounds();
+        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
+            return true;
+        }
+        return elevation.elevationSubunitsAt(x, y) < 0L;
     }
 
     private static int countLand(ElevationField elevation) {

@@ -62,8 +62,20 @@ final class V12LandformElevationAlgorithm {
         int area = calibration.area();
         GenerationRandom random = GenerationRandom.from(genesis);
 
-        long[] rankKeys = calibratedLandRankKeys(random, bounds, calibration, recipe, boundary);
-        int landCount = Math.min(calibration.landCount(), boundary.maximumLandCells());
+        LandmassDomain domain = createLandmassDomain(
+                random,
+                bounds,
+                calibration,
+                recipe,
+                boundary);
+        long[] rankKeys = calibratedLandRankKeys(
+                random,
+                bounds,
+                calibration,
+                recipe,
+                boundary,
+                domain);
+        int landCount = Math.min(calibration.landCount(), domain.supportCellCount());
         boolean[] land = new boolean[area];
         for (int rank = 0; rank < landCount; rank++) {
             land[(int) rankKeys[rank]] = true;
@@ -161,12 +173,87 @@ final class V12LandformElevationAlgorithm {
         return new DenseElevationField(bounds, elevations);
     }
 
+    /**
+     * Resolves the maximum V14 terrestrial support before authored land coverage is applied.
+     *
+     * <p>This is deliberately a rank selection over a broad continuous field. At maximum authored
+     * land, the generated silhouette is therefore this organic support itself rather than every cell
+     * inside a rectangular edge margin. The hard margin remains only a safety invariant: it can
+     * never become the coastline merely because the requested land amount is high.</p>
+     */
+    private static LandmassDomain createLandmassDomain(
+            GenerationRandom random,
+            WorldBounds bounds,
+            V12LandformCalibration calibration,
+            V12LandformRecipe terrainRecipe,
+            LandmassBoundaryCalibration boundary) {
+        int area = calibration.area();
+        if (!boundary.oceanBounded()) {
+            boolean[] support = new boolean[area];
+            Arrays.fill(support, true);
+            return new LandmassDomain(support, null, area);
+        }
+
+        int width = calibration.width();
+        int height = calibration.height();
+        int[] domainPotentialPpm = new int[area];
+        long[] domainRanks = new long[area];
+        int transition = Math.max(1, boundary.detailScaleCells());
+
+        int index = 0;
+        for (int localY = 0; localY < height; localY++) {
+            int y = bounds.minY() + localY;
+            for (int localX = 0; localX < width; localX++) {
+                int x = bounds.minX() + localX;
+                int edgeDistance = edgeDistance(localX, localY, width, height);
+                if (edgeDistance < boundary.minimumOceanMarginCells()) {
+                    domainPotentialPpm[index] = 0;
+                    domainRanks[index] = rankKey(-1, index);
+                    index++;
+                    continue;
+                }
+
+                int rawDomainPpm = organicDomainPotentialPpm(
+                        random,
+                        x,
+                        y,
+                        localX,
+                        localY,
+                        width,
+                        height,
+                        boundary,
+                        terrainRecipe);
+                long coastCoordinate = (long) (edgeDistance
+                        - boundary.minimumOceanMarginCells() + 1) * PPM / transition;
+                int oceanGatePpm = smoothStepPpm(coastCoordinate);
+                int supportPpm = Math.toIntExact((long) rawDomainPpm * oceanGatePpm / PPM);
+                domainPotentialPpm[index] = supportPpm;
+                domainRanks[index] = rankKey(ppmToSample(supportPpm), index);
+                index++;
+            }
+        }
+
+        Arrays.sort(domainRanks);
+        int supportCellCount = Math.min(boundary.maximumLandCells(), area);
+        boolean[] support = new boolean[area];
+        for (int rank = 0; rank < supportCellCount; rank++) {
+            int cell = (int) domainRanks[rank];
+            if (domainPotentialPpm[cell] <= 0) {
+                supportCellCount = rank;
+                break;
+            }
+            support[cell] = true;
+        }
+        return new LandmassDomain(support, domainPotentialPpm, supportCellCount);
+    }
+
     private static long[] calibratedLandRankKeys(
             GenerationRandom random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
-            LandmassBoundaryCalibration boundary) {
+            LandmassBoundaryCalibration boundary,
+            LandmassDomain domain) {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
@@ -193,17 +280,17 @@ final class V12LandformElevationAlgorithm {
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
-                potential = boundaryAdjustedLandPotential(
-                        random,
-                        x,
-                        y,
-                        localX,
-                        localY,
-                        width,
-                        height,
-                        potential,
-                        boundary,
-                        recipe);
+                if (!domain.support()[index]) {
+                    potential = -1;
+                } else if (boundary.oceanBounded()) {
+                    int domainPpm = domain.potentialPpm()[index];
+                    int influencePpm = boundary.domainInfluencePpm();
+                    int basePpm = sampleToPpm(potential);
+                    int blendedPpm = Math.toIntExact(
+                            ((long) basePpm * (PPM - influencePpm)
+                                    + (long) domainPpm * influencePpm) / PPM);
+                    potential = ppmToSample(blendedPpm);
+                }
                 rankKeys[index] = rankKey(potential, index);
                 index++;
             }
@@ -212,7 +299,7 @@ final class V12LandformElevationAlgorithm {
         return rankKeys;
     }
 
-    private static int boundaryAdjustedLandPotential(
+    private static int organicDomainPotentialPpm(
             GenerationRandom random,
             int x,
             int y,
@@ -220,16 +307,8 @@ final class V12LandformElevationAlgorithm {
             int localY,
             int width,
             int height,
-            int potential,
             LandmassBoundaryCalibration boundary,
             V12LandformRecipe terrainRecipe) {
-        if (!boundary.oceanBounded()) return potential;
-
-        int edgeDistance = Math.min(
-                Math.min(localX, width - 1 - localX),
-                Math.min(localY, height - 1 - localY));
-        if (edgeDistance < boundary.minimumOceanMarginCells()) return -1;
-
         int centerPpm = continentalCenterPotentialPpm(localX, localY, width, height);
         int macroPpm = sampleToPpm(organicValueNoise(
                 random,
@@ -245,17 +324,20 @@ final class V12LandformElevationAlgorithm {
                 y,
                 boundary.detailScaleCells(),
                 terrainRecipe));
-
-        int domainPpm = Math.toIntExact(
+        return Math.toIntExact(
                 ((long) centerPpm * boundary.centerWeightPpm()
                         + (long) macroPpm * boundary.macroWeightPpm()
                         + (long) detailPpm * boundary.detailWeightPpm()) / PPM);
-        int influencePpm = boundary.domainInfluencePpm();
-        int basePpm = sampleToPpm(potential);
-        int blendedPpm = Math.toIntExact(
-                ((long) basePpm * (PPM - influencePpm)
-                        + (long) domainPpm * influencePpm) / PPM);
-        return ppmToSample(blendedPpm);
+    }
+
+    private static int edgeDistance(
+            int localX,
+            int localY,
+            int width,
+            int height) {
+        return Math.min(
+                Math.min(localX, width - 1 - localX),
+                Math.min(localY, height - 1 - localY));
     }
 
     private static int continentalCenterPotentialPpm(
@@ -632,6 +714,20 @@ final class V12LandformElevationAlgorithm {
             result[index] = smoothStepPpm(coordinate);
         }
         return result;
+    }
+
+    private record LandmassDomain(
+            boolean[] support,
+            int[] potentialPpm,
+            int supportCellCount) {
+        private LandmassDomain {
+            if (support == null || supportCellCount < 0 || supportCellCount > support.length) {
+                throw new IllegalArgumentException("landmass domain support must be valid");
+            }
+            if (potentialPpm != null && potentialPpm.length != support.length) {
+                throw new IllegalArgumentException("landmass domain potential must match support domain");
+            }
+        }
     }
 
     private record LandformFeature(
