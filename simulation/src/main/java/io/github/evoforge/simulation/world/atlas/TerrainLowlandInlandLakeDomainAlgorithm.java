@@ -108,11 +108,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             support[cell] = eligible[cell] && broadElevation[cell] <= threshold;
         }
 
-        /*
-         * Erode the lowland support in an approximately Euclidean metric. This is the structural
-         * anti-tendril step. Unlike Manhattan erosion it does not manufacture square/diamond lake
-         * cores from otherwise rounded terrain lows.
-         */
         int[] supportWidth = chamferDistanceInside(support, width, height);
         int requiredHalfWidth = Math.max(2, calibration.minimumComponentSpanCells() / 4);
         int requiredHalfWidthScaled = requiredHalfWidth * DISTANCE_SCALE;
@@ -121,11 +116,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             broadCore[cell] = support[cell] && supportWidth[cell] > requiredHalfWidthScaled;
         }
 
-        /*
-         * Dilate the thick core back through the original support using the same metric. A support
-         * point itself must retain more than one cell of local width, so one-cell corridors and
-         * isolated teeth cannot return during reconstruction.
-         */
         int[] distanceToCore = chamferDistanceFromTrue(broadCore, width, height);
         boolean[] regularized = new boolean[area];
         for (int cell = 0; cell < area; cell++) {
