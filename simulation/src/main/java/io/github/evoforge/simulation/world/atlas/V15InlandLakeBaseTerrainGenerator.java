@@ -83,7 +83,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
 
         WorldGenesis placementGenesis = predictiveLandReservation
-                ? predictedLandGenesis(genesis, lakeRecipe.targetDryLandCoveragePpm())
+                ? predictedLandGenesis(genesis, lakeRecipe)
                 : genesis;
         ElevationField placementBase = requireBase(continentalBaseGenerator.generate(placementGenesis));
         InlandLakeDomainCalibration calibration = lakeCalibrator.calibrate(
@@ -124,16 +124,32 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         return base;
     }
 
-    private static WorldGenesis predictedLandGenesis(WorldGenesis genesis, int lakeCoveragePpm) {
+    private static WorldGenesis predictedLandGenesis(
+            WorldGenesis genesis,
+            InlandLakeDomainRecipe recipe) {
+        int lakeCoveragePpm = recipe.targetDryLandCoveragePpm();
         if (lakeCoveragePpm <= 0) return genesis;
         int area = DenseElevationField.cellCount(genesis.spec().bounds());
         int desiredDryCells = desiredDryCells(genesis, area);
         long denominator = PPM - (long) lakeCoveragePpm;
         if (denominator <= 0L) return withLandCoverage(genesis, PPM);
 
-        int predictedContinentalCells = Math.toIntExact(Math.min(
-                (long) area,
-                ((long) desiredDryCells * PPM + denominator / 2L) / denominator));
+        int predictedLakeCells = Math.toIntExact(
+                ((long) desiredDryCells * lakeCoveragePpm + denominator / 2L) / denominator);
+        int width = Math.toIntExact(
+                (long) genesis.spec().bounds().maxX() - genesis.spec().bounds().minX() + 1L);
+        int height = Math.toIntExact(
+                (long) genesis.spec().bounds().maxY() - genesis.spec().bounds().minY() + 1L);
+        int limitingSpan = Math.min(width, height);
+        int minimumSpan = Math.max(
+                recipe.minimumComponentSpanCells(),
+                limitingSpan / recipe.componentSpanWorldDivisor());
+        int minimumLakeCells = Math.max(4, minimumSpan * minimumSpan / 2);
+        if (desiredDryCells > 0) predictedLakeCells = Math.max(predictedLakeCells, minimumLakeCells);
+
+        int predictedContinentalCells = Math.min(
+                area,
+                Math.addExact(desiredDryCells, Math.min(predictedLakeCells, area - desiredDryCells)));
         return withContinentalCells(genesis, predictedContinentalCells, area);
     }
 
