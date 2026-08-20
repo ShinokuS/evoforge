@@ -12,7 +12,8 @@ import java.util.List;
 
 /** Builds bounded LOD-aware 3D water surfaces from generated inland-lake membership. */
 final class WorldGenerationInlandWater3DMeshBuilder {
-    private static final int CHUNK_INTERVALS = 96;
+    // Four independent vertices per water quad; 90^2 * 4 stays below signed-short vertex limits.
+    private static final int CHUNK_INTERVALS = 90;
     private static final float WATER_R = 0.08f;
     private static final float WATER_G = 0.38f;
     private static final float WATER_B = 0.62f;
