@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.atlas;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
 
-/** Policy for finite V14 ocean clearance and maximum terrestrial capacity only. */
+/** Policy for finite V14 external-ocean boundary and maximum terrestrial capacity only. */
 public record LandmassBoundaryRecipe(
         BoundaryPolicy boundary,
         CoveragePolicy coverage) {
@@ -17,10 +17,7 @@ public record LandmassBoundaryRecipe(
 
     public static LandmassBoundaryRecipe balanced() {
         return new LandmassBoundaryRecipe(
-                new BoundaryPolicy(
-                        5,
-                        550_000,
-                        96),
+                new BoundaryPolicy(1),
                 new CoveragePolicy(
                         420_000,
                         180_000,
@@ -28,19 +25,14 @@ public record LandmassBoundaryRecipe(
     }
 
     /**
-     * Minimum ocean clearance scales with sqrt(world span): enough visual sea around large maps
-     * without consuming a fixed percentage of enormous worlds. This is a placement/safety fact,
-     * never a rectangular coastline falloff.
+     * Number of outer raster cells that must remain part of the external ocean. This is only a
+     * finite-world topology guarantee; it must never be used as a rectangular coastline falloff.
      */
-    public record BoundaryPolicy(
-            int minimumOceanMarginCells,
-            int marginSqrtScalePpm,
-            int maximumOceanMarginCells) {
+    public record BoundaryPolicy(int guaranteedOceanEdgeCells) {
         public BoundaryPolicy {
-            if (minimumOceanMarginCells <= 0 || maximumOceanMarginCells < minimumOceanMarginCells) {
-                throw new IllegalArgumentException("ocean margin bounds must be positive and ordered");
+            if (guaranteedOceanEdgeCells <= 0) {
+                throw new IllegalArgumentException("guaranteed ocean edge cells must be positive");
             }
-            requirePositivePpm(marginSqrtScalePpm, "marginSqrtScalePpm");
         }
     }
 
@@ -64,12 +56,6 @@ public record LandmassBoundaryRecipe(
     private static void requirePpm(int value, String label) {
         if (value < 0 || value > PPM) {
             throw new IllegalArgumentException(label + " must be in [0, 1_000_000]");
-        }
-    }
-
-    private static void requirePositivePpm(int value, String label) {
-        if (value <= 0) {
-            throw new IllegalArgumentException(label + " must be positive");
         }
     }
 }

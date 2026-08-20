@@ -46,9 +46,10 @@ final class V14BathymetryElevationGenerationTest {
                 .calibrate(baseGenesis, terrain, boundaryRecipe);
         boolean foundMeaningfulDepth = false;
 
-        assertTrue(
-                boundary.minimumOceanMarginCells() >= boundaryRecipe.boundary().minimumOceanMarginCells(),
-                "finite-world ocean clearance must respect the configured minimum");
+        assertEquals(
+                boundaryRecipe.boundary().guaranteedOceanEdgeCells(),
+                boundary.minimumOceanMarginCells(),
+                "finite-world boundary guarantee must be an explicit topology policy");
 
         for (int y = finalBounds.minY(); y <= finalBounds.maxY(); y++) {
             for (int x = finalBounds.minX(); x <= finalBounds.maxX(); x++) {

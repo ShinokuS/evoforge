@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Resolves finite-world ocean safety independently from actual continent geometry. */
+/** Resolves finite-world external-ocean topology independently from actual continent geometry. */
 @FunctionalInterface
 public interface LandmassBoundaryCalibrator {
     LandmassBoundaryCalibration calibrate(
@@ -43,15 +43,10 @@ final class StandardLandmassBoundaryCalibrator implements LandmassBoundaryCalibr
             throw new IllegalArgumentException("ocean-bounded landmass generation needs at least an 8-cell span");
         }
 
-        LandmassBoundaryRecipe.BoundaryPolicy boundary = recipe.boundary();
-        int scaledMargin = (int) StrictMath.ceil(
-                StrictMath.sqrt(limitingSpan) * boundary.marginSqrtScalePpm() / PPM);
         int geometricMaximum = Math.max(1, (limitingSpan - 4) / 3);
         int margin = Math.min(
                 geometricMaximum,
-                Math.min(
-                        boundary.maximumOceanMarginCells(),
-                        Math.max(boundary.minimumOceanMarginCells(), scaledMargin)));
+                recipe.boundary().guaranteedOceanEdgeCells());
 
         LandmassBoundaryRecipe.CoveragePolicy coverage = recipe.coverage();
         long saturationDenominator = (long) limitingSpan + coverage.halfSaturationCells();

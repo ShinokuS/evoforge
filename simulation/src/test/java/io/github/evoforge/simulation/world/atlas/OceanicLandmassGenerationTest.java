@@ -22,10 +22,27 @@ final class OceanicLandmassGenerationTest {
     };
 
     @Test
-    void balancedOceanClearanceScalesSublinearlyWithWorldSpan() {
-        assertEquals(5, calibrationFor(64, 350_000, 250_000, 1L).minimumOceanMarginCells());
-        assertEquals(10, calibrationFor(300, 350_000, 250_000, 1L).minimumOceanMarginCells());
-        assertEquals(13, calibrationFor(500, 350_000, 250_000, 1L).minimumOceanMarginCells());
+    void balancedBoundaryGuaranteesOnlyTheExternalEdgeAtEveryRepresentativeScale() {
+        assertEquals(1, calibrationFor(64, 350_000, 250_000, 1L).minimumOceanMarginCells());
+        assertEquals(1, calibrationFor(300, 350_000, 250_000, 1L).minimumOceanMarginCells());
+        assertEquals(1, calibrationFor(500, 350_000, 250_000, 1L).minimumOceanMarginCells());
+    }
+
+    @Test
+    void boundaryOceanRemainsGeneratedAcrossTopologyExtremes() {
+        int[] fragmentations = {0, 250_000, 1_000_000};
+        int[] landCoverages = {350_000, 1_000_000};
+        for (long seed : REJECTED_RECTANGULAR_SEEDS) {
+            for (int fragmentation : fragmentations) {
+                for (int land : landCoverages) {
+                    ElevationField elevation = V14OceanicBaseTerrainGenerator.standard().generate(
+                            genesis(bounds(64), seed, land, fragmentation));
+                    assertExternalOceanBoundary(
+                            elevation,
+                            "seed=" + seed + " Land=" + land + " Fragmentation=" + fragmentation);
+                }
+            }
+        }
     }
 
     @Test
@@ -43,7 +60,7 @@ final class OceanicLandmassGenerationTest {
                 "balanced 35% land must fit inside realized plate-derived support");
         assertEquals(terrain.landCount(), countLand(elevation),
                 "ordinary authored land coverage must remain exact when it fits support");
-        assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
+        assertExternalOceanBoundary(elevation, "64x64 seed=1 Land=35%");
         assertGeographicSilhouette(elevation, "64x64 seed=1 Land=35%");
     }
 
@@ -124,7 +141,7 @@ final class OceanicLandmassGenerationTest {
                 "100% authored land must fill the realized plate-derived support: " + context);
         assertTrue(silhouette.supportCellCount() <= boundary.maximumLandCells(),
                 "plate-derived support may approach but never exceed finite-world land capacity: " + context);
-        assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
+        assertExternalOceanBoundary(elevation, context);
         assertGeographicSilhouette(elevation, context);
     }
 
@@ -154,15 +171,19 @@ final class OceanicLandmassGenerationTest {
                 .calibrate(genesis, terrain, LandmassBoundaryRecipe.balanced());
     }
 
-    private static void assertGuaranteedOceanMargin(ElevationField elevation, int margin) {
+    private static void assertExternalOceanBoundary(ElevationField elevation, String context) {
         WorldBounds bounds = elevation.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                if (edgeDistance(bounds, x, y) < margin) {
-                    assertTrue(elevation.elevationSubunitsAt(x, y) < 0L,
-                            "scale-aware external-ocean clearance must remain submerged");
-                }
-            }
+            assertTrue(elevation.elevationSubunitsAt(bounds.minX(), y) < 0L,
+                    "left world edge must be generated external ocean: " + context);
+            assertTrue(elevation.elevationSubunitsAt(bounds.maxX(), y) < 0L,
+                    "right world edge must be generated external ocean: " + context);
+        }
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            assertTrue(elevation.elevationSubunitsAt(x, bounds.minY()) < 0L,
+                    "bottom world edge must be generated external ocean: " + context);
+            assertTrue(elevation.elevationSubunitsAt(x, bounds.maxY()) < 0L,
+                    "top world edge must be generated external ocean: " + context);
         }
     }
 
@@ -326,11 +347,5 @@ final class OceanicLandmassGenerationTest {
                 GenerationRevision.V14,
                 RngRevision.V1,
                 intent);
-    }
-
-    private static int edgeDistance(WorldBounds bounds, int x, int y) {
-        return Math.min(
-                Math.min(x - bounds.minX(), bounds.maxX() - x),
-                Math.min(y - bounds.minY(), bounds.maxY() - y));
     }
 }
