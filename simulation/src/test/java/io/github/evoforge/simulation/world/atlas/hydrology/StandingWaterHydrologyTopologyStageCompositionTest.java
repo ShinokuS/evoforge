@@ -25,9 +25,9 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 new DenseStandingWaterTopology(bounds, new int[] {0}, List.of(selectedBody));
         StandingWaterMorphologyTopology morphology = new DenseStandingWaterMorphologyTopology(
                 bounds,
-                List.of(new StandingWaterMorphology(0, 1, 4L)));
+                List.of(new StandingWaterMorphology(0, 1, 4L, 1)));
         StandingWaterExternalSinkCalibration calibration =
-                new StandingWaterExternalSinkCalibration(1, 1);
+                new StandingWaterExternalSinkCalibration(1, 1, 1);
         StandingWaterExternalSinkTopology externalSinks =
                 new DenseStandingWaterExternalSinkTopology(bounds, new boolean[] {true});
         StandingWaterRimTopology rims = new DenseStandingWaterRimTopology(bounds, List.of(List.of()));

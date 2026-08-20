@@ -1,12 +1,12 @@
 package io.github.evoforge.simulation.world.atlas.hydrology;
 
 /**
- * Resolves external drainage sinks from a sufficiently broad opening onto the finite world edge.
+ * Resolves external drainage sinks from broad edge openness plus water-body scale.
  *
- * <p>Neither boundary contact nor water-body area alone is sufficient. A body must expose enough
- * distinct water cells on the world boundary for the calibrated world scale and retain a minimal
- * interior width. This keeps a large lake clipped by a short map edge from becoming a global
- * terminal merely because it happens to touch the finite domain boundary.</p>
+ * <p>World-edge contact alone is deliberately insufficient. A body must satisfy three calibrated
+ * conditions at once: enough total area, enough interior clearance, and one sufficiently long
+ * contiguous opening along a single side of the finite world. This keeps both small edge lakes and
+ * long narrow edge traces from becoming global drainage terminals.</p>
  */
 public final class ScaleAwareStandingWaterExternalSinkResolver
         implements StandingWaterExternalSinkResolver {
@@ -34,10 +34,11 @@ public final class ScaleAwareStandingWaterExternalSinkResolver
             StandingWaterBody body = standingWater.body(bodyId);
             StandingWaterMorphology bodyMorphology = morphology.morphology(bodyId);
             sinks[bodyId] = body.touchesWorldBoundary()
-                    && bodyMorphology.worldBoundaryCellCount()
-                    >= calibration.minimumBoundaryContactCells()
+                    && body.cellCount() >= calibration.minimumAreaCells()
                     && bodyMorphology.maximumInteriorClearanceCells()
-                    >= calibration.minimumClearanceCells();
+                    >= calibration.minimumClearanceCells()
+                    && bodyMorphology.maximumBoundaryRunCells()
+                    >= calibration.minimumBoundaryRunCells();
         }
         return new DenseStandingWaterExternalSinkTopology(standingWater.bounds(), sinks);
     }
