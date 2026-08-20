@@ -34,6 +34,11 @@ public record InlandLakeDomainRecipe(
         requirePositive(maximumLakeBodies, "maximumLakeBodies");
     }
 
+    /**
+     * Balanced placement deliberately rejects small inland-water bodies. A candidate must have
+     * enough genuine lowland width to support the standard five-Z minimum depth profile without
+     * turning the lake into a narrow artificial trench.
+     */
     public static InlandLakeDomainRecipe balanced() {
         return new InlandLakeDomainRecipe(
                 15_000,
@@ -44,8 +49,8 @@ public record InlandLakeDomainRecipe(
                 3,
                 90,
                 24,
-                8,
-                60,
+                20,
+                30,
                 6);
     }
 
