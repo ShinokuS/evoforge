@@ -4,8 +4,12 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBody;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBoundaryRoute;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterHydrologyTopology;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterRimCell;
@@ -20,15 +24,20 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
 
+    private static final Color MICRO_WATER = new Color(0.82f, 0.82f, 0.86f, 0.62f);
     private static final Color BOUNDARY_WATER = new Color(0.10f, 0.46f, 0.92f, 0.20f);
     private static final Color ROUTED_WATER = new Color(0.12f, 0.86f, 0.62f, 0.24f);
     private static final Color CLOSED_WATER = new Color(0.94f, 0.24f, 0.50f, 0.28f);
     private static final Color RIM = new Color(0.98f, 0.82f, 0.18f, 0.72f);
     private static final Color SPILL = new Color(0.96f, 0.56f, 0.12f, 0.55f);
+    private static final Color ROUTE_GRAPH = new Color(0.22f, 0.94f, 0.96f, 0.62f);
     private static final Color SELECTED_ROUTE = new Color(0.38f, 1f, 0.86f, 0.96f);
+    private static final Color LABEL = new Color(0.90f, 1f, 1f, 1f);
 
     private final VisualizerCamera camera = new VisualizerCamera();
     private final ShapeRenderer diagnostics = new ShapeRenderer(8_192);
+    private final SpriteBatch labels = new SpriteBatch(256);
+    private final BitmapFont font = new BitmapFont();
 
     private WorldBounds bounds;
     private int viewportWidth = 1;
@@ -100,19 +109,41 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         diagnostics.setProjectionMatrix(camera.projection());
         diagnostics.begin(ShapeRenderer.ShapeType.Filled);
 
+        drawIgnoredMicroWater(topology, visible);
         drawBodies(topology, visible);
         drawInternalRims(topology, visible);
+        drawRouteGraph(topology);
         drawSpillMeetings(topology, visible);
         drawSelectedRoutes(topology, visible);
 
         diagnostics.end();
+        drawLabels(topology, visible);
         Gdx.gl.glDisable(GL20.GL_BLEND);
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
     @Override
     public void dispose() {
+        font.dispose();
+        labels.dispose();
         diagnostics.dispose();
+    }
+
+    private void drawIgnoredMicroWater(
+            StandingWaterHydrologyTopology topology,
+            VisualizerCamera.VisibleRange visible) {
+        StandingWaterTopology raw = topology.rawStandingWater();
+        StandingWaterTopology selected = topology.standingWater();
+        diagnostics.setColor(MICRO_WATER);
+        for (int x = visible.minX(); x <= visible.maxX(); x++) {
+            for (int y = visible.minY(); y <= visible.maxY(); y++) {
+                if (raw.bodyIdAt(x, y) == StandingWaterTopology.NO_BODY
+                        || selected.bodyIdAt(x, y) != StandingWaterTopology.NO_BODY) {
+                    continue;
+                }
+                diagnostics.rect(x + 0.16f, y + 0.16f, 0.68f, 0.68f);
+            }
+        }
     }
 
     private void drawBodies(
@@ -142,6 +173,55 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
                 diagnostics.rect(rim.x() + 0.5f - half, rim.y() + 0.5f - half, marker, marker);
             }
         }
+    }
+
+    private void drawRouteGraph(StandingWaterHydrologyTopology topology) {
+        float thickness = Math.max(0.045f, camera.worldUnitsPerPixel() * 2.1f);
+        diagnostics.setColor(ROUTE_GRAPH);
+        for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
+            StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
+            if (route.nextBodyId().isEmpty()) continue;
+            StandingWaterBody from = topology.standingWater().body(bodyId);
+            StandingWaterBody to = topology.standingWater().body(route.nextBodyId().getAsInt());
+            drawDashedArrow(
+                    bodyCenterX(from),
+                    bodyCenterY(from),
+                    bodyCenterX(to),
+                    bodyCenterY(to),
+                    thickness);
+        }
+    }
+
+    private void drawDashedArrow(float x0, float y0, float x1, float y1, float thickness) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float length = (float) Math.sqrt(dx * dx + dy * dy);
+        if (length <= 0.001f) return;
+        float ux = dx / length;
+        float uy = dy / length;
+        float dash = Math.max(0.35f, camera.worldUnitsPerPixel() * 9f);
+        float gap = dash * 0.72f;
+        for (float start = 0f; start < length - dash; start += dash + gap) {
+            float end = Math.min(start + dash, length);
+            diagnostics.rectLine(
+                    x0 + ux * start,
+                    y0 + uy * start,
+                    x0 + ux * end,
+                    y0 + uy * end,
+                    thickness);
+        }
+        float arrow = Math.max(0.28f, camera.worldUnitsPerPixel() * 8f);
+        float baseX = x1 - ux * arrow;
+        float baseY = y1 - uy * arrow;
+        float sideX = -uy * arrow * 0.58f;
+        float sideY = ux * arrow * 0.58f;
+        diagnostics.triangle(
+                x1,
+                y1,
+                baseX + sideX,
+                baseY + sideY,
+                baseX - sideX,
+                baseY - sideY);
     }
 
     private void drawSpillMeetings(
@@ -180,6 +260,62 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
                     selected.meetingSecondY() + 0.5f,
                     thickness);
         }
+    }
+
+    private void drawLabels(
+            StandingWaterHydrologyTopology topology,
+            VisualizerCamera.VisibleRange visible) {
+        labels.setProjectionMatrix(camera.projection());
+        labels.begin();
+        float scale = Math.max(0.012f, camera.worldUnitsPerPixel() * 0.92f);
+        font.getData().setScale(scale);
+        font.setColor(LABEL);
+
+        for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
+            StandingWaterBody body = topology.standingWater().body(bodyId);
+            StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
+            float x = bodyCenterX(body);
+            float y = bodyCenterY(body);
+            if (!visibleContains(visible, Math.round(x), Math.round(y))) continue;
+            font.draw(labels, bodyLabel(route), x + 0.35f, y + 0.35f);
+        }
+
+        float lineHeight = Math.max(0.58f, camera.worldUnitsPerPixel() * 18f);
+        float legendX = visible.minX() + 0.6f;
+        float legendY = visible.maxY() + 0.35f;
+        int ignored = topology.rawBodyCount() - topology.bodyCount();
+        font.draw(labels, String.format(
+                "F4 TOPOLOGY  raw %d  hydrologic %d  ignored-micro %d",
+                topology.rawBodyCount(), topology.bodyCount(), ignored), legendX, legendY);
+        font.draw(labels,
+                "#ID: BLUE boundary | GREEN routed | RED closed | GRAY micro-water",
+                legendX,
+                legendY - lineHeight);
+        font.draw(labels,
+                "CYAN dashed: body route | ORANGE: spill candidate | bright cyan: selected spill | YELLOW: rim",
+                legendX,
+                legendY - lineHeight * 2f);
+        labels.end();
+    }
+
+    private static String bodyLabel(StandingWaterBoundaryRoute route) {
+        if (route.boundaryConnected()) return "#" + route.bodyId() + " BOUNDARY";
+        if (route.nextBodyId().isEmpty()) return "#" + route.bodyId() + " CLOSED";
+        double barrier = route.minimumBarrierElevationSubunits().getAsLong()
+                / (double) ElevationField.SUBUNITS_PER_CELL;
+        return String.format(
+                "#%d -> #%d  barrier %.1fZ",
+                route.bodyId(),
+                route.nextBodyId().getAsInt(),
+                barrier);
+    }
+
+    private static float bodyCenterX(StandingWaterBody body) {
+        return (body.minX() + body.maxX() + 1f) * 0.5f;
+    }
+
+    private static float bodyCenterY(StandingWaterBody body) {
+        return (body.minY() + body.maxY() + 1f) * 0.5f;
     }
 
     private static StandingWaterSpillConnection selectedConnection(
