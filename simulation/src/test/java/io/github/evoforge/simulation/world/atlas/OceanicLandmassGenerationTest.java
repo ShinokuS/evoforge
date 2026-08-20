@@ -35,21 +35,24 @@ final class OceanicLandmassGenerationTest {
         V12LandformCalibration terrain = V12LandformCalibrator.standard().calibrate(genesis, terrainRecipe);
         LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
                 .calibrate(genesis, terrain, LandmassBoundaryRecipe.balanced());
+        LandmassSilhouette silhouette = silhouetteFor(genesis, terrain, boundary);
         ElevationField elevation = V14OceanicBaseTerrainGenerator.standard().generate(genesis);
 
-        assertTrue(terrain.landCount() < boundary.maximumLandCells(),
-                "balanced 35% land should fit inside maximum geometric support");
+        assertTrue(terrain.landCount() < silhouette.supportCellCount(),
+                "balanced 35% land should fit inside realized geometric support");
         assertEquals(terrain.landCount(), countLand(elevation),
                 "ordinary authored land coverage must remain exact when it fits support");
         assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
-        assertGeographicSilhouette(elevation);
+        assertGeographicSilhouette(elevation, "64x64 seed=1 Land=35%");
     }
 
     @Test
     void screenshotRegressionSeedsDoNotReturnToRectangularContinentsAt64() {
         for (long seed : REJECTED_RECTANGULAR_SEEDS) {
-            assertGeographicSilhouette(V14OceanicBaseTerrainGenerator.standard().generate(
-                    genesis(bounds(64), seed, 350_000)));
+            assertGeographicSilhouette(
+                    V14OceanicBaseTerrainGenerator.standard().generate(
+                            genesis(bounds(64), seed, 350_000)),
+                    "64x64 seed=" + seed + " Land=35%");
             assertMaximumLandGeographic(64, seed);
         }
     }
@@ -57,8 +60,10 @@ final class OceanicLandmassGenerationTest {
     @Test
     void screenshotRegressionSeedsDoNotReturnToRectangularContinentsAt300() {
         for (long seed : REJECTED_RECTANGULAR_SEEDS) {
-            assertGeographicSilhouette(V14OceanicBaseTerrainGenerator.standard().generate(
-                    genesis(bounds(300), seed, 350_000)));
+            assertGeographicSilhouette(
+                    V14OceanicBaseTerrainGenerator.standard().generate(
+                            genesis(bounds(300), seed, 350_000)),
+                    "300x300 seed=" + seed + " Land=35%");
             assertMaximumLandGeographic(300, seed);
         }
     }
@@ -95,12 +100,33 @@ final class OceanicLandmassGenerationTest {
         V12LandformCalibration terrain = V12LandformCalibrator.standard().calibrate(genesis, terrainRecipe);
         LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
                 .calibrate(genesis, terrain, LandmassBoundaryRecipe.balanced());
+        LandmassSilhouette silhouette = silhouetteFor(genesis, terrain, boundary);
         ElevationField elevation = V14OceanicBaseTerrainGenerator.standard().generate(genesis);
+        String context = size + "x" + size + " seed=" + seed + " Land=100%";
 
-        assertEquals(boundary.maximumLandCells(), countLand(elevation),
-                "100% authored land means maximum geometric support, not rectangular world fill");
+        assertEquals(silhouette.supportCellCount(), countLand(elevation),
+                "100% authored land must fill the realized geometric support: " + context);
+        assertTrue(silhouette.supportCellCount() <= boundary.maximumLandCells(),
+                "geometric support may approach but never exceed finite-world land capacity: " + context);
+        assertTrue((long) silhouette.supportCellCount() * 100L
+                        >= (long) boundary.maximumLandCells() * 90L,
+                "radius calibration should use most of the available land capacity: " + context);
         assertGuaranteedOceanMargin(elevation, boundary.minimumOceanMarginCells());
-        assertGeographicSilhouette(elevation);
+        assertGeographicSilhouette(elevation, context);
+    }
+
+    private static LandmassSilhouette silhouetteFor(
+            WorldGenesis genesis,
+            V12LandformCalibration terrain,
+            LandmassBoundaryCalibration boundary) {
+        LandmassSilhouetteRecipe recipe = LandmassSilhouetteRecipe.balanced();
+        LandmassSilhouetteCalibration calibration = LandmassSilhouetteCalibrator.standard()
+                .calibrate(genesis, terrain, recipe);
+        return LandmassSilhouetteAlgorithm.standard().generate(
+                genesis,
+                boundary,
+                calibration,
+                recipe);
     }
 
     private static LandmassBoundaryCalibration calibrationFor(int size, int landPpm, long seed) {
@@ -128,7 +154,7 @@ final class OceanicLandmassGenerationTest {
      * have short horizontal/vertical steps, but it must neither fill its bounding rectangle nor ride
      * along that rectangle's four sides for a large fraction of the perimeter.
      */
-    private static void assertGeographicSilhouette(ElevationField elevation) {
+    private static void assertGeographicSilhouette(ElevationField elevation, String context) {
         WorldBounds bounds = elevation.bounds();
         int minX = bounds.maxX();
         int maxX = bounds.minX();
@@ -145,13 +171,14 @@ final class OceanicLandmassGenerationTest {
                 maxY = Math.max(maxY, y);
             }
         }
-        assertTrue(landCells > 0, "representative silhouette must contain land");
+        assertTrue(landCells > 0, "representative silhouette must contain land: " + context);
 
         int boxWidth = maxX - minX + 1;
         int boxHeight = maxY - minY + 1;
         int boundingArea = Math.multiplyExact(boxWidth, boxHeight);
         assertTrue((long) landCells * 100L < (long) boundingArea * 82L,
-                "landmass still reads as a filled axis-aligned bounding rectangle");
+                "landmass still reads as a filled axis-aligned bounding rectangle: " + context
+                        + " fill=" + landCells + "/" + boundingArea);
 
         int sideLand = 0;
         for (int x = minX; x <= maxX; x++) {
@@ -164,14 +191,16 @@ final class OceanicLandmassGenerationTest {
         }
         int boxPerimeterSamples = 2 * boxWidth + 2 * boxHeight;
         assertTrue((long) sideLand * 100L < (long) boxPerimeterSamples * 35L,
-                "too much coastline rides directly along its axis-aligned bounding box");
+                "too much coastline rides directly along its axis-aligned bounding box: " + context
+                        + " side=" + sideLand + "/" + boxPerimeterSamples);
 
-        assertNoDominantAxisAlignedCoastline(elevation, 35);
+        assertNoDominantAxisAlignedCoastline(elevation, 35, context);
     }
 
     private static void assertNoDominantAxisAlignedCoastline(
             ElevationField elevation,
-            int maximumRunPercent) {
+            int maximumRunPercent,
+            String context) {
         WorldBounds bounds = elevation.bounds();
         int width = bounds.maxX() - bounds.minX() + 1;
         int height = bounds.maxY() - bounds.minY() + 1;
@@ -200,8 +229,8 @@ final class OceanicLandmassGenerationTest {
         }
 
         assertTrue(maximumObserved <= maximumAllowed,
-                "coastline contains an implausibly dominant axis-aligned run: "
-                        + maximumObserved + " cells, allowed " + maximumAllowed);
+                "coastline contains an implausibly dominant axis-aligned run: " + context
+                        + " observed=" + maximumObserved + " allowed=" + maximumAllowed);
     }
 
     private static boolean isLand(ElevationField elevation, int x, int y) {
