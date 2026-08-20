@@ -8,12 +8,11 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  * V15 pre-mountain composition: accepted V14 continental base plus independently selected Z=0
  * inland-water domains.
  *
- * <p>Placement reads the already accepted lowland geometry but never edits it. Once the actual lake
- * footprint is known, this coordinator compensates the continental coverage budget by that footprint
- * so authored {@code Land} continues to mean dry land as closely as normalized intent resolution
- * permits. Shore conditioning then converts only the selected domain to submerged membership and
- * caps a bounded shoreline belt using the accepted V12 coast profile. Mountains and bathymetry
- * remain downstream owners.</p>
+ * <p>The standard path reserves the balanced lake budget before the expensive continental synthesis.
+ * When the selected footprint matches that prediction, the already generated base is authoritative
+ * and no second V14-base synthesis is needed. Shape validity still has priority over quota: if the
+ * actual footprint materially differs, the coordinator falls back to exact post-selection land
+ * compensation rather than silently changing the meaning of {@code Land}.</p>
  */
 public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerator {
     private static final int PPM = NormalizedValue.SCALE;
@@ -24,6 +23,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
     private final InlandLakeDomainAlgorithm lakeAlgorithm;
     private final InlandLakeShoreConditioningAlgorithm shoreAlgorithm;
     private final V12LandformRecipe.CoastProfile coastProfile;
+    private final boolean predictiveLandReservation;
 
     public V15InlandLakeBaseTerrainGenerator(
             ElevationGenerator continentalBaseGenerator,
@@ -32,6 +32,24 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
             InlandLakeDomainAlgorithm lakeAlgorithm,
             InlandLakeShoreConditioningAlgorithm shoreAlgorithm,
             V12LandformRecipe.CoastProfile coastProfile) {
+        this(
+                continentalBaseGenerator,
+                lakeCalibrator,
+                lakeRecipe,
+                lakeAlgorithm,
+                shoreAlgorithm,
+                coastProfile,
+                false);
+    }
+
+    V15InlandLakeBaseTerrainGenerator(
+            ElevationGenerator continentalBaseGenerator,
+            InlandLakeDomainCalibrator lakeCalibrator,
+            InlandLakeDomainRecipe lakeRecipe,
+            InlandLakeDomainAlgorithm lakeAlgorithm,
+            InlandLakeShoreConditioningAlgorithm shoreAlgorithm,
+            V12LandformRecipe.CoastProfile coastProfile,
+            boolean predictiveLandReservation) {
         if (continentalBaseGenerator == null
                 || lakeCalibrator == null
                 || lakeRecipe == null
@@ -46,6 +64,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         this.lakeAlgorithm = lakeAlgorithm;
         this.shoreAlgorithm = shoreAlgorithm;
         this.coastProfile = coastProfile;
+        this.predictiveLandReservation = predictiveLandReservation;
     }
 
     public static V15InlandLakeBaseTerrainGenerator standard() {
@@ -55,14 +74,18 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                 InlandLakeDomainRecipe.balanced(),
                 InlandLakeDomainAlgorithm.standard(),
                 InlandLakeShoreConditioningAlgorithm.standard(),
-                V12LandformRecipe.balanced().coast());
+                V12LandformRecipe.balanced().coast(),
+                true);
     }
 
     @Override
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
 
-        ElevationField placementBase = requireBase(continentalBaseGenerator.generate(genesis));
+        WorldGenesis placementGenesis = predictiveLandReservation
+                ? predictedLandGenesis(genesis, lakeRecipe.targetDryLandCoveragePpm())
+                : genesis;
+        ElevationField placementBase = requireBase(continentalBaseGenerator.generate(placementGenesis));
         InlandLakeDomainCalibration calibration = lakeCalibrator.calibrate(
                 genesis,
                 placementBase,
@@ -78,11 +101,15 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (domain == null) {
             throw new IllegalStateException("V15 inland lake domain algorithm returned null");
         }
-        if (domain.lakeCellCount() == 0) return placementBase;
 
-        WorldGenesis compensatedGenesis = compensatedLandGenesis(genesis, domain.lakeCellCount());
-        ElevationField authoritativeBase = requireBase(
-                continentalBaseGenerator.generate(compensatedGenesis));
+        WorldGenesis exactGenesis = domain.lakeCellCount() == 0
+                ? genesis
+                : compensatedLandGenesis(genesis, domain.lakeCellCount());
+        ElevationField authoritativeBase = sameLandCoverage(placementGenesis, exactGenesis)
+                ? placementBase
+                : requireBase(continentalBaseGenerator.generate(exactGenesis));
+
+        if (domain.lakeCellCount() == 0) return authoritativeBase;
         verifyLakeDomainRemainsDry(authoritativeBase, domain);
 
         ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain, coastProfile);
@@ -97,19 +124,46 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         return base;
     }
 
+    private static WorldGenesis predictedLandGenesis(WorldGenesis genesis, int lakeCoveragePpm) {
+        if (lakeCoveragePpm <= 0) return genesis;
+        int area = DenseElevationField.cellCount(genesis.spec().bounds());
+        int desiredDryCells = desiredDryCells(genesis, area);
+        long denominator = PPM - (long) lakeCoveragePpm;
+        if (denominator <= 0L) return withLandCoverage(genesis, PPM);
+
+        int predictedContinentalCells = Math.toIntExact(Math.min(
+                (long) area,
+                ((long) desiredDryCells * PPM + denominator / 2L) / denominator));
+        return withContinentalCells(genesis, predictedContinentalCells, area);
+    }
+
     private static WorldGenesis compensatedLandGenesis(WorldGenesis genesis, int lakeCellCount) {
         int area = DenseElevationField.cellCount(genesis.spec().bounds());
-        int desiredDryCells = Math.toIntExact(
+        int desiredDryCells = desiredDryCells(genesis, area);
+        int continentalCells = Math.min(area, Math.addExact(desiredDryCells, lakeCellCount));
+        return withContinentalCells(genesis, continentalCells, area);
+    }
+
+    private static int desiredDryCells(WorldGenesis genesis, int area) {
+        return Math.toIntExact(
                 ((long) area * genesis.generationIntent().landCoverage().partsPerMillion() + PPM / 2L)
                         / PPM);
-        int continentalCells = Math.min(area, Math.addExact(desiredDryCells, lakeCellCount));
-        int compensatedCoveragePpm = Math.toIntExact(Math.min(
+    }
+
+    private static WorldGenesis withContinentalCells(
+            WorldGenesis genesis,
+            int continentalCells,
+            int area) {
+        int coveragePpm = Math.toIntExact(Math.min(
                 (long) PPM,
                 ((long) continentalCells * PPM + area / 2L) / area));
+        return withLandCoverage(genesis, coveragePpm);
+    }
 
+    private static WorldGenesis withLandCoverage(WorldGenesis genesis, int coveragePpm) {
         WorldGenerationIntent intent = genesis.generationIntent();
         WorldGenerationIntent compensatedIntent = new WorldGenerationIntent(
-                NormalizedValue.ofPartsPerMillion(compensatedCoveragePpm),
+                NormalizedValue.ofPartsPerMillion(coveragePpm),
                 intent.landmassScale(),
                 intent.fragmentation(),
                 intent.relief(),
@@ -123,6 +177,11 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                 genesis.generationRevision(),
                 genesis.rngRevision(),
                 compensatedIntent);
+    }
+
+    private static boolean sameLandCoverage(WorldGenesis first, WorldGenesis second) {
+        return first.generationIntent().landCoverage().partsPerMillion()
+                == second.generationIntent().landCoverage().partsPerMillion();
     }
 
     private static void verifyLakeDomainRemainsDry(
