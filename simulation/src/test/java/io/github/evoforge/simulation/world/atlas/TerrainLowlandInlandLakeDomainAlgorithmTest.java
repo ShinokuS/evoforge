@@ -81,6 +81,38 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
     }
 
     @Test
+    void chamferReconstructionKeepsRoundedLowlandCornersOutOfTheLake() {
+        WorldBounds bounds = new WorldBounds(0, 60, 0, 60, -1, 12);
+        long[] elevation = new long[61 * 61];
+        long high = 9L * ElevationField.SUBUNITS_PER_CELL;
+        long low = 2L * ElevationField.SUBUNITS_PER_CELL;
+        for (int y = 0; y < 61; y++) {
+            for (int x = 0; x < 61; x++) {
+                int cell = y * 61 + x;
+                if (x == 0 || y == 0 || x == 60 || y == 60) {
+                    elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
+                    continue;
+                }
+                int dx = x - 30;
+                int dy = y - 30;
+                elevation[cell] = dx * dx + dy * dy <= 15 * 15 ? low : high;
+            }
+        }
+        ElevationField base = new DenseElevationField(bounds, elevation);
+        InlandLakeDomainCalibration calibration = new InlandLakeDomainCalibration(
+                61, 61, 61 * 61, 59 * 59, 500, 6, 1, 24, 9, 1,
+                5L * ElevationField.SUBUNITS_PER_CELL);
+        InlandLakeDomain domain = InlandLakeDomainAlgorithm.standard().generate(
+                genesis(bounds), base, calibration, permissiveRecipe(1));
+
+        assertTrue(domain.isLakeAt(30, 30));
+        assertTrue(domain.isLakeAt(30, 39));
+        assertTrue(domain.isLakeAt(39, 30));
+        assertFalse(domain.isLakeAt(41, 41),
+                "rounded lowland reconstruction must not invent a square corner");
+    }
+
+    @Test
     void shoreConditioningChangesOnlyLakeMembershipAndLeavesDryTerrainBitExact() {
         WorldBounds bounds = new WorldBounds(0, 20, 0, 20, -1, 12);
         long[] elevation = new long[21 * 21];
