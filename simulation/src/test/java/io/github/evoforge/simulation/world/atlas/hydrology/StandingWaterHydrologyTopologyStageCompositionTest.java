@@ -18,8 +18,11 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
     void stageComposesReplaceableOwnersWithoutReimplementingTheirPolicy() {
         WorldBounds bounds = new WorldBounds(0, 0, 0, 0, -2, 2);
         ElevationField elevation = constantElevation(bounds, -1L);
-        StandingWaterBody body = new StandingWaterBody(0, 1L, 0L, true, 0, 0, 0, 0);
-        StandingWaterTopology water = new DenseStandingWaterTopology(bounds, new int[] {0}, List.of(body));
+        StandingWaterBody rawBody = new StandingWaterBody(0, 1L, 0L, true, 0, 0, 0, 0);
+        StandingWaterTopology rawWater = new DenseStandingWaterTopology(bounds, new int[] {0}, List.of(rawBody));
+        StandingWaterBody selectedBody = new StandingWaterBody(0, 1L, 0L, true, 0, 0, 0, 0);
+        StandingWaterTopology selectedWater =
+                new DenseStandingWaterTopology(bounds, new int[] {0}, List.of(selectedBody));
         StandingWaterRimTopology rims = new DenseStandingWaterRimTopology(bounds, List.of(List.of()));
         StandingWaterSpillTopology spills = new DenseStandingWaterSpillTopology(bounds, 1, List.of());
         StandingWaterBoundaryRouteTopology routes = new DenseStandingWaterBoundaryRouteTopology(
@@ -35,22 +38,27 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 input -> {
                     assertSame(elevation, input);
                     calls.add("water");
-                    return water;
+                    return rawWater;
+                },
+                raw -> {
+                    assertSame(rawWater, raw);
+                    calls.add("select");
+                    return selectedWater;
                 },
                 (input, analyzedWater) -> {
                     assertSame(elevation, input);
-                    assertSame(water, analyzedWater);
+                    assertSame(selectedWater, analyzedWater);
                     calls.add("rims");
                     return rims;
                 },
                 (input, analyzedWater) -> {
                     assertSame(elevation, input);
-                    assertSame(water, analyzedWater);
+                    assertSame(selectedWater, analyzedWater);
                     calls.add("spills");
                     return spills;
                 },
                 (analyzedWater, analyzedSpills) -> {
-                    assertSame(water, analyzedWater);
+                    assertSame(selectedWater, analyzedWater);
                     assertSame(spills, analyzedSpills);
                     calls.add("routes");
                     return routes;
@@ -58,15 +66,16 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
 
         StandingWaterHydrologyTopology result = stage.generate(elevation);
 
-        assertSame(water, result.standingWater());
+        assertSame(rawWater, result.rawStandingWater());
+        assertSame(selectedWater, result.standingWater());
         assertSame(rims, result.rims());
         assertSame(spills, result.spills());
         assertSame(routes, result.boundaryRoutes());
-        assertEquals(List.of("water", "rims", "spills", "routes"), calls);
+        assertEquals(List.of("water", "select", "rims", "spills", "routes"), calls);
     }
 
     @Test
-    void standardCompositionProducesOneConsistentFactDomain() {
+    void standardCompositionKeepsMicroWaterRawButOutOfHydrologicBodyDomain() {
         WorldBounds bounds = new WorldBounds(0, 2, 0, 2, -4, 4);
         ElevationField elevation = new ElevationField() {
             @Override
@@ -84,8 +93,32 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 StandingWaterHydrologyTopologyStage.standard().generate(elevation);
 
         assertEquals(bounds, result.bounds());
+        assertEquals(1, result.rawBodyCount());
+        assertEquals(0, result.bodyCount());
+        assertEquals(0, result.spills().connections().size());
+    }
+
+    @Test
+    void standardCompositionPassesBroadWaterIntoRimSpillAndRouteFacts() {
+        WorldBounds bounds = new WorldBounds(0, 3, 0, 3, -4, 4);
+        ElevationField elevation = new ElevationField() {
+            @Override
+            public WorldBounds bounds() {
+                return bounds;
+            }
+
+            @Override
+            public int elevationAt(int x, int y) {
+                return x >= 1 && x <= 2 && y >= 1 && y <= 2 ? -1 : 1;
+            }
+        };
+
+        StandingWaterHydrologyTopology result =
+                StandingWaterHydrologyTopologyStage.standard().generate(elevation);
+
+        assertEquals(1, result.rawBodyCount());
         assertEquals(1, result.bodyCount());
-        assertEquals(4, result.rims().rimCells(0).size());
+        assertEquals(8, result.rims().rimCells(0).size());
         assertEquals(0, result.spills().connections().size());
         assertEquals(false, result.boundaryRoutes().route(0).reachesBoundaryWater());
     }
@@ -94,6 +127,7 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
     void stageRejectsNullDependencyAndNullOwnerOutputAtCompositionBoundary() {
         assertThrows(IllegalArgumentException.class, () -> new StandingWaterHydrologyTopologyStage(
                 null,
+                raw -> raw,
                 (e, w) -> null,
                 (e, w) -> null,
                 (w, s) -> null));
@@ -103,6 +137,7 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 1L);
         StandingWaterHydrologyTopologyStage stage = new StandingWaterHydrologyTopologyStage(
                 ignored -> null,
+                raw -> raw,
                 (e, w) -> null,
                 (e, w) -> null,
                 (w, s) -> null);
