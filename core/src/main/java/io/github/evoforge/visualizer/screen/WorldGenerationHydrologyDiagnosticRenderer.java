@@ -10,6 +10,10 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.utils.Disposable;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.hydrology.DrainageBasin;
+import io.github.evoforge.simulation.world.atlas.hydrology.DrainageBasinTopology;
+import io.github.evoforge.simulation.world.atlas.hydrology.InlandLake;
+import io.github.evoforge.simulation.world.atlas.hydrology.InlandLakeTopology;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBody;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBoundaryRoute;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterDomainRole;
@@ -17,10 +21,11 @@ import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterHydrolog
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterRimCell;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterSpillConnection;
 import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterTopology;
+import io.github.evoforge.simulation.world.atlas.hydrology.WorldHydrologyTopology;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.visualizer.VisualizerCamera;
 
-/** Presentation-only F4 overlay for inspecting Stage 2B standing-water topology facts. */
+/** Presentation-only F4 overlay for inspecting Stage 2B drainage and standing-water facts. */
 final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private static final float FIT_PADDING = 1.08f;
     private static final float MIN_CAMERA_MARGIN = 2f;
@@ -28,8 +33,10 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private static final float LABEL_SCALE = 0.85f;
     private static final float LABEL_OFFSET_PX = 6f;
     private static final float LEGEND_LINE_HEIGHT_PX = 16f;
-    private static final float LEGEND_TOP_OFFSET_PX = 190f;
+    private static final float LEGEND_TOP_OFFSET_PX = 220f;
 
+    private static final Color BASIN = new Color(0.98f, 0.68f, 0.12f, 0.18f);
+    private static final Color GENERATED_LAKE = new Color(0.08f, 0.72f, 1f, 0.50f);
     private static final Color MICRO_WATER = new Color(0.82f, 0.82f, 0.86f, 0.62f);
     private static final Color OCEANIC_WATER = new Color(0.10f, 0.46f, 0.92f, 0.20f);
     private static final Color ROUTED_WATER = new Color(0.12f, 0.86f, 0.62f, 0.24f);
@@ -100,6 +107,40 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         constrainCamera();
     }
 
+    void render(WorldHydrologyTopology topology) {
+        if (topology == null || bounds == null) return;
+        if (!bounds.equals(topology.bounds())) {
+            throw new IllegalArgumentException("hydrology diagnostic topology must match preview bounds");
+        }
+
+        StandingWaterHydrologyTopology standingWater = topology.standingWaterTopology();
+        constrainCamera();
+        camera.update();
+        VisualizerCamera.VisibleRange visible = clipped(camera.visibleRange());
+        if (visible == null) return;
+
+        Gdx.gl.glViewport(0, 0, viewportWidth, viewportHeight);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        diagnostics.setProjectionMatrix(camera.projection());
+        diagnostics.begin(ShapeRenderer.ShapeType.Filled);
+
+        drawDrainageBasins(topology.drainageBasins(), visible);
+        drawGeneratedLakes(topology.inlandLakes(), visible);
+        drawIgnoredMicroWater(standingWater, visible);
+        drawBodies(standingWater, visible);
+        drawInspectableRims(standingWater, visible);
+        drawRouteGraph(standingWater);
+        drawSpillMeetings(standingWater, visible);
+        drawSelectedRoutes(standingWater, visible);
+
+        diagnostics.end();
+        drawLabels(topology);
+        Gdx.gl.glDisable(GL20.GL_BLEND);
+        Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+    }
+
+    /** Compatibility path for focused standing-water diagnostics and older tests. */
     void render(StandingWaterHydrologyTopology topology) {
         if (topology == null || bounds == null) return;
         if (!bounds.equals(topology.bounds())) {
@@ -116,14 +157,12 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         diagnostics.setProjectionMatrix(camera.projection());
         diagnostics.begin(ShapeRenderer.ShapeType.Filled);
-
         drawIgnoredMicroWater(topology, visible);
         drawBodies(topology, visible);
         drawInspectableRims(topology, visible);
         drawRouteGraph(topology);
         drawSpillMeetings(topology, visible);
         drawSelectedRoutes(topology, visible);
-
         diagnostics.end();
         drawLabels(topology);
         Gdx.gl.glDisable(GL20.GL_BLEND);
@@ -135,6 +174,30 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         font.dispose();
         labels.dispose();
         diagnostics.dispose();
+    }
+
+    private void drawDrainageBasins(
+            DrainageBasinTopology basins,
+            VisualizerCamera.VisibleRange visible) {
+        diagnostics.setColor(BASIN);
+        for (int x = visible.minX(); x <= visible.maxX(); x++) {
+            for (int y = visible.minY(); y <= visible.maxY(); y++) {
+                if (basins.basinIdAt(x, y) == DrainageBasinTopology.NO_BASIN) continue;
+                diagnostics.rect(x + 0.05f, y + 0.05f, 0.90f, 0.90f);
+            }
+        }
+    }
+
+    private void drawGeneratedLakes(
+            InlandLakeTopology lakes,
+            VisualizerCamera.VisibleRange visible) {
+        diagnostics.setColor(GENERATED_LAKE);
+        for (int x = visible.minX(); x <= visible.maxX(); x++) {
+            for (int y = visible.minY(); y <= visible.maxY(); y++) {
+                if (!lakes.isLakeAt(x, y)) continue;
+                diagnostics.rect(x + 0.10f, y + 0.10f, 0.80f, 0.80f);
+            }
+        }
     }
 
     private void drawIgnoredMicroWater(
@@ -270,25 +333,60 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         }
     }
 
-    private void drawLabels(StandingWaterHydrologyTopology topology) {
+    private void drawLabels(WorldHydrologyTopology topology) {
+        StandingWaterHydrologyTopology standing = topology.standingWaterTopology();
         labels.setProjectionMatrix(labelProjection);
         labels.begin();
         font.getData().setScale(LABEL_SCALE);
         font.setColor(LABEL);
 
-        for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
-            StandingWaterBody body = topology.standingWater().body(bodyId);
-            StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
+        drawStandingLabels(standing);
+        for (int lakeId = 0; lakeId < topology.inlandLakes().lakeCount(); lakeId++) {
+            InlandLake lake = topology.inlandLakes().lake(lakeId);
             VisualizerCamera.ScreenPoint point = camera.screenAt(
-                    bodyCenterX(body),
-                    bodyCenterY(body));
+                    centerX(lake.minX(), lake.maxX()),
+                    centerY(lake.minY(), lake.maxY()));
             if (!screenContains(point)) continue;
             font.draw(
                     labels,
-                    bodyLabel(topology, route),
+                    String.format(
+                            "L%d  %.1fZ  depth %.1fZ",
+                            lake.id(),
+                            lake.surfaceElevationSubunits() / (double) ElevationField.SUBUNITS_PER_CELL,
+                            lake.maximumDepthSubunits() / (double) ElevationField.SUBUNITS_PER_CELL),
                     point.x() + LABEL_OFFSET_PX,
                     point.y() + LABEL_OFFSET_PX);
         }
+
+        float legendX = 12f;
+        float legendY = Math.max(68f, viewportHeight - LEGEND_TOP_OFFSET_PX);
+        int ignored = standing.rawBodyCount() - standing.bodyCount();
+        font.draw(labels, String.format(
+                "F4 TOPOLOGY  basins %d  lakes %d  sea bodies %d  micro %d  oceanic %d",
+                topology.drainageBasins().basinCount(),
+                topology.inlandLakes().lakeCount(),
+                standing.bodyCount(),
+                ignored,
+                standing.domains().oceanicBodyCount()),
+                legendX,
+                legendY);
+        font.draw(labels,
+                "AMBER terrain basin | BRIGHT BLUE generated inland lake | BLUE oceanic water",
+                legendX,
+                legendY - LEGEND_LINE_HEIGHT_PX);
+        font.draw(labels,
+                "CYAN dashed: sea-body route | ORANGE: spill candidate | YELLOW: old sea-level inland rim",
+                legendX,
+                legendY - LEGEND_LINE_HEIGHT_PX * 2f);
+        labels.end();
+    }
+
+    private void drawLabels(StandingWaterHydrologyTopology topology) {
+        labels.setProjectionMatrix(labelProjection);
+        labels.begin();
+        font.getData().setScale(LABEL_SCALE);
+        font.setColor(LABEL);
+        drawStandingLabels(topology);
 
         float legendX = 12f;
         float legendY = Math.max(52f, viewportHeight - LEGEND_TOP_OFFSET_PX);
@@ -302,15 +400,23 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
                 topology.domains().inlandBodyCount()),
                 legendX,
                 legendY);
-        font.draw(labels,
-                "BLUE oceanic | GREEN routed lake | RED closed lake | GRAY micro-water",
-                legendX,
-                legendY - LEGEND_LINE_HEIGHT_PX);
-        font.draw(labels,
-                "CYAN dashed: body route | ORANGE: spill candidate | bright cyan: selected spill | YELLOW: lake rim",
-                legendX,
-                legendY - LEGEND_LINE_HEIGHT_PX * 2f);
         labels.end();
+    }
+
+    private void drawStandingLabels(StandingWaterHydrologyTopology topology) {
+        for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
+            StandingWaterBody body = topology.standingWater().body(bodyId);
+            StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
+            VisualizerCamera.ScreenPoint point = camera.screenAt(
+                    bodyCenterX(body),
+                    bodyCenterY(body));
+            if (!screenContains(point)) continue;
+            font.draw(
+                    labels,
+                    bodyLabel(topology, route),
+                    point.x() + LABEL_OFFSET_PX,
+                    point.y() + LABEL_OFFSET_PX);
+        }
     }
 
     private boolean screenContains(VisualizerCamera.ScreenPoint point) {
@@ -324,22 +430,30 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         if (topology.domains().role(route.bodyId()) == StandingWaterDomainRole.OCEANIC) {
             return "#" + route.bodyId() + " OCEANIC";
         }
-        if (route.nextBodyId().isEmpty()) return "#" + route.bodyId() + " LAKE CLOSED";
+        if (route.nextBodyId().isEmpty()) return "#" + route.bodyId() + " SEA-LEVEL CLOSED";
         double barrier = route.minimumBarrierElevationSubunits().getAsLong()
                 / (double) ElevationField.SUBUNITS_PER_CELL;
         return String.format(
-                "#%d LAKE -> #%d  barrier %.1fZ",
+                "#%d SEA-LEVEL -> #%d  barrier %.1fZ",
                 route.bodyId(),
                 route.nextBodyId().getAsInt(),
                 barrier);
     }
 
     private static float bodyCenterX(StandingWaterBody body) {
-        return (body.minX() + body.maxX() + 1f) * 0.5f;
+        return centerX(body.minX(), body.maxX());
     }
 
     private static float bodyCenterY(StandingWaterBody body) {
-        return (body.minY() + body.maxY() + 1f) * 0.5f;
+        return centerY(body.minY(), body.maxY());
+    }
+
+    private static float centerX(int minX, int maxX) {
+        return (minX + maxX + 1f) * 0.5f;
+    }
+
+    private static float centerY(int minY, int maxY) {
+        return (minY + maxY + 1f) * 0.5f;
     }
 
     private static StandingWaterSpillConnection selectedConnection(
