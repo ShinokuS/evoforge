@@ -19,9 +19,10 @@ public record InlandLakeBathymetryRecipe(
     }
 
     /**
-     * Balanced lakes follow the accepted ocean-floor principle without ocean deep-interior pits:
-     * depth is supplied only by room available away from shoreline. About two cardinal cells of
-     * inward room are required for each additional visible Z level, so depth bands remain broad.
+     * Balanced lakes follow the accepted ocean-floor principle without lake-specific pits. Depth
+     * comes only from shoreline distance: roughly two cardinal cells of inward room are required
+     * for each full Z. Production lake-domain selection is calibrated to reject bodies that cannot
+     * honestly supply the ten-cell radius required for the five-Z minimum profile.
      */
     public static InlandLakeBathymetryRecipe balanced() {
         return new InlandLakeBathymetryRecipe(
