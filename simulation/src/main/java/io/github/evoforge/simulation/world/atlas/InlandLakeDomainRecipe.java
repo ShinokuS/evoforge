@@ -36,17 +36,17 @@ public record InlandLakeDomainRecipe(
 
     public static InlandLakeDomainRecipe balanced() {
         return new InlandLakeDomainRecipe(
-                18_000,
-                180_000,
-                480_000,
+                15_000,
+                140_000,
+                280_000,
                 8,
                 50,
-                2,
-                120,
-                18,
                 3,
-                120,
-                8);
+                90,
+                24,
+                8,
+                60,
+                6);
     }
 
     private static void requirePositive(int value, String name) {
