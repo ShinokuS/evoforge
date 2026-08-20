@@ -16,8 +16,9 @@ import java.util.List;
  * <p>Primary bodies are oriented ellipses whose broad coastline is deformed by low-frequency
  * angular harmonics. Satellite bodies provide islands and detached coastal fragments. The only use
  * of rectangular world-edge distance is a hard exclusion guard; it never contributes a falloff or
- * coastline score. A weak Euclidean confinement term keeps generated bodies comfortably inside the
- * finite world without introducing square level sets.</p>
+ * coastline score. Maximum-land coverage is a capacity, not a quota: a deterministic radius
+ * calibration grows the bodies until their real zero-level union approaches that capacity without
+ * ever selecting low-score tails just to fill an arbitrary cell count.</p>
  */
 final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlgorithm {
     static final HarmonicLandmassSilhouetteAlgorithm INSTANCE = new HarmonicLandmassSilhouetteAlgorithm();
@@ -27,8 +28,9 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
     private static final GenerationPurposeId SATELLITE = GenerationPurposeId.of("world:v14-landmass-satellite");
     private static final int PPM = NormalizedValue.SCALE;
     private static final int SAMPLE_MAX = 65_535;
-    private static final int OUTSIDE_SCORE = -1_500_000_000;
-    private static final int MINIMUM_SCORE = -1_000_000_000;
+    private static final int MINIMUM_RADIUS_SCALE_PPM = 100_000;
+    private static final int MAXIMUM_RADIUS_SCALE_PPM = 4_000_000;
+    private static final int RADIUS_SEARCH_STEPS = 23;
     private static final double TWO_PI = StrictMath.PI * 2d;
 
     private HarmonicLandmassSilhouetteAlgorithm() {
@@ -52,81 +54,174 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
         int candidateHeight = Math.max(0, height - margin * 2);
         int candidateCount = Math.multiplyExact(candidateWidth, candidateHeight);
         if (boundary.maximumLandCells() > candidateCount) {
-            throw new IllegalArgumentException("maximum land support must fit inside the hard ocean guard");
+            throw new IllegalArgumentException("maximum land capacity must fit inside the hard ocean guard");
         }
 
         GenerationRandom random = GenerationRandom.from(genesis);
         List<Body> bodies = createBodies(random, width, height, calibration, recipe);
-        int[] rawScore = new int[area];
-        long[] ranks = new long[area];
+        GeometricDomain domain = precomputeDomainGeometry(
+                bodies,
+                width,
+                height,
+                margin,
+                recipe.coast());
+        int radiusScalePpm = calibrateRadiusScale(
+                bodies,
+                domain,
+                boundary.maximumLandCells());
+        return materializeSilhouette(
+                bounds,
+                bodies,
+                domain,
+                radiusScalePpm,
+                boundary.maximumLandCells(),
+                calibration.silhouetteInfluencePpm());
+    }
 
+    private static GeometricDomain precomputeDomainGeometry(
+            List<Body> bodies,
+            int width,
+            int height,
+            int margin,
+            LandmassSilhouetteRecipe.CoastPolicy coast) {
+        int area = Math.multiplyExact(width, height);
+        boolean[] eligible = new boolean[area];
+        double[] confinementPenalty = new double[area];
+        double[][] radialRatioByBody = new double[bodies.size()][area];
         double centerX = (width - 1d) * 0.5d;
         double centerY = (height - 1d) * 0.5d;
         double halfWidth = Math.max(1d, width * 0.5d);
         double halfHeight = Math.max(1d, height * 0.5d);
-        LandmassSilhouetteRecipe.CoastPolicy coast = recipe.coast();
+        double confinementStart = coast.confinementStartPpm() / (double) PPM;
+        double confinementStrength = coast.confinementStrengthPpm() / (double) PPM;
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
             for (int localX = 0; localX < width; localX++) {
-                int score;
                 if (edgeDistance(localX, localY, width, height) < margin) {
-                    score = OUTSIDE_SCORE;
-                } else {
-                    double best = -1_000d;
-                    for (Body body : bodies) {
-                        best = Math.max(best, body.scoreAt(localX, localY));
+                    for (double[] ratios : radialRatioByBody) {
+                        ratios[index] = Double.POSITIVE_INFINITY;
                     }
-                    double normalizedX = (localX - centerX) / halfWidth;
-                    double normalizedY = (localY - centerY) / halfHeight;
-                    double radial = StrictMath.hypot(normalizedX, normalizedY);
-                    double confinementStart = coast.confinementStartPpm() / (double) PPM;
-                    if (radial > confinementStart) {
-                        double tail = (radial - confinementStart) / Math.max(0.000_001d, 1d - confinementStart);
-                        double strength = coast.confinementStrengthPpm() / (double) PPM;
-                        best -= tail * tail * tail * strength;
-                    }
-                    score = clampScore(StrictMath.round(best * PPM));
+                    index++;
+                    continue;
                 }
-                rawScore[index] = score;
-                ranks[index] = scoreRankKey(score, index);
+                eligible[index] = true;
+                double normalizedX = (localX - centerX) / halfWidth;
+                double normalizedY = (localY - centerY) / halfHeight;
+                double radial = StrictMath.hypot(normalizedX, normalizedY);
+                if (radial > confinementStart) {
+                    double tail = (radial - confinementStart)
+                            / Math.max(0.000_001d, 1d - confinementStart);
+                    confinementPenalty[index] = tail * tail * tail * confinementStrength;
+                }
+                for (int bodyIndex = 0; bodyIndex < bodies.size(); bodyIndex++) {
+                    radialRatioByBody[bodyIndex][index] = bodies.get(bodyIndex)
+                            .radialRatioAt(localX, localY);
+                }
                 index++;
             }
         }
+        return new GeometricDomain(eligible, confinementPenalty, radialRatioByBody);
+    }
 
-        Arrays.sort(ranks);
-        int supportCount = Math.min(boundary.maximumLandCells(), candidateCount);
-        boolean[] support = new boolean[area];
-        int[] potentialPpm = new int[area];
-        if (supportCount == 0) {
-            return new LandmassSilhouette(
-                    bounds,
-                    support,
-                    potentialPpm,
-                    0,
-                    calibration.silhouetteInfluencePpm());
+    /** Finds the largest geometric radius scale whose true zero-level union fits the capacity. */
+    private static int calibrateRadiusScale(
+            List<Body> bodies,
+            GeometricDomain domain,
+            int maximumLandCells) {
+        if (maximumLandCells <= 0) return MINIMUM_RADIUS_SCALE_PPM;
+        int minimumCount = countPositiveSupport(bodies, domain, MINIMUM_RADIUS_SCALE_PPM);
+        if (minimumCount > maximumLandCells) {
+            throw new IllegalStateException("minimum geometric landmass already exceeds land capacity");
         }
 
-        int highestScore = rawScore[(int) ranks[0]];
-        int thresholdScore = rawScore[(int) ranks[supportCount - 1]];
-        if (thresholdScore <= OUTSIDE_SCORE) {
-            throw new IllegalStateException("landmass silhouette exhausted interior candidates");
+        int maximumCount = countPositiveSupport(bodies, domain, MAXIMUM_RADIUS_SCALE_PPM);
+        if (maximumCount <= maximumLandCells) return MAXIMUM_RADIUS_SCALE_PPM;
+
+        int low = MINIMUM_RADIUS_SCALE_PPM;
+        int high = MAXIMUM_RADIUS_SCALE_PPM;
+        for (int step = 0; step < RADIUS_SEARCH_STEPS && low < high; step++) {
+            int mid = low + (high - low + 1) / 2;
+            int count = countPositiveSupport(bodies, domain, mid);
+            if (count <= maximumLandCells) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
         }
-        long range = Math.max(1L, (long) highestScore - thresholdScore);
-        for (int rank = 0; rank < supportCount; rank++) {
-            int cell = (int) ranks[rank];
-            support[cell] = true;
-            potentialPpm[cell] = Math.toIntExact(Math.min(
+        return low;
+    }
+
+    private static int countPositiveSupport(
+            List<Body> bodies,
+            GeometricDomain domain,
+            int radiusScalePpm) {
+        double radiusScale = radiusScalePpm / (double) PPM;
+        int count = 0;
+        for (int index = 0; index < domain.eligible().length; index++) {
+            if (!domain.eligible()[index]) continue;
+            if (geometricScore(bodies, domain, index, radiusScale) > 0d) count++;
+        }
+        return count;
+    }
+
+    private static LandmassSilhouette materializeSilhouette(
+            WorldBounds bounds,
+            List<Body> bodies,
+            GeometricDomain domain,
+            int radiusScalePpm,
+            int maximumLandCells,
+            int influencePpm) {
+        double radiusScale = radiusScalePpm / (double) PPM;
+        boolean[] support = new boolean[domain.eligible().length];
+        int[] potentialPpm = new int[domain.eligible().length];
+        double[] positiveScore = new double[domain.eligible().length];
+        double maximumScore = 0d;
+        int supportCount = 0;
+
+        for (int index = 0; index < support.length; index++) {
+            if (!domain.eligible()[index]) continue;
+            double score = geometricScore(bodies, domain, index, radiusScale);
+            if (!(score > 0d)) continue;
+            support[index] = true;
+            positiveScore[index] = score;
+            maximumScore = Math.max(maximumScore, score);
+            supportCount++;
+        }
+        if (supportCount > maximumLandCells) {
+            throw new IllegalStateException("calibrated geometric support exceeded land capacity");
+        }
+        if (supportCount == 0 || !(maximumScore > 0d)) {
+            throw new IllegalStateException("geometric landmass calibration produced no terrestrial support");
+        }
+
+        for (int index = 0; index < support.length; index++) {
+            if (!support[index]) continue;
+            potentialPpm[index] = (int) Math.min(
                     (long) PPM,
-                    Math.max(0L, ((long) rawScore[cell] - thresholdScore) * PPM / range)));
+                    Math.max(1L, StrictMath.round(positiveScore[index] * PPM / maximumScore)));
         }
-
         return new LandmassSilhouette(
                 bounds,
                 support,
                 potentialPpm,
                 supportCount,
-                calibration.silhouetteInfluencePpm());
+                influencePpm);
+    }
+
+    private static double geometricScore(
+            List<Body> bodies,
+            GeometricDomain domain,
+            int index,
+            double radiusScale) {
+        double best = -Double.MAX_VALUE;
+        for (int bodyIndex = 0; bodyIndex < bodies.size(); bodyIndex++) {
+            Body body = bodies.get(bodyIndex);
+            double score = body.peak()
+                    - domain.radialRatioByBody()[bodyIndex][index] / radiusScale;
+            best = Math.max(best, score);
+        }
+        return best - domain.confinementPenalty()[index];
     }
 
     private static List<Body> createBodies(
@@ -201,8 +296,8 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
                     + (long) randomPpm(random, SATELLITE, satelliteId, 0L, 2L)
                     * bodyPolicy.satelliteReachRangePpm() / PPM;
             double reach = radius * reachPpm / PPM;
-            double cx = parent.centerX + StrictMath.cos(angle) * reach;
-            double cy = parent.centerY + StrictMath.sin(angle) * reach;
+            double cx = parent.centerX() + StrictMath.cos(angle) * reach;
+            double cy = parent.centerY() + StrictMath.sin(angle) * reach;
             double satelliteRadiusPpm = bodyPolicy.satelliteMinimumRadiusPpm()
                     + (long) randomPpm(random, SATELLITE, satelliteId, 0L, 3L)
                     * bodyPolicy.satelliteRadiusRangePpm() / PPM;
@@ -225,15 +320,6 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
 
     private static int edgeDistance(int x, int y, int width, int height) {
         return Math.min(Math.min(x, width - 1 - x), Math.min(y, height - 1 - y));
-    }
-
-    private static int clampScore(long score) {
-        return (int) Math.max((long) MINIMUM_SCORE, Math.min((long) PPM, score));
-    }
-
-    private static long scoreRankKey(int score, int cellIndex) {
-        long inverted = (long) PPM - score;
-        return (inverted << 32) | (cellIndex & 0xffff_ffffL);
     }
 
     private static double interpolate(double from, double to, double coordinate) {
@@ -274,6 +360,23 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
         return (int) ((long) sample * PPM / SAMPLE_MAX);
     }
 
+    private record GeometricDomain(
+            boolean[] eligible,
+            double[] confinementPenalty,
+            double[][] radialRatioByBody) {
+        private GeometricDomain {
+            if (eligible == null || confinementPenalty == null || radialRatioByBody == null
+                    || eligible.length != confinementPenalty.length) {
+                throw new IllegalArgumentException("geometric landmass domain arrays must be valid");
+            }
+            for (double[] ratios : radialRatioByBody) {
+                if (ratios == null || ratios.length != eligible.length) {
+                    throw new IllegalArgumentException("body geometry must match landmass domain");
+                }
+            }
+        }
+    }
+
     private record Body(
             double centerX,
             double centerY,
@@ -291,7 +394,7 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
             phases = Arrays.copyOf(phases, phases.length);
         }
 
-        double scoreAt(double x, double y) {
+        double radialRatioAt(double x, double y) {
             double dx = x - centerX;
             double dy = y - centerY;
             double cosine = StrictMath.cos(rotation);
@@ -309,7 +412,7 @@ final class HarmonicLandmassSilhouetteAlgorithm implements LandmassSilhouetteAlg
                         * StrictMath.cos(order * angle + phases[harmonic]);
             }
             boundaryRadius = Math.max(0.55d, boundaryRadius);
-            return peak - radial / boundaryRadius;
+            return radial / boundaryRadius;
         }
     }
 }
