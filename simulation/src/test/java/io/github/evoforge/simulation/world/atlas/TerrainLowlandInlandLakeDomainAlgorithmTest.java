@@ -33,52 +33,55 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
             }
         }
         ElevationField base = new DenseElevationField(bounds, elevation);
-        InlandLakeDomainCalibration calibration = new InlandLakeDomainCalibration(
-                41,
-                41,
-                41 * 41,
-                39 * 39,
-                170,
-                6,
-                2,
-                16,
-                3,
-                3,
-                5L * ElevationField.SUBUNITS_PER_CELL);
-        InlandLakeDomainRecipe recipe = new InlandLakeDomainRecipe(
-                100_000,
-                900_000,
-                500_000,
-                6,
-                50,
-                2,
-                120,
-                18,
-                3,
-                120,
-                3);
+        InlandLakeDomainCalibration calibration = calibration(41, 170, 3);
+        InlandLakeDomainRecipe recipe = permissiveRecipe(3);
 
         InlandLakeDomain domain = InlandLakeDomainAlgorithm.standard().generate(
-                genesis(bounds),
-                base,
-                calibration,
-                recipe);
+                genesis(bounds), base, calibration, recipe);
 
-        assertTrue(domain.lakeCellCount() >= 100, "broad lowland should become a visible lake domain");
+        assertTrue(domain.lakeCellCount() >= 70, "broad lowland should remain a visible lake domain");
         assertTrue(domain.isLakeAt(20, 20));
         assertFalse(domain.isLakeAt(6, 6));
-        for (int x = 0; x <= 40; x++) {
-            assertFalse(domain.isLakeAt(x, 0));
-            assertFalse(domain.isLakeAt(x, 40));
-        }
-        for (int y = 0; y <= 40; y++) {
-            assertFalse(domain.isLakeAt(0, y));
-            assertFalse(domain.isLakeAt(40, y));
-        }
+        assertBoundaryDry(domain, 40);
     }
 
     @Test
-    void shoreConditioningCreatesOnlyZ0WaterAndLeavesFarTerrainExact() {
+    void morphologicalOpeningRejectsOneCellLowlandCorridorInsteadOfMakingLakeTendril() {
+        WorldBounds bounds = new WorldBounds(0, 50, 0, 50, -1, 12);
+        long[] elevation = new long[51 * 51];
+        long high = 9L * ElevationField.SUBUNITS_PER_CELL;
+        long low = 2L * ElevationField.SUBUNITS_PER_CELL;
+        for (int y = 0; y < 51; y++) {
+            for (int x = 0; x < 51; x++) {
+                int cell = y * 51 + x;
+                if (x == 0 || y == 0 || x == 50 || y == 50) {
+                    elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
+                } else {
+                    elevation[cell] = high;
+                }
+            }
+        }
+        for (int y = 16; y <= 28; y++) {
+            for (int x = 8; x <= 20; x++) elevation[y * 51 + x] = low;
+            for (int x = 30; x <= 42; x++) elevation[y * 51 + x] = low;
+        }
+        for (int x = 21; x <= 29; x++) elevation[22 * 51 + x] = low;
+
+        ElevationField base = new DenseElevationField(bounds, elevation);
+        InlandLakeDomainCalibration calibration = new InlandLakeDomainCalibration(
+                51, 51, 51 * 51, 49 * 49, 220, 5, 1, 24, 7, 2,
+                5L * ElevationField.SUBUNITS_PER_CELL);
+        InlandLakeDomain domain = InlandLakeDomainAlgorithm.standard().generate(
+                genesis(bounds), base, calibration, permissiveRecipe(2));
+
+        assertTrue(domain.isLakeAt(14, 22));
+        assertTrue(domain.isLakeAt(36, 22));
+        assertFalse(domain.isLakeAt(25, 22),
+                "a one-cell lowland connector must not survive as a lake channel");
+    }
+
+    @Test
+    void shoreConditioningChangesOnlyLakeMembershipAndLeavesDryTerrainBitExact() {
         WorldBounds bounds = new WorldBounds(0, 20, 0, 20, -1, 12);
         long[] elevation = new long[21 * 21];
         long ordinary = 7L * ElevationField.SUBUNITS_PER_CELL;
@@ -99,16 +102,57 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
         InlandLakeDomain domain = new InlandLakeDomain(bounds, lake, 9);
 
         ElevationField conditioned = InlandLakeShoreConditioningAlgorithm.standard().condition(
-                base,
-                domain,
-                V12LandformRecipe.balanced().coast());
+                base, domain, V12LandformRecipe.balanced().coast());
 
         assertEquals(-1L, conditioned.elevationSubunitsAt(10, 10));
-        assertEquals(base.elevationSubunitsAt(0, 10), conditioned.elevationSubunitsAt(0, 10));
-        assertEquals(base.elevationSubunitsAt(2, 2), conditioned.elevationSubunitsAt(2, 2));
-        assertTrue(conditioned.elevationSubunitsAt(8, 10) > 0L);
-        assertTrue(conditioned.elevationSubunitsAt(8, 10) < ordinary,
-                "dry shore must approach Z=0 without becoming water");
+        for (int y = 0; y <= 20; y++) {
+            for (int x = 0; x <= 20; x++) {
+                if (domain.isLakeAt(x, y)) continue;
+                assertEquals(base.elevationSubunitsAt(x, y), conditioned.elevationSubunitsAt(x, y),
+                        "dry terrain around a lake must remain owned by the terrain generator");
+            }
+        }
+    }
+
+    private static InlandLakeDomainCalibration calibration(int size, int target, int bodies) {
+        return new InlandLakeDomainCalibration(
+                size,
+                size,
+                size * size,
+                (size - 2) * (size - 2),
+                target,
+                6,
+                2,
+                16,
+                5,
+                bodies,
+                5L * ElevationField.SUBUNITS_PER_CELL);
+    }
+
+    private static InlandLakeDomainRecipe permissiveRecipe(int bodies) {
+        return new InlandLakeDomainRecipe(
+                100_000,
+                900_000,
+                500_000,
+                6,
+                50,
+                2,
+                120,
+                18,
+                5,
+                120,
+                bodies);
+    }
+
+    private static void assertBoundaryDry(InlandLakeDomain domain, int max) {
+        for (int x = 0; x <= max; x++) {
+            assertFalse(domain.isLakeAt(x, 0));
+            assertFalse(domain.isLakeAt(x, max));
+        }
+        for (int y = 0; y <= max; y++) {
+            assertFalse(domain.isLakeAt(0, y));
+            assertFalse(domain.isLakeAt(max, y));
+        }
     }
 
     private static WorldGenesis genesis(WorldBounds bounds) {
