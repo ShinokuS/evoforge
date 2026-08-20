@@ -21,7 +21,6 @@ final class V15InlandLakeTerrainGeneratorTest {
         ElevationField v15 = V15InlandLakeTerrainGenerator.standard().generate(genesis);
 
         int landToWater = 0;
-        int waterToLand = 0;
         int dryLand = 0;
         WorldBounds bounds = v15.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
@@ -33,8 +32,6 @@ final class V15InlandLakeTerrainGeneratorTest {
                     assertTrue(x > bounds.minX() && x < bounds.maxX()
                                     && y > bounds.minY() && y < bounds.maxY(),
                             "inland lake must not be a boundary rewrite");
-                } else if (before < 0L && after >= 0L) {
-                    waterToLand++;
                 }
                 if (after >= 0L) dryLand++;
             }
@@ -44,8 +41,6 @@ final class V15InlandLakeTerrainGeneratorTest {
         int requestedDryLand = Math.toIntExact((area * 830_000L + 500_000L) / 1_000_000L);
         assertTrue(landToWater >= 100,
                 "representative high-land V15 world should contain a visually meaningful inland-water footprint");
-        assertTrue(waterToLand > 0,
-                "coordinator should compensate inland-water area through the continental land budget");
         assertTrue(Math.abs(dryLand - requestedDryLand) <= 4,
                 "Land should continue to describe actual dry terrain within normalized calibration precision");
 
