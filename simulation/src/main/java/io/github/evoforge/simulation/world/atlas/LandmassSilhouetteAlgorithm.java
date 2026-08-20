@@ -12,6 +12,6 @@ public interface LandmassSilhouetteAlgorithm {
             LandmassSilhouetteRecipe recipe);
 
     static LandmassSilhouetteAlgorithm standard() {
-        return PlateLandmassSilhouetteAlgorithm.INSTANCE;
+        return CompactRegionLandmassSilhouetteAlgorithm.INSTANCE;
     }
 }

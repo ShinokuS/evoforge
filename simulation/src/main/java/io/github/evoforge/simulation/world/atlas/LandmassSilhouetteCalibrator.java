@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
-/** Resolves semantic continent scale and fragmentation into plate-scaffold operating values. */
+/** Resolves semantic continent scale and fragmentation into compact-region operating values. */
 @FunctionalInterface
 public interface LandmassSilhouetteCalibrator {
     LandmassSilhouetteCalibration calibrate(
@@ -35,25 +35,29 @@ final class StandardLandmassSilhouetteCalibrator implements LandmassSilhouetteCa
         int limitingSpan = Math.min(terrain.width(), terrain.height());
         int scalePpm = genesis.generationIntent().landmassScale().partsPerMillion();
         int fragmentationPpm = terrain.fragmentationPpm();
-        LandmassSilhouetteRecipe.PlatePolicy plates = recipe.plates();
+        LandmassSilhouetteRecipe.ScaffoldPolicy scaffold = recipe.scaffold();
 
-        long spacingWorldPpm = plates.minimumSpacingWorldPpm()
-                + (long) (plates.maximumSpacingWorldPpm() - plates.minimumSpacingWorldPpm())
+        long spacingWorldPpm = scaffold.minimumSpacingWorldPpm()
+                + (long) (scaffold.maximumSpacingWorldPpm() - scaffold.minimumSpacingWorldPpm())
                         * scalePpm / PPM;
         long compressionPpm = (long) fragmentationPpm
-                * plates.fragmentationSpacingCompressionPpm() / PPM;
+                * scaffold.fragmentationSpacingCompressionPpm() / PPM;
         spacingWorldPpm = spacingWorldPpm * (PPM - compressionPpm) / PPM;
         int spacing = Math.max(
-                plates.minimumSpacingCells(),
+                scaffold.minimumSpacingCells(),
                 Math.toIntExact((long) limitingSpan * spacingWorldPpm / PPM));
 
-        long cohesionPpm = (long) scalePpm * (PPM - fragmentationPpm) / PPM;
-        int correlationPasses = Math.toIntExact(
-                (cohesionPpm * plates.maximumCorrelationPasses() + PPM / 2L) / PPM);
+        LandmassSilhouetteRecipe.GrowthPolicy growth = recipe.growth();
+        int requestedClusters = 1 + Math.toIntExact(
+                ((long) fragmentationPpm * (growth.maximumClusterCount() - 1) + PPM / 2L) / PPM);
+        int approximateColumns = Math.max(1, Math.floorDiv(terrain.width() + spacing - 1, spacing));
+        int approximateRows = Math.max(1, Math.floorDiv(terrain.height() + spacing - 1, spacing));
+        int structuralCapacity = Math.max(1, Math.multiplyExact(approximateColumns, approximateRows) / 3);
+        int clusters = Math.max(1, Math.min(requestedClusters, structuralCapacity));
 
         return new LandmassSilhouetteCalibration(
                 spacing,
-                correlationPasses,
+                clusters,
                 fragmentationPpm,
                 recipe.blend().silhouetteInfluencePpm());
     }

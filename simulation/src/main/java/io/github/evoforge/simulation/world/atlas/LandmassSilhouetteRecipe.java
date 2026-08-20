@@ -2,9 +2,10 @@ package io.github.evoforge.simulation.world.atlas;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
 
-/** Stable policy for plate-scaffold V14 continent/island topology and coastline deformation. */
+/** Stable policy for compact-region V14 continent/island topology and coastline deformation. */
 public record LandmassSilhouetteRecipe(
-        PlatePolicy plates,
+        ScaffoldPolicy scaffold,
+        GrowthPolicy growth,
         CoastPolicy coast,
         CoastRelaxationPolicy relaxation,
         BlendPolicy blend) {
@@ -12,26 +13,34 @@ public record LandmassSilhouetteRecipe(
     private static final int PPM = NormalizedValue.SCALE;
 
     public LandmassSilhouetteRecipe {
-        if (plates == null || coast == null || relaxation == null || blend == null) {
+        if (scaffold == null || growth == null || coast == null || relaxation == null || blend == null) {
             throw new IllegalArgumentException("landmass silhouette recipe sections must not be null");
         }
     }
 
     public static LandmassSilhouetteRecipe balanced() {
         return new LandmassSilhouetteRecipe(
-                new PlatePolicy(
+                new ScaffoldPolicy(
                         4,
                         70_000,
                         220_000,
                         550_000,
-                        5,
                         380_000,
                         550_000),
+                new GrowthPolicy(
+                        8,
+                        1_600_000,
+                        1_050_000,
+                        820_000,
+                        650_000,
+                        150_000,
+                        120_000,
+                        80_000),
                 new CoastPolicy(
                         2_400_000,
                         750_000,
-                        320_000,
-                        120_000),
+                        260_000,
+                        80_000),
                 new CoastRelaxationPolicy(
                         2,
                         160_000,
@@ -43,26 +52,24 @@ public record LandmassSilhouetteRecipe(
     }
 
     /**
-     * Jittered control-mesh policy. Continent scale controls average plate spacing; fragmentation
-     * compresses that spacing and removes graph correlation, producing more independent land/ocean
-     * regions rather than merely roughening one continent.
+     * Jittered coarse reference scaffold. Continent scale controls spacing while fragmentation
+     * compresses spacing so highly fragmented worlds have enough structural cells for islands.
      */
-    public record PlatePolicy(
+    public record ScaffoldPolicy(
             int minimumSpacingCells,
             int minimumSpacingWorldPpm,
             int maximumSpacingWorldPpm,
             int fragmentationSpacingCompressionPpm,
-            int maximumCorrelationPasses,
             int siteJitterPpm,
             int oceanSeedBandSpacingPpm) {
-        public PlatePolicy {
-            if (minimumSpacingCells < 3 || maximumCorrelationPasses < 0) {
-                throw new IllegalArgumentException("plate scaffold scale must be valid");
+        public ScaffoldPolicy {
+            if (minimumSpacingCells < 3) {
+                throw new IllegalArgumentException("landmass scaffold spacing must be at least three cells");
             }
             requirePositivePpm(minimumSpacingWorldPpm, "minimumSpacingWorldPpm");
             requirePositivePpm(maximumSpacingWorldPpm, "maximumSpacingWorldPpm");
             if (maximumSpacingWorldPpm < minimumSpacingWorldPpm) {
-                throw new IllegalArgumentException("maximum plate spacing must be >= minimum spacing");
+                throw new IllegalArgumentException("maximum scaffold spacing must be >= minimum spacing");
             }
             requireNormalized(fragmentationSpacingCompressionPpm, "fragmentationSpacingCompressionPpm");
             requireNormalized(siteJitterPpm, "siteJitterPpm");
@@ -70,7 +77,34 @@ public record LandmassSilhouetteRecipe(
         }
     }
 
-    /** Smooth domain-warped deformation of plate boundaries; topology remains owned by plates. */
+    /**
+     * Multi-source compact growth policy. Fragmentation interpolates from one cohesive front toward
+     * several separated fronts and lowers the maximum support fill so sea corridors survive.
+     */
+    public record GrowthPolicy(
+            int maximumClusterCount,
+            int cohesiveSupportExpansionPpm,
+            int fragmentedSupportExpansionPpm,
+            int cohesiveMaximumSupportPpm,
+            int fragmentedMaximumSupportPpm,
+            int growthRateVariationPpm,
+            int directionalBiasPpm,
+            int traversalNoisePpm) {
+        public GrowthPolicy {
+            if (maximumClusterCount < 1 || maximumClusterCount > 16) {
+                throw new IllegalArgumentException("maximum land cluster count must be in [1, 16]");
+            }
+            requirePositivePpm(cohesiveSupportExpansionPpm, "cohesiveSupportExpansionPpm");
+            requirePositivePpm(fragmentedSupportExpansionPpm, "fragmentedSupportExpansionPpm");
+            requireNormalized(cohesiveMaximumSupportPpm, "cohesiveMaximumSupportPpm");
+            requireNormalized(fragmentedMaximumSupportPpm, "fragmentedMaximumSupportPpm");
+            requireNormalized(growthRateVariationPpm, "growthRateVariationPpm");
+            requireNormalized(directionalBiasPpm, "directionalBiasPpm");
+            requireNormalized(traversalNoisePpm, "traversalNoisePpm");
+        }
+    }
+
+    /** Smooth domain-warped deformation of compact region boundaries; it never owns topology. */
     public record CoastPolicy(
             int warpScaleSpacingPpm,
             int detailScaleSpacingPpm,
@@ -114,7 +148,7 @@ public record LandmassSilhouetteRecipe(
         }
     }
 
-    /** How strongly the plate-derived continent field owns low-Land rank selection over V12 noise. */
+    /** How strongly the compact continent field owns low-Land rank selection over V12 noise. */
     public record BlendPolicy(int silhouetteInfluencePpm) {
         public BlendPolicy {
             requireNormalized(silhouetteInfluencePpm, "silhouetteInfluencePpm");
