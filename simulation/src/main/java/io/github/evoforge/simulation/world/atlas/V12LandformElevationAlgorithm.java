@@ -17,7 +17,10 @@ import java.util.Arrays;
 final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId LANDMASS = GenerationPurposeId.of("world:landmass");
     private static final GenerationPurposeId FRAGMENT = GenerationPurposeId.of("world:fragment");
-    private static final GenerationPurposeId OCEAN_EDGE = GenerationPurposeId.of("world:v14-ocean-edge");
+    private static final GenerationPurposeId OCEAN_DOMAIN_MACRO =
+            GenerationPurposeId.of("world:v14-ocean-domain-macro");
+    private static final GenerationPurposeId OCEAN_DOMAIN_DETAIL =
+            GenerationPurposeId.of("world:v14-ocean-domain-detail");
     private static final GenerationPurposeId UPLIFT = GenerationPurposeId.of("world:v12-uplift");
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:v12-ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:v12-ridge-b");
@@ -199,7 +202,8 @@ final class V12LandformElevationAlgorithm {
                         width,
                         height,
                         potential,
-                        boundary);
+                        boundary,
+                        recipe);
                 rankKeys[index] = rankKey(potential, index);
                 index++;
             }
@@ -217,26 +221,57 @@ final class V12LandformElevationAlgorithm {
             int width,
             int height,
             int potential,
-            LandmassBoundaryCalibration boundary) {
+            LandmassBoundaryCalibration boundary,
+            V12LandformRecipe terrainRecipe) {
         if (!boundary.oceanBounded()) return potential;
+
         int edgeDistance = Math.min(
                 Math.min(localX, width - 1 - localX),
                 Math.min(localY, height - 1 - localY));
-        int margin = boundary.minimumOceanMarginCells();
-        if (edgeDistance < margin) return -1;
-        if (boundary.transitionCells() == 0) return potential;
+        if (edgeDistance < boundary.minimumOceanMarginCells()) return -1;
 
-        int edgeSample = smoothValueNoise(
+        int centerPpm = continentalCenterPotentialPpm(localX, localY, width, height);
+        int macroPpm = sampleToPpm(organicValueNoise(
                 random,
-                OCEAN_EDGE,
+                OCEAN_DOMAIN_MACRO,
                 x,
                 y,
-                boundary.edgeNoiseScale());
-        int variation = centeredSampleOffset(edgeSample, boundary.edgeVariationCells());
-        long transitionCoordinate = (long) edgeDistance - margin + variation;
-        int gatePpm = smoothStepPpm(
-                transitionCoordinate * PPM / boundary.transitionCells());
-        return (int) ((long) potential * gatePpm / PPM);
+                boundary.macroScaleCells(),
+                terrainRecipe));
+        int detailPpm = sampleToPpm(organicValueNoise(
+                random,
+                OCEAN_DOMAIN_DETAIL,
+                x,
+                y,
+                boundary.detailScaleCells(),
+                terrainRecipe));
+
+        int domainPpm = Math.toIntExact(
+                ((long) centerPpm * boundary.centerWeightPpm()
+                        + (long) macroPpm * boundary.macroWeightPpm()
+                        + (long) detailPpm * boundary.detailWeightPpm()) / PPM);
+        int influencePpm = boundary.domainInfluencePpm();
+        int basePpm = sampleToPpm(potential);
+        int blendedPpm = Math.toIntExact(
+                ((long) basePpm * (PPM - influencePpm)
+                        + (long) domainPpm * influencePpm) / PPM);
+        return ppmToSample(blendedPpm);
+    }
+
+    private static int continentalCenterPotentialPpm(
+            int localX,
+            int localY,
+            int width,
+            int height) {
+        long xDenominator = Math.max(1L, width - 1L);
+        long yDenominator = Math.max(1L, height - 1L);
+        long centeredX = Math.abs(2L * localX - (width - 1L));
+        long centeredY = Math.abs(2L * localY - (height - 1L));
+        long xPpm = centeredX * PPM / xDenominator;
+        long yPpm = centeredY * PPM / yDenominator;
+        long radialSquaredPpm = (xPpm * xPpm + yPpm * yPpm) / PPM;
+        int radialPpm = clampPpm(radialSquaredPpm);
+        return PPM - smoothStepPpm(radialPpm);
     }
 
     private static long landformFieldPpm(
@@ -519,6 +554,10 @@ final class V12LandformElevationAlgorithm {
 
     private static int sampleToPpm(int sample) {
         return (int) ((long) sample * PPM / SAMPLE_MAX);
+    }
+
+    private static int ppmToSample(int ppm) {
+        return (int) ((long) clampPpm(ppm) * SAMPLE_MAX / PPM);
     }
 
     private static int clampPpm(long value) {

@@ -39,12 +39,14 @@ final class V14BathymetryElevationGenerationTest {
                 MountainRecipe.balanced())
                 .generate(baseGenesis);
         ElevationField v14 = new ElevationGenerationStage().generate(v14Genesis);
+        V12LandformCalibration terrain = V12LandformCalibrator.standard()
+                .calibrate(baseGenesis, V12LandformRecipe.balanced());
         LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
-                .calibrate(baseGenesis, LandmassBoundaryRecipe.balanced());
+                .calibrate(baseGenesis, terrain, LandmassBoundaryRecipe.balanced());
         boolean foundMeaningfulDepth = false;
 
-        assertEquals(8, boundary.minimumOceanMarginCells(),
-                "64x64 balanced worlds must reserve a broad oceanic margin");
+        assertEquals(5, boundary.minimumOceanMarginCells(),
+                "64x64 balanced worlds must keep at least five full cells of guaranteed external ocean");
 
         for (int y = finalBounds.minY(); y <= finalBounds.maxY(); y++) {
             for (int x = finalBounds.minX(); x <= finalBounds.maxX(); x++) {

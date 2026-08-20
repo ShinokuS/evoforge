@@ -3,8 +3,8 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
 /**
- * V14-specific base-terrain composition that reserves a genuine oceanic domain during landmass
- * selection rather than repainting already-generated terrain after the fact.
+ * V14-specific base-terrain composition that authors an organic finite land domain inside a
+ * guaranteed external ocean before ordinary relief is synthesized.
  */
 public final class V14OceanicBaseTerrainGenerator implements ElevationGenerator {
     private final V12LandformCalibrator terrainCalibrator;
@@ -58,7 +58,10 @@ public final class V14OceanicBaseTerrainGenerator implements ElevationGenerator 
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         V12LandformCalibration terrain = terrainCalibrator.calibrate(genesis, terrainRecipe);
-        LandmassBoundaryCalibration boundary = boundaryCalibrator.calibrate(genesis, boundaryRecipe);
+        LandmassBoundaryCalibration boundary = boundaryCalibrator.calibrate(
+                genesis,
+                terrain,
+                boundaryRecipe);
         if (terrain == null || boundary == null) {
             throw new IllegalStateException("V14 oceanic base-terrain calibrator returned null");
         }

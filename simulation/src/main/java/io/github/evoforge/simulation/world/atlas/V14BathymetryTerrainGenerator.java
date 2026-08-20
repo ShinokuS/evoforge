@@ -7,11 +7,13 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
  * Replaceable V14 elevation pipeline: accepted V12/V13 terrain character plus an ocean-bounded
- * landmass domain and standing-water bathymetry.
+ * organic land domain and standing-water bathymetry.
  *
- * <p>The standard composition reserves the oceanic world margin during V12 landmass rank selection,
- * before relief or mountain synthesis. It never repaints already-generated land. V12 and ordinary
- * V13 generation remain on their accepted unconstrained landmass path.</p>
+ * <p>The standard composition authors the finite land silhouette during V12 landmass rank selection,
+ * before relief or mountain synthesis. A guaranteed external-ocean margin is only a safety guard;
+ * the actual continent/island boundary comes from a broad deterministic domain field blended with
+ * the accepted landmass potential. V12 and ordinary V13 generation remain on their accepted
+ * unconstrained landmass path.</p>
  *
  * <p>The pipeline owns composition only. Base generation, mountain synthesis, bathymetry calibration
  * and bathymetry synthesis remain independent concerns. Water, river carving, materials and concrete
