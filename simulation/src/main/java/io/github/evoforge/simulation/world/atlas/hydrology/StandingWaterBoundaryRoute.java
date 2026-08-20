@@ -6,6 +6,7 @@ import java.util.OptionalLong;
 /** Minimum-barrier potential route from one standing-water body toward an external drainage sink. */
 public record StandingWaterBoundaryRoute(
         int bodyId,
+        boolean boundaryConnected,
         boolean externalSink,
         OptionalInt nextBodyId,
         OptionalLong minimumBarrierElevationSubunits) {
@@ -14,6 +15,9 @@ public record StandingWaterBoundaryRoute(
         if (bodyId < 0) throw new IllegalArgumentException("route body id must be non-negative");
         if (nextBodyId == null || minimumBarrierElevationSubunits == null) {
             throw new IllegalArgumentException("route optionals must not be null");
+        }
+        if (externalSink && !boundaryConnected) {
+            throw new IllegalArgumentException("external standing-water sink must touch the world boundary");
         }
         if (externalSink) {
             if (nextBodyId.isPresent()) {
@@ -36,13 +40,8 @@ public record StandingWaterBoundaryRoute(
         return externalSink || nextBodyId.isPresent();
     }
 
-    /** Compatibility accessor retained while Stage 2B.1 migrates from boundary to external semantics. */
-    public boolean boundaryConnected() {
-        return externalSink;
-    }
-
-    /** Compatibility accessor retained for current diagnostics; use {@link #reachesExternalSink()}. */
+    /** Legacy wording retained for current consumers; external sinks are always boundary-connected. */
     public boolean reachesBoundaryWater() {
-        return reachesExternalSink();
+        return boundaryConnected || reachesExternalSink();
     }
 }

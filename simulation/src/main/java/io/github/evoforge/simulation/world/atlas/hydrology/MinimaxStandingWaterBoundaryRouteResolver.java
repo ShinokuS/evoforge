@@ -72,16 +72,19 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
 
         List<StandingWaterBoundaryRoute> routes = new ArrayList<>(count);
         for (int bodyId = 0; bodyId < count; bodyId++) {
+            boolean boundaryConnected = standingWater.body(bodyId).touchesWorldBoundary();
             boolean externalSink = externalSinks.isExternalSink(bodyId);
             if (externalSink) {
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
+                        boundaryConnected,
                         true,
                         OptionalInt.empty(),
                         OptionalLong.of(0L)));
             } else if (minimumBarrier[bodyId] == Long.MAX_VALUE) {
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
+                        boundaryConnected,
                         false,
                         OptionalInt.empty(),
                         OptionalLong.empty()));
@@ -91,6 +94,7 @@ public final class MinimaxStandingWaterBoundaryRouteResolver
                 }
                 routes.add(new StandingWaterBoundaryRoute(
                         bodyId,
+                        boundaryConnected,
                         false,
                         OptionalInt.of(nextBody[bodyId]),
                         OptionalLong.of(minimumBarrier[bodyId])));

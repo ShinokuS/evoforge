@@ -37,6 +37,7 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
                 List.of(new StandingWaterBoundaryRoute(
                         0,
                         true,
+                        true,
                         OptionalInt.empty(),
                         OptionalLong.of(0L))));
         StandingWaterExternalSinkRecipe recipe = StandingWaterExternalSinkRecipe.balanced();
@@ -151,6 +152,7 @@ final class StandingWaterHydrologyTopologyStageCompositionTest {
 
         assertEquals(1, result.bodyCount());
         assertEquals(0, result.externalSinks().externalSinkCount());
+        assertEquals(true, result.boundaryRoutes().route(0).boundaryConnected());
         assertEquals(false, result.boundaryRoutes().route(0).externalSink());
         assertEquals(false, result.boundaryRoutes().route(0).reachesExternalSink());
     }

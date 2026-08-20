@@ -25,7 +25,7 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
 
     private static final Color MICRO_WATER = new Color(0.82f, 0.82f, 0.86f, 0.62f);
-    private static final Color BOUNDARY_WATER = new Color(0.10f, 0.46f, 0.92f, 0.20f);
+    private static final Color EXTERNAL_WATER = new Color(0.10f, 0.46f, 0.92f, 0.20f);
     private static final Color ROUTED_WATER = new Color(0.12f, 0.86f, 0.62f, 0.24f);
     private static final Color CLOSED_WATER = new Color(0.94f, 0.24f, 0.50f, 0.28f);
     private static final Color RIM = new Color(0.98f, 0.82f, 0.18f, 0.72f);
@@ -111,7 +111,7 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
 
         drawIgnoredMicroWater(topology, visible);
         drawBodies(topology, visible);
-        drawInternalRims(topology, visible);
+        drawInspectableRims(topology, visible);
         drawRouteGraph(topology);
         drawSpillMeetings(topology, visible);
         drawSelectedRoutes(topology, visible);
@@ -160,14 +160,14 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         }
     }
 
-    private void drawInternalRims(
+    private void drawInspectableRims(
             StandingWaterHydrologyTopology topology,
             VisualizerCamera.VisibleRange visible) {
         diagnostics.setColor(RIM);
         float marker = Math.max(0.12f, Math.min(0.30f, camera.worldUnitsPerPixel() * 3.2f));
         float half = marker * 0.5f;
         for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
-            if (topology.standingWater().body(bodyId).touchesWorldBoundary()) continue;
+            if (topology.externalSinks().isExternalSink(bodyId)) continue;
             for (StandingWaterRimCell rim : topology.rims().rimCells(bodyId)) {
                 if (!rim.hasDryContinuation() || !visibleContains(visible, rim.x(), rim.y())) continue;
                 diagnostics.rect(rim.x() + 0.5f - half, rim.y() + 0.5f - half, marker, marker);
@@ -271,13 +271,15 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         font.getData().setScale(scale);
         font.setColor(LABEL);
 
+        int edgeBodies = 0;
         for (int bodyId = 0; bodyId < topology.bodyCount(); bodyId++) {
             StandingWaterBody body = topology.standingWater().body(bodyId);
             StandingWaterBoundaryRoute route = topology.boundaryRoutes().route(bodyId);
+            if (body.touchesWorldBoundary()) edgeBodies++;
             float x = bodyCenterX(body);
             float y = bodyCenterY(body);
             if (!visibleContains(visible, Math.round(x), Math.round(y))) continue;
-            font.draw(labels, bodyLabel(route), x + 0.35f, y + 0.35f);
+            font.draw(labels, bodyLabel(body, route), x + 0.35f, y + 0.35f);
         }
 
         float lineHeight = Math.max(0.58f, camera.worldUnitsPerPixel() * 18f);
@@ -285,10 +287,16 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         float legendY = visible.maxY() + 0.35f;
         int ignored = topology.rawBodyCount() - topology.bodyCount();
         font.draw(labels, String.format(
-                "F4 TOPOLOGY  raw %d  hydrologic %d  ignored-micro %d",
-                topology.rawBodyCount(), topology.bodyCount(), ignored), legendX, legendY);
+                "F4 TOPOLOGY  raw %d  hydrologic %d  micro %d  edge %d  external %d",
+                topology.rawBodyCount(),
+                topology.bodyCount(),
+                ignored,
+                edgeBodies,
+                topology.externalSinks().externalSinkCount()),
+                legendX,
+                legendY);
         font.draw(labels,
-                "#ID: BLUE boundary | GREEN routed | RED closed | GRAY micro-water",
+                "BLUE external sink | GREEN routed | RED closed | EDGE = geometry only | GRAY micro-water",
                 legendX,
                 legendY - lineHeight);
         font.draw(labels,
@@ -298,14 +306,18 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
         labels.end();
     }
 
-    private static String bodyLabel(StandingWaterBoundaryRoute route) {
-        if (route.boundaryConnected()) return "#" + route.bodyId() + " BOUNDARY";
-        if (route.nextBodyId().isEmpty()) return "#" + route.bodyId() + " CLOSED";
+    private static String bodyLabel(
+            StandingWaterBody body,
+            StandingWaterBoundaryRoute route) {
+        if (route.externalSink()) return "#" + route.bodyId() + " EXTERNAL SINK";
+        String edge = body.touchesWorldBoundary() ? " EDGE" : "";
+        if (route.nextBodyId().isEmpty()) return "#" + route.bodyId() + edge + " CLOSED";
         double barrier = route.minimumBarrierElevationSubunits().getAsLong()
                 / (double) ElevationField.SUBUNITS_PER_CELL;
         return String.format(
-                "#%d -> #%d  barrier %.1fZ",
+                "#%d%s -> #%d  barrier %.1fZ",
                 route.bodyId(),
+                edge,
                 route.nextBodyId().getAsInt(),
                 barrier);
     }
@@ -334,8 +346,8 @@ final class WorldGenerationHydrologyDiagnosticRenderer implements Disposable {
     }
 
     private static Color bodyColor(StandingWaterBoundaryRoute route) {
-        if (route.boundaryConnected()) return BOUNDARY_WATER;
-        return route.reachesBoundaryWater() ? ROUTED_WATER : CLOSED_WATER;
+        if (route.externalSink()) return EXTERNAL_WATER;
+        return route.reachesExternalSink() ? ROUTED_WATER : CLOSED_WATER;
     }
 
     private static boolean edgeTouchesVisible(
