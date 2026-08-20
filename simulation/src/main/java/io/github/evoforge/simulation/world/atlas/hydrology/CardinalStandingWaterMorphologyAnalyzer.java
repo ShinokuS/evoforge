@@ -11,8 +11,8 @@ import java.util.List;
  *
  * <p>Interior clearance is cardinal distance from in-world non-body terrain. World-edge contact is
  * deliberately not treated as shoreline: an external body may continue beyond the finite preview.
- * This keeps clearance useful for deciding whether edge-connected water is genuinely broad rather
- * than merely touching the map border.</p>
+ * Boundary contact is recorded as the number of distinct water cells touching the finite world
+ * boundary, not the number of exposed cardinal edges, so corner cells are counted once.</p>
  */
 public final class CardinalStandingWaterMorphologyAnalyzer implements StandingWaterMorphologyAnalyzer {
     static final CardinalStandingWaterMorphologyAnalyzer INSTANCE =
@@ -36,7 +36,7 @@ public final class CardinalStandingWaterMorphologyAnalyzer implements StandingWa
         int count = standingWater.bodyCount();
         int[] distance = new int[area];
         Arrays.fill(distance, -1);
-        long[] boundaryEdges = new long[count];
+        long[] boundaryCells = new long[count];
         ArrayDeque<Integer> frontier = new ArrayDeque<>();
 
         for (int localY = 0; localY < height; localY++) {
@@ -47,12 +47,13 @@ public final class CardinalStandingWaterMorphologyAnalyzer implements StandingWa
                 if (bodyId == StandingWaterTopology.NO_BODY) continue;
 
                 boolean touchesInWorldNonBody = false;
+                boolean touchesWorldBoundary = false;
                 for (int direction = 0; direction < DX.length; direction++) {
                     int nextLocalX = localX + DX[direction];
                     int nextLocalY = localY + DY[direction];
                     if (nextLocalX < 0 || nextLocalX >= width
                             || nextLocalY < 0 || nextLocalY >= height) {
-                        boundaryEdges[bodyId]++;
+                        touchesWorldBoundary = true;
                         continue;
                     }
                     int nextX = bounds.minX() + nextLocalX;
@@ -62,6 +63,9 @@ public final class CardinalStandingWaterMorphologyAnalyzer implements StandingWa
                     }
                 }
 
+                if (touchesWorldBoundary) {
+                    boundaryCells[bodyId]++;
+                }
                 if (touchesInWorldNonBody) {
                     int index = localY * width + localX;
                     distance[index] = 1;
@@ -120,7 +124,7 @@ public final class CardinalStandingWaterMorphologyAnalyzer implements StandingWa
             morphology.add(new StandingWaterMorphology(
                     bodyId,
                     clearance,
-                    boundaryEdges[bodyId]));
+                    boundaryCells[bodyId]));
         }
         return new DenseStandingWaterMorphologyTopology(bounds, morphology);
     }

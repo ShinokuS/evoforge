@@ -29,11 +29,12 @@ final class StandingWaterExternalSinkAnalysisTest {
 
         assertEquals(3, result.maximumInteriorClearanceCells(),
                 "clearance must measure toward in-world dry terrain, not the finite map edge");
-        assertEquals(11L, result.worldBoundaryEdgeCount());
+        assertEquals(9L, result.worldBoundaryCellCount(),
+                "corner cells touch two boundary edges but must count as one boundary-contact cell");
     }
 
     @Test
-    void allWaterBodyGetsFiniteFallbackClearance() {
+    void allWaterBodyGetsFiniteFallbackClearanceAndDistinctBoundaryCells() {
         WorldBounds bounds = new WorldBounds(0, 4, 0, 2, -4, 4);
         int[] labels = new int[15];
         StandingWaterBody body = new StandingWaterBody(0, 15L, 0L, true, 0, 4, 0, 2);
@@ -44,11 +45,11 @@ final class StandingWaterExternalSinkAnalysisTest {
                 .morphology(0);
 
         assertEquals(2, result.maximumInteriorClearanceCells());
-        assertEquals(16L, result.worldBoundaryEdgeCount());
+        assertEquals(12L, result.worldBoundaryCellCount());
     }
 
     @Test
-    void balancedCalibrationScalesExternalRoleWithWorldSize() {
+    void balancedCalibrationUsesSublinearBoundaryOpeningScale() {
         StandingWaterExternalSinkCalibrator calibrator = StandingWaterExternalSinkCalibrator.standard();
         StandingWaterExternalSinkRecipe recipe = StandingWaterExternalSinkRecipe.balanced();
 
@@ -58,30 +59,32 @@ final class StandingWaterExternalSinkAnalysisTest {
                 new WorldBounds(0, 299, 0, 299, -8, 8), recipe);
         StandingWaterExternalSinkCalibration large = calibrator.calibrate(
                 new WorldBounds(0, 499, 0, 499, -8, 8), recipe);
+        StandingWaterExternalSinkCalibration huge = calibrator.calibrate(
+                new WorldBounds(0, 9_999, 0, 9_999, -8, 8), recipe);
 
-        assertEquals(21, small.minimumAreaCells());
-        assertEquals(2, small.minimumClearanceCells());
-        assertEquals(450, medium.minimumAreaCells());
-        assertEquals(5, medium.minimumClearanceCells());
-        assertEquals(1_250, large.minimumAreaCells());
-        assertEquals(8, large.minimumClearanceCells());
+        assertEquals(36, small.minimumBoundaryContactCells());
+        assertEquals(78, medium.minimumBoundaryContactCells());
+        assertEquals(100, large.minimumBoundaryContactCells());
+        assertEquals(448, huge.minimumBoundaryContactCells(),
+                "a huge world must not require a linear thousands-of-cells opening");
+        assertEquals(2, large.minimumClearanceCells());
     }
 
     @Test
-    void boundaryContactAloneNeverMakesSmallOrNarrowWaterAnExternalSink() {
-        WorldBounds bounds = new WorldBounds(0, 299, 0, 299, -8, 8);
+    void externalRoleDependsOnBoundaryOpeningRatherThanWaterBodyArea() {
+        WorldBounds bounds = new WorldBounds(0, 499, 0, 499, -8, 8);
         StandingWaterTopology water = bodiesOnlyTopology(bounds, List.of(
-                body(0, 100L, true),
-                body(1, 2_000L, true),
-                body(2, 2_000L, true),
-                body(3, 5_000L, false)));
+                body(0, 20_000L, true),
+                body(1, 20_000L, true),
+                body(2, 500L, true),
+                body(3, 20_000L, false)));
         StandingWaterMorphologyTopology morphology = new DenseStandingWaterMorphologyTopology(
                 bounds,
                 List.of(
-                        new StandingWaterMorphology(0, 10, 2),
-                        new StandingWaterMorphology(1, 3, 20),
-                        new StandingWaterMorphology(2, 8, 20),
-                        new StandingWaterMorphology(3, 20, 0)));
+                        new StandingWaterMorphology(0, 10, 30),
+                        new StandingWaterMorphology(1, 1, 150),
+                        new StandingWaterMorphology(2, 8, 100),
+                        new StandingWaterMorphology(3, 20, 200)));
         StandingWaterExternalSinkCalibration calibration =
                 StandingWaterExternalSinkCalibrator.standard().calibrate(
                         bounds,
@@ -90,10 +93,14 @@ final class StandingWaterExternalSinkAnalysisTest {
         StandingWaterExternalSinkTopology sinks = StandingWaterExternalSinkResolver.standard()
                 .resolve(water, morphology, calibration);
 
-        assertFalse(sinks.isExternalSink(0), "small edge lake must not become a global terminal");
-        assertFalse(sinks.isExternalSink(1), "narrow edge water must not become a global terminal");
-        assertTrue(sinks.isExternalSink(2), "broad large edge water may act as external drainage");
-        assertFalse(sinks.isExternalSink(3), "large internal water is not external merely by scale");
+        assertFalse(sinks.isExternalSink(0),
+                "even a huge edge lake with only 30 boundary cells must not become external on 500x500");
+        assertFalse(sinks.isExternalSink(1),
+                "a long but one-cell-clearance boundary trace must not become external");
+        assertTrue(sinks.isExternalSink(2),
+                "100 boundary cells with real interior width is a broad enough 500x500 opening");
+        assertFalse(sinks.isExternalSink(3),
+                "internal water is never external merely because it is large and broad");
         assertEquals(1, sinks.externalSinkCount());
     }
 

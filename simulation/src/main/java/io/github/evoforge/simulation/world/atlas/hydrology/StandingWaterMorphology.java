@@ -4,15 +4,15 @@ package io.github.evoforge.simulation.world.atlas.hydrology;
 public record StandingWaterMorphology(
         int bodyId,
         int maximumInteriorClearanceCells,
-        long worldBoundaryEdgeCount) {
+        long worldBoundaryCellCount) {
 
     public StandingWaterMorphology {
         if (bodyId < 0) throw new IllegalArgumentException("morphology body id must be non-negative");
         if (maximumInteriorClearanceCells <= 0) {
             throw new IllegalArgumentException("standing-water clearance must be positive");
         }
-        if (worldBoundaryEdgeCount < 0L) {
-            throw new IllegalArgumentException("world-boundary edge count must be non-negative");
+        if (worldBoundaryCellCount < 0L) {
+            throw new IllegalArgumentException("world-boundary cell count must be non-negative");
         }
     }
 }
