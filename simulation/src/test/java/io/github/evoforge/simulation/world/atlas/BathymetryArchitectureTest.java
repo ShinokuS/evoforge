@@ -56,15 +56,15 @@ final class BathymetryArchitectureTest {
     }
 
     @Test
-    void coastalFallBudgetAllowsSteepButNotMultiCellCliffContinuation() {
+    void coastalFallBudgetKeepsReadableBandsBroaderThanOneCell() {
         BathymetryCalibration calibration = CALIBRATOR.calibrate(
                 genesis(new WorldBounds(-150, 149, -150, 149, -96, 96)),
                 RECIPE);
 
         assertEquals(20_000L, calibration.coastalMinimumFallSubunits());
-        assertEquals(800_000L, calibration.coastalMaximumFallSubunits());
+        assertEquals(460_000L, calibration.coastalMaximumFallSubunits());
         assertTrue(calibration.coastalMaximumFallSubunits() > calibration.maximumCardinalFallSubunits());
-        assertTrue(calibration.coastalMaximumFallSubunits() < ElevationField.SUBUNITS_PER_CELL);
+        assertTrue(calibration.coastalMaximumFallSubunits() < ElevationField.SUBUNITS_PER_CELL / 2L);
     }
 
     @Test

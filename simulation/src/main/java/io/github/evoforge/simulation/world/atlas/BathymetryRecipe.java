@@ -42,13 +42,17 @@ public record BathymetryRecipe(
         if (coastalMinimumFallPpm > coastalMaximumFallPpm) {
             throw new IllegalArgumentException("coastal fall limits must be ordered");
         }
+        if (coastalMaximumFallPpm >= PPM / 2) {
+            throw new IllegalArgumentException("coastalMaximumFallPpm must stay below half a cell per step");
+        }
         requirePositiveNormalized(coastalReliefFullScalePpm, "coastalReliefFullScalePpm");
     }
 
     /**
      * Balanced bathymetry model: the accepted smooth bowl remains the universal base profile.
-     * Ocean-connected coastlines may descend faster only when a broad land-side relief context
-     * causally supports it; no random coastal character or per-cell seafloor noise is authored.
+     * Ocean-connected coastlines may descend faster only when broad land morphology causally
+     * supports it. Coastal fall remains below half a Z cell per cardinal step so readable terrain
+     * bands stay broader than the one-cell noise rejected during visual development.
      */
     public static BathymetryRecipe balanced() {
         return new BathymetryRecipe(
@@ -60,7 +64,7 @@ public record BathymetryRecipe(
                 6,
                 18,
                 20_000,
-                800_000,
+                460_000,
                 500_000);
     }
 

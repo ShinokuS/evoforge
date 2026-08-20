@@ -79,7 +79,7 @@ final class BathymetryMorphologyElevationGenerationTest {
         long steepFirstDepth = -steep.elevationSubunitsAt(16, 32);
         long steepThirdDepth = -steep.elevationSubunitsAt(18, 32);
 
-        assertTrue(steepFirstDepth > flatFirstDepth + ElevationField.SUBUNITS_PER_CELL / 2L,
+        assertTrue(steepFirstDepth > flatFirstDepth + ElevationField.SUBUNITS_PER_CELL / 4L,
                 "sustained high land relief should permit a visibly faster coastal descent");
         assertTrue(steepThirdDepth > steepFirstDepth,
                 "the steep coastal continuation should still deepen coherently into the sea");
@@ -123,6 +123,30 @@ final class BathymetryMorphologyElevationGenerationTest {
     }
 
     @Test
+    void competingCoastsBlendAcrossBayCornerInsteadOfCreatingANearestOwnerWedge() {
+        WorldBounds bounds = new WorldBounds(0, 63, 0, 63, -96, 96);
+        ElevationField flat = generate(bounds, cornerOcean(bounds, 16, 0L, 0L, -1L));
+        ElevationField mixed = generate(
+                bounds,
+                cornerOcean(
+                        bounds,
+                        16,
+                        8L * ElevationField.SUBUNITS_PER_CELL,
+                        0L,
+                        -1L));
+
+        for (int offset = 4; offset <= 7; offset++) {
+            int coordinate = 16 + offset;
+            long topSideExtra = depth(mixed, coordinate + 1, coordinate)
+                    - depth(flat, coordinate + 1, coordinate);
+            long leftSideExtra = depth(mixed, coordinate, coordinate + 1)
+                    - depth(flat, coordinate, coordinate + 1);
+            assertTrue(Math.abs(topSideExtra - leftSideExtra) < ElevationField.SUBUNITS_PER_CELL / 3L,
+                    "adjacent cells across a bay bisector must blend shore character instead of switching owners");
+        }
+    }
+
+    @Test
     void narrowOceanCorridorRemainsShallowEvenBesideHighRelief() {
         WorldBounds bounds = new WorldBounds(0, 39, 0, 39, -96, 96);
         ElevationField base = narrowBoundaryConnectedSea(
@@ -145,7 +169,30 @@ final class BathymetryMorphologyElevationGenerationTest {
     }
 
     @Test
-    void steepOceanCoastStaysMonotoneAndAvoidsMultiCellCardinalCliffs() {
+    void steepOceanCoastStaysMonotoneWithinTheSubHalfCellFallBudget() {
+        WorldBounds bounds = new WorldBounds(0, 63, 0, 63, -96, 96);
+        ElevationField result = generate(
+                bounds,
+                openOceanAgainstLand(
+                        bounds,
+                        16,
+                        8L * ElevationField.SUBUNITS_PER_CELL,
+                        -1L));
+        BathymetryCalibration calibration = CALIBRATOR.calibrate(genesis(bounds), RECIPE);
+        long allowed = calibration.coastalMaximumFallSubunits() + 2_000L;
+
+        for (int x = 16; x < 47; x++) {
+            long currentDepth = -result.elevationSubunitsAt(x, 32);
+            long nextDepth = -result.elevationSubunitsAt(x + 1, 32);
+            assertTrue(nextDepth >= currentDepth,
+                    "causal coastal morphology must not create an underwater ridge while moving offshore");
+            assertTrue(nextDepth - currentDepth <= allowed,
+                    "coastal continuation must preserve the sub-half-cell readable fall budget");
+        }
+    }
+
+    @Test
+    void steepOceanCoastDoesNotProduceInteriorOneCellZBands() {
         WorldBounds bounds = new WorldBounds(0, 63, 0, 63, -96, 96);
         ElevationField result = generate(
                 bounds,
@@ -155,14 +202,22 @@ final class BathymetryMorphologyElevationGenerationTest {
                         8L * ElevationField.SUBUNITS_PER_CELL,
                         -1L));
 
-        long allowed = ElevationField.SUBUNITS_PER_CELL;
-        for (int x = 16; x < 47; x++) {
-            long currentDepth = -result.elevationSubunitsAt(x, 32);
-            long nextDepth = -result.elevationSubunitsAt(x + 1, 32);
-            assertTrue(nextDepth >= currentDepth,
-                    "causal coastal morphology must not create an underwater ridge while moving offshore");
-            assertTrue(nextDepth - currentDepth <= allowed,
-                    "causal coastal continuation may be steep but not a multi-cell cliff");
+        int previousLevel = discreteLevel(result, 16, 32);
+        int runLength = 1;
+        boolean firstRun = true;
+        for (int x = 17; x <= 47; x++) {
+            int level = discreteLevel(result, x, 32);
+            if (level == previousLevel) {
+                runLength++;
+                continue;
+            }
+            if (!firstRun) {
+                assertTrue(runLength >= 2,
+                        "an interior underwater Z band must occupy at least two cardinal cells");
+            }
+            firstRun = false;
+            previousLevel = level;
+            runLength = 1;
         }
     }
 
@@ -218,6 +273,16 @@ final class BathymetryMorphologyElevationGenerationTest {
         return ALGORITHM.generate(genesis, base, calibration, RECIPE);
     }
 
+    private static long depth(ElevationField field, int x, int y) {
+        return -field.elevationSubunitsAt(x, y);
+    }
+
+    private static int discreteLevel(ElevationField field, int x, int y) {
+        return Math.toIntExact(Math.floorDiv(
+                field.elevationSubunitsAt(x, y),
+                ElevationField.SUBUNITS_PER_CELL));
+    }
+
     private static ElevationField squareWaterBody(WorldBounds bounds, int landBorder, long waterElevation) {
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
@@ -270,6 +335,32 @@ final class BathymetryMorphologyElevationGenerationTest {
                 } else {
                     boolean highRelief = y >= reliefStartY && y <= reliefEndY;
                     values[index++] = highRelief ? reliefElevation : 0L;
+                }
+            }
+        }
+        return new DenseElevationField(bounds, values);
+    }
+
+    private static ElevationField cornerOcean(
+            WorldBounds bounds,
+            int corner,
+            long topRelief,
+            long leftRelief,
+            long waterElevation) {
+        int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
+        int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
+        long[] values = new long[Math.multiplyExact(width, height)];
+        int index = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (x >= corner && y >= corner) {
+                    values[index++] = waterElevation;
+                } else if (y < corner && x >= corner) {
+                    values[index++] = topRelief;
+                } else if (x < corner && y >= corner) {
+                    values[index++] = leftRelief;
+                } else {
+                    values[index++] = Math.max(topRelief, leftRelief) / 2L;
                 }
             }
         }

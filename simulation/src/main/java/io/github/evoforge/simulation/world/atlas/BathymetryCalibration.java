@@ -35,8 +35,9 @@ public record BathymetryCalibration(
         if (coastalMinimumFallSubunits < 0L
                 || coastalMaximumFallSubunits <= 0L
                 || coastalMinimumFallSubunits > coastalMaximumFallSubunits
-                || coastalMaximumFallSubunits > ElevationField.SUBUNITS_PER_CELL) {
-            throw new IllegalArgumentException("coastal fall limits must fit within one cell and be ordered");
+                || coastalMaximumFallSubunits >= ElevationField.SUBUNITS_PER_CELL / 2L) {
+            throw new IllegalArgumentException(
+                    "coastal fall limits must be ordered and stay below half a cell per step");
         }
     }
 }
