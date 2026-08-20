@@ -19,10 +19,9 @@ public record InlandLakeBathymetryRecipe(
     }
 
     /**
-     * Balanced lakes use the same geometric principle as accepted ocean bathymetry: depth emerges
-     * from room available away from shoreline. Unlike the ocean deep-interior layer, inland lakes do
-     * not receive authored pits/basins. One Z of additional depth requires about two cells of inward
-     * room, so visible depth bands stay broad instead of collapsing into one-cell terraces.
+     * Balanced lakes follow the accepted ocean-floor principle without ocean deep-interior pits:
+     * depth is supplied only by room available away from shoreline. About two cardinal cells of
+     * inward room are required for each additional visible Z level, so depth bands remain broad.
      */
     public static InlandLakeBathymetryRecipe balanced() {
         return new InlandLakeBathymetryRecipe(
