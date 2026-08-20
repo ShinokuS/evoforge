@@ -10,13 +10,13 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Finds lake domains as the lowest broad connected parts of real continental interiors.
+ * Selects broad inland-water domains from real continental lowlands.
  *
- * <p>No radial primitive, stamped basin or post-hoc water level is used. The algorithm reads the
- * accepted pre-mountain terrain, excludes coast-adjacent and already submerged cells, smooths only
- * for placement decisions, then takes a low quantile of that actual terrain. Connected components
- * of the lowland quantile become lake domains only when they have geographic width. Fragmentation
- * is never read directly: fragmented worlds simply contain less deep continental interior.</p>
+ * <p>The broad terrain chooses where a lake may exist. A morphological interior-width pass then
+ * removes narrow traces, one-cell appendages and accidental lowland corridors before any water is
+ * authored. The result therefore follows the accepted terrain without tracing every low contour.
+ * Fragmentation is never read directly: it only changes the amount and shape of continental
+ * interior available to this algorithm.</p>
  */
 final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainAlgorithm {
     static final TerrainLowlandInlandLakeDomainAlgorithm INSTANCE =
@@ -42,6 +42,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         if (!sameHorizontalBounds(bounds, continentalBase.bounds())) {
             throw new IllegalArgumentException("continental base must match lake-domain horizontal bounds");
         }
+
         int width = calibration.width();
         int height = calibration.height();
         int area = calibration.area();
@@ -66,7 +67,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             }
         }
 
-        int[] coastDistance = distanceFromExistingWater(dry, width, height);
+        int[] coastDistance = distanceFromFalse(dry, width, height);
         long[] broadElevation = broadDryElevation(
                 elevation,
                 dry,
@@ -74,8 +75,8 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 height,
                 calibration.smoothingRadiusCells());
 
-        long[] eligibleHeights = new long[area];
         boolean[] eligible = new boolean[area];
+        long[] eligibleHeights = new long[area];
         int eligibleCount = 0;
         for (int cell = 0; cell < area; cell++) {
             if (!dry[cell]
@@ -86,40 +87,78 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             eligible[cell] = true;
             eligibleHeights[eligibleCount++] = broadElevation[cell];
         }
+        if (eligibleCount == 0) return InlandLakeDomain.empty(bounds);
 
         int interiorCapacity = Math.toIntExact(
                 (long) eligibleCount * recipe.maximumInteriorOccupancyPpm() / PPM);
         int desiredLakeCells = Math.min(calibration.targetLakeCells(), interiorCapacity);
-        if (desiredLakeCells < calibration.minimumComponentCells() || eligibleCount == 0) {
+        if (desiredLakeCells < calibration.minimumComponentCells()) {
             return InlandLakeDomain.empty(bounds);
         }
 
+        /*
+         * Select a wider lowland support than the eventual water footprint. The later width opening
+         * is intentionally subtractive: terrain decides the candidate geography, morphology only
+         * refuses parts that are too thin to read as a lake.
+         */
         Arrays.sort(eligibleHeights, 0, eligibleCount);
-        long threshold = eligibleHeights[Math.min(eligibleCount - 1, desiredLakeCells - 1)];
-        boolean[] candidate = new boolean[area];
+        int supportTarget = Math.min(
+                eligibleCount,
+                Math.max(desiredLakeCells, Math.multiplyExact(desiredLakeCells, 3)));
+        long threshold = eligibleHeights[Math.max(0, supportTarget - 1)];
+        boolean[] support = new boolean[area];
         for (int cell = 0; cell < area; cell++) {
-            candidate[cell] = eligible[cell] && broadElevation[cell] <= threshold;
+            support[cell] = eligible[cell] && broadElevation[cell] <= threshold;
+        }
+
+        int[] supportWidth = distanceFromFalse(support, width, height);
+        int requiredHalfWidth = Math.max(2, calibration.minimumComponentSpanCells() / 4);
+        boolean[] broadCore = new boolean[area];
+        for (int cell = 0; cell < area; cell++) {
+            broadCore[cell] = support[cell] && supportWidth[cell] > requiredHalfWidth;
+        }
+
+        /*
+         * Grow one bounded rim back from the thick core, but only through the original lowland
+         * support and only where several neighbours agree. This restores natural lowland edges
+         * without resurrecting one-cell tendrils or accidental channels.
+         */
+        boolean[] regularized = broadCore.clone();
+        for (int pass = 0; pass < requiredHalfWidth; pass++) {
+            boolean[] next = regularized.clone();
+            for (int cell = 0; cell < area; cell++) {
+                if (regularized[cell] || !support[cell]) continue;
+                int x = cell % width;
+                int y = cell / width;
+                int neighbours = 0;
+                for (int direction = 0; direction < DX.length; direction++) {
+                    int nx = x + DX[direction];
+                    int ny = y + DY[direction];
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                    if (regularized[ny * width + nx]) neighbours++;
+                }
+                if (neighbours >= 2) next[cell] = true;
+            }
+            regularized = next;
         }
 
         int[] componentIds = new int[area];
         Arrays.fill(componentIds, -1);
         List<Component> components = collectComponents(
-                candidate,
+                regularized,
                 broadElevation,
                 componentIds,
                 width,
                 height);
         if (components.isEmpty()) return InlandLakeDomain.empty(bounds);
 
-        boolean[] hasInteriorCore = interiorCoreFlags(componentIds, components.size(), width, height);
         List<Component> valid = new ArrayList<>();
         for (Component component : components) {
             int spanX = component.maxX() - component.minX() + 1;
             int spanY = component.maxY() - component.minY() + 1;
             if (component.cellCount() < calibration.minimumComponentCells()
                     || spanX < calibration.minimumComponentSpanCells()
-                    || spanY < calibration.minimumComponentSpanCells()
-                    || !hasInteriorCore[component.id()]) {
+                    || spanY < calibration.minimumComponentSpanCells()) {
                 continue;
             }
             valid.add(component);
@@ -150,32 +189,24 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             lake[cell] = true;
             lakeCellCount++;
         }
-        return new InlandLakeDomain(bounds, lake, lakeCellCount);
+        return lakeCellCount == 0
+                ? InlandLakeDomain.empty(bounds)
+                : new InlandLakeDomain(bounds, lake, lakeCellCount);
     }
 
-    private static int[] distanceFromExistingWater(boolean[] dry, int width, int height) {
-        int area = dry.length;
+    private static int[] distanceFromFalse(boolean[] inside, int width, int height) {
+        int area = inside.length;
         int[] distance = new int[area];
         Arrays.fill(distance, Integer.MAX_VALUE);
         ArrayDeque<Integer> queue = new ArrayDeque<>();
-        boolean hasWater = false;
         for (int cell = 0; cell < area; cell++) {
-            if (dry[cell]) continue;
-            distance[cell] = 0;
-            queue.addLast(cell);
-            hasWater = true;
-        }
-        if (!hasWater) {
-            for (int x = 0; x < width; x++) {
-                seedBoundary(distance, queue, x);
-                seedBoundary(distance, queue, (height - 1) * width + x);
-            }
-            for (int y = 1; y + 1 < height; y++) {
-                seedBoundary(distance, queue, y * width);
-                seedBoundary(distance, queue, y * width + width - 1);
+            int x = cell % width;
+            int y = cell / width;
+            if (!inside[cell] || x == 0 || y == 0 || x == width - 1 || y == height - 1) {
+                distance[cell] = 0;
+                queue.addLast(cell);
             }
         }
-
         while (!queue.isEmpty()) {
             int cell = queue.removeFirst();
             int x = cell % width;
@@ -192,12 +223,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             }
         }
         return distance;
-    }
-
-    private static void seedBoundary(int[] distance, ArrayDeque<Integer> queue, int cell) {
-        if (distance[cell] == 0) return;
-        distance[cell] = 0;
-        queue.addLast(cell);
     }
 
     private static long[] broadDryElevation(
@@ -249,14 +274,12 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             int minY,
             int maxX,
             int maxY) {
-        int x0 = minX;
-        int y0 = minY;
         int x1 = maxX + 1;
         int y1 = maxY + 1;
         return integral[y1 * stride + x1]
-                - integral[y0 * stride + x1]
-                - integral[y1 * stride + x0]
-                + integral[y0 * stride + x0];
+                - integral[minY * stride + x1]
+                - integral[y1 * stride + minX]
+                + integral[minY * stride + minX];
     }
 
     private static long rectangle(
@@ -266,14 +289,12 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             int minY,
             int maxX,
             int maxY) {
-        int x0 = minX;
-        int y0 = minY;
         int x1 = maxX + 1;
         int y1 = maxY + 1;
         return (long) integral[y1 * stride + x1]
-                - integral[y0 * stride + x1]
-                - integral[y1 * stride + x0]
-                + integral[y0 * stride + x0];
+                - integral[minY * stride + x1]
+                - integral[y1 * stride + minX]
+                + integral[minY * stride + minX];
     }
 
     private static List<Component> collectComponents(
@@ -308,7 +329,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 maxX = Math.max(maxX, x);
                 minY = Math.min(minY, y);
                 maxY = Math.max(maxY, y);
-
                 for (int direction = 0; direction < DX.length; direction++) {
                     int nx = x + DX[direction];
                     int ny = y + DY[direction];
@@ -322,28 +342,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             components.add(new Component(id, cellCount, sumBroad, minX, maxX, minY, maxY));
         }
         return components;
-    }
-
-    private static boolean[] interiorCoreFlags(
-            int[] componentIds,
-            int componentCount,
-            int width,
-            int height) {
-        boolean[] result = new boolean[componentCount];
-        for (int y = 1; y + 1 < height; y++) {
-            for (int x = 1; x + 1 < width; x++) {
-                int cell = y * width + x;
-                int id = componentIds[cell];
-                if (id < 0 || result[id]) continue;
-                if (componentIds[cell - 1] == id
-                        && componentIds[cell + 1] == id
-                        && componentIds[cell - width] == id
-                        && componentIds[cell + width] == id) {
-                    result[id] = true;
-                }
-            }
-        }
-        return result;
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
