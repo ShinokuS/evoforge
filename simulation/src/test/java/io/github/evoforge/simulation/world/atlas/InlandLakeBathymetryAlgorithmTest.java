@@ -14,15 +14,15 @@ import org.junit.jupiter.api.Test;
 final class InlandLakeBathymetryAlgorithmTest {
 
     @Test
-    void deepensBroadInlandBodyWhilePreservingDryTerrainOceanAndMembershipExactly() {
-        WorldBounds bounds = new WorldBounds(0, 24, 0, 24, -32, 16);
-        long[] elevation = new long[25 * 25];
-        for (int y = 0; y < 25; y++) {
-            for (int x = 0; x < 25; x++) {
-                int cell = y * 25 + x;
-                if (x == 0 || y == 0 || x == 24 || y == 24) {
+    void deepensBroadInlandBodyWithBroadMonotoneTerracesWhilePreservingOtherDomains() {
+        WorldBounds bounds = new WorldBounds(0, 40, 0, 40, -32, 16);
+        long[] elevation = new long[41 * 41];
+        for (int y = 0; y < 41; y++) {
+            for (int x = 0; x < 41; x++) {
+                int cell = y * 41 + x;
+                if (x == 0 || y == 0 || x == 40 || y == 40) {
                     elevation[cell] = -3L * ElevationField.SUBUNITS_PER_CELL;
-                } else if (x >= 7 && x <= 17 && y >= 7 && y <= 17) {
+                } else if (x >= 10 && x <= 30 && y >= 10 && y <= 30) {
                     elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
                 } else {
                     elevation[cell] = 6L * ElevationField.SUBUNITS_PER_CELL;
@@ -33,19 +33,27 @@ final class InlandLakeBathymetryAlgorithmTest {
         ElevationField after = InlandLakeBathymetryAlgorithm.standard().generate(
                 genesis(bounds), before, InlandLakeBathymetryRecipe.balanced());
 
-        assertTrue(after.elevationSubunitsAt(12, 12) <= -5L * ElevationField.SUBUNITS_PER_CELL);
-        assertEquals(-ElevationField.SUBUNITS_PER_CELL, after.elevationSubunitsAt(7, 12),
+        assertTrue(after.elevationSubunitsAt(20, 20) <= -5L * ElevationField.SUBUNITS_PER_CELL);
+        assertEquals(-ElevationField.SUBUNITS_PER_CELL, after.elevationSubunitsAt(10, 20),
                 "first submerged ring should remain shallow");
+        assertEquals(-ElevationField.SUBUNITS_PER_CELL, after.elevationSubunitsAt(11, 20),
+                "one-cell depth terraces are not allowed beside the shore");
 
-        for (int y = 0; y < 25; y++) {
-            for (int x = 0; x < 25; x++) {
+        for (int y = 0; y < 41; y++) {
+            for (int x = 0; x < 41; x++) {
                 long original = before.elevationSubunitsAt(x, y);
                 long refined = after.elevationSubunitsAt(x, y);
                 assertEquals(original < 0L, refined < 0L,
                         "depth refinement must never change standing-water membership");
-                if (original >= 0L || x == 0 || y == 0 || x == 24 || y == 24) {
+                if (original >= 0L || x == 0 || y == 0 || x == 40 || y == 40) {
                     assertEquals(original, refined,
                             "dry terrain and boundary-connected ocean must remain bit-identical");
+                }
+                if (x > 10 && x <= 30 && y >= 10 && y <= 30) {
+                    long west = after.elevationSubunitsAt(x - 1, y);
+                    long cardinalFall = Math.abs(refined - west);
+                    assertTrue(cardinalFall <= ElevationField.SUBUNITS_PER_CELL,
+                            "lake floor must never jump by more than one full Z per cardinal step");
                 }
             }
         }
