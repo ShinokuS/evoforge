@@ -80,6 +80,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private TerrainShapeField generatedShapes;
     private WorldHydrologyTopology generatedHydrologyTopology;
     private Mesh[] surfaceMeshes = new Mesh[0];
+    private Mesh[] inlandWaterMeshes = new Mesh[0];
     private Mesh oceanMesh;
     private boolean showSurface = true;
     private boolean showOcean = true;
@@ -167,6 +168,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     }
 
     private void renderThreeDimensional() {
+        if (showOcean) ensureHydrologyTopology();
         updateCamera();
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
         shader.bind();
@@ -176,10 +178,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 surfaceMesh.render(shader, GL20.GL_TRIANGLES);
             }
         }
-        if (showOcean && oceanMesh != null) {
+        if (showOcean) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-            oceanMesh.render(shader, GL20.GL_TRIANGLES);
+            if (oceanMesh != null) oceanMesh.render(shader, GL20.GL_TRIANGLES);
+            for (Mesh inlandWaterMesh : inlandWaterMeshes) {
+                inlandWaterMesh.render(shader, GL20.GL_TRIANGLES);
+            }
             Gdx.gl.glDisable(GL20.GL_BLEND);
         }
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
@@ -281,6 +286,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private void ensureHydrologyTopology() {
         if (generatedHydrologyTopology != null || generatedElevation == null) return;
         generatedHydrologyTopology = WorldHydrologyTopologyStage.standard().generate(generatedElevation);
+        rebuildInlandWaterMeshes();
     }
 
     private void setElevationTintPpm(int strengthPpm) {
@@ -297,6 +303,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         if (WorldGeneration3DDetail.maxAxisSamples() == samples) return;
         WorldGeneration3DDetail.maxAxisSamples(samples);
         rebuildSurfaceMeshes();
+        if (generatedHydrologyTopology != null) rebuildInlandWaterMeshes();
     }
 
     private void rebuildSurfaceMeshes() {
@@ -311,6 +318,19 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 previewWidth,
                 previewLength,
                 elevationTintPpm);
+    }
+
+    private void rebuildInlandWaterMeshes() {
+        disposeInlandWaterMeshes();
+        if (generatedHydrologyTopology == null || bounds == null || previewWidth < 1 || previewLength < 1) {
+            return;
+        }
+        inlandWaterMeshes = WorldGenerationInlandWater3DMeshBuilder.build(
+                generatedHydrologyTopology.inlandLakes(),
+                bounds,
+                previewWidth,
+                previewLength,
+                VERTICAL_EXAGGERATION);
     }
 
     private static Mesh[] buildSurfaceMeshes(
@@ -534,13 +554,14 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             }
         } else {
             font.draw(batch, String.format(
-                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   chunks %d   axis cap %d",
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   terrain chunks %d   water chunks %d   axis cap %d",
                     Gdx.graphics.getFramesPerSecond(),
                     Gdx.graphics.getDeltaTime() * 1000f,
                     lastCpuMillis,
                     previewWidth,
                     previewLength,
                     surfaceMeshes.length,
+                    inlandWaterMeshes.length,
                     WorldGeneration3DDetail.maxAxisSamples()),
                     24f,
                     Gdx.graphics.getHeight() - 120f);
@@ -593,6 +614,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void disposeMeshes() {
         disposeSurfaceMeshes();
+        disposeInlandWaterMeshes();
         if (oceanMesh != null) {
             oceanMesh.dispose();
             oceanMesh = null;
@@ -604,6 +626,13 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             surfaceMesh.dispose();
         }
         surfaceMeshes = new Mesh[0];
+    }
+
+    private void disposeInlandWaterMeshes() {
+        for (Mesh inlandWaterMesh : inlandWaterMeshes) {
+            inlandWaterMesh.dispose();
+        }
+        inlandWaterMeshes = new Mesh[0];
     }
 
     private static int sampleCoordinate(int min, int max, int sampleIndex, int sampleCount) {
