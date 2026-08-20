@@ -34,7 +34,7 @@ import java.util.List;
 
 /** Interactive 2D/3D inspection workspace for generated world morphology and surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V14;
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V15;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
     private static final int SURFACE_CHUNK_INTERVALS = 128;
 
@@ -479,8 +479,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE V14"
-                        : "WORLD GENERATION / STANDING-WATER BATHYMETRY V14",
+                        ? "WORLD GENERATION / 2D SURFACE V15"
+                        : "WORLD GENERATION / CONTINENTAL BASINS V15",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
