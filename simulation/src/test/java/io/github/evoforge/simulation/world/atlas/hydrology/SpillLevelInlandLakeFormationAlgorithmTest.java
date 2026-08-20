@@ -11,14 +11,14 @@ final class SpillLevelInlandLakeFormationAlgorithmTest {
     private static final long CELL = ElevationField.SUBUNITS_PER_CELL;
 
     @Test
-    void fillsSignificantBasinToLocalSpillWithoutMutatingTerrainOrSeaLevel() {
+    void explicitExperimentalAlgorithmFillsSignificantBasinWithoutMutatingTerrainOrSeaLevel() {
         ElevationField elevation = PriorityFloodDrainageBasinTopologyAnalyzerTest.bowlElevation();
         StandingWaterTopology outlets = new BroadStandingWaterBodySelector().select(
                 new ConnectedStandingWaterTopologyAnalyzer().analyze(elevation));
         DrainageBasinTopology basins =
                 DrainageBasinTopologyAnalyzer.standard().analyze(elevation, outlets);
 
-        InlandLakeTopology lakes = InlandLakeFormationAlgorithm.standard().generate(
+        InlandLakeTopology lakes = new SpillLevelInlandLakeFormationAlgorithm().generate(
                 elevation,
                 basins,
                 InlandLakeFormationRecipe.balanced());
