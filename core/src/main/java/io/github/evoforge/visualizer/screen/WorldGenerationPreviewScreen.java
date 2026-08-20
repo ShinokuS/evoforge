@@ -195,7 +195,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 showSurface,
                 showOcean);
         if (showHydrologyDiagnostics && generatedHydrologyTopology != null) {
-            hydrologyDiagnosticRenderer.render(generatedHydrologyTopology.standingWaterTopology());
+            hydrologyDiagnosticRenderer.render(generatedHydrologyTopology);
         }
     }
 
@@ -551,7 +551,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             font.draw(
                     batch,
                     "WASD / drag: pan | wheel: zoom (" + shape2DRenderer.zoomLabel()
-                            + ") | F: fit | F3: shape directions | F4: hydrology topology "
+                            + ") | F: fit | F3: shape directions | F4: basin/lake topology "
                             + (showHydrologyDiagnostics ? "ON" : "OFF")
                             + " | Esc: development tools",
                     24f,
