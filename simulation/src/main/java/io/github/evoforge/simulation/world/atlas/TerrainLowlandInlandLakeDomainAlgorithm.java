@@ -12,17 +12,19 @@ import java.util.List;
 /**
  * Selects broad inland-water domains from real continental lowlands.
  *
- * <p>The broad terrain chooses where a lake may exist. A morphological interior-width pass then
- * removes narrow traces, one-cell appendages and accidental lowland corridors before any water is
- * authored. The result therefore follows the accepted terrain without tracing every low contour.
- * Fragmentation is never read directly: it only changes the amount and shape of continental
- * interior available to this algorithm.</p>
+ * <p>The terrain still decides where a lake may exist. Shape regularization only rejects narrow
+ * support and rounds the accepted lowland footprint in an approximately Euclidean metric. It does
+ * not carve arbitrary water through high ground and it never reads Fragmentation directly.</p>
  */
 final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainAlgorithm {
     static final TerrainLowlandInlandLakeDomainAlgorithm INSTANCE =
             new TerrainLowlandInlandLakeDomainAlgorithm();
 
     private static final int PPM = NormalizedValue.SCALE;
+    private static final int DISTANCE_SCALE = 1_000;
+    private static final int CARDINAL_DISTANCE = DISTANCE_SCALE;
+    private static final int DIAGONAL_DISTANCE = 1_414;
+    private static final int INFINITE_DISTANCE = Integer.MAX_VALUE / 4;
     private static final int[] DX = {-1, 1, 0, 0};
     private static final int[] DY = {0, 0, -1, 1};
 
@@ -67,7 +69,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             }
         }
 
-        int[] coastDistance = distanceFromFalse(dry, width, height);
+        int[] coastDistance = chamferDistanceInside(dry, width, height);
         long[] broadElevation = broadDryElevation(
                 elevation,
                 dry,
@@ -80,7 +82,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         int eligibleCount = 0;
         for (int cell = 0; cell < area; cell++) {
             if (!dry[cell]
-                    || coastDistance[cell] < calibration.minimumInteriorClearanceCells()
+                    || coastDistance[cell] < calibration.minimumInteriorClearanceCells() * DISTANCE_SCALE
                     || elevation[cell] > calibration.maximumSourceElevationSubunits()) {
                 continue;
             }
@@ -96,11 +98,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             return InlandLakeDomain.empty(bounds);
         }
 
-        /*
-         * Select a wider lowland support than the eventual water footprint. The later width opening
-         * is intentionally subtractive: terrain decides the candidate geography, morphology only
-         * refuses parts that are too thin to read as a lake.
-         */
         Arrays.sort(eligibleHeights, 0, eligibleCount);
         int supportTarget = Math.min(
                 eligibleCount,
@@ -111,35 +108,30 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             support[cell] = eligible[cell] && broadElevation[cell] <= threshold;
         }
 
-        int[] supportWidth = distanceFromFalse(support, width, height);
+        /*
+         * Erode the lowland support in an approximately Euclidean metric. This is the structural
+         * anti-tendril step. Unlike Manhattan erosion it does not manufacture square/diamond lake
+         * cores from otherwise rounded terrain lows.
+         */
+        int[] supportWidth = chamferDistanceInside(support, width, height);
         int requiredHalfWidth = Math.max(2, calibration.minimumComponentSpanCells() / 4);
+        int requiredHalfWidthScaled = requiredHalfWidth * DISTANCE_SCALE;
         boolean[] broadCore = new boolean[area];
         for (int cell = 0; cell < area; cell++) {
-            broadCore[cell] = support[cell] && supportWidth[cell] > requiredHalfWidth;
+            broadCore[cell] = support[cell] && supportWidth[cell] > requiredHalfWidthScaled;
         }
 
         /*
-         * Grow one bounded rim back from the thick core, but only through the original lowland
-         * support and only where several neighbours agree. This restores natural lowland edges
-         * without resurrecting one-cell tendrils or accidental channels.
+         * Dilate the thick core back through the original support using the same metric. A support
+         * point itself must retain more than one cell of local width, so one-cell corridors and
+         * isolated teeth cannot return during reconstruction.
          */
-        boolean[] regularized = broadCore.clone();
-        for (int pass = 0; pass < requiredHalfWidth; pass++) {
-            boolean[] next = regularized.clone();
-            for (int cell = 0; cell < area; cell++) {
-                if (regularized[cell] || !support[cell]) continue;
-                int x = cell % width;
-                int y = cell / width;
-                int neighbours = 0;
-                for (int direction = 0; direction < DX.length; direction++) {
-                    int nx = x + DX[direction];
-                    int ny = y + DY[direction];
-                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-                    if (regularized[ny * width + nx]) neighbours++;
-                }
-                if (neighbours >= 2) next[cell] = true;
-            }
-            regularized = next;
+        int[] distanceToCore = chamferDistanceFromTrue(broadCore, width, height);
+        boolean[] regularized = new boolean[area];
+        for (int cell = 0; cell < area; cell++) {
+            regularized[cell] = support[cell]
+                    && supportWidth[cell] > DISTANCE_SCALE
+                    && distanceToCore[cell] <= requiredHalfWidthScaled;
         }
 
         int[] componentIds = new int[area];
@@ -194,35 +186,66 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 : new InlandLakeDomain(bounds, lake, lakeCellCount);
     }
 
-    private static int[] distanceFromFalse(boolean[] inside, int width, int height) {
-        int area = inside.length;
-        int[] distance = new int[area];
-        Arrays.fill(distance, Integer.MAX_VALUE);
-        ArrayDeque<Integer> queue = new ArrayDeque<>();
-        for (int cell = 0; cell < area; cell++) {
+    private static int[] chamferDistanceInside(boolean[] inside, int width, int height) {
+        int[] distance = new int[inside.length];
+        for (int cell = 0; cell < inside.length; cell++) {
             int x = cell % width;
             int y = cell / width;
-            if (!inside[cell] || x == 0 || y == 0 || x == width - 1 || y == height - 1) {
-                distance[cell] = 0;
-                queue.addLast(cell);
-            }
+            distance[cell] = inside[cell]
+                    && x > 0 && x + 1 < width && y > 0 && y + 1 < height
+                    ? INFINITE_DISTANCE
+                    : 0;
         }
-        while (!queue.isEmpty()) {
-            int cell = queue.removeFirst();
-            int x = cell % width;
-            int y = cell / width;
-            int nextDistance = distance[cell] + 1;
-            for (int direction = 0; direction < DX.length; direction++) {
-                int nx = x + DX[direction];
-                int ny = y + DY[direction];
-                if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-                int next = ny * width + nx;
-                if (nextDistance >= distance[next]) continue;
-                distance[next] = nextDistance;
-                queue.addLast(next);
-            }
-        }
+        chamferPasses(distance, width, height);
         return distance;
+    }
+
+    private static int[] chamferDistanceFromTrue(boolean[] source, int width, int height) {
+        int[] distance = new int[source.length];
+        boolean any = false;
+        for (int cell = 0; cell < source.length; cell++) {
+            if (source[cell]) {
+                distance[cell] = 0;
+                any = true;
+            } else {
+                distance[cell] = INFINITE_DISTANCE;
+            }
+        }
+        if (!any) return distance;
+        chamferPasses(distance, width, height);
+        return distance;
+    }
+
+    private static void chamferPasses(int[] distance, int width, int height) {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int cell = y * width + x;
+                if (distance[cell] == 0) continue;
+                int best = distance[cell];
+                if (x > 0) best = Math.min(best, plus(distance[cell - 1], CARDINAL_DISTANCE));
+                if (y > 0) best = Math.min(best, plus(distance[cell - width], CARDINAL_DISTANCE));
+                if (x > 0 && y > 0) best = Math.min(best, plus(distance[cell - width - 1], DIAGONAL_DISTANCE));
+                if (x + 1 < width && y > 0) best = Math.min(best, plus(distance[cell - width + 1], DIAGONAL_DISTANCE));
+                distance[cell] = best;
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int cell = y * width + x;
+                if (distance[cell] == 0) continue;
+                int best = distance[cell];
+                if (x + 1 < width) best = Math.min(best, plus(distance[cell + 1], CARDINAL_DISTANCE));
+                if (y + 1 < height) best = Math.min(best, plus(distance[cell + width], CARDINAL_DISTANCE));
+                if (x + 1 < width && y + 1 < height) best = Math.min(best, plus(distance[cell + width + 1], DIAGONAL_DISTANCE));
+                if (x > 0 && y + 1 < height) best = Math.min(best, plus(distance[cell + width - 1], DIAGONAL_DISTANCE));
+                distance[cell] = best;
+            }
+        }
+    }
+
+    private static int plus(int distance, int increment) {
+        if (distance >= INFINITE_DISTANCE - increment) return INFINITE_DISTANCE;
+        return distance + increment;
     }
 
     private static long[] broadDryElevation(
@@ -259,21 +282,14 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 int minX = Math.max(0, x - radius);
                 int maxX = Math.min(width - 1, x + radius);
                 long windowSum = rectangle(sum, integralWidth, minX, minY, maxX, maxY);
-                int windowCount = Math.toIntExact(
-                        rectangle(count, integralWidth, minX, minY, maxX, maxY));
+                int windowCount = Math.toIntExact(rectangle(count, integralWidth, minX, minY, maxX, maxY));
                 if (windowCount > 0) broad[cell] = windowSum / windowCount;
             }
         }
         return broad;
     }
 
-    private static long rectangle(
-            long[] integral,
-            int stride,
-            int minX,
-            int minY,
-            int maxX,
-            int maxY) {
+    private static long rectangle(long[] integral, int stride, int minX, int minY, int maxX, int maxY) {
         int x1 = maxX + 1;
         int y1 = maxY + 1;
         return integral[y1 * stride + x1]
@@ -282,13 +298,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 + integral[minY * stride + minX];
     }
 
-    private static long rectangle(
-            int[] integral,
-            int stride,
-            int minX,
-            int minY,
-            int maxX,
-            int maxY) {
+    private static long rectangle(int[] integral, int stride, int minX, int minY, int maxX, int maxY) {
         int x1 = maxX + 1;
         int y1 = maxY + 1;
         return (long) integral[y1 * stride + x1]
@@ -318,7 +328,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             int maxX = startX;
             int minY = startY;
             int maxY = startY;
-
             while (!queue.isEmpty()) {
                 int cell = queue.removeFirst();
                 int x = cell % width;
