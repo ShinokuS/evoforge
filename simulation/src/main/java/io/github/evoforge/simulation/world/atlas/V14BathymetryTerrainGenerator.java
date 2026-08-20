@@ -22,7 +22,7 @@ public final class V14BathymetryTerrainGenerator implements ElevationGenerator {
             ElevationGenerator baseGenerator,
             BathymetryCalibrator calibrator,
             BathymetryRecipe recipe) {
-        this(baseGenerator, calibrator, recipe, new BathymetryMorphologyAlgorithm());
+        this(baseGenerator, calibrator, recipe, StructuredBathymetryAlgorithm.standard());
     }
 
     public V14BathymetryTerrainGenerator(

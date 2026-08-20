@@ -19,7 +19,8 @@ public record BathymetryRecipe(
         int coastalContextMaximumCells,
         int coastalMinimumFallPpm,
         int coastalMaximumFallPpm,
-        int coastalReliefFullScalePpm) {
+        int coastalReliefFullScalePpm,
+        BathymetryInteriorRecipe interiorStructure) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -46,13 +47,15 @@ public record BathymetryRecipe(
             throw new IllegalArgumentException("coastalMaximumFallPpm must stay below half a cell per step");
         }
         requirePositiveNormalized(coastalReliefFullScalePpm, "coastalReliefFullScalePpm");
+        if (interiorStructure == null) {
+            throw new IllegalArgumentException("interiorStructure must not be null");
+        }
     }
 
     /**
-     * Balanced bathymetry model: the accepted smooth bowl remains the universal base profile.
-     * Ocean-connected coastlines may descend faster only when broad land morphology causally
-     * supports it. Coastal fall remains below half a Z cell per cardinal step so readable terrain
-     * bands stay broader than the one-cell noise rejected during visual development.
+     * Balanced bathymetry model: the accepted smooth coastal morphology remains the universal base.
+     * Large deep interiors may then replace the single-center bowl with several broad basins and
+     * highs, while shoreline distance remains only a room/depth envelope for those structures.
      */
     public static BathymetryRecipe balanced() {
         return new BathymetryRecipe(
@@ -65,7 +68,8 @@ public record BathymetryRecipe(
                 18,
                 20_000,
                 460_000,
-                500_000);
+                500_000,
+                BathymetryInteriorRecipe.balanced());
     }
 
     private static void requirePositiveNormalized(int value, String name) {
