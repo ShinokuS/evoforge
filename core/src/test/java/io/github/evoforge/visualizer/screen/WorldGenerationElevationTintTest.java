@@ -10,6 +10,11 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationElevationTintTest {
     private static final WorldGenerationElevationRange RANGE =
             new WorldGenerationElevationRange(0L, 10L * ElevationField.SUBUNITS_PER_CELL);
+    private static final WorldGenerationElevationRange RANGE_WITH_WATER =
+            new WorldGenerationElevationRange(
+                    0L,
+                    10L * ElevationField.SUBUNITS_PER_CELL,
+                    -20L * ElevationField.SUBUNITS_PER_CELL);
 
     @Test
     void zeroSensitivityUsesOneNeutralColorAcrossZ() {
@@ -104,6 +109,65 @@ final class WorldGenerationElevationTintTest {
 
         assertEquals(0.5f, low.r, 0.0001f);
         assertEquals(Color.rgba8888(low), Color.rgba8888(high));
+    }
+
+    @Test
+    void submergedShaderTintGetsDarkerWithNegativeZ() {
+        Color shallow = WorldGenerationElevationTint.shaderColor(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color deep = WorldGenerationElevationTint.shaderColor(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+
+        assertTrue(shallow.r <= 0.5f, "submerged terrain must never use the bright half of the ramp");
+        assertTrue(deep.r < shallow.r, "deeper negative Z must receive a darker shader coordinate");
+    }
+
+    @Test
+    void submerged3DColorDarkensWithDepthWithoutChangingItsBlueCharacter() {
+        Color shallow = WorldGenerationElevationTint.color(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+        Color deep = WorldGenerationElevationTint.color(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                500_000,
+                new Color());
+
+        assertTrue(deep.r < shallow.r);
+        assertTrue(deep.g < shallow.g);
+        assertTrue(deep.b < shallow.b);
+        assertTrue(shallow.b > shallow.g && shallow.g > shallow.r, "shallow seabed must stay blue-gray");
+        assertTrue(deep.b > deep.g && deep.g > deep.r, "deep seabed must stay blue-gray");
+    }
+
+    @Test
+    void zeroSensitivityLeavesSubmergedDepthAtOneNeutralWaterShade() {
+        Color shallow = WorldGenerationElevationTint.color(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color deep = WorldGenerationElevationTint.color(
+                -18L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+        Color shallowShader = WorldGenerationElevationTint.shaderColor(
+                -2L * ElevationField.SUBUNITS_PER_CELL,
+                RANGE_WITH_WATER,
+                0,
+                new Color());
+
+        assertEquals(Color.rgba8888(shallow), Color.rgba8888(deep));
+        assertEquals(0.5f, shallowShader.r, 0.0001f);
     }
 
     private static float colorDistance(Color first, Color second) {

@@ -340,15 +340,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                         bounds.minX(), bounds.maxX(), sampleX, globalSampleWidth);
                 long heightSubunits = elevation.elevationSubunitsAt(x, y);
                 float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
-                if (heightSubunits >= 0L) {
-                    WorldGenerationElevationTint.color(
-                            heightSubunits,
-                            elevationRange,
-                            elevationTintPpm,
-                            color);
-                } else {
-                    color.set(0.16f, 0.24f, 0.30f, 1f);
-                }
+                WorldGenerationElevationTint.color(
+                        heightSubunits,
+                        elevationRange,
+                        elevationTintPpm,
+                        color);
                 vertices[cursor++] = x;
                 vertices[cursor++] = h * VERTICAL_EXAGGERATION;
                 vertices[cursor++] = -y;
