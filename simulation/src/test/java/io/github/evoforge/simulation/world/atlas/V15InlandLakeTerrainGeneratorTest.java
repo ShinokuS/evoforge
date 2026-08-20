@@ -10,6 +10,7 @@ import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class V15InlandLakeTerrainGeneratorTest {
@@ -55,38 +56,9 @@ final class V15InlandLakeTerrainGeneratorTest {
     void coordinatorReservesRealLakeAreaSoLandContinuesToMeanDryLandWhenSupportFits() {
         WorldBounds bounds = new WorldBounds(0, 9, 0, 9, -4, 4);
         WorldGenesis genesis = genesis(bounds, 91_337L, GenerationRevision.V15, 500_000);
-        ElevationGenerator coverageBase = current -> {
-            int area = DenseElevationField.cellCount(current.spec().bounds());
-            int landCells = Math.toIntExact(
-                    ((long) area * current.generationIntent().landCoverage().partsPerMillion()
-                                    + NormalizedValue.SCALE / 2L)
-                            / NormalizedValue.SCALE);
-            long[] elevation = new long[area];
-            for (int cell = 0; cell < area; cell++) {
-                elevation[cell] = cell < landCells
-                        ? ElevationField.SUBUNITS_PER_CELL
-                        : -ElevationField.SUBUNITS_PER_CELL;
-            }
-            return new DenseElevationField(current.spec().bounds(), elevation);
-        };
-        InlandLakeDomainCalibrator calibrator = (current, base, recipe) ->
-                new InlandLakeDomainCalibration(
-                        10,
-                        10,
-                        100,
-                        50,
-                        5,
-                        1,
-                        1,
-                        1,
-                        1,
-                        1,
-                        4L * ElevationField.SUBUNITS_PER_CELL);
-        InlandLakeDomainAlgorithm lakeAlgorithm = (current, base, calibration, recipe) -> {
-            boolean[] lake = new boolean[100];
-            for (int cell = 40; cell < 45; cell++) lake[cell] = true;
-            return new InlandLakeDomain(bounds, lake, 5);
-        };
+        ElevationGenerator coverageBase = coverageBaseGenerator(null);
+        InlandLakeDomainCalibrator calibrator = fixedCalibration(5);
+        InlandLakeDomainAlgorithm lakeAlgorithm = fixedLake(bounds, 40, 5);
         V15InlandLakeBaseTerrainGenerator generator = new V15InlandLakeBaseTerrainGenerator(
                 coverageBase,
                 calibrator,
@@ -96,20 +68,52 @@ final class V15InlandLakeTerrainGeneratorTest {
                 V12LandformRecipe.balanced().coast());
 
         ElevationField result = generator.generate(genesis);
-        int dryLand = 0;
-        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                if (result.elevationSubunitsAt(x, y) >= 0L) dryLand++;
-            }
-        }
-
-        assertEquals(50, dryLand,
+        assertEquals(50, dryCellCount(result),
                 "five lake cells must be reserved in the continental budget rather than silently reducing Land");
         for (int cell = 40; cell < 45; cell++) {
             int x = cell % 10;
             int y = cell / 10;
             assertTrue(result.elevationSubunitsAt(x, y) < 0L);
         }
+    }
+
+    @Test
+    void predictiveLakeBudgetUsesOneBaseSynthesisWhenActualFootprintMatchesReservation() {
+        WorldBounds bounds = new WorldBounds(0, 9, 0, 9, -4, 4);
+        WorldGenesis genesis = genesis(bounds, 81_337L, GenerationRevision.V15, 500_000);
+        AtomicInteger calls = new AtomicInteger();
+        ElevationGenerator coverageBase = coverageBaseGenerator(calls);
+        InlandLakeDomainRecipe recipe = new InlandLakeDomainRecipe(
+                100_000,
+                900_000,
+                500_000,
+                1,
+                50,
+                1,
+                120,
+                8,
+                1,
+                120,
+                1);
+        InlandLakeDomainCalibrator calibrator = (current, base, ignored) ->
+                new InlandLakeDomainCalibration(
+                        10, 10, 100, dryCellCount(base), 6, 1, 1, 1, 1, 1,
+                        4L * ElevationField.SUBUNITS_PER_CELL);
+        V15InlandLakeBaseTerrainGenerator generator = new V15InlandLakeBaseTerrainGenerator(
+                coverageBase,
+                calibrator,
+                recipe,
+                fixedLake(bounds, 40, 6),
+                InlandLakeShoreConditioningAlgorithm.standard(),
+                V12LandformRecipe.balanced().coast(),
+                true);
+
+        ElevationField result = generator.generate(genesis);
+
+        assertEquals(1, calls.get(),
+                "matching predictive lake budget must avoid a duplicate expensive continental synthesis");
+        assertEquals(50, dryCellCount(result),
+                "single-pass prediction must preserve final dry-land semantics when prediction matches");
     }
 
     @Test
@@ -131,6 +135,50 @@ final class V15InlandLakeTerrainGeneratorTest {
         assertFieldsEqual(
                 V14BathymetryTerrainGenerator.standard().generate(v14),
                 new ElevationGenerationStage().generate(v14));
+    }
+
+    private static ElevationGenerator coverageBaseGenerator(AtomicInteger calls) {
+        return current -> {
+            if (calls != null) calls.incrementAndGet();
+            int area = DenseElevationField.cellCount(current.spec().bounds());
+            int landCells = Math.toIntExact(
+                    ((long) area * current.generationIntent().landCoverage().partsPerMillion()
+                                    + NormalizedValue.SCALE / 2L)
+                            / NormalizedValue.SCALE);
+            long[] elevation = new long[area];
+            for (int cell = 0; cell < area; cell++) {
+                elevation[cell] = cell < landCells
+                        ? ElevationField.SUBUNITS_PER_CELL
+                        : -ElevationField.SUBUNITS_PER_CELL;
+            }
+            return new DenseElevationField(current.spec().bounds(), elevation);
+        };
+    }
+
+    private static InlandLakeDomainCalibrator fixedCalibration(int lakeCells) {
+        return (current, base, recipe) ->
+                new InlandLakeDomainCalibration(
+                        10, 10, 100, 50, lakeCells, 1, 1, 1, 1, 1,
+                        4L * ElevationField.SUBUNITS_PER_CELL);
+    }
+
+    private static InlandLakeDomainAlgorithm fixedLake(WorldBounds bounds, int firstCell, int count) {
+        return (current, base, calibration, recipe) -> {
+            boolean[] lake = new boolean[100];
+            for (int cell = firstCell; cell < firstCell + count; cell++) lake[cell] = true;
+            return new InlandLakeDomain(bounds, lake, count);
+        };
+    }
+
+    private static int dryCellCount(ElevationField field) {
+        int dry = 0;
+        WorldBounds bounds = field.bounds();
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                if (field.elevationSubunitsAt(x, y) >= 0L) dry++;
+            }
+        }
+        return dry;
     }
 
     private static void assertFieldsEqual(ElevationField expected, ElevationField actual) {
