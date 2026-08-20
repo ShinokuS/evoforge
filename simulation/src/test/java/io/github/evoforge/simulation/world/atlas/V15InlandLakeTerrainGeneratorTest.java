@@ -15,29 +15,48 @@ import org.junit.jupiter.api.Test;
 final class V15InlandLakeTerrainGeneratorTest {
 
     @Test
-    void v15AddsOnlyInteriorStandingWaterToAcceptedV14Footprint() {
+    void v15AddsInteriorStandingWaterWhilePreservingRequestedDryLandBudget() {
         WorldGenesis genesis = genesis(300, 4_859_186_304_997_574_751L, GenerationRevision.V15);
         ElevationField v14 = V14BathymetryTerrainGenerator.standard().generate(genesis);
         ElevationField v15 = V15InlandLakeTerrainGenerator.standard().generate(genesis);
 
-        int newWater = 0;
+        int landToWater = 0;
+        int waterToLand = 0;
+        int dryLand = 0;
         WorldBounds bounds = v15.bounds();
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 long before = v14.elevationSubunitsAt(x, y);
                 long after = v15.elevationSubunitsAt(x, y);
-                if (before < 0L) {
-                    assertTrue(after < 0L, "V15 must never dry accepted V14 standing water");
-                } else if (after < 0L) {
-                    newWater++;
+                if (before >= 0L && after < 0L) {
+                    landToWater++;
                     assertTrue(x > bounds.minX() && x < bounds.maxX()
                                     && y > bounds.minY() && y < bounds.maxY(),
                             "inland lake must not be a boundary rewrite");
+                } else if (before < 0L && after >= 0L) {
+                    waterToLand++;
                 }
+                if (after >= 0L) dryLand++;
             }
         }
-        assertTrue(newWater >= 100,
+
+        int area = 300 * 300;
+        int requestedDryLand = Math.toIntExact((area * 830_000L + 500_000L) / 1_000_000L);
+        assertTrue(landToWater >= 100,
                 "representative high-land V15 world should contain a visually meaningful inland-water footprint");
+        assertTrue(waterToLand > 0,
+                "coordinator should compensate inland-water area through the continental land budget");
+        assertTrue(Math.abs(dryLand - requestedDryLand) <= 4,
+                "Land should continue to describe actual dry terrain within normalized calibration precision");
+
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            assertTrue(v15.elevationSubunitsAt(x, bounds.minY()) < 0L);
+            assertTrue(v15.elevationSubunitsAt(x, bounds.maxY()) < 0L);
+        }
+        for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+            assertTrue(v15.elevationSubunitsAt(bounds.minX(), y) < 0L);
+            assertTrue(v15.elevationSubunitsAt(bounds.maxX(), y) < 0L);
+        }
     }
 
     @Test
