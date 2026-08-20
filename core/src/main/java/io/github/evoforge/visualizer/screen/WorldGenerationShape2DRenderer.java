@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.hydrology.InlandLakeTopology;
 import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
 import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
@@ -149,9 +150,13 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     void render(
             ElevationField elevation,
             TerrainShapeField terrainShapes,
+            InlandLakeTopology inlandLakes,
             boolean showSurface,
-            boolean showOcean) {
+            boolean showWater) {
         if (elevation == null || terrainShapes == null || bounds == null) return;
+        if (inlandLakes != null && !bounds.equals(inlandLakes.bounds())) {
+            throw new IllegalArgumentException("inland lake topology must match preview bounds");
+        }
 
         constrainCamera();
         camera.update();
@@ -179,29 +184,27 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (showSurface) {
             elevationShader.apply(batch);
             if (stride == 1) {
-                drawTerrainDetailed(batch, elevation, terrainShapes, visible, showOcean);
+                drawTerrainDetailed(batch, elevation, terrainShapes, inlandLakes, visible, showWater);
             } else {
-                drawTerrainOverview(batch, elevation, visible, stride, showOcean);
+                drawTerrainOverview(batch, elevation, inlandLakes, visible, stride, showWater);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
             if (stride == 1) {
-                drawRelief(batch, elevation, terrainShapes, visible, showOcean);
+                drawRelief(batch, elevation, terrainShapes, inlandLakes, visible, showWater);
             }
         }
-        if (showOcean) {
+        if (showWater) {
             if (stride == 1) {
-                drawOceanDetailed(batch, elevation, visible);
+                drawWaterDetailed(batch, elevation, inlandLakes, visible);
             } else {
-                drawOceanOverview(batch, elevation, visible, stride);
+                drawWaterOverview(batch, elevation, inlandLakes, visible, stride);
             }
         }
         batch.end();
 
         if (showSurface && stride > 1) {
-            // Contours are presentation guidance rather than terrain samples. Running them on a
-            // coarser grid avoids a second full overview workload while retaining readable relief.
-            drawOverviewContours(elevation, visible, stride * 2);
+            drawOverviewContours(elevation, inlandLakes, visible, stride * 2, showWater);
         }
         if (showSurface && showShapeDirections && stride == 1) {
             drawShapeDirections(terrainShapes, visible);
@@ -226,27 +229,24 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             SpriteBatch batch,
             ElevationField elevation,
             TerrainShapeField terrainShapes,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
-            boolean oceanVisible) {
-        // Keep ordinary cells and overrides in separate passes. Full terrain and ramp art live in
-        // different atlases; grouping them prevents alternating texture switches from flushing the
-        // SpriteBatch on every neighbouring ramp.
-        drawTerrainBaseCells(batch, elevation, terrainShapes, visible, oceanVisible);
-        drawTerrainOverrides(batch, elevation, terrainShapes, visible, oceanVisible);
+            boolean waterVisible) {
+        drawTerrainBaseCells(batch, elevation, terrainShapes, inlandLakes, visible, waterVisible);
+        drawTerrainOverrides(batch, elevation, terrainShapes, inlandLakes, visible, waterVisible);
     }
 
     private void drawTerrainBaseCells(
             SpriteBatch batch,
             ElevationField elevation,
             TerrainShapeField terrainShapes,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
-            boolean oceanVisible) {
+            boolean waterVisible) {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 long height = elevation.elevationSubunitsAt(x, y);
-                // Water tiles are opaque. When the ocean layer is visible there is no reason to
-                // shade, topology-resolve and submit terrain that will be completely covered later.
-                if (oceanVisible && height < 0L) continue;
+                if (waterVisible && isStandingWater(elevation, inlandLakes, x, y)) continue;
                 if (terrainShapes.shapeOverrideAt(x, y) != null) continue;
                 drawTerrainCell(batch, elevation, terrainShapes, x, y, height, FullShape.INSTANCE);
             }
@@ -257,12 +257,13 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             SpriteBatch batch,
             ElevationField elevation,
             TerrainShapeField terrainShapes,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
-            boolean oceanVisible) {
+            boolean waterVisible) {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 long height = elevation.elevationSubunitsAt(x, y);
-                if (oceanVisible && height < 0L) continue;
+                if (waterVisible && isStandingWater(elevation, inlandLakes, x, y)) continue;
                 Shape shape = terrainShapes.shapeOverrideAt(x, y);
                 if (shape == null) continue;
                 drawTerrainCell(batch, elevation, terrainShapes, x, y, height, shape);
@@ -304,9 +305,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private void drawTerrainOverview(
             SpriteBatch batch,
             ElevationField elevation,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
             int stride,
-            boolean oceanVisible) {
+            boolean waterVisible) {
         for (int x = visible.minX(); x <= visible.maxX(); x += stride) {
             int blockWidth = Math.min(stride, visible.maxX() - x + 1);
             int sampleX = x + blockWidth / 2;
@@ -314,7 +316,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 int blockLength = Math.min(stride, visible.maxY() - y + 1);
                 int sampleY = y + blockLength / 2;
                 long height = elevation.elevationSubunitsAt(sampleX, sampleY);
-                if (oceanVisible && height < 0L) continue;
+                if (waterVisible && isStandingWater(elevation, inlandLakes, sampleX, sampleY)) continue;
                 int z = discreteZ(height);
                 int variant = LandscapeTopology.variant(
                         sampleX,
@@ -338,8 +340,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
     private void drawOverviewContours(
             ElevationField elevation,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
-            int stride) {
+            int stride,
+            boolean waterVisible) {
         diagnostics.setProjectionMatrix(camera.projection());
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -356,7 +360,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 int blockLength = Math.min(stride, visible.maxY() - y + 1);
                 int sampleY = y + blockLength / 2;
                 long sampleElevation = elevation.elevationSubunitsAt(sampleX, sampleY);
-                if (sampleElevation < 0L) continue;
+                if (sampleElevation < 0L
+                        || waterVisible && isStandingWater(elevation, inlandLakes, sampleX, sampleY)) {
+                    continue;
+                }
                 int sampleZ = discreteZ(sampleElevation);
 
                 int eastX = x + blockWidth;
@@ -364,7 +371,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     int eastWidth = Math.min(stride, visible.maxX() - eastX + 1);
                     int eastSampleX = eastX + eastWidth / 2;
                     long eastElevation = elevation.elevationSubunitsAt(eastSampleX, sampleY);
-                    if (eastElevation >= 0L && discreteZ(eastElevation) != sampleZ) {
+                    if (eastElevation >= 0L
+                            && (!waterVisible || !isStandingWater(elevation, inlandLakes, eastSampleX, sampleY))
+                            && discreteZ(eastElevation) != sampleZ) {
                         diagnostics.rectLine(eastX, y, eastX, y + blockLength, thickness);
                     }
                 }
@@ -374,7 +383,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     int northLength = Math.min(stride, visible.maxY() - northY + 1);
                     int northSampleY = northY + northLength / 2;
                     long northElevation = elevation.elevationSubunitsAt(sampleX, northSampleY);
-                    if (northElevation >= 0L && discreteZ(northElevation) != sampleZ) {
+                    if (northElevation >= 0L
+                            && (!waterVisible || !isStandingWater(elevation, inlandLakes, sampleX, northSampleY))
+                            && discreteZ(northElevation) != sampleZ) {
                         diagnostics.rectLine(x, northY, x + blockWidth, northY, thickness);
                     }
                 }
@@ -388,12 +399,13 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             SpriteBatch batch,
             ElevationField elevation,
             TerrainShapeField terrainShapes,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
-            boolean oceanVisible) {
+            boolean waterVisible) {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 long height = elevation.elevationSubunitsAt(x, y);
-                if (oceanVisible && height < 0L) continue;
+                if (waterVisible && isStandingWater(elevation, inlandLakes, x, y)) continue;
                 int z = discreteZ(height);
                 Shape shape = shapeAt(terrainShapes, x, y);
                 drawReliefEdge(batch, elevation, terrainShapes, x, y, z, shape,
@@ -439,22 +451,24 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         batch.draw(reliefEdges.region(side, raised), x, y, 1f, 1f);
     }
 
-    private void drawOceanDetailed(
+    private void drawWaterDetailed(
             SpriteBatch batch,
             ElevationField elevation,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible) {
         int frame = (int) (presentationSeconds * 5f);
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
-                if (elevation.elevationSubunitsAt(x, y) >= 0L) continue;
+                if (!isStandingWater(elevation, inlandLakes, x, y)) continue;
                 batch.draw(waterArt.frame(frame), x, y, 1f, 1f);
             }
         }
     }
 
-    private void drawOceanOverview(
+    private void drawWaterOverview(
             SpriteBatch batch,
             ElevationField elevation,
+            InlandLakeTopology inlandLakes,
             VisualizerCamera.VisibleRange visible,
             int stride) {
         int frame = (int) (presentationSeconds * 5f);
@@ -464,10 +478,19 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             for (int y = visible.minY(); y <= visible.maxY(); y += stride) {
                 int blockLength = Math.min(stride, visible.maxY() - y + 1);
                 int sampleY = y + blockLength / 2;
-                if (elevation.elevationSubunitsAt(sampleX, sampleY) >= 0L) continue;
+                if (!isStandingWater(elevation, inlandLakes, sampleX, sampleY)) continue;
                 batch.draw(waterArt.frame(frame), x, y, blockWidth, blockLength);
             }
         }
+    }
+
+    private static boolean isStandingWater(
+            ElevationField elevation,
+            InlandLakeTopology inlandLakes,
+            int x,
+            int y) {
+        return elevation.elevationSubunitsAt(x, y) < 0L
+                || inlandLakes != null && inlandLakes.isLakeAt(x, y);
     }
 
     private void drawShapeDirections(
