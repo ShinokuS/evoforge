@@ -7,7 +7,10 @@ public record BathymetryCalibration(
         int area,
         long floorSubunits,
         long maximumCardinalFallSubunits,
-        long worldDepthCapSubunits) {
+        long worldDepthCapSubunits,
+        int coastalContextRadiusCells,
+        long coastalMinimumFallSubunits,
+        long coastalMaximumFallSubunits) {
 
     public BathymetryCalibration {
         if (width <= 0 || height <= 0 || area <= 0) {
@@ -25,6 +28,15 @@ public record BathymetryCalibration(
         long verticalCapacity = Math.negateExact(floorSubunits);
         if (worldDepthCapSubunits <= 0L || worldDepthCapSubunits > verticalCapacity) {
             throw new IllegalArgumentException("worldDepthCapSubunits must fit available negative-Z capacity");
+        }
+        if (coastalContextRadiusCells <= 0) {
+            throw new IllegalArgumentException("coastalContextRadiusCells must be positive");
+        }
+        if (coastalMinimumFallSubunits < 0L
+                || coastalMaximumFallSubunits <= 0L
+                || coastalMinimumFallSubunits > coastalMaximumFallSubunits
+                || coastalMaximumFallSubunits > ElevationField.SUBUNITS_PER_CELL) {
+            throw new IllegalArgumentException("coastal fall limits must fit within one cell and be ordered");
         }
     }
 }

@@ -11,9 +11,13 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * elevation is copied exactly. Submerged elevation is re-authored from body geometry so legacy
  * below-sea-level ranking does not become accidental bathymetric truth.</p>
  *
- * <p>Depth is driven by distance from the nearest shoreline and capped by both body width and the
- * calibrated world depth budget. A smooth quintic profile yields shallow littoral margins, a broad
- * transition slope and a flattened deep interior without generating Water or runtime Shapes.</p>
+ * <p>The accepted smooth shoreline-distance profile remains the universal base morphology. For
+ * boundary-connected seas/oceans only, a broad land-side relief context may causally permit a
+ * locally faster coastal descent. Coastal character is sampled at the nearest land source rather
+ * than independently from each water cell, so one broad landform authors one broad coastal segment
+ * instead of a noisy per-cell field. The causal contribution is monotone and fades automatically as
+ * the accepted baseline approaches the body's depth cap; narrow bays therefore remain shallow when
+ * they do not have enough horizontal room.</p>
  */
 public final class BathymetryMorphologyAlgorithm implements BathymetryElevationAlgorithm {
     private static final int PPM = NormalizedValue.SCALE;
@@ -43,7 +47,8 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
         }
 
         long[] elevation = copyBaseElevation(base, bounds, width, height);
-        int[] shorelineDistance = shorelineDistance(elevation, width, height);
+        ShorelineField shoreline = shorelineField(elevation, width, height);
+        LandReliefIntegral landRelief = landReliefIntegral(elevation, width, height);
         boolean[] visited = new boolean[elevation.length];
         int[] component = new int[elevation.length];
 
@@ -58,7 +63,8 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                     height);
             authorComponentBathymetry(
                     elevation,
-                    shorelineDistance,
+                    shoreline,
+                    landRelief,
                     component,
                     componentSize,
                     width,
@@ -87,33 +93,68 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
         return elevation;
     }
 
-    private static int[] shorelineDistance(long[] elevation, int width, int height) {
+    /**
+     * Approximate Euclidean shoreline distance plus the deterministic nearest-land source that won
+     * the same chamfer transform. Keeping source provenance lets broad land morphology continue into
+     * water without re-sampling a shrinking/disappearing land window at every submerged cell.
+     */
+    private static ShorelineField shorelineField(long[] elevation, int width, int height) {
         int[] distance = new int[elevation.length];
+        int[] nearestLand = new int[elevation.length];
         boolean hasLand = false;
         for (int cell = 0; cell < elevation.length; cell++) {
             if (elevation[cell] >= 0L) {
                 distance[cell] = 0;
+                nearestLand[cell] = cell;
                 hasLand = true;
             } else {
                 distance[cell] = INFINITE_DISTANCE;
+                nearestLand[cell] = -1;
             }
         }
-        if (!hasLand) return distance;
+        if (!hasLand) return new ShorelineField(distance, nearestLand);
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int cell = y * width + x;
                 if (distance[cell] == 0) continue;
                 int best = distance[cell];
-                if (x > 0) best = Math.min(best, plus(distance[cell - 1], CARDINAL_DISTANCE));
-                if (y > 0) best = Math.min(best, plus(distance[cell - width], CARDINAL_DISTANCE));
+                int source = nearestLand[cell];
+
+                if (x > 0) {
+                    int neighbor = cell - 1;
+                    int candidate = plus(distance[neighbor], CARDINAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
+                }
+                if (y > 0) {
+                    int neighbor = cell - width;
+                    int candidate = plus(distance[neighbor], CARDINAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
+                }
                 if (x > 0 && y > 0) {
-                    best = Math.min(best, plus(distance[cell - width - 1], DIAGONAL_DISTANCE));
+                    int neighbor = cell - width - 1;
+                    int candidate = plus(distance[neighbor], DIAGONAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
                 }
                 if (x + 1 < width && y > 0) {
-                    best = Math.min(best, plus(distance[cell - width + 1], DIAGONAL_DISTANCE));
+                    int neighbor = cell - width + 1;
+                    int candidate = plus(distance[neighbor], DIAGONAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
                 }
                 distance[cell] = best;
+                nearestLand[cell] = source;
             }
         }
 
@@ -122,18 +163,72 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                 int cell = y * width + x;
                 if (distance[cell] == 0) continue;
                 int best = distance[cell];
-                if (x + 1 < width) best = Math.min(best, plus(distance[cell + 1], CARDINAL_DISTANCE));
-                if (y + 1 < height) best = Math.min(best, plus(distance[cell + width], CARDINAL_DISTANCE));
+                int source = nearestLand[cell];
+
+                if (x + 1 < width) {
+                    int neighbor = cell + 1;
+                    int candidate = plus(distance[neighbor], CARDINAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
+                }
+                if (y + 1 < height) {
+                    int neighbor = cell + width;
+                    int candidate = plus(distance[neighbor], CARDINAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
+                }
                 if (x + 1 < width && y + 1 < height) {
-                    best = Math.min(best, plus(distance[cell + width + 1], DIAGONAL_DISTANCE));
+                    int neighbor = cell + width + 1;
+                    int candidate = plus(distance[neighbor], DIAGONAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
                 }
                 if (x > 0 && y + 1 < height) {
-                    best = Math.min(best, plus(distance[cell + width - 1], DIAGONAL_DISTANCE));
+                    int neighbor = cell + width - 1;
+                    int candidate = plus(distance[neighbor], DIAGONAL_DISTANCE);
+                    if (candidate < best) {
+                        best = candidate;
+                        source = nearestLand[neighbor];
+                    }
                 }
                 distance[cell] = best;
+                nearestLand[cell] = source;
             }
         }
-        return distance;
+        return new ShorelineField(distance, nearestLand);
+    }
+
+    private static LandReliefIntegral landReliefIntegral(long[] elevation, int width, int height) {
+        int stride = width + 1;
+        int cells = Math.multiplyExact(stride, height + 1);
+        long[] positiveHeightSum = new long[cells];
+        int[] positiveLandCount = new int[cells];
+
+        for (int y = 1; y <= height; y++) {
+            for (int x = 1; x <= width; x++) {
+                long value = elevation[(y - 1) * width + (x - 1)];
+                long positiveHeight = Math.max(0L, value);
+                int positiveLand = value > 0L ? 1 : 0;
+                int cell = y * stride + x;
+                int above = cell - stride;
+                int left = cell - 1;
+                int diagonal = above - 1;
+                positiveHeightSum[cell] = Math.addExact(
+                        positiveHeight,
+                        positiveHeightSum[above] + positiveHeightSum[left] - positiveHeightSum[diagonal]);
+                positiveLandCount[cell] = positiveLand
+                        + positiveLandCount[above]
+                        + positiveLandCount[left]
+                        - positiveLandCount[diagonal];
+            }
+        }
+        return new LandReliefIntegral(stride, positiveHeightSum, positiveLandCount);
     }
 
     private static int collectComponent(
@@ -174,13 +269,58 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
 
     private static void authorComponentBathymetry(
             long[] elevation,
-            int[] shorelineDistance,
+            ShorelineField shoreline,
+            LandReliefIntegral landRelief,
             int[] component,
             int componentSize,
             int width,
             int height,
             BathymetryCalibration calibration,
             BathymetryRecipe recipe) {
+        int maximumDistance = maximumShorelineDistance(
+                shoreline.distance(),
+                component,
+                componentSize,
+                width,
+                height);
+        long bodyDepthCap = bodyDepthCap(maximumDistance, calibration, recipe);
+        long verticalCapacity = Math.negateExact(calibration.floorSubunits());
+        boolean oceanConnected = touchesWorldBoundary(component, componentSize, width, height);
+
+        for (int index = 0; index < componentSize; index++) {
+            int cell = component[index];
+            int distance = shoreline.distance()[cell];
+            if (distance >= INFINITE_DISTANCE) distance = maximumDistance;
+            long baselineDepth = baselineDepth(distance, maximumDistance, bodyDepthCap);
+            long depth = baselineDepth;
+
+            if (oceanConnected) {
+                long coastalDepth = causalCoastalDepth(
+                        cell,
+                        distance,
+                        shoreline.nearestLand()[cell],
+                        width,
+                        height,
+                        landRelief,
+                        baselineDepth,
+                        bodyDepthCap,
+                        calibration,
+                        recipe);
+                depth = Math.max(depth, coastalDepth);
+            }
+
+            depth = Math.min(bodyDepthCap, depth);
+            depth = Math.min(verticalCapacity, depth);
+            elevation[cell] = -Math.max(1L, depth);
+        }
+    }
+
+    private static int maximumShorelineDistance(
+            int[] shorelineDistance,
+            int[] component,
+            int componentSize,
+            int width,
+            int height) {
         int maximumDistance = 0;
         boolean finiteShore = false;
         for (int index = 0; index < componentSize; index++) {
@@ -194,22 +334,143 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                     DISTANCE_SCALE,
                     Math.min(width, height) * DISTANCE_SCALE / 2);
         }
-        maximumDistance = Math.max(DISTANCE_SCALE, maximumDistance);
+        return Math.max(DISTANCE_SCALE, maximumDistance);
+    }
 
-        long bodyDepthCap = bodyDepthCap(maximumDistance, calibration, recipe);
-        long verticalCapacity = Math.negateExact(calibration.floorSubunits());
+    private static boolean touchesWorldBoundary(
+            int[] component,
+            int componentSize,
+            int width,
+            int height) {
         for (int index = 0; index < componentSize; index++) {
             int cell = component[index];
-            int distance = shorelineDistance[cell];
-            if (distance >= INFINITE_DISTANCE) distance = maximumDistance;
-            int coordinatePpm = (int) Math.min(
-                    PPM,
-                    (long) distance * PPM / maximumDistance);
-            int profilePpm = smootherStepPpm(coordinatePpm);
-            long depth = Math.max(1L, bodyDepthCap * profilePpm / PPM);
-            depth = Math.min(verticalCapacity, depth);
-            elevation[cell] = -depth;
+            int x = cell % width;
+            int y = cell / width;
+            if (x == 0 || x == width - 1 || y == 0 || y == height - 1) return true;
         }
+        return false;
+    }
+
+    private static long baselineDepth(int distance, int maximumDistance, long bodyDepthCap) {
+        int coordinatePpm = (int) Math.min(
+                PPM,
+                (long) distance * PPM / maximumDistance);
+        int profilePpm = smootherStepPpm(coordinatePpm);
+        return Math.max(1L, bodyDepthCap * profilePpm / PPM);
+    }
+
+    /**
+     * Builds one monotone coastal continuation from the broad relief around the nearest land source.
+     *
+     * <p>The first term is the fastest depth that the causal coast may geometrically support. The
+     * second term limits how far that coast may depart from the accepted baseline. That extra budget
+     * shrinks in direct proportion to remaining body-depth headroom, so the coastal contribution
+     * returns continuously to zero as the baseline reaches its deep interior cap.</p>
+     */
+    private static long causalCoastalDepth(
+            int cell,
+            int shorelineDistance,
+            int nearestLand,
+            int width,
+            int height,
+            LandReliefIntegral landRelief,
+            long baselineDepth,
+            long bodyDepthCap,
+            BathymetryCalibration calibration,
+            BathymetryRecipe recipe) {
+        if (nearestLand < 0 || shorelineDistance <= 0) return 0L;
+
+        int sourceX = nearestLand % width;
+        int sourceY = nearestLand / width;
+        int reliefPpm = coastalLandReliefPpm(
+                sourceX,
+                sourceY,
+                width,
+                height,
+                landRelief,
+                calibration.coastalContextRadiusCells());
+        if (reliefPpm <= 0) return 0L;
+
+        int reliefCoordinatePpm = (int) Math.min(
+                PPM,
+                (long) reliefPpm * PPM / recipe.coastalReliefFullScalePpm());
+        int reliefCharacterPpm = smootherStepPpm(reliefCoordinatePpm);
+        long localFall = calibration.coastalMinimumFallSubunits()
+                + (calibration.coastalMaximumFallSubunits()
+                                - calibration.coastalMinimumFallSubunits())
+                        * reliefCharacterPpm
+                        / PPM;
+        if (localFall <= 0L) return 0L;
+
+        long geometricDepth = (long) shorelineDistance * localFall / DISTANCE_SCALE;
+        int supportedSteps = Math.max(2, calibration.coastalContextRadiusCells() / 2);
+        long requestedExtra = Math.multiplyExact(localFall, (long) supportedSteps);
+        long maximumExtra = Math.min(bodyDepthCap, requestedExtra);
+        long remainingDepth = Math.max(0L, bodyDepthCap - baselineDepth);
+        long fadedExtra = bodyDepthCap <= 0L
+                ? 0L
+                : maximumExtra * remainingDepth / bodyDepthCap;
+        long parallelDepth = Math.addExact(baselineDepth, fadedExtra);
+
+        return Math.min(bodyDepthCap, Math.min(geometricDepth, parallelDepth));
+    }
+
+    private static int coastalLandReliefPpm(
+            int x,
+            int y,
+            int width,
+            int height,
+            LandReliefIntegral integral,
+            int radius) {
+        int minX = Math.max(0, x - radius);
+        int maxX = Math.min(width - 1, x + radius);
+        int minY = Math.max(0, y - radius);
+        int maxY = Math.min(height - 1, y + radius);
+        long sum = rectangleSum(integral.positiveHeightSum(), integral.stride(), minX, minY, maxX, maxY);
+        int count = rectangleSum(integral.positiveLandCount(), integral.stride(), minX, minY, maxX, maxY);
+        if (count <= 0 || sum <= 0L) return 0;
+
+        long averageLandHeight = sum / count;
+        long horizontalReference = Math.multiplyExact(
+                (long) radius,
+                ElevationField.SUBUNITS_PER_CELL);
+        return (int) Math.min(
+                PPM,
+                averageLandHeight * PPM / horizontalReference);
+    }
+
+    private static long rectangleSum(
+            long[] integral,
+            int stride,
+            int minX,
+            int minY,
+            int maxX,
+            int maxY) {
+        int left = minX;
+        int top = minY;
+        int right = maxX + 1;
+        int bottom = maxY + 1;
+        return integral[bottom * stride + right]
+                - integral[top * stride + right]
+                - integral[bottom * stride + left]
+                + integral[top * stride + left];
+    }
+
+    private static int rectangleSum(
+            int[] integral,
+            int stride,
+            int minX,
+            int minY,
+            int maxX,
+            int maxY) {
+        int left = minX;
+        int top = minY;
+        int right = maxX + 1;
+        int bottom = maxY + 1;
+        return integral[bottom * stride + right]
+                - integral[top * stride + right]
+                - integral[bottom * stride + left]
+                + integral[top * stride + left];
     }
 
     private static long bodyDepthCap(
@@ -256,5 +517,14 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
 
     private static int horizontalHeight(WorldBounds bounds) {
         return Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
+    }
+
+    private record ShorelineField(int[] distance, int[] nearestLand) {
+    }
+
+    private record LandReliefIntegral(
+            int stride,
+            long[] positiveHeightSum,
+            int[] positiveLandCount) {
     }
 }

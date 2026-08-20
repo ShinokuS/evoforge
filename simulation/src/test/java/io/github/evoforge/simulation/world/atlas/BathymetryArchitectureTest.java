@@ -39,6 +39,35 @@ final class BathymetryArchitectureTest {
     }
 
     @Test
+    void coastalContextScalesWithWorldSizeWithinRecipeBounds() {
+        BathymetryCalibration small = CALIBRATOR.calibrate(
+                genesis(new WorldBounds(-32, 31, -32, 31, -96, 96)),
+                RECIPE);
+        BathymetryCalibration medium = CALIBRATOR.calibrate(
+                genesis(new WorldBounds(-150, 149, -150, 149, -96, 96)),
+                RECIPE);
+        BathymetryCalibration large = CALIBRATOR.calibrate(
+                genesis(new WorldBounds(-250, 249, -250, 249, -96, 96)),
+                RECIPE);
+
+        assertEquals(6, small.coastalContextRadiusCells());
+        assertEquals(13, medium.coastalContextRadiusCells());
+        assertEquals(18, large.coastalContextRadiusCells());
+    }
+
+    @Test
+    void coastalFallBudgetAllowsSteepButNotMultiCellCliffContinuation() {
+        BathymetryCalibration calibration = CALIBRATOR.calibrate(
+                genesis(new WorldBounds(-150, 149, -150, 149, -96, 96)),
+                RECIPE);
+
+        assertEquals(20_000L, calibration.coastalMinimumFallSubunits());
+        assertEquals(800_000L, calibration.coastalMaximumFallSubunits());
+        assertTrue(calibration.coastalMaximumFallSubunits() > calibration.maximumCardinalFallSubunits());
+        assertTrue(calibration.coastalMaximumFallSubunits() < ElevationField.SUBUNITS_PER_CELL);
+    }
+
+    @Test
     void verticalWorldFloorCapsOtherwiseDeeperBathymetry() {
         BathymetryCalibration shallowWorld = CALIBRATOR.calibrate(
                 genesis(new WorldBounds(-250, 249, -250, 249, -7, 96)),

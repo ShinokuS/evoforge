@@ -13,7 +13,13 @@ public record BathymetryRecipe(
         int baseTerrainFloorCells,
         int maximumCardinalFallPpm,
         int worldSlopeRadiusUtilizationPpm,
-        int profileGradientBoundMilli) {
+        int profileGradientBoundMilli,
+        int coastalContextScalePpm,
+        int coastalContextMinimumCells,
+        int coastalContextMaximumCells,
+        int coastalMinimumFallPpm,
+        int coastalMaximumFallPpm,
+        int coastalReliefFullScalePpm) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
@@ -26,23 +32,47 @@ public record BathymetryRecipe(
         if (profileGradientBoundMilli <= 0) {
             throw new IllegalArgumentException("profileGradientBoundMilli must be positive");
         }
+        requirePositiveNormalized(coastalContextScalePpm, "coastalContextScalePpm");
+        if (coastalContextMinimumCells <= 0
+                || coastalContextMaximumCells < coastalContextMinimumCells) {
+            throw new IllegalArgumentException("coastal context cell limits must be positive and ordered");
+        }
+        requireNonNegativeNormalized(coastalMinimumFallPpm, "coastalMinimumFallPpm");
+        requirePositiveNormalized(coastalMaximumFallPpm, "coastalMaximumFallPpm");
+        if (coastalMinimumFallPpm > coastalMaximumFallPpm) {
+            throw new IllegalArgumentException("coastal fall limits must be ordered");
+        }
+        requirePositiveNormalized(coastalReliefFullScalePpm, "coastalReliefFullScalePpm");
     }
 
     /**
-     * Balanced first bathymetry model: broad readable underwater slopes with enough world-scale
-     * headroom for deep seas while keeping small enclosed water bodies naturally shallow.
+     * Balanced bathymetry model: the accepted smooth bowl remains the universal base profile.
+     * Ocean-connected coastlines may descend faster only when a broad land-side relief context
+     * causally supports it; no random coastal character or per-cell seafloor noise is authored.
      */
     public static BathymetryRecipe balanced() {
         return new BathymetryRecipe(
                 1,
                 420_000,
                 900_000,
-                1_875);
+                1_875,
+                45_000,
+                6,
+                18,
+                20_000,
+                800_000,
+                500_000);
     }
 
     private static void requirePositiveNormalized(int value, String name) {
         if (value <= 0 || value > PPM) {
             throw new IllegalArgumentException(name + " must be in [1, 1_000_000]");
+        }
+    }
+
+    private static void requireNonNegativeNormalized(int value, String name) {
+        if (value < 0 || value > PPM) {
+            throw new IllegalArgumentException(name + " must be in [0, 1_000_000]");
         }
     }
 }

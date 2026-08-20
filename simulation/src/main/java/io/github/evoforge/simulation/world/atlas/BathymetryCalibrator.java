@@ -55,12 +55,30 @@ final class StandardBathymetryCalibrator implements BathymetryCalibrator {
                 / recipe.profileGradientBoundMilli();
         long worldDepthCap = Math.min(verticalCapacity, Math.max(1L, slopeSupportedDepth));
 
+        int requestedCoastalContext = Math.max(
+                1,
+                (int) ((long) limitingHorizontalSpan * recipe.coastalContextScalePpm() / PPM));
+        int coastalContextRadius = Math.max(
+                recipe.coastalContextMinimumCells(),
+                Math.min(recipe.coastalContextMaximumCells(), requestedCoastalContext));
+        long coastalMinimumFall = ElevationField.SUBUNITS_PER_CELL
+                * (long) recipe.coastalMinimumFallPpm()
+                / PPM;
+        long coastalMaximumFall = Math.max(
+                1L,
+                ElevationField.SUBUNITS_PER_CELL
+                        * (long) recipe.coastalMaximumFallPpm()
+                        / PPM);
+
         return new BathymetryCalibration(
                 width,
                 height,
                 area,
                 floorSubunits,
                 maximumCardinalFall,
-                worldDepthCap);
+                worldDepthCap,
+                coastalContextRadius,
+                coastalMinimumFall,
+                coastalMaximumFall);
     }
 }
