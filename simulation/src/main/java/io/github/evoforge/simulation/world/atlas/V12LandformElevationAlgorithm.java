@@ -11,16 +11,12 @@ import java.util.Arrays;
  * Pure deterministic spatial synthesis for the accepted V12 base terrain.
  *
  * <p>All world-specific operating values arrive through {@link V12LandformCalibration}; all V12
- * model choices arrive through {@link V12LandformRecipe}. Later compositions may additionally
- * constrain the landmass domain before rank selection without changing accepted V12 behavior.</p>
+ * model choices arrive through {@link V12LandformRecipe}. Later compositions may supply a typed
+ * landmass silhouette before rank selection without changing accepted V12 relief behavior.</p>
  */
 final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId LANDMASS = GenerationPurposeId.of("world:landmass");
     private static final GenerationPurposeId FRAGMENT = GenerationPurposeId.of("world:fragment");
-    private static final GenerationPurposeId OCEAN_DOMAIN_MACRO =
-            GenerationPurposeId.of("world:v14-ocean-domain-macro");
-    private static final GenerationPurposeId OCEAN_DOMAIN_DETAIL =
-            GenerationPurposeId.of("world:v14-ocean-domain-detail");
     private static final GenerationPurposeId UPLIFT = GenerationPurposeId.of("world:v12-uplift");
     private static final GenerationPurposeId RIDGE_A = GenerationPurposeId.of("world:v12-ridge-a");
     private static final GenerationPurposeId RIDGE_B = GenerationPurposeId.of("world:v12-ridge-b");
@@ -41,41 +37,38 @@ final class V12LandformElevationAlgorithm {
             WorldGenesis genesis,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe) {
+        if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
         return generate(
                 genesis,
                 calibration,
                 recipe,
-                LandmassBoundaryCalibration.unconstrained(calibration.area()));
+                LandmassSilhouette.unconstrained(genesis.spec().bounds()));
     }
 
     ElevationField generate(
             WorldGenesis genesis,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
-            LandmassBoundaryCalibration boundary) {
-        if (genesis == null || calibration == null || recipe == null || boundary == null) {
+            LandmassSilhouette silhouette) {
+        if (genesis == null || calibration == null || recipe == null || silhouette == null) {
             throw new IllegalArgumentException("V12 generation inputs must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
+        if (!bounds.equals(silhouette.bounds())) {
+            throw new IllegalArgumentException("landmass silhouette must match generation bounds");
+        }
         int width = calibration.width();
         int height = calibration.height();
         int area = calibration.area();
         GenerationRandom random = GenerationRandom.from(genesis);
 
-        LandmassDomain domain = createLandmassDomain(
-                random,
-                bounds,
-                calibration,
-                recipe,
-                boundary);
         long[] rankKeys = calibratedLandRankKeys(
                 random,
                 bounds,
                 calibration,
                 recipe,
-                boundary,
-                domain);
-        int landCount = Math.min(calibration.landCount(), domain.supportCellCount());
+                silhouette);
+        int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
         boolean[] land = new boolean[area];
         for (int rank = 0; rank < landCount; rank++) {
             land[(int) rankKeys[rank]] = true;
@@ -173,87 +166,12 @@ final class V12LandformElevationAlgorithm {
         return new DenseElevationField(bounds, elevations);
     }
 
-    /**
-     * Resolves the maximum V14 terrestrial support before authored land coverage is applied.
-     *
-     * <p>This is deliberately a rank selection over a broad continuous field. At maximum authored
-     * land, the generated silhouette is therefore this organic support itself rather than every cell
-     * inside a rectangular edge margin. The hard margin remains only a safety invariant: it can
-     * never become the coastline merely because the requested land amount is high.</p>
-     */
-    private static LandmassDomain createLandmassDomain(
-            GenerationRandom random,
-            WorldBounds bounds,
-            V12LandformCalibration calibration,
-            V12LandformRecipe terrainRecipe,
-            LandmassBoundaryCalibration boundary) {
-        int area = calibration.area();
-        if (!boundary.oceanBounded()) {
-            boolean[] support = new boolean[area];
-            Arrays.fill(support, true);
-            return new LandmassDomain(support, null, area);
-        }
-
-        int width = calibration.width();
-        int height = calibration.height();
-        int[] domainPotentialPpm = new int[area];
-        long[] domainRanks = new long[area];
-        int transition = Math.max(1, boundary.detailScaleCells());
-
-        int index = 0;
-        for (int localY = 0; localY < height; localY++) {
-            int y = bounds.minY() + localY;
-            for (int localX = 0; localX < width; localX++) {
-                int x = bounds.minX() + localX;
-                int edgeDistance = edgeDistance(localX, localY, width, height);
-                if (edgeDistance < boundary.minimumOceanMarginCells()) {
-                    domainPotentialPpm[index] = 0;
-                    domainRanks[index] = rankKey(-1, index);
-                    index++;
-                    continue;
-                }
-
-                int rawDomainPpm = organicDomainPotentialPpm(
-                        random,
-                        x,
-                        y,
-                        localX,
-                        localY,
-                        width,
-                        height,
-                        boundary,
-                        terrainRecipe);
-                long coastCoordinate = (long) (edgeDistance
-                        - boundary.minimumOceanMarginCells() + 1) * PPM / transition;
-                int oceanGatePpm = smoothStepPpm(coastCoordinate);
-                int supportPpm = Math.toIntExact((long) rawDomainPpm * oceanGatePpm / PPM);
-                domainPotentialPpm[index] = supportPpm;
-                domainRanks[index] = rankKey(ppmToSample(supportPpm), index);
-                index++;
-            }
-        }
-
-        Arrays.sort(domainRanks);
-        int supportCellCount = Math.min(boundary.maximumLandCells(), area);
-        boolean[] support = new boolean[area];
-        for (int rank = 0; rank < supportCellCount; rank++) {
-            int cell = (int) domainRanks[rank];
-            if (domainPotentialPpm[cell] <= 0) {
-                supportCellCount = rank;
-                break;
-            }
-            support[cell] = true;
-        }
-        return new LandmassDomain(support, domainPotentialPpm, supportCellCount);
-    }
-
     private static long[] calibratedLandRankKeys(
             GenerationRandom random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
-            LandmassBoundaryCalibration boundary,
-            LandmassDomain domain) {
+            LandmassSilhouette silhouette) {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
@@ -280,15 +198,14 @@ final class V12LandformElevationAlgorithm {
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
-                if (!domain.support()[index]) {
+                if (!silhouette.supportsIndex(index)) {
                     potential = -1;
-                } else if (boundary.oceanBounded()) {
-                    int domainPpm = domain.potentialPpm()[index];
-                    int influencePpm = boundary.domainInfluencePpm();
+                } else if (silhouette.constrained()) {
                     int basePpm = sampleToPpm(potential);
+                    int influencePpm = silhouette.influencePpm();
                     int blendedPpm = Math.toIntExact(
                             ((long) basePpm * (PPM - influencePpm)
-                                    + (long) domainPpm * influencePpm) / PPM);
+                                    + (long) silhouette.potentialPpmAtIndex(index) * influencePpm) / PPM);
                     potential = ppmToSample(blendedPpm);
                 }
                 rankKeys[index] = rankKey(potential, index);
@@ -297,63 +214,6 @@ final class V12LandformElevationAlgorithm {
         }
         Arrays.sort(rankKeys);
         return rankKeys;
-    }
-
-    private static int organicDomainPotentialPpm(
-            GenerationRandom random,
-            int x,
-            int y,
-            int localX,
-            int localY,
-            int width,
-            int height,
-            LandmassBoundaryCalibration boundary,
-            V12LandformRecipe terrainRecipe) {
-        int centerPpm = continentalCenterPotentialPpm(localX, localY, width, height);
-        int macroPpm = sampleToPpm(organicValueNoise(
-                random,
-                OCEAN_DOMAIN_MACRO,
-                x,
-                y,
-                boundary.macroScaleCells(),
-                terrainRecipe));
-        int detailPpm = sampleToPpm(organicValueNoise(
-                random,
-                OCEAN_DOMAIN_DETAIL,
-                x,
-                y,
-                boundary.detailScaleCells(),
-                terrainRecipe));
-        return Math.toIntExact(
-                ((long) centerPpm * boundary.centerWeightPpm()
-                        + (long) macroPpm * boundary.macroWeightPpm()
-                        + (long) detailPpm * boundary.detailWeightPpm()) / PPM);
-    }
-
-    private static int edgeDistance(
-            int localX,
-            int localY,
-            int width,
-            int height) {
-        return Math.min(
-                Math.min(localX, width - 1 - localX),
-                Math.min(localY, height - 1 - localY));
-    }
-
-    private static int continentalCenterPotentialPpm(
-            int localX,
-            int localY,
-            int width,
-            int height) {
-        long xDenominator = Math.max(1L, width - 1L);
-        long yDenominator = Math.max(1L, height - 1L);
-        long centeredX = Math.abs(2L * localX - (width - 1L));
-        long centeredY = Math.abs(2L * localY - (height - 1L));
-        long xPpm = centeredX * PPM / xDenominator;
-        long yPpm = centeredY * PPM / yDenominator;
-        long radialSquaredPpm = (xPpm * xPpm + yPpm * yPpm) / PPM;
-        int radialPpm = clampPpm(radialSquaredPpm);
-        return PPM - smoothStepPpm(radialPpm);
     }
 
     private static long landformFieldPpm(
@@ -714,20 +574,6 @@ final class V12LandformElevationAlgorithm {
             result[index] = smoothStepPpm(coordinate);
         }
         return result;
-    }
-
-    private record LandmassDomain(
-            boolean[] support,
-            int[] potentialPpm,
-            int supportCellCount) {
-        private LandmassDomain {
-            if (support == null || supportCellCount < 0 || supportCellCount > support.length) {
-                throw new IllegalArgumentException("landmass domain support must be valid");
-            }
-            if (potentialPpm != null && potentialPpm.length != support.length) {
-                throw new IllegalArgumentException("landmass domain potential must match support domain");
-            }
-        }
     }
 
     private record LandformFeature(
