@@ -20,20 +20,27 @@ final class CompactRegionLandmassSilhouetteAlgorithmTest {
         LandmassSilhouetteCalibration fragmented = calibrate(300, 1_000_000);
 
         assertEquals(1, cohesive.landClusterCount(),
-                "Fragmentation=0 must start from one cohesive continent front");
+                "Fragmentation=0 must start from one cohesive geographic nucleus");
         assertTrue(fragmented.landClusterCount() >= 6,
-                "Fragmentation=100% must start several independently separated growth fronts");
+                "Fragmentation=100% must start several independently separated geographic nuclei");
         assertTrue(fragmented.scaffoldSpacingCells() < cohesive.scaffoldSpacingCells(),
-                "fragmented worlds need a finer structural scaffold for islands and straits");
+                "fragmented worlds need a finer structural graph for islands and straits");
     }
 
     @Test
-    void standardAlgorithmIsCompactRegionGrowthRatherThanRandomPlateClassification() {
-        assertTrue(LandmassSilhouetteAlgorithm.standard() instanceof CompactRegionLandmassSilhouetteAlgorithm);
+    void standardAlgorithmUsesRegularizedGraphPhaseRatherThanFrontierGrowth() {
+        assertTrue(LandmassSilhouetteAlgorithm.standard()
+                instanceof RegularizedGraphLandmassSilhouetteAlgorithm);
     }
 
     private static LandmassSilhouetteCalibration calibrate(int size, int fragmentationPpm) {
-        WorldBounds bounds = new WorldBounds(-size / 2, -size / 2 + size - 1, -size / 2, -size / 2 + size - 1, -16, 96);
+        WorldBounds bounds = new WorldBounds(
+                -size / 2,
+                -size / 2 + size - 1,
+                -size / 2,
+                -size / 2 + size - 1,
+                -16,
+                96);
         WorldGenerationIntent balanced = WorldGenerationIntent.balanced();
         WorldGenerationIntent intent = new WorldGenerationIntent(
                 NormalizedValue.ofPartsPerMillion(500_000),
