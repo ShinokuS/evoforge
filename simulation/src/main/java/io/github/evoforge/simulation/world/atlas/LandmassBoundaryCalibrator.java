@@ -39,26 +39,28 @@ final class StandardLandmassBoundaryCalibrator implements LandmassBoundaryCalibr
             throw new IllegalArgumentException("terrain calibration must match world bounds");
         }
         int limitingSpan = Math.min(width, height);
-        if (limitingSpan < 5) {
-            throw new IllegalArgumentException("ocean-bounded landmass generation needs at least a 5-cell span");
+        if (limitingSpan < 8) {
+            throw new IllegalArgumentException("ocean-bounded landmass generation needs at least an 8-cell span");
         }
 
-        int maximumMargin = Math.max(1, (limitingSpan - 4) / 2);
-        int margin = Math.min(maximumMargin, recipe.boundary().minimumOceanMarginCells());
+        LandmassBoundaryRecipe.BoundaryPolicy boundary = recipe.boundary();
+        int scaledMargin = (int) StrictMath.ceil(
+                StrictMath.sqrt(limitingSpan) * boundary.marginSqrtScalePpm() / PPM);
+        int geometricMaximum = Math.max(1, (limitingSpan - 4) / 3);
+        int margin = Math.min(
+                geometricMaximum,
+                Math.min(
+                        boundary.maximumOceanMarginCells(),
+                        Math.max(boundary.minimumOceanMarginCells(), scaledMargin)));
 
         LandmassBoundaryRecipe.CoveragePolicy coverage = recipe.coverage();
         long saturationDenominator = (long) limitingSpan + coverage.halfSaturationCells();
         int maximumLandPpm = coverage.baseMaximumLandPpm()
                 + Math.toIntExact((long) coverage.maximumLandRangePpm()
                         * limitingSpan / saturationDenominator);
-        int requestedMaximumLandCells = Math.toIntExact(
+        int maximumLandCells = Math.toIntExact(
                 ((long) terrain.area() * maximumLandPpm + PPM / 2L) / PPM);
-        int candidateWidth = Math.max(0, width - margin * 2);
-        int candidateHeight = Math.max(0, height - margin * 2);
-        int candidateCells = Math.multiplyExact(candidateWidth, candidateHeight);
 
-        return new LandmassBoundaryCalibration(
-                margin,
-                Math.min(requestedMaximumLandCells, candidateCells));
+        return new LandmassBoundaryCalibration(margin, maximumLandCells);
     }
 }

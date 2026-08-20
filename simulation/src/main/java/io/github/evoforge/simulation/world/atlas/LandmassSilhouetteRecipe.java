@@ -2,99 +2,81 @@ package io.github.evoforge.simulation.world.atlas;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
 
-/** Stable policy for geometric V14 continent/island silhouettes. */
+/** Stable policy for plate-scaffold V14 continent/island topology and coastline deformation. */
 public record LandmassSilhouetteRecipe(
-        BodyPolicy bodies,
+        PlatePolicy plates,
         CoastPolicy coast,
         BlendPolicy blend) {
 
     private static final int PPM = NormalizedValue.SCALE;
 
     public LandmassSilhouetteRecipe {
-        if (bodies == null || coast == null || blend == null) {
+        if (plates == null || coast == null || blend == null) {
             throw new IllegalArgumentException("landmass silhouette recipe sections must not be null");
         }
     }
 
     public static LandmassSilhouetteRecipe balanced() {
         return new LandmassSilhouetteRecipe(
-                new BodyPolicy(
-                        1,
-                        2,
-                        6,
-                        250_000,
-                        170_000,
-                        145_000,
-                        190_000,
-                        180_000,
-                        300_000,
-                        1_550_000,
-                        2_500_000),
+                new PlatePolicy(
+                        4,
+                        70_000,
+                        220_000,
+                        550_000,
+                        5,
+                        380_000,
+                        550_000),
                 new CoastPolicy(
-                        6,
-                        55_000,
-                        75_000,
-                        1_150_000,
-                        1_550_000,
-                        780_000,
+                        2_400_000,
+                        750_000,
+                        320_000,
                         120_000),
-                new BlendPolicy(850_000));
+                new BlendPolicy(900_000));
     }
 
-    /** Scale-aware placement of primary continental bodies and smaller satellite islands. */
-    public record BodyPolicy(
-            int minimumBodyCount,
-            int additionalBodiesAtMinimumScale,
-            int maximumSatelliteBodies,
-            int singleBodyRadiusWorldPpm,
-            int twoBodyRadiusWorldPpm,
-            int manyBodyRadiusWorldPpm,
-            int multiBodyAnchorOffsetWorldPpm,
-            int satelliteMinimumRadiusPpm,
-            int satelliteRadiusRangePpm,
-            int satelliteMinimumReachPpm,
-            int satelliteReachRangePpm) {
-        public BodyPolicy {
-            if (minimumBodyCount <= 0 || additionalBodiesAtMinimumScale < 0 || maximumSatelliteBodies < 0) {
-                throw new IllegalArgumentException("landmass body counts must be valid");
+    /**
+     * Jittered control-mesh policy. Continent scale controls average plate spacing; fragmentation
+     * compresses that spacing and removes graph correlation, producing more independent land/ocean
+     * regions rather than merely roughening one continent.
+     */
+    public record PlatePolicy(
+            int minimumSpacingCells,
+            int minimumSpacingWorldPpm,
+            int maximumSpacingWorldPpm,
+            int fragmentationSpacingCompressionPpm,
+            int maximumCorrelationPasses,
+            int siteJitterPpm,
+            int oceanSeedBandSpacingPpm) {
+        public PlatePolicy {
+            if (minimumSpacingCells < 3 || maximumCorrelationPasses < 0) {
+                throw new IllegalArgumentException("plate scaffold scale must be valid");
             }
-            requirePositivePpm(singleBodyRadiusWorldPpm, "singleBodyRadiusWorldPpm");
-            requirePositivePpm(twoBodyRadiusWorldPpm, "twoBodyRadiusWorldPpm");
-            requirePositivePpm(manyBodyRadiusWorldPpm, "manyBodyRadiusWorldPpm");
-            requireNormalized(multiBodyAnchorOffsetWorldPpm, "multiBodyAnchorOffsetWorldPpm");
-            requirePositivePpm(satelliteMinimumRadiusPpm, "satelliteMinimumRadiusPpm");
-            requirePositivePpm(satelliteRadiusRangePpm, "satelliteRadiusRangePpm");
-            requirePositivePpm(satelliteMinimumReachPpm, "satelliteMinimumReachPpm");
-            requirePositivePpm(satelliteReachRangePpm, "satelliteReachRangePpm");
+            requirePositivePpm(minimumSpacingWorldPpm, "minimumSpacingWorldPpm");
+            requirePositivePpm(maximumSpacingWorldPpm, "maximumSpacingWorldPpm");
+            if (maximumSpacingWorldPpm < minimumSpacingWorldPpm) {
+                throw new IllegalArgumentException("maximum plate spacing must be >= minimum spacing");
+            }
+            requireNormalized(fragmentationSpacingCompressionPpm, "fragmentationSpacingCompressionPpm");
+            requireNormalized(siteJitterPpm, "siteJitterPpm");
+            requirePositivePpm(oceanSeedBandSpacingPpm, "oceanSeedBandSpacingPpm");
         }
     }
 
-    /** Broad, non-grid-aligned contour deformation. No cell-scale noise belongs here. */
+    /** Smooth domain-warped deformation of plate boundaries; topology remains owned by plates. */
     public record CoastPolicy(
-            int harmonicCount,
-            int minimumIrregularityPpm,
-            int fragmentationIrregularityRangePpm,
-            int minimumAspectPpm,
-            int maximumAspectPpm,
-            int confinementStartPpm,
-            int confinementStrengthPpm) {
+            int warpScaleSpacingPpm,
+            int detailScaleSpacingPpm,
+            int warpAmplitudeSpacingPpm,
+            int detailAmplitudeSpacingPpm) {
         public CoastPolicy {
-            if (harmonicCount < 2) {
-                throw new IllegalArgumentException("landmass coast needs at least two broad harmonics");
-            }
-            requireNormalized(minimumIrregularityPpm, "minimumIrregularityPpm");
-            requireNormalized(fragmentationIrregularityRangePpm, "fragmentationIrregularityRangePpm");
-            requirePositivePpm(minimumAspectPpm, "minimumAspectPpm");
-            requirePositivePpm(maximumAspectPpm, "maximumAspectPpm");
-            if (maximumAspectPpm < minimumAspectPpm) {
-                throw new IllegalArgumentException("maximum landmass aspect must be >= minimum aspect");
-            }
-            requireNormalized(confinementStartPpm, "confinementStartPpm");
-            requireNormalized(confinementStrengthPpm, "confinementStrengthPpm");
+            requirePositivePpm(warpScaleSpacingPpm, "warpScaleSpacingPpm");
+            requirePositivePpm(detailScaleSpacingPpm, "detailScaleSpacingPpm");
+            requireNormalized(warpAmplitudeSpacingPpm, "warpAmplitudeSpacingPpm");
+            requireNormalized(detailAmplitudeSpacingPpm, "detailAmplitudeSpacingPpm");
         }
     }
 
-    /** How strongly the geometric silhouette owns low-Land rank selection over legacy V12 noise. */
+    /** How strongly the plate-derived continent field owns low-Land rank selection over V12 noise. */
     public record BlendPolicy(int silhouetteInfluencePpm) {
         public BlendPolicy {
             requireNormalized(silhouetteInfluencePpm, "silhouetteInfluencePpm");

@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
-/** Resolves semantic continent scale and fragmentation into exact silhouette operating values. */
+/** Resolves semantic continent scale and fragmentation into plate-scaffold operating values. */
 @FunctionalInterface
 public interface LandmassSilhouetteCalibrator {
     LandmassSilhouetteCalibration calibrate(
@@ -35,38 +35,26 @@ final class StandardLandmassSilhouetteCalibrator implements LandmassSilhouetteCa
         int limitingSpan = Math.min(terrain.width(), terrain.height());
         int scalePpm = genesis.generationIntent().landmassScale().partsPerMillion();
         int fragmentationPpm = terrain.fragmentationPpm();
-        LandmassSilhouetteRecipe.BodyPolicy bodies = recipe.bodies();
+        LandmassSilhouetteRecipe.PlatePolicy plates = recipe.plates();
 
-        int extraBodies = Math.toIntExact(
-                ((long) (PPM - scalePpm) * bodies.additionalBodiesAtMinimumScale() + PPM / 2L) / PPM);
-        int primaryBodies = bodies.minimumBodyCount() + extraBodies;
-        if (fragmentationPpm >= 700_000 && primaryBodies < bodies.minimumBodyCount() + bodies.additionalBodiesAtMinimumScale() + 1) {
-            primaryBodies++;
-        }
+        long spacingWorldPpm = plates.minimumSpacingWorldPpm()
+                + (long) (plates.maximumSpacingWorldPpm() - plates.minimumSpacingWorldPpm())
+                        * scalePpm / PPM;
+        long compressionPpm = (long) fragmentationPpm
+                * plates.fragmentationSpacingCompressionPpm() / PPM;
+        spacingWorldPpm = spacingWorldPpm * (PPM - compressionPpm) / PPM;
+        int spacing = Math.max(
+                plates.minimumSpacingCells(),
+                Math.toIntExact((long) limitingSpan * spacingWorldPpm / PPM));
 
-        int satelliteBodies = Math.toIntExact(
-                ((long) fragmentationPpm * bodies.maximumSatelliteBodies() + PPM / 2L) / PPM);
-
-        int radiusWorldPpm;
-        if (primaryBodies == 1) {
-            radiusWorldPpm = bodies.singleBodyRadiusWorldPpm();
-        } else if (primaryBodies == 2) {
-            radiusWorldPpm = bodies.twoBodyRadiusWorldPpm();
-        } else {
-            radiusWorldPpm = bodies.manyBodyRadiusWorldPpm();
-        }
-        int primaryRadius = Math.max(4, Math.toIntExact((long) limitingSpan * radiusWorldPpm / PPM));
-
-        LandmassSilhouetteRecipe.CoastPolicy coast = recipe.coast();
-        int irregularity = coast.minimumIrregularityPpm()
-                + Math.toIntExact((long) fragmentationPpm
-                        * coast.fragmentationIrregularityRangePpm() / PPM);
+        long cohesionPpm = (long) scalePpm * (PPM - fragmentationPpm) / PPM;
+        int correlationPasses = Math.toIntExact(
+                (cohesionPpm * plates.maximumCorrelationPasses() + PPM / 2L) / PPM);
 
         return new LandmassSilhouetteCalibration(
-                primaryBodies,
-                satelliteBodies,
-                primaryRadius,
-                irregularity,
+                spacing,
+                correlationPasses,
+                fragmentationPpm,
                 recipe.blend().silhouetteInfluencePpm());
     }
 }
