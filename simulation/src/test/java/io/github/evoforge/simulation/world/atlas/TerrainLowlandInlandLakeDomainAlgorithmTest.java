@@ -113,7 +113,37 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
     }
 
     @Test
-    void shoreConditioningGradesOnlyNarrowDryCollarAndKeepsOneZCardinalApproach() {
+    void balancedPolicyRejectsLowlandWithoutEnoughInteriorRadiusForFiveZLake() {
+        WorldBounds bounds = new WorldBounds(0, 80, 0, 80, -16, 16);
+        long[] elevation = new long[81 * 81];
+        long high = 8L * ElevationField.SUBUNITS_PER_CELL;
+        long low = 2L * ElevationField.SUBUNITS_PER_CELL;
+        for (int y = 0; y < 81; y++) {
+            for (int x = 0; x < 81; x++) {
+                int cell = y * 81 + x;
+                if (x == 0 || y == 0 || x == 80 || y == 80) {
+                    elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
+                } else if (x >= 33 && x <= 47 && y >= 33 && y <= 47) {
+                    elevation[cell] = low;
+                } else {
+                    elevation[cell] = high;
+                }
+            }
+        }
+        ElevationField base = new DenseElevationField(bounds, elevation);
+        InlandLakeDomainCalibration calibration = new InlandLakeDomainCalibration(
+                81, 81, 81 * 81, 79 * 79, 160, 8, 3, 200, 20, 2,
+                5L * ElevationField.SUBUNITS_PER_CELL);
+
+        InlandLakeDomain domain = InlandLakeDomainAlgorithm.standard().generate(
+                genesis(bounds), base, calibration, InlandLakeDomainRecipe.balanced());
+
+        assertEquals(0, domain.lakeCellCount(),
+                "a lowland without enough honest inradius for the five-Z profile must not become a lake");
+    }
+
+    @Test
+    void shoreConditioningChangesOnlyLakeCellsAndLeavesNaturalDryReliefBitExact() {
         WorldBounds bounds = new WorldBounds(0, 20, 0, 20, -1, 12);
         long[] elevation = new long[21 * 21];
         long ordinary = 7L * ElevationField.SUBUNITS_PER_CELL;
@@ -137,17 +167,12 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
                 base, domain, V12LandformRecipe.balanced().coast());
 
         assertEquals(-1L, conditioned.elevationSubunitsAt(10, 10));
-        assertTrue(conditioned.elevationSubunitsAt(8, 10) > 0L);
-        assertTrue(conditioned.elevationSubunitsAt(8, 10) < ElevationField.SUBUNITS_PER_CELL);
-        assertTrue(conditioned.elevationSubunitsAt(7, 10) < 2L * ElevationField.SUBUNITS_PER_CELL);
-        assertEquals(ordinary, conditioned.elevationSubunitsAt(5, 10),
-                "terrain outside the coast-derived collar must remain bit-identical");
-
-        for (int x = 8; x <= 11; x++) {
-            long left = conditioned.elevationSubunitsAt(x, 10);
-            long right = conditioned.elevationSubunitsAt(x + 1, 10);
-            assertTrue(Math.abs(left - right) <= ElevationField.SUBUNITS_PER_CELL,
-                    "shoreline collar may not introduce a cardinal jump larger than one Z");
+        for (int y = 0; y <= 20; y++) {
+            for (int x = 0; x <= 20; x++) {
+                if (domain.isLakeAt(x, y)) continue;
+                assertEquals(base.elevationSubunitsAt(x, y), conditioned.elevationSubunitsAt(x, y),
+                        "lake materialization must not manufacture a one-Z dry ridge around the shore");
+            }
         }
     }
 
