@@ -9,11 +9,12 @@ EvoForge also separates **what a human asks for** from **how an algorithm produc
 ## Current status
 
 **Stage 0 — architecture stabilization / V12 normalization is complete.**  
-**Stage 1 — V13 Mountain Systems is complete and manually accepted.**
+**Stage 1 — V13 Mountain Systems is complete and manually accepted.**  
+**Stage 2A — V14 Standing-Water Bathymetry is complete and manually accepted.**
 
-The next implementation stage is:
+Stage 2 is now in progress. The next implementation concern is:
 
-> **Stage 2 — Dry hydrography and carving**
+> **Stage 2B — Drainage and basin topology**
 
 Current code still contains useful typed seams with provisional drainage, hydrography, geology, initial-Water and material algorithms. Later stages replace/refine those algorithms behind their existing contracts where appropriate rather than accumulating feature-specific special cases.
 
@@ -57,7 +58,8 @@ A domain calibrator combines semantic intent with world/environment context and 
 Examples:
 
 - V12 converts `landformScale` into exact ordinary-feature spacing and `ruggedness` into an exact local slope limit;
-- V13 converts mountain `Scale`, `Height`, `Chaininess` and `Peak sharpness` into exact structure widths/lengths, height limits and cardinal rise budgets appropriate for the world dimensions.
+- V13 converts mountain `Scale`, `Height`, `Chaininess` and `Peak sharpness` into exact structure widths/lengths, height limits and cardinal rise budgets appropriate for the world dimensions;
+- V14 bathymetry converts world dimensions and negative-Z headroom into exact depth/slope/shore-context operating limits.
 
 Calibration is domain-owned. There is no universal GodCalibrator.
 
@@ -70,13 +72,14 @@ Examples:
 ```text
 V12LandformRecipe
 MountainRecipe
+BathymetryRecipe
 ```
 
 This keeps model choices out of spatial loops and lets another revision/model replace them without redefining user intent accidentally.
 
 ### Algorithms create typed facts
 
-Downstream consumers see typed facts such as `ElevationField`. They do not need to know whether the surface came from V12, V13 or a test algorithm.
+Downstream consumers see typed facts such as `ElevationField`. They do not need to know whether the surface came from V12, V13, V14 or a test algorithm.
 
 ## Deterministic provenance
 
@@ -108,7 +111,7 @@ HydrographyField
 SurfaceHydrologyField
 ```
 
-V13 mountains remain part of the precise `ElevationField`; there is no separate mountain fact merely for naming the feature because no independent downstream owner currently requires one.
+V13 mountains and V14 bathymetry remain part of the precise `ElevationField`; there is no separate mountain or bathymetry fact merely for naming those features because no independent downstream owner currently requires one.
 
 The Atlas is not live Terrain, Water, Soil, weather or a scheduler.
 
@@ -181,6 +184,44 @@ Mountain synthesis knows nothing about concrete Terrain Shapes or rock identity.
 
 See [V13 Mountain Generation](mountain-generation.md) and [Terrain Generation](terrain-generation.md).
 
+## Stage 2A — V14 Standing-Water Bathymetry **[COMPLETE]**
+
+V14 starts from accepted V13 land and submerged membership:
+
+```text
+accepted V13 ElevationField membership
+        ↓
+BathymetryCalibrator
+        +
+BathymetryRecipe
+        ↓
+StructuredBathymetryAlgorithm
+        ├─ BathymetryMorphologyAlgorithm
+        └─ DeepBathymetryStructureAlgorithm
+        ↓
+V14 ElevationField
+```
+
+The accepted contract is deliberately narrow:
+
+- V13 land elevation remains exact;
+- the complete V13 submerged footprint/shoreline membership remains exact;
+- V14 re-authors only underwater Z;
+- no standing-water body is created or deleted;
+- coastal/littoral morphology remains smooth, readable and broad;
+- broad adjacent land relief may causally affect ocean-connected descent;
+- competing coasts blend rather than creating nearest-owner wedges;
+- narrow water remains shallow when geometry cannot support clean depth;
+- large/deep interiors may contain several broad basins, highs and saddles;
+- deep structure is deterministic and does not use high-frequency noise;
+- source morphology remains slope/world-floor bounded rather than relying on downstream repair.
+
+`StructuredBathymetryAlgorithm` composes the accepted coast first and the independently replaceable deep-interior algorithm second. This protects the accepted littoral result from later deep-structure tuning.
+
+The development preview's negative-Z `Z contrast` is presentation-only: deeper bottom is darker, positive-Z land behavior is unchanged, and generated elevation is unaffected.
+
+See [V14 Standing-Water Bathymetry](bathymetry-generation.md).
+
 ## Causal separation rules
 
 ### Mountains are geometry first
@@ -201,18 +242,24 @@ soil / sediment / exposed rock
 
 Therefore generic code must not contain `if mountain -> granite`.
 
-### Rivers and lakes are dry geometry before Water
+### Standing-water bottom is geometry before Water
 
-The canonical order is:
+Accepted V14 bathymetry is dry bottom geometry. The sea-level plane shown by the development preview is not authoritative initial Water.
+
+Later stages may consume that geometry, but they do not reopen the accepted lake/sea/ocean footprint or bottom merely to make a later river/material behavior convenient.
+
+### Rivers are dry geometry before Water
+
+The remaining canonical order is:
 
 ```text
-accepted mountain-bearing dry morphology
+accepted V14 morphology + standing-water bathymetry
         ↓
 drainage / watersheds / basins
         ↓
 river hierarchy + outlets
         ↓
-dry valley/channel/lake-bowl carving
+dry valley/channel carving
         ↓
 depositional/erosional context
         ↓
@@ -251,17 +298,38 @@ Puddles arise from terrain geometry, Soil hydraulics, precipitation and finite r
 - generic sparse shape-fitting remains independent;
 - headless tests, Generated World Audit and manual 2D/3D acceptance completed.
 
-### Stage 2 — Dry hydrography and carving **[NEXT]**
+### Stage 2 — Dry hydrography and carving **[IN PROGRESS]**
 
-Starting from the accepted V13 dry surface:
+#### Stage 2A — Standing-water bathymetry **[COMPLETE]**
 
-- derive/reconcile drainage, watersheds and basins;
-- produce real river hierarchy and outlets;
-- carve readable dry valleys/channels;
-- carve lake bowls and shore forms;
+- V14 preserves V13 land and standing-water membership;
+- accepted coast/littoral depth morphology;
+- accepted broad deep-water basins/highs/saddles where room exists;
+- no Water and no new waterbody creation;
+- automated and manual acceptance complete.
+
+#### Stage 2B — Drainage and basin topology **[NEXT]**
+
+Starting from accepted V14 elevation:
+
+- derive/reconcile drainage directions and terminals;
+- derive catchments/watersheds and closed basins;
+- resolve basin/outlet topology required by river generation;
+- remain completely dry;
+- preserve accepted V14 standing-water geometry.
+
+#### Stage 2C — River network
+
+- produce real tributary/confluence/outlet hierarchy from drainage facts;
+- keep network semantics replaceable independently of carving when appropriate.
+
+#### Stage 2D — River / valley carving
+
+- carve readable dry channels and valleys from the accepted network;
+- interact with accepted standing water only through explicit mouth/outlet rules;
 - remain completely dry.
 
-Typed topology/morphology tests and manual dry-geometry acceptance are required.
+Typed topology/morphology tests and manual dry-geometry acceptance are required before Stage 2 closes.
 
 ### Stage 3 — Coherent geology
 
@@ -277,7 +345,7 @@ Combine completed dry morphology, hydrographic/depositional facts, geology and c
 
 ### Stage 6 — Complete dry-world acceptance
 
-Accept land/ocean morphology, mountains, dry river/lake geometry, geology/deposits, caves and surface/subsurface material structure before initial Water exists.
+Accept land/ocean morphology, mountains, standing-water bathymetry, dry drainage/river geometry, geology/deposits, caves and surface/subsurface material structure before initial Water exists.
 
 ### Stage 7 — Finite initial Water fill
 
@@ -289,8 +357,8 @@ Verify no generator, preparation helper or bootstrap remains a second source of 
 
 ## Provisional components
 
-- current drainage provides useful topology but Stage 2 owns final dry network/carving;
-- current threshold hydrography is provisional;
+- current drainage provides useful topology but Stage 2B owns final drainage/basin topology;
+- current threshold hydrography is provisional until Stage 2C;
 - current geology algorithm is provisional until Stage 3;
 - current surface-hydrology/initial-Water ordering is historical compatibility infrastructure;
 - current slope/concavity/drainage/shoreline material logic is an early slice until Stage 5.
@@ -338,13 +406,14 @@ Do not introduce:
 - exact-physics authoring knobs where semantic coordinates are sufficient;
 - scattered tunable magic constants inside spatial loops;
 - parallel duplicate river/geology/formation frameworks beside existing typed seams;
-- Water before dry channels/lakes/surface structure are accepted;
+- Water before dry channels/surface structure are accepted;
 - visual-only fake rivers/lakes not backed by generated facts;
 - downstream repair passes before proving which upstream stage first emits the wrong fact;
+- reopening accepted V14 standing-water geometry merely to repair a later-stage defect;
 - a generator that continues controlling the world after runtime starts.
 
 ## Sources
 
-The generation architecture is project-owned. External terrain research informs later physical models but V12/V13 are not claimed as direct implementations of a tectonic or erosion paper.
+The generation architecture is project-owned. External terrain research informs later physical models but V12/V13/V14 are not claimed as direct implementations of a tectonic or erosion paper.
 
-See [References](../../references.md), [Project Context](../../project-context.md), [Roadmap](../../roadmap.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-022](../../decisions/022-green-checkpoint-development.md).
+See [References](../../references.md), [Project Context](../../project-context.md), [Roadmap](../../roadmap.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-022](../../decisions/022-green-checkpoint-development.md).

@@ -4,7 +4,7 @@
 
 `WorldGenesis` is the immutable **birth certificate** of a generated EvoForge world. It records what was requested and which deterministic generation rules were used so the same authored world can be replayed deliberately instead of depending on hidden global randomness.
 
-It does not contain generated Terrain, mountains or Water. Owning generation stages produce those facts later.
+It does not contain generated Terrain, mountains, bathymetry or Water. Owning generation stages produce those facts later.
 
 ```text
 semantic request + seed + algorithm revisions
@@ -16,14 +16,18 @@ semantic request + seed + algorithm revisions
 
 ## Current status
 
-The repository supports generation revisions `V1` through `V13` and RNG revision `V1`.
+The repository defines generation revisions `V1` through `V14` and RNG revision `V1`.
 
-There are two deliberately different meanings of “current”:
+There are deliberately different meanings of “current”:
 
-- `WorldGenesis.current(spec, seed)` still creates **GenerationRevision.V7 + RngRevision.V1** for the ordinary compatibility convenience path until the broader production generation contract is promoted together;
-- **V12 is the accepted ordinary base-terrain revision and V13 is the accepted dedicated-mountain revision used explicitly by the current world-generation milestone, preview and tests.**
+- `WorldGenesis.current(spec, seed)` still creates **GenerationRevision.V7 + RngRevision.V1** for the ordinary compatibility convenience path until the broader production Atlas contract is promoted together;
+- **V12** is the accepted ordinary base-terrain revision;
+- **V13** is the accepted dedicated-mountain revision;
+- **V14** is the accepted standing-water bathymetry revision used explicitly by the current world-generation elevation milestone, preview and owning tests.
 
-Neither is silently substituted into `WorldGenesis.current(...)`.
+No newer milestone revision is silently substituted into `WorldGenesis.current(...)`.
+
+V14 acceptance therefore does **not** mean that every standard downstream Atlas stage has already been promoted to V14. The explicit V14 elevation path is accepted first; climate/hydrography/initial-Water compatibility remains separate and must be widened only when its owning milestone requires it.
 
 ## What Genesis records
 
@@ -55,7 +59,7 @@ The 64-bit master seed identifies the deterministic random family used by genera
 
 This versions **world-generation semantics**. Historical revisions remain executable so a newer model does not silently rewrite what an older seed meant.
 
-Current known revisions are `evoforge:worldgen-v1` through `evoforge:worldgen-v13`.
+Current known revisions are `evoforge:worldgen-v1` through `evoforge:worldgen-v14`.
 
 ### `RngRevision`
 
@@ -119,6 +123,19 @@ plateauProbability 0.18
 
 These semantic coordinates are not widths, metres, exact slopes, noise frequencies or source counts. Revision/domain calibrators compile them into exact operating values.
 
+### V14 bathymetry has no new human-authored waterbody-type intent
+
+V14 deliberately does not add authored `OCEAN / SEA / LAKE` categories or a fixed depth slider merely to implement standing-water bottom geometry.
+
+Its bathymetry calibrator derives exact operating depth/slope/context limits from:
+
+- final world bounds and negative-Z headroom;
+- horizontal world dimensions;
+- available room inside each existing submerged component;
+- the versioned `BathymetryRecipe`.
+
+The V13 sign of elevation supplies standing-water membership. V14 owns the negative-Z bottom shape within that footprint.
+
 ## Revision history that matters today
 
 - **V1** — original cell-quantized elevation behavior.
@@ -129,8 +146,11 @@ These semantic coordinates are not widths, metres, exact slopes, noise frequenci
 - **V11** — smooth/domain-warped organic morphology.
 - **V12** — accepted scale-stable ordinary base terrain behind semantic calibration + recipe + replaceable spatial algorithm.
 - **V13** — accepted dedicated structural mountains composed over a capped V12 base, with typed `MountainIntent`, replaceable calibration/spatial seams and generic sparse shape fitting downstream.
+- **V14** — accepted standing-water bathymetry: preserves every V13 land elevation and the complete V13 submerged footprint while re-authoring negative-Z bottom geometry with accepted coastal morphology and broad deep-water structures. It does not create/delete water bodies or place Water.
 
-V9–V13 ocean-first generation requires vertical `WorldBounds` with valid space below and above sea level. V13 additionally requires positive headroom above the V12 base-terrain ceiling used by its recipe.
+V9–V14 ocean-first elevation requires vertical `WorldBounds` with valid space below and above sea level. V13 additionally requires positive headroom above the V12 base-terrain ceiling used by its recipe. V14 additionally benefits from sufficient negative-Z headroom, but realized depth is still limited by horizontal room and readable slope rather than simply consuming the whole vertical range.
+
+See [V14 Standing-Water Bathymetry](bathymetry-generation.md) for the accepted underwater model.
 
 ## Deterministic generation randomness
 
@@ -150,6 +170,8 @@ GenerationRandom.sampleLong(...)
 
 The current V1 sampler combines the master seed with stable semantic keys/coordinates/ordinal through fixed deterministic hashing/mixing. Stage/purpose names therefore isolate unrelated random domains and sample values do not depend on call order.
 
+V14 bathymetry itself does not need per-cell random noise to create bottom structure. Its accepted spatial model is deterministic from geometry and calibrated recipe inputs.
+
 ## Invariants
 
 - Identical Genesis + compatible revision code reproduces identical generated facts.
@@ -159,6 +181,7 @@ The current V1 sampler combines the master seed with stable semantic keys/coordi
 - Authored intent remains semantic; exact model values belong to calibrators/recipes.
 - Genesis is immutable provenance and never owns live Terrain, Water, agents or weather.
 - Adding a replaceable implementation behind the same compatible contract does not require downstream fact consumers to inspect its class.
+- V14 does not imply automatic promotion of unrelated Atlas stages; revision support is widened at the owning boundary deliberately.
 
 ## Ownership and lifecycle
 
@@ -203,4 +226,4 @@ simulation/.../world/genesis/RngRevision.java
 simulation/.../world/genesis/GenerationRandom.java
 ```
 
-See [V13 Mountain Generation](mountain-generation.md), [World Atlas](world-atlas.md), [World Generation](overview.md), [ADR-009](../../decisions/009-world-genesis-provenance-and-randomness.md), and [Project Context](../../project-context.md).
+See [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [World Atlas](world-atlas.md), [World Generation](overview.md), [ADR-009](../../decisions/009-world-genesis-provenance-and-randomness.md), and [Project Context](../../project-context.md).

@@ -8,7 +8,7 @@ It is not the living world. Once those facts are materialized/prepared into runt
 
 ## Current status
 
-The current Atlas contains:
+The current Atlas contract contains:
 
 ```text
 WorldAtlas
@@ -23,13 +23,21 @@ WorldAtlas
 
 All fields use the same `WorldBounds` as Genesis.
 
-V13 mountains are represented in the same precise `ElevationField` used by ordinary terrain. There is intentionally no separate `MountainField` merely to label feature names: no current downstream owner needs an independent mountain fact beyond final morphology.
+V13 mountains and accepted V14 standing-water bathymetry are represented in the same precise `ElevationField` used by ordinary terrain. There is intentionally no separate `MountainField` or `BathymetryField` merely to label feature names: no current downstream owner needs those morphologies as independent facts beyond final elevation.
+
+Important revision boundary: the explicit elevation router supports accepted V14, but that does **not** automatically mean every standard downstream Atlas stage has been promoted to V14. `WorldGenesis.current()` remains the compatibility V7 path, and climate/hydrography/initial-Water revision support is widened only at its owning milestone.
 
 ## What each field means
 
 ### `ElevationField`
 
-Precise generated surface height for each horizontal `(x,y)` column, including the accepted V12 base morphology and, for `GenerationRevision.V13`, dedicated mountain uplift. It also exposes the discrete cell projection used by runtime terrain materialization.
+Precise generated surface height for each horizontal `(x,y)` column. Depending on the explicit generation revision it can include:
+
+- accepted V12 ordinary base morphology;
+- V13 dedicated mountain uplift;
+- V14 standing-water bathymetry while preserving V13 land and submerged membership.
+
+It also exposes the discrete cell projection used by runtime terrain materialization.
 
 ### `GeologyField`
 
@@ -41,11 +49,11 @@ Long-term generated climate normals. These are prepared environmental facts, not
 
 ### `DrainageField`
 
-Analytical downstream routing, contributing area and terminal destination/basin. It does not own Water and does not imply accepted river carving.
+Analytical downstream routing, contributing area and terminal destination/basin. It does not own Water and does not imply accepted Stage 2B drainage/basin topology yet.
 
 ### `HydrographyField`
 
-Current derived channel/network footprint. Its threshold-style algorithm is provisional; Stage 2 owns final dry hierarchy and carving.
+Current derived channel/network footprint. Its threshold-style algorithm is provisional; Stage 2C owns final dry river-network semantics.
 
 ### `SurfaceHydrologyField`
 
@@ -76,6 +84,8 @@ WorldGenesis + ElevationField + DrainageField
 
 Null stage outputs are rejected immediately and the final Atlas constructor validates bounds consistency.
 
+This graph is a composition contract, not a claim that every historical/new `GenerationRevision` is currently supported by every standard implementation in the graph.
+
 ## Algorithm substitution
 
 `WorldGenerationAlgorithms` groups typed contracts:
@@ -91,21 +101,23 @@ SurfaceHydrologyGenerator
 
 Each can be replaced independently for tests/experiments while downstream consumers continue reading the same fact interfaces.
 
-## V12 and V13 inside `ElevationGenerator`
+## V12, V13 and V14 inside `ElevationGenerator`
 
-The Atlas does not branch downstream based on which elevation implementation produced the surface:
+Downstream elevation consumers do not inspect which concrete elevation implementation produced the surface:
 
 ```text
-V9 / V10 / V11 / V12 / V13 / test generator
-                    ↓
-              ElevationField
-                    ↓
-          same downstream contracts
+V9 / V10 / V11 / V12 / V13 / V14 / test generator
+                         ↓
+                   ElevationField
 ```
 
-V12 composes semantic ordinary-landscape intent through its calibrator/recipe/spatial algorithm. V13 composes that capped V12 base with a separate `MountainCalibrator + MountainRecipe + MountainElevationAlgorithm` pipeline behind the same `ElevationGenerator` boundary.
+- V12 composes semantic ordinary-landscape intent through its calibrator/recipe/spatial algorithm.
+- V13 composes a capped V12 base with `MountainCalibrator + MountainRecipe + MountainElevationAlgorithm`.
+- V14 composes accepted V13 land/submerged membership with `BathymetryCalibrator + BathymetryRecipe + BathymetryElevationAlgorithm`; the standard bathymetry algorithm itself composes accepted coast morphology with an independent deep-interior structure pass.
 
-See [Terrain Generation](terrain-generation.md) and [V13 Mountain Generation](mountain-generation.md).
+V14 preserves exact V13 land elevation and submerged membership while re-authoring underwater Z. It does not create Water or a separate waterbody fact.
+
+See [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md) and [V14 Standing-Water Bathymetry](bathymetry-generation.md).
 
 ## Climate facts versus weather
 
@@ -132,7 +144,9 @@ SurfaceHydrology     generated initial-Water compatibility fact
 runtime Liquid/Water finite lived Water after materialization
 ```
 
-Stage 2 will replace/refine the dry network/carving model from the accepted V13 dry elevation. Stage 7 owns final finite initial Water placement.
+Stage 2A standing-water bathymetry is already accepted inside elevation. Stage 2B next owns final drainage/basin topology starting from accepted V14 elevation. Stage 2C owns the river network and Stage 2D owns dry river/valley carving. Stage 7 owns final finite initial Water placement.
+
+Neither provisional drainage nor hydrography is permission to rewrite accepted V14 lake/sea/ocean footprint or bottom geometry.
 
 ## Preparation after the Atlas
 
@@ -152,7 +166,7 @@ Elevation + Geology + Drainage + SurfaceHydrology + Morphology
 TerrainMaterialField
 ```
 
-V13 shape preparation remains generic: it consumes `ElevationField + GenerationRevision`, not a mountain-specific concrete class. The sparse V13 transition policy is a geometry fitting policy, not part of the mountain generator.
+V13/V14 shape preparation remains generic: it consumes `ElevationField + GenerationRevision`, not mountain- or bathymetry-specific concrete classes. The sparse coherent transition policy is geometry fitting policy, not part of either morphology generator.
 
 These prepared facts are packaged in `PreparedGeneratedWorld`; they still are not mutable runtime owners.
 
@@ -161,8 +175,9 @@ These prepared facts are packaged in `PreparedGeneratedWorld`; they still are no
 - Every Atlas field uses Genesis bounds.
 - Atlas fields are immutable/read-only generated facts.
 - Stage algorithms are independently replaceable behind typed contracts.
-- V13 mountains do not require a separate fact type when elevation is the only durable downstream fact.
+- V13 mountains and V14 bathymetry do not require separate fact types when elevation is the only durable downstream fact.
 - Downstream consumers do not inspect concrete elevation algorithm classes.
+- Explicit V14 elevation support does not silently promote unrelated standard Atlas-stage revision support.
 - The Atlas does not contain runtime services/processes.
 - Drainage/hydrography do not own Water quantity.
 - Running simulation does not regenerate the Atlas to update lived state.
@@ -170,7 +185,9 @@ These prepared facts are packaged in `PreparedGeneratedWorld`; they still are no
 
 ## Current limitations / next changes
 
-Stage 2 may replace/refine drainage/hydrography and may introduce new typed dry-carving facts only when real downstream consumers require them. Later stages may similarly introduce explicit stratigraphy, cave or depositional facts.
+Stage 2B may replace/refine drainage topology and introduce a new typed basin/topology fact only if a real downstream consumer requires one. Stage 2C/2D may similarly refine hydrography/carving behind narrow contracts. Later stages may introduce explicit stratigraphy, cave or depositional facts.
+
+Accepted V14 bathymetry is protected input for those later concerns rather than provisional data to be freely repaired downstream.
 
 Do not add a universal generated-fact bag such as `Map<String,Object>`. New durable facts require explicit types and consumers.
 
@@ -185,6 +202,6 @@ world/atlas/WorldGenerationAlgorithms.java
 world/atlas/*Generator.java
 ```
 
-`WorldAtlasAlgorithmContractTest` protects substitution/bounds/null-output behavior. Generated-world audits exercise representative complete Atlases.
+`WorldAtlasAlgorithmContractTest` protects substitution/bounds/null-output behavior. Generated-world audits exercise representative complete Atlases on revisions supported by the corresponding standard stage implementations.
 
-See [World Genesis](world-genesis.md), [World Generation](overview.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [Generated World Runtime](generated-world-runtime.md), [ADR-010](../../decisions/010-world-atlas-generated-facts.md), and [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md).
+See [World Genesis](world-genesis.md), [World Generation](overview.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [Generated World Runtime](generated-world-runtime.md), [ADR-010](../../decisions/010-world-atlas-generated-facts.md), and [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md).

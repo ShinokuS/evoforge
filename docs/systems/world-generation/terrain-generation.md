@@ -17,22 +17,26 @@ V12 ordinary base morphology
         ↓
 V13 dedicated mountain morphology
         ↓
+V14 standing-water bathymetry
+        ↓
 precise ElevationField
         ↓
 generic surface-shape fitting
 ```
 
-V12 and V13 have both completed deterministic checks and manual visual acceptance. Dry river/lake carving, final geology, caves and final causal surface materials remain later stages.
+V12, V13 and V14 Stage 2A have completed deterministic checks and manual visual acceptance. Drainage topology, river-network generation/carving, final geology, caves and final causal surface materials remain later concerns.
 
 ## Current status
 
 ### Accepted
 
-- deterministic V1–V13 elevation revision compatibility;
+- deterministic V1–V14 elevation revision compatibility where the owning stage explicitly supports the revision;
 - manually accepted V12 ordinary-landscape appearance;
 - manually accepted V13 structural-mountain appearance;
+- manually accepted V14 standing-water bathymetry over the accepted V13 submerged footprint;
 - V12 semantic intent → calibration → recipe → spatial algorithm split;
 - V13 semantic mountain intent → calibration → recipe → replaceable mountain algorithm split;
+- V14 calibration → recipe → replaceable standing-water bathymetry algorithm split;
 - precise sub-cell elevation plus discrete `elevationAt` projection;
 - local morphology derivation (slope/convexity/concavity);
 - generic shape-template fitting independent from concrete Shape classes;
@@ -41,7 +45,7 @@ V12 and V13 have both completed deterministic checks and manual visual acceptanc
 ### Explicitly provisional
 
 - current geology generation;
-- current drainage/hydrography algorithms before Stage 2 carving;
+- current drainage/hydrography algorithms before final Stage 2B/2C topology;
 - current slope/concavity/drainage terrain-material model;
 - historical generated initial-Water ordering.
 
@@ -108,7 +112,7 @@ This is a synthesis/readability constraint, not physical erosion.
 
 ### V12 boundary
 
-V12 deliberately does **not** own dedicated mountain abundance/height/elongation, river carving, geology, caves or final material synthesis. V13 adds mountains as a separate elevation stage instead of growing more mountain-specific policy inside V12.
+V12 deliberately does **not** own dedicated mountain abundance/height/elongation, standing-water bathymetry, river carving, geology, caves or final material synthesis. V13 adds mountains and V14 adds standing-water bathymetry as separate elevation concerns instead of growing those policies inside V12.
 
 ## Part II — V13 structural mountains
 
@@ -195,7 +199,64 @@ The cap uses the same local-rise budget, so coast handling does not introduce a 
 
 For the full model, exact semantics and acceptance evidence see [V13 Mountain Generation](mountain-generation.md).
 
-## Part III — local surface morphology
+## Part III — V14 standing-water bathymetry
+
+V14 preserves the accepted V13 land and submerged membership, but it does not inherit V12/V13 negative amplitude as bathymetric truth.
+
+```text
+V14 WorldGenesis
+      ↓
+V13 base Genesis with shallow negative floor
+      ↓
+V13MountainTerrainGenerator
+      ↓
+accepted V13 land + submerged footprint
+      +
+BathymetryCalibrator + BathymetryRecipe
+      ↓
+StructuredBathymetryAlgorithm
+      ↓
+V14 ElevationField
+```
+
+The shallow base negative floor is intentional: V13 needs the sign of submerged columns for membership, while V14 owns actual underwater depth.
+
+### Standing-water membership
+
+V14 enforces a strong invariant:
+
+```text
+V13 elevation >= 0  -> exact same V14 land elevation
+V13 elevation <  0  -> remains submerged in V14
+```
+
+No standing-water body is created or deleted by bathymetry.
+
+### Coastal bottom morphology
+
+`BathymetryMorphologyAlgorithm` owns the accepted shallow/coastal profile. It uses available horizontal room, depth capacity and broad coastal context to produce readable descent without cell-scale noise.
+
+Ocean-connected coast may descend more strongly when broad adjacent land relief causally supports it. Competing coast influences blend through connected water instead of switching discrete nearest-land owners, and land barriers stop propagation.
+
+The accepted causal coastal fall remains below half a vertical cell per cardinal XY step. Narrow bays/corridors remain shallow when geometry cannot support clean depth.
+
+### Deep-water structure
+
+`DeepBathymetryStructureAlgorithm` is a separate replaceable pass composed after the accepted coast. It activates only in sufficiently deep/spacious water components.
+
+Large interiors can contain several broad:
+
+- basins/depressions;
+- highs;
+- saddles/transitions.
+
+The pass uses deterministic structural cores, not high-frequency noise. Basin/high surfaces are independently slope-bounded and compose through `max(depth)` / `min(depth)`, avoiding additive gradient stacking on top of the accepted seabed.
+
+Small, shallow and narrow water therefore stays on the accepted coastal/base morphology.
+
+For the full model and acceptance boundary see [V14 Standing-Water Bathymetry](bathymetry-generation.md).
+
+## Part IV — local surface morphology
 
 `world.terrain.surface` derives local geometric facts from precise elevation:
 
@@ -205,7 +266,7 @@ For the full model, exact semantics and acceptance evidence see [V13 Mountain Ge
 
 These are derived Terrain facts, not another elevation owner. A uniform vertical translation preserves them because they depend on local differences.
 
-## Part IV — generic runtime surface shape
+## Part V — generic runtime surface shape
 
 Precise elevation is fitted to the discrete Terrain shapes available to runtime Geometry:
 
@@ -223,11 +284,11 @@ materialization
 
 Generic fitting compares represented surface geometry rather than branching on `RampShape`, `FullShape` or future concrete classes. The palette/adaptor is the only layer that binds available runtime Shapes to surface templates.
 
-V13 uses a sparse coherent transition policy. A locally suitable transition must have readable neighboring elevation and a coherent band at least three cells wide; only irregular deterministic patches are then retained. Hash selection includes XY, discrete Z layer and direction so neighboring levels do not repeat one mechanical interval.
+V13/V14 use the same sparse coherent transition policy. A locally suitable transition must have readable neighboring elevation and a coherent band at least three cells wide; only irregular deterministic patches are then retained. Hash selection includes XY, discrete Z layer and direction so neighboring levels do not repeat one mechanical interval.
 
-Poor fits remain ordinary full-cell terrain. Mountains are not required to be globally traversable and generation does not create transition shapes merely to repair Navigation connectivity.
+Poor fits remain ordinary full-cell terrain. Mountains and bathymetry are not required to become globally traversable and generation does not create transition shapes merely to repair Navigation connectivity.
 
-## Part V — current material preparation
+## Part VI — current material preparation
 
 Material identity remains downstream from morphology.
 
@@ -249,6 +310,7 @@ Final material synthesis must use completed morphology, hydrographic/depositiona
 WorldGenesis / intent               authored generation meaning
 V12 calibrator + recipe             ordinary base model
 Mountain calibrator + recipe        V13 mountain model
+Bathymetry calibrator + recipe      V14 standing-water bottom model
 ElevationField                      immutable generated surface fact
 SurfaceMorphologyField              derived local geometry fact
 TerrainShapeField                   immutable discrete shape-preparation fact
@@ -269,8 +331,12 @@ Generated/prepared fields are not synchronized backward from later runtime Terra
 - V13 zero mountain abundance preserves its V12 base exactly.
 - V13 cannot create/delete coastline cells.
 - Abundance owns mountain coverage; Scale owns individual size; Height owns bounded prominence; Chaininess owns elongation.
-- Mountain synthesis and material synthesis do not branch on concrete runtime Shape classes.
-- Shape fitting remains generic and may intentionally leave mountains partially or wholly impassable.
+- V14 preserves every accepted V13 land elevation exactly.
+- V14 preserves the complete V13 standing-water membership/shoreline footprint.
+- Bathymetry source morphology is world-floor and readable-slope bounded.
+- Deep bathymetry cannot rewrite the protected accepted coastal band.
+- Mountain/bathymetry synthesis and material synthesis do not branch on concrete runtime Shape classes.
+- Shape fitting remains generic and may intentionally leave terrain partially or wholly impassable.
 - Material composition depends on causal generated/local facts rather than feature-name special cases.
 
 ## Tests and acceptance
@@ -285,24 +351,34 @@ MountainArchitectureTest
 MountainAbundanceCoverageTest
 MountainMorphologyElevationGenerationTest
 V13MountainTerrainGeneratorCompositionTest
+BathymetryArchitectureTest
+BathymetryMorphologyElevationGenerationTest
+DeepBathymetryStructureGenerationTest
+V14BathymetryTerrainGeneratorCompositionTest
+V14BathymetryElevationGenerationTest
 V13SparseShapeGenerationTest
 WorldGenerationPreviewSettingsTest
+WorldGenerationElevationTintTest
 Generated World Audit
 ```
 
-V12 and V13 visible morphology additionally require manual 2D/3D preview acceptance; numerical invariants do not substitute for visual judgement.
+V12, V13 and V14 visible morphology additionally require manual 2D/3D preview acceptance; numerical invariants do not substitute for visual judgement.
 
 ## Current limitations / next stage
 
 The accepted terrain stack still does not implement:
 
-- final dry river hierarchy, valleys, channels and lake-bowl carving (**Stage 2 — next**);
+- final drainage/watershed/basin topology (**Stage 2B — next**);
+- final river hierarchy and outlets (**Stage 2C**);
+- final dry river/valley/channel carving (**Stage 2D**);
 - final coherent geology/stratigraphy;
 - caves/open underground volumes;
 - final causal sediment/soil/exposed-bedrock synthesis;
 - runtime erosion;
 - biome authority;
 - navigation connectivity repair.
+
+The current standing-water footprint/bathymetry is accepted and is not scheduled for regeneration inside later Stage 2 work.
 
 ## Code
 
@@ -318,7 +394,13 @@ simulation/.../world/atlas/MountainCalibrator.java
 simulation/.../world/atlas/MountainRecipe.java
 simulation/.../world/atlas/MountainElevationAlgorithm.java
 simulation/.../world/atlas/MountainMorphologyAlgorithm.java
+simulation/.../world/atlas/V14BathymetryTerrainGenerator.java
+simulation/.../world/atlas/BathymetryCalibrator.java
+simulation/.../world/atlas/BathymetryRecipe.java
+simulation/.../world/atlas/BathymetryMorphologyAlgorithm.java
+simulation/.../world/atlas/StructuredBathymetryAlgorithm.java
+simulation/.../world/atlas/DeepBathymetryStructureAlgorithm.java
 simulation/.../world/terrain/shape/*
 ```
 
-See [V13 Mountain Generation](mountain-generation.md), [World Generation](overview.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-021](../../decisions/021-world-preparation-and-calibration-boundary.md).
+See [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [World Generation](overview.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-021](../../decisions/021-world-preparation-and-calibration-boundary.md).
