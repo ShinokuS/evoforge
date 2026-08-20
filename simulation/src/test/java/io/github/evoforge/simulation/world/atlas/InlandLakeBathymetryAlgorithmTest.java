@@ -14,30 +14,30 @@ import org.junit.jupiter.api.Test;
 final class InlandLakeBathymetryAlgorithmTest {
 
     @Test
-    void deepensBroadInlandBodyWithBroadMonotoneTerracesWhilePreservingOtherDomains() {
+    void deepensBroadInlandBodyWithBroadAsymmetricTerracesWhilePreservingOtherDomains() {
         WorldBounds bounds = new WorldBounds(0, 40, 0, 40, -32, 16);
-        long[] elevation = new long[41 * 41];
-        for (int y = 0; y < 41; y++) {
-            for (int x = 0; x < 41; x++) {
-                int cell = y * 41 + x;
-                if (x == 0 || y == 0 || x == 40 || y == 40) {
-                    elevation[cell] = -3L * ElevationField.SUBUNITS_PER_CELL;
-                } else if (x >= 10 && x <= 30 && y >= 10 && y <= 30) {
-                    elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
-                } else {
-                    elevation[cell] = 6L * ElevationField.SUBUNITS_PER_CELL;
-                }
-            }
-        }
+        long[] elevation = broadSquareLake(bounds);
         ElevationField before = new DenseElevationField(bounds, elevation);
+        WorldGenesis genesis = genesis(bounds);
         ElevationField after = InlandLakeBathymetryAlgorithm.standard().generate(
-                genesis(bounds), before, InlandLakeBathymetryRecipe.balanced());
+                genesis, before, InlandLakeBathymetryRecipe.balanced());
 
-        assertTrue(after.elevationSubunitsAt(20, 20) <= -5L * ElevationField.SUBUNITS_PER_CELL);
+        assertTrue(deepest(after, 10, 30, 10, 30) <= -5L * ElevationField.SUBUNITS_PER_CELL);
         assertEquals(-ElevationField.SUBUNITS_PER_CELL, after.elevationSubunitsAt(10, 20),
                 "first submerged ring should remain shallow");
         assertEquals(-ElevationField.SUBUNITS_PER_CELL, after.elevationSubunitsAt(11, 20),
                 "one-cell depth terraces are not allowed beside the shore");
+
+        int asymmetricPairs = 0;
+        for (int offset = 1; offset <= 8; offset++) {
+            long west = after.elevationSubunitsAt(20 - offset, 20);
+            long east = after.elevationSubunitsAt(20 + offset, 20);
+            long south = after.elevationSubunitsAt(20, 20 - offset);
+            long north = after.elevationSubunitsAt(20, 20 + offset);
+            if (west != east || south != north) asymmetricPairs++;
+        }
+        assertTrue(asymmetricPairs > 0,
+                "broad lake floor should not remain a perfectly symmetric funnel around the geometric center");
 
         for (int y = 0; y < 41; y++) {
             for (int x = 0; x < 41; x++) {
@@ -55,6 +55,15 @@ final class InlandLakeBathymetryAlgorithmTest {
                     assertTrue(cardinalFall <= ElevationField.SUBUNITS_PER_CELL,
                             "lake floor must never jump by more than one full Z per cardinal step");
                 }
+            }
+        }
+
+        ElevationField replay = InlandLakeBathymetryAlgorithm.standard().generate(
+                genesis, before, InlandLakeBathymetryRecipe.balanced());
+        for (int y = 0; y < 41; y++) {
+            for (int x = 0; x < 41; x++) {
+                assertEquals(after.elevationSubunitsAt(x, y), replay.elevationSubunitsAt(x, y),
+                        "asymmetric floor bias must replay deterministically");
             }
         }
     }
@@ -80,6 +89,33 @@ final class InlandLakeBathymetryAlgorithmTest {
                 assertEquals(before.elevationSubunitsAt(x, y), after.elevationSubunitsAt(x, y));
             }
         }
+    }
+
+    private static long[] broadSquareLake(WorldBounds bounds) {
+        long[] elevation = new long[41 * 41];
+        for (int y = 0; y < 41; y++) {
+            for (int x = 0; x < 41; x++) {
+                int cell = y * 41 + x;
+                if (x == 0 || y == 0 || x == 40 || y == 40) {
+                    elevation[cell] = -3L * ElevationField.SUBUNITS_PER_CELL;
+                } else if (x >= 10 && x <= 30 && y >= 10 && y <= 30) {
+                    elevation[cell] = -ElevationField.SUBUNITS_PER_CELL;
+                } else {
+                    elevation[cell] = 6L * ElevationField.SUBUNITS_PER_CELL;
+                }
+            }
+        }
+        return elevation;
+    }
+
+    private static long deepest(ElevationField field, int minX, int maxX, int minY, int maxY) {
+        long deepest = 0L;
+        for (int y = minY; y <= maxY; y++) {
+            for (int x = minX; x <= maxX; x++) {
+                deepest = Math.min(deepest, field.elevationSubunitsAt(x, y));
+            }
+        }
+        return deepest;
     }
 
     private static WorldGenesis genesis(WorldBounds bounds) {
