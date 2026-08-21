@@ -11,6 +11,7 @@ final class LandmassSilhouette {
     private final WorldBounds bounds;
     private final int cellCount;
     private final boolean[] support;
+    private final long[] packedSupport;
     private final int[] potentialPpm;
     private final int supportCellCount;
     private final int influencePpm;
@@ -89,6 +90,7 @@ final class LandmassSilhouette {
                 bounds,
                 expected,
                 null,
+                null,
                 potentialPpm,
                 supportCellCount,
                 influencePpm,
@@ -129,6 +131,7 @@ final class LandmassSilhouette {
         this.support = copyArrays || !potentialEncodesSupport
                 ? (copyArrays ? Arrays.copyOf(support, support.length) : support)
                 : null;
+        this.packedSupport = null;
         this.potentialPpm = copyArrays ? Arrays.copyOf(potentialPpm, potentialPpm.length) : potentialPpm;
         this.supportCellCount = supportCellCount;
         this.influencePpm = influencePpm;
@@ -139,6 +142,7 @@ final class LandmassSilhouette {
             WorldBounds bounds,
             int cellCount,
             boolean[] support,
+            long[] packedSupport,
             int[] potentialPpm,
             int supportCellCount,
             int influencePpm,
@@ -146,10 +150,40 @@ final class LandmassSilhouette {
         this.bounds = bounds;
         this.cellCount = cellCount;
         this.support = support;
+        this.packedSupport = packedSupport;
         this.potentialPpm = potentialPpm;
         this.supportCellCount = supportCellCount;
         this.influencePpm = influencePpm;
         this.constrained = constrained;
+    }
+
+    /**
+     * Replaces dense constrained silhouette potential with the support fact still required after
+     * land ranking has been prepared.
+     *
+     * <p>The returned silhouette deliberately cannot provide potential values. It is valid only for
+     * materialization paths that already hold {@code PreparedLandRanking} and therefore need support
+     * membership, bounds and counts but no longer need the original potential field.</p>
+     */
+    LandmassSilhouette compactSupportForMaterialization() {
+        if (!constrained || potentialPpm == null) return this;
+
+        long[] bits = new long[Math.toIntExact(((long) cellCount + Long.SIZE - 1L) / Long.SIZE)];
+        for (int index = 0; index < cellCount; index++) {
+            boolean supported = support != null ? support[index] : potentialPpm[index] > 0;
+            if (supported) {
+                bits[index >>> 6] |= 1L << (index & 63);
+            }
+        }
+        return new LandmassSilhouette(
+                bounds,
+                cellCount,
+                null,
+                bits,
+                null,
+                supportCellCount,
+                influencePpm,
+                true);
     }
 
     /**
@@ -159,7 +193,7 @@ final class LandmassSilhouette {
      * silhouette influence is zero by definition.</p>
      */
     private LandmassSilhouette(WorldBounds bounds, int cellCount) {
-        this(bounds, cellCount, null, null, cellCount, 0, false);
+        this(bounds, cellCount, null, null, null, cellCount, 0, false);
     }
 
     static LandmassSilhouette unconstrained(WorldBounds bounds) {
@@ -186,12 +220,21 @@ final class LandmassSilhouette {
     boolean supportsIndex(int index) {
         requireIndex(index);
         if (!constrained) return true;
-        return support != null ? support[index] : potentialPpm[index] > 0;
+        if (support != null) return support[index];
+        if (packedSupport != null) {
+            return (packedSupport[index >>> 6] & (1L << (index & 63))) != 0L;
+        }
+        return potentialPpm[index] > 0;
     }
 
     int potentialPpmAtIndex(int index) {
         requireIndex(index);
-        return constrained ? potentialPpm[index] : PPM;
+        if (!constrained) return PPM;
+        if (potentialPpm == null) {
+            throw new IllegalStateException(
+                    "landmass silhouette potential is unavailable after support-only compaction");
+        }
+        return potentialPpm[index];
     }
 
     private static void validateSupportCount(int supportCellCount, int expected) {
