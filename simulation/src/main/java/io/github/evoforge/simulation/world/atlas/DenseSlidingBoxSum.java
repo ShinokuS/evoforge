@@ -6,6 +6,11 @@ package io.github.evoforge.simulation.world.atlas;
  * <p>The caller owns both full-field buffers so a generation stage can explicitly reuse scratch
  * whose lifetime does not overlap with another fact. The kernel performs one horizontal and one
  * vertical sliding pass, making work O(N) independently of the requested radius.</p>
+ *
+ * <p>The final result may alias {@code source}. This is safe because the horizontal pass completes
+ * into its separate scratch buffer before the vertical pass starts reading it. That ownership rule
+ * lets multi-pass generation pipelines transform one semantic field in place instead of retaining
+ * another full-world result array for every box-filter level.</p>
  */
 final class DenseSlidingBoxSum {
     private DenseSlidingBoxSum() {
@@ -95,10 +100,8 @@ final class DenseSlidingBoxSum {
         if (source.length != area || horizontalScratch.length != area || result.length != area) {
             throw new IllegalArgumentException("dense box-sum buffers must match horizontal area");
         }
-        if (source == horizontalScratch
-                || source == result
-                || horizontalScratch == result) {
-            throw new IllegalArgumentException("dense box-sum buffers must not alias");
+        if (source == horizontalScratch || horizontalScratch == result) {
+            throw new IllegalArgumentException("dense box-sum horizontal scratch must not alias source/result");
         }
     }
 }
