@@ -193,11 +193,14 @@ public final class V14OceanicBaseTerrainGenerator
                 terrainRecipe,
                 silhouette);
         profileMemory("v14.prepare.after_land_ranking");
+        LandmassSilhouette materializationSilhouette =
+                silhouette.compactSupportForMaterialization();
+        profileMemory("v14.prepare.after_silhouette_compaction");
         return new PreparedInputs(
                 terrain,
                 boundary,
                 silhouetteCalibration,
-                silhouette,
+                materializationSilhouette,
                 landRanking);
     }
 
