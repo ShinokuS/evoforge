@@ -7,7 +7,24 @@ final class DenseElevationField implements ElevationField {
     private final int width;
     private final long[] elevationSubunits;
 
+    /** Copy-safe constructor for callers that retain ownership of their input buffer. */
     DenseElevationField(WorldBounds bounds, long[] elevationSubunits) {
+        this(bounds, elevationSubunits, true);
+    }
+
+    /**
+     * Transfers exclusive ownership of a freshly allocated generation buffer without cloning it.
+     *
+     * <p>The caller must never mutate the array again after this call.</p>
+     */
+    static DenseElevationField takeOwnership(WorldBounds bounds, long[] elevationSubunits) {
+        return new DenseElevationField(bounds, elevationSubunits, false);
+    }
+
+    private DenseElevationField(
+            WorldBounds bounds,
+            long[] elevationSubunits,
+            boolean copyArray) {
         if (bounds == null) {
             throw new IllegalArgumentException("bounds must not be null");
         }
@@ -22,7 +39,7 @@ final class DenseElevationField implements ElevationField {
         }
         this.bounds = bounds;
         this.width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
-        this.elevationSubunits = elevationSubunits.clone();
+        this.elevationSubunits = copyArray ? elevationSubunits.clone() : elevationSubunits;
     }
 
     static int cellCount(WorldBounds bounds) {
