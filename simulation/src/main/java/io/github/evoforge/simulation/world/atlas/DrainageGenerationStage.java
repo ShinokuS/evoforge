@@ -23,19 +23,10 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int count = Math.multiplyExact(width, height);
-        long[] heights = new long[count];
+        long[] heights = denseOrMaterializedHeights(elevation, bounds, width, height, count);
         int[] downstream = new int[count];
         int[] traversalScratch = new int[count];
         Arrays.fill(downstream, DenseDrainageField.TERMINAL);
-
-        for (int localY = 0; localY < height; localY++) {
-            int y = bounds.minY() + localY;
-            for (int localX = 0; localX < width; localX++) {
-                int x = bounds.minX() + localX;
-                int index = localY * width + localX;
-                heights[index] = elevation.elevationSubunitsAt(x, y);
-            }
-        }
 
         assignStrictDownhill(width, height, heights, downstream);
         resolveEqualElevationFlats(width, height, heights, downstream, traversalScratch);
@@ -43,6 +34,32 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         long[] contributingArea = accumulateContributingArea(downstream, traversalScratch);
         int[] terminal = resolveTerminals(downstream, traversalScratch);
         return DenseDrainageField.takeOwnership(bounds, downstream, contributingArea, terminal);
+    }
+
+    /** Borrows immutable dense storage in production and materializes only generic field adapters. */
+    private static long[] denseOrMaterializedHeights(
+            ElevationField elevation,
+            WorldBounds bounds,
+            int width,
+            int height,
+            int count) {
+        if (elevation instanceof DenseElevationField dense) {
+            long[] storage = dense.readOnlyStorage();
+            if (storage.length != count) {
+                throw new IllegalStateException("dense elevation storage does not match world area");
+            }
+            return storage;
+        }
+
+        long[] heights = new long[count];
+        for (int localY = 0; localY < height; localY++) {
+            int y = bounds.minY() + localY;
+            for (int localX = 0; localX < width; localX++) {
+                int x = bounds.minX() + localX;
+                heights[localY * width + localX] = elevation.elevationSubunitsAt(x, y);
+            }
+        }
+        return heights;
     }
 
     private static void assignStrictDownhill(
