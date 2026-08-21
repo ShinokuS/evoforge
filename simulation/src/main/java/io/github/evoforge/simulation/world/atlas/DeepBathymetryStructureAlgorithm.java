@@ -44,12 +44,13 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
         }
 
         long[] elevation = copyBaseElevation(base, bounds, width, height);
-        int[] shorelineDistance = shorelineDistance(elevation, width, height);
-        boolean[] visited = new boolean[elevation.length];
-        int[] component = new int[elevation.length];
+        ShorelineDistanceResult shoreline = shorelineDistance(elevation, width, height);
+        int[] shorelineDistance = shoreline.distance();
+        long[] visited = new long[Math.toIntExact(((long) elevation.length + 63L) >>> 6)];
+        int[] component = new int[shoreline.waterCellCount()];
 
         for (int cell = 0; cell < elevation.length; cell++) {
-            if (elevation[cell] >= 0L || visited[cell]) continue;
+            if (elevation[cell] >= 0L || isMarked(visited, cell)) continue;
             int componentSize = collectComponent(cell, elevation, visited, component, width, height);
             authorDeepStructure(
                     elevation,
@@ -318,18 +319,20 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
         return elevation;
     }
 
-    private static int[] shorelineDistance(long[] elevation, int width, int height) {
+    private static ShorelineDistanceResult shorelineDistance(long[] elevation, int width, int height) {
         int[] distance = new int[elevation.length];
         boolean hasLand = false;
+        int waterCellCount = 0;
         for (int cell = 0; cell < elevation.length; cell++) {
             if (elevation[cell] >= 0L) {
                 distance[cell] = 0;
                 hasLand = true;
             } else {
                 distance[cell] = INFINITE_DISTANCE;
+                waterCellCount++;
             }
         }
-        if (!hasLand) return distance;
+        if (!hasLand) return new ShorelineDistanceResult(distance, waterCellCount);
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -361,20 +364,20 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
                 distance[cell] = best;
             }
         }
-        return distance;
+        return new ShorelineDistanceResult(distance, waterCellCount);
     }
 
     private static int collectComponent(
             int start,
             long[] elevation,
-            boolean[] visited,
+            long[] visited,
             int[] queue,
             int width,
             int height) {
         int head = 0;
         int tail = 0;
         queue[tail++] = start;
-        visited[start] = true;
+        mark(visited, start);
         while (head < tail) {
             int cell = queue[head++];
             int x = cell % width;
@@ -390,13 +393,21 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
     private static int enqueueWater(
             int cell,
             long[] elevation,
-            boolean[] visited,
+            long[] visited,
             int[] queue,
             int tail) {
-        if (visited[cell] || elevation[cell] >= 0L) return tail;
-        visited[cell] = true;
+        if (isMarked(visited, cell) || elevation[cell] >= 0L) return tail;
+        mark(visited, cell);
         queue[tail] = cell;
         return tail + 1;
+    }
+
+    private static boolean isMarked(long[] words, int index) {
+        return (words[index >>> 6] & (1L << (index & 63))) != 0L;
+    }
+
+    private static void mark(long[] words, int index) {
+        words[index >>> 6] |= 1L << (index & 63);
     }
 
     private static int plus(int distance, int increment) {
@@ -419,6 +430,9 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
 
     private static int horizontalHeight(WorldBounds bounds) {
         return Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
+    }
+
+    private record ShorelineDistanceResult(int[] distance, int waterCellCount) {
     }
 
     private record Core(int cell, int radiusMilli, boolean basin, long targetDepthSubunits) {
