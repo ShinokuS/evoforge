@@ -42,7 +42,24 @@ final class DenseSlidingBoxSumTest {
     }
 
     @Test
-    void rejectsAliasingBecauseCallerOwnedScratchHasExplicitLifetime() {
+    void mayReplaceSourceInPlaceAfterHorizontalScratchIsComplete() {
+        int width = 7;
+        int height = 5;
+        int radius = 2;
+        long[] source = new long[width * height];
+        for (int cell = 0; cell < source.length; cell++) {
+            source[cell] = cell * 17L + 3L;
+        }
+        long[] expected = reference(source, width, height, radius);
+        long[] scratch = new long[source.length];
+
+        DenseSlidingBoxSum.sumInto(source, width, height, radius, scratch, source);
+
+        assertArrayEquals(expected, source);
+    }
+
+    @Test
+    void rejectsScratchAliasingBecauseItsLifetimeOverlapsBothPasses() {
         long[] source = {1L, 2L, 3L, 4L};
         long[] output = new long[4];
         assertThrows(
