@@ -37,6 +37,8 @@ public final class GenerationRandom {
 
     private final long masterSeed;
     private final long seededState;
+    private final ConcurrentMap<GenerationStageId, ConcurrentMap<GenerationPurposeId, Long>>
+            semanticStates = new ConcurrentHashMap<>();
 
     private GenerationRandom(long masterSeed) {
         this.masterSeed = masterSeed;
@@ -84,6 +86,16 @@ public final class GenerationRandom {
         if (purpose == null) {
             throw new IllegalArgumentException("purpose must not be null");
         }
+        ConcurrentMap<GenerationPurposeId, Long> purposeStates =
+                semanticStates.computeIfAbsent(stage, ignored -> new ConcurrentHashMap<>());
+        return purposeStates.computeIfAbsent(
+                purpose,
+                key -> computeSemanticState(stage, key));
+    }
+
+    private long computeSemanticState(
+            GenerationStageId stage,
+            GenerationPurposeId purpose) {
         long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
         return mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
     }
