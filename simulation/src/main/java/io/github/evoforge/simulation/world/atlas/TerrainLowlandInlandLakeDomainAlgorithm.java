@@ -325,63 +325,130 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         return distance + increment;
     }
 
+    /**
+     * Computes the same dry-only square-window mean as the former integral-image implementation,
+     * but retains only one pair of horizontal rows plus the current vertical column windows.
+     *
+     * <p>Every source row is evaluated at most twice (once when entering and once when leaving the
+     * vertical window), so work remains O(N). Auxiliary storage is O(width) regardless of world
+     * height; the only full-world result is the broad elevation field itself.</p>
+     */
     private static long[] broadDryElevation(
             long[] elevation,
             boolean[] dry,
             int width,
             int height,
             int radius) {
-        int integralWidth = width + 1;
-        long[] sum = new long[Math.multiplyExact(integralWidth, height + 1)];
-        int[] count = new int[sum.length];
-        for (int y = 0; y < height; y++) {
-            long rowSum = 0L;
-            int rowCount = 0;
-            for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
-                if (dry[cell]) {
-                    rowSum += elevation[cell];
-                    rowCount++;
-                }
-                int integral = (y + 1) * integralWidth + x + 1;
-                sum[integral] = sum[y * integralWidth + x + 1] + rowSum;
-                count[integral] = count[y * integralWidth + x + 1] + rowCount;
-            }
+        long[] broad = elevation.clone();
+        long[] verticalSum = new long[width];
+        int[] verticalCount = new int[width];
+        long[] horizontalSum = new long[width];
+        int[] horizontalCount = new int[width];
+
+        int initialBottom = Math.min(height - 1, radius);
+        for (int row = 0; row <= initialBottom; row++) {
+            accumulateDryRowWindow(
+                    elevation,
+                    dry,
+                    width,
+                    row,
+                    radius,
+                    1,
+                    horizontalSum,
+                    horizontalCount,
+                    verticalSum,
+                    verticalCount);
         }
 
-        long[] broad = elevation.clone();
         for (int y = 0; y < height; y++) {
-            int minY = Math.max(0, y - radius);
-            int maxY = Math.min(height - 1, y + radius);
+            int row = y * width;
             for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
+                int cell = row + x;
                 if (!dry[cell]) continue;
-                int minX = Math.max(0, x - radius);
-                int maxX = Math.min(width - 1, x + radius);
-                long windowSum = rectangle(sum, integralWidth, minX, minY, maxX, maxY);
-                int windowCount = Math.toIntExact(rectangle(count, integralWidth, minX, minY, maxX, maxY));
-                if (windowCount > 0) broad[cell] = windowSum / windowCount;
+                int count = verticalCount[x];
+                if (count > 0) broad[cell] = verticalSum[x] / count;
+            }
+
+            int leaving = y - radius;
+            if (leaving >= 0) {
+                accumulateDryRowWindow(
+                        elevation,
+                        dry,
+                        width,
+                        leaving,
+                        radius,
+                        -1,
+                        horizontalSum,
+                        horizontalCount,
+                        verticalSum,
+                        verticalCount);
+            }
+            int entering = y + radius + 1;
+            if (entering < height) {
+                accumulateDryRowWindow(
+                        elevation,
+                        dry,
+                        width,
+                        entering,
+                        radius,
+                        1,
+                        horizontalSum,
+                        horizontalCount,
+                        verticalSum,
+                        verticalCount);
             }
         }
         return broad;
     }
 
-    private static long rectangle(long[] integral, int stride, int minX, int minY, int maxX, int maxY) {
-        int x1 = maxX + 1;
-        int y1 = maxY + 1;
-        return integral[y1 * stride + x1]
-                - integral[minY * stride + x1]
-                - integral[y1 * stride + minX]
-                + integral[minY * stride + minX];
-    }
+    private static void accumulateDryRowWindow(
+            long[] elevation,
+            boolean[] dry,
+            int width,
+            int row,
+            int radius,
+            int direction,
+            long[] horizontalSum,
+            int[] horizontalCount,
+            long[] verticalSum,
+            int[] verticalCount) {
+        int rowStart = row * width;
+        long windowSum = 0L;
+        int windowCount = 0;
+        int initialRight = Math.min(width - 1, radius);
+        for (int x = 0; x <= initialRight; x++) {
+            int cell = rowStart + x;
+            if (!dry[cell]) continue;
+            windowSum += elevation[cell];
+            windowCount++;
+        }
 
-    private static long rectangle(int[] integral, int stride, int minX, int minY, int maxX, int maxY) {
-        int x1 = maxX + 1;
-        int y1 = maxY + 1;
-        return (long) integral[y1 * stride + x1]
-                - integral[minY * stride + x1]
-                - integral[y1 * stride + minX]
-                + integral[minY * stride + minX];
+        for (int x = 0; x < width; x++) {
+            horizontalSum[x] = windowSum;
+            horizontalCount[x] = windowCount;
+
+            int leaving = x - radius;
+            if (leaving >= 0) {
+                int cell = rowStart + leaving;
+                if (dry[cell]) {
+                    windowSum -= elevation[cell];
+                    windowCount--;
+                }
+            }
+            int entering = x + radius + 1;
+            if (entering < width) {
+                int cell = rowStart + entering;
+                if (dry[cell]) {
+                    windowSum += elevation[cell];
+                    windowCount++;
+                }
+            }
+        }
+
+        for (int x = 0; x < width; x++) {
+            verticalSum[x] += direction * horizontalSum[x];
+            verticalCount[x] += direction * horizontalCount[x];
+        }
     }
 
     private static List<Component> collectComponents(
