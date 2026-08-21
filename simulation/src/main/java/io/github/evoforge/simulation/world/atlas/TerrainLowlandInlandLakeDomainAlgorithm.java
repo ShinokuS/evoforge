@@ -101,7 +101,9 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         }
         boolean[] support = eligible;
 
-        int[] supportWidth = chamferDistanceInside(support, width, height);
+        /* Coast clearance is dead after eligibility; recycle the same int raster for support width. */
+        int[] supportWidth = coastDistance;
+        chamferDistanceInside(support, width, height, supportWidth);
 
         /*
          * A valid lake needs real geometric room for its depth profile, not merely enough area to
@@ -265,6 +267,18 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
 
     private static int[] chamferDistanceInside(boolean[] inside, int width, int height) {
         int[] distance = new int[inside.length];
+        chamferDistanceInside(inside, width, height, distance);
+        return distance;
+    }
+
+    private static void chamferDistanceInside(
+            boolean[] inside,
+            int width,
+            int height,
+            int[] distance) {
+        if (distance.length != inside.length) {
+            throw new IllegalArgumentException("chamfer scratch must match mask area");
+        }
         for (int cell = 0; cell < inside.length; cell++) {
             int x = cell % width;
             int y = cell / width;
@@ -274,7 +288,6 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                     : 0;
         }
         chamferPasses(distance, width, height);
-        return distance;
     }
 
     private static int[] chamferDistanceFromTrue(boolean[] source, int width, int height) {
