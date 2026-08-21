@@ -8,14 +8,16 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  * V15 pre-mountain composition: accepted continental terrain plus independently selected Z=0
  * inland-water domains.
  *
- * <p>The standard path reserves the balanced lake budget before the expensive continental synthesis.
- * When the selected footprint matches that prediction, the already generated base is authoritative
- * and no second base synthesis is needed. Shape validity still has priority over quota: if the
- * actual footprint materially differs, the coordinator falls back to exact post-selection land
- * compensation rather than silently changing the meaning of {@code Land}.</p>
+ * <p>The standard path reserves a plausible lake budget before continental materialization, then
+ * discovers the actual terrain-derived lake footprint. Exact dry-land compensation remains
+ * authoritative. When the continental generator supports Land retarget preparation, expensive
+ * Land-independent geometry is retained across the placement and exact materializations instead of
+ * being rebuilt from scratch.</p>
  */
 public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerator {
     private static final int PPM = NormalizedValue.SCALE;
+    private static final boolean PROFILE_MEMORY =
+            Boolean.parseBoolean(System.getenv().getOrDefault("EVOFORGE_WORLDGEN_MEMORY_PROFILE", "false"));
 
     private final ElevationGenerator continentalBaseGenerator;
     private final InlandLakeDomainCalibrator lakeCalibrator;
@@ -75,10 +77,64 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
 
+        profileMemory("v15.start");
         WorldGenesis placementGenesis = predictiveLandReservation
                 ? predictedLandGenesis(genesis, lakeRecipe)
                 : genesis;
-        ElevationField placementBase = requireBase(continentalBaseGenerator.generate(placementGenesis));
+        profileMemory("v15.before_prepare_base");
+        LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase =
+                prepareRetargetableBase(placementGenesis);
+        profileMemory("v15.after_prepare_base");
+
+        PlacementAssessment placement = assessPlacement(
+                genesis,
+                placementGenesis,
+                preparedBase);
+        InlandLakeDomain domain = placement.domain();
+        WorldGenesis exactGenesis = placement.exactGenesis();
+        profileMemory("v15.after_placement_assessment");
+
+        ElevationField authoritativeBase;
+        if (placement.reusablePlacementBase() != null) {
+            authoritativeBase = placement.reusablePlacementBase();
+        } else if (preparedBase != null) {
+            profileMemory("v15.before_exact_materialize");
+            authoritativeBase = requireBase(preparedBase.materialize(exactGenesis));
+            profileMemory("v15.after_exact_materialize");
+        } else {
+            profileMemory("v15.before_exact_regenerate");
+            authoritativeBase = requireBase(continentalBaseGenerator.generate(exactGenesis));
+            profileMemory("v15.after_exact_regenerate");
+        }
+
+        if (domain.lakeCellCount() == 0) return authoritativeBase;
+        verifyLakeDomainRemainsDry(authoritativeBase, domain);
+        profileMemory("v15.after_domain_verification");
+
+        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
+        if (conditioned == null) {
+            throw new IllegalStateException("V15 inland lake shore algorithm returned null");
+        }
+        profileMemory("v15.after_shore_conditioning");
+        return conditioned;
+    }
+
+    /**
+     * Materializes the placement terrain only inside this frame so that a retargeted second
+     * materialization cannot accidentally retain the first full elevation raster as a GC root.
+     *
+     * <p>If exact land coverage equals placement coverage, the same placement field is deliberately
+     * returned for reuse and behavior is identical to the former single-frame implementation.</p>
+     */
+    private PlacementAssessment assessPlacement(
+            WorldGenesis genesis,
+            WorldGenesis placementGenesis,
+            LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase) {
+        ElevationField placementBase = requireBase(preparedBase != null
+                ? preparedBase.materialize(placementGenesis)
+                : continentalBaseGenerator.generate(placementGenesis));
+        profileMemory("v15.after_placement_materialize");
+
         InlandLakeDomainCalibration calibration = lakeCalibrator.calibrate(
                 genesis,
                 placementBase,
@@ -86,6 +142,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (calibration == null) {
             throw new IllegalStateException("V15 inland lake calibrator returned null");
         }
+        profileMemory("v15.after_lake_calibration");
         InlandLakeDomain domain = lakeAlgorithm.generate(
                 genesis,
                 placementBase,
@@ -94,22 +151,23 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (domain == null) {
             throw new IllegalStateException("V15 inland lake domain algorithm returned null");
         }
+        profileMemory("v15.after_lake_domain");
 
         WorldGenesis exactGenesis = domain.lakeCellCount() == 0
                 ? genesis
                 : compensatedLandGenesis(genesis, domain.lakeCellCount());
-        ElevationField authoritativeBase = sameLandCoverage(placementGenesis, exactGenesis)
+        ElevationField reusablePlacementBase = sameLandCoverage(placementGenesis, exactGenesis)
                 ? placementBase
-                : requireBase(continentalBaseGenerator.generate(exactGenesis));
+                : null;
+        return new PlacementAssessment(domain, exactGenesis, reusablePlacementBase);
+    }
 
-        if (domain.lakeCellCount() == 0) return authoritativeBase;
-        verifyLakeDomainRemainsDry(authoritativeBase, domain);
-
-        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
-        if (conditioned == null) {
-            throw new IllegalStateException("V15 inland lake shore algorithm returned null");
+    private LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation prepareRetargetableBase(
+            WorldGenesis placementGenesis) {
+        if (continentalBaseGenerator instanceof LandCoverageRetargetableElevationGenerator retargetable) {
+            return retargetable.prepare(placementGenesis);
         }
-        return conditioned;
+        return null;
     }
 
     private ElevationField requireBase(ElevationField base) {
@@ -217,5 +275,23 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                         - authoritativeBase.bounds().minY() + 1L))) {
             throw new IllegalStateException("unexpected lake-domain verification area");
         }
+    }
+
+    private static void profileMemory(String stage) {
+        if (!PROFILE_MEMORY) return;
+        Runtime runtime = Runtime.getRuntime();
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        System.out.printf(
+                "WORLDGEN_MEMORY stage=%s used_mib=%.2f committed_mib=%.2f max_mib=%.2f%n",
+                stage,
+                used / 1048576.0,
+                runtime.totalMemory() / 1048576.0,
+                runtime.maxMemory() / 1048576.0);
+    }
+
+    private record PlacementAssessment(
+            InlandLakeDomain domain,
+            WorldGenesis exactGenesis,
+            ElevationField reusablePlacementBase) {
     }
 }

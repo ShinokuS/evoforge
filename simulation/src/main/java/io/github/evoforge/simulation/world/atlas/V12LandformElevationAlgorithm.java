@@ -31,6 +31,7 @@ final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:v12-warp-y");
 
     private static final int SAMPLE_MAX = 65_535;
+    private static final int POTENTIAL_BUCKETS = SAMPLE_MAX + 2;
     private static final int PPM = NormalizedValue.SCALE;
 
     ElevationField generate(
@@ -50,7 +51,37 @@ final class V12LandformElevationAlgorithm {
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
             LandmassSilhouette silhouette) {
+        PreparedLandRanking ranking = prepareLandRanking(genesis, calibration, recipe, silhouette);
+        return generate(genesis, calibration, recipe, silhouette, ranking);
+    }
+
+    PreparedLandRanking prepareLandRanking(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette) {
         if (genesis == null || calibration == null || recipe == null || silhouette == null) {
+            throw new IllegalArgumentException("V12 generation inputs must not be null");
+        }
+        WorldBounds bounds = genesis.spec().bounds();
+        if (!bounds.equals(silhouette.bounds())) {
+            throw new IllegalArgumentException("landmass silhouette must match generation bounds");
+        }
+        V12RandomStreams random = V12RandomStreams.bind(GenerationRandom.from(genesis));
+        return calibratedLandRanking(random, bounds, calibration, recipe, silhouette);
+    }
+
+    ElevationField generate(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette,
+            PreparedLandRanking ranking) {
+        if (genesis == null
+                || calibration == null
+                || recipe == null
+                || silhouette == null
+                || ranking == null) {
             throw new IllegalArgumentException("V12 generation inputs must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
@@ -60,19 +91,14 @@ final class V12LandformElevationAlgorithm {
         int width = calibration.width();
         int height = calibration.height();
         int area = calibration.area();
-        GenerationRandom random = GenerationRandom.from(genesis);
-
-        long[] rankKeys = calibratedLandRankKeys(
-                random,
-                bounds,
-                calibration,
-                recipe,
-                silhouette);
-        int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
-        boolean[] land = new boolean[area];
-        for (int rank = 0; rank < landCount; rank++) {
-            land[(int) rankKeys[rank]] = true;
+        if (ranking.potentialSamples().length != area
+                || ranking.startRankByBucket().length != POTENTIAL_BUCKETS) {
+            throw new IllegalArgumentException("prepared V12 land ranking must match generation area");
         }
+        V12RandomStreams random = V12RandomStreams.bind(GenerationRandom.from(genesis));
+
+        int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
+        boolean[] land = selectedLand(ranking, silhouette, landCount);
         int[] coastalInteriority = coastalInteriorityPpm(
                 land,
                 width,
@@ -92,9 +118,31 @@ final class V12LandformElevationAlgorithm {
                 recipe);
         V12LandformRecipe.ReliefMix relief = recipe.relief();
         V12LandformRecipe.CoastProfile coast = recipe.coast();
+        SmoothValueNoiseRowSampler rollingSampler = new SmoothValueNoiseRowSampler(
+                random.rolling(),
+                bounds.minX(),
+                bounds.maxX(),
+                calibration.rollingScale());
+        SmoothValueNoiseRowSampler rollingDetailSampler = new SmoothValueNoiseRowSampler(
+                random.rollingDetail(),
+                bounds.minX(),
+                bounds.maxX(),
+                calibration.rollingDetailScale());
+        OrganicWarpRowSampler upliftWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.upliftScale(),
+                recipe);
+        OrganicWarpRowSampler ridgeWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.ridgeScale(),
+                recipe);
 
-        for (int rank = 0; rank < area; rank++) {
-            int cell = (int) rankKeys[rank];
+        int[] seenByBucket = new int[POTENTIAL_BUCKETS];
+        for (int cell = 0; cell < area; cell++) {
+            int bucket = rankingBucket(ranking, silhouette, cell);
+            int rank = ranking.startRankByBucket()[bucket] + seenByBucket[bucket]++;
             if (!land[cell]) {
                 elevations[cell] = -positiveRankHeight(
                         area - 1 - rank,
@@ -110,25 +158,24 @@ final class V12LandformElevationAlgorithm {
             int interiorityPpm = coastalInteriority[cell];
 
             long upliftPpm = centeredPpm(organicValueNoise(
-                    random,
-                    UPLIFT,
+                    random.uplift(),
                     x,
                     y,
                     calibration.upliftScale(),
-                    recipe));
+                    upliftWarp));
             long landformPpm = landformFieldPpm(landforms, x, y, recipe.features());
             int ridgePpm = ridgeCrestPpm(
                     random,
+                    ridgeWarp,
                     x,
                     y,
                     calibration.ridgeScale(),
                     recipe);
             long rollingPpm = rollingFieldPpm(
-                    random,
+                    rollingSampler,
+                    rollingDetailSampler,
                     x,
                     y,
-                    calibration.rollingScale(),
-                    calibration.rollingDetailScale(),
                     recipe);
 
             long macroSignalPpm = weightedCentered(upliftPpm, relief.upliftWeightPpm())
@@ -163,11 +210,19 @@ final class V12LandformElevationAlgorithm {
                 calibration.maximumReadableStepSubunits(),
                 landAmplitude,
                 recipe.slopes().relaxationPasses());
-        return new DenseElevationField(bounds, elevations);
+        return DenseElevationField.takeOwnership(bounds, elevations);
     }
 
-    private static long[] calibratedLandRankKeys(
-            GenerationRandom random,
+    /**
+     * Computes the exact old comparison-sort rank from a bounded 16-bit potential domain.
+     *
+     * <p>Bucket zero represents unsupported potential -1. Supported potential {@code p} uses bucket
+     * {@code p + 1}. Start ranks are accumulated from highest potential to lowest. A later linear
+     * scan increments {@code seen[bucket]}, reproducing the old cell-index tie-break exactly without
+     * allocating or sorting one 64-bit key per cell.</p>
+     */
+    private static PreparedLandRanking calibratedLandRanking(
+            V12RandomStreams random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
@@ -175,32 +230,37 @@ final class V12LandformElevationAlgorithm {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
-        long[] rankKeys = new long[calibration.area()];
+        char[] potentialSamples = new char[calibration.area()];
+        int[] bucketCounts = new int[POTENTIAL_BUCKETS];
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
             int y = bounds.minY() + localY;
             for (int localX = 0; localX < width; localX++) {
+                if (!silhouette.supportsIndex(index)) {
+                    bucketCounts[0]++;
+                    index++;
+                    continue;
+                }
+
                 int x = bounds.minX() + localX;
                 int coherent = organicValueNoise(
                         random,
-                        LANDMASS,
+                        random.landmass(),
                         x,
                         y,
                         calibration.coherentLandmassScale(),
                         recipe);
                 int fragmented = organicValueNoise(
                         random,
-                        FRAGMENT,
+                        random.fragment(),
                         x,
                         y,
                         calibration.fragmentedLandmassScale(),
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
-                if (!silhouette.supportsIndex(index)) {
-                    potential = -1;
-                } else if (silhouette.constrained()) {
+                if (silhouette.constrained()) {
                     int basePpm = sampleToPpm(potential);
                     int influencePpm = silhouette.influencePpm();
                     int blendedPpm = Math.toIntExact(
@@ -208,12 +268,45 @@ final class V12LandformElevationAlgorithm {
                                     + (long) silhouette.potentialPpmAtIndex(index) * influencePpm) / PPM);
                     potential = ppmToSample(blendedPpm);
                 }
-                rankKeys[index] = rankKey(potential, index);
+                potentialSamples[index] = (char) potential;
+                bucketCounts[potential + 1]++;
                 index++;
             }
         }
-        Arrays.sort(rankKeys);
-        return rankKeys;
+
+        int[] startRankByBucket = new int[POTENTIAL_BUCKETS];
+        int runningRank = 0;
+        for (int bucket = POTENTIAL_BUCKETS - 1; bucket >= 0; bucket--) {
+            startRankByBucket[bucket] = runningRank;
+            runningRank = Math.addExact(runningRank, bucketCounts[bucket]);
+        }
+        if (runningRank != calibration.area()) {
+            throw new IllegalStateException("V12 potential histogram did not cover generation area");
+        }
+        return new PreparedLandRanking(potentialSamples, startRankByBucket);
+    }
+
+    private static boolean[] selectedLand(
+            PreparedLandRanking ranking,
+            LandmassSilhouette silhouette,
+            int landCount) {
+        boolean[] land = new boolean[ranking.potentialSamples().length];
+        int[] seenByBucket = new int[POTENTIAL_BUCKETS];
+        for (int cell = 0; cell < land.length; cell++) {
+            int bucket = rankingBucket(ranking, silhouette, cell);
+            int rank = ranking.startRankByBucket()[bucket] + seenByBucket[bucket]++;
+            if (rank < landCount) land[cell] = true;
+        }
+        return land;
+    }
+
+    private static int rankingBucket(
+            PreparedLandRanking ranking,
+            LandmassSilhouette silhouette,
+            int cell) {
+        return silhouette.supportsIndex(cell)
+                ? ranking.potentialSamples()[cell] + 1
+                : 0;
     }
 
     private static long landformFieldPpm(
@@ -250,14 +343,14 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static LandformFeature createLandformFeature(
-            GenerationRandom random,
+            V12RandomStreams random,
             long featureX,
             long featureY,
             int spacing,
             V12LandformRecipe recipe) {
         V12LandformRecipe.FeatureKernel policy = recipe.features();
-        int jitterX = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 0L);
-        int jitterY = centeredRandomPpm(random, LANDFORM_FEATURE, featureX, featureY, 1L);
+        int jitterX = centeredRandomPpm(random.landformFeature(), featureX, featureY, 0L);
+        int jitterY = centeredRandomPpm(random.landformFeature(), featureX, featureY, 1L);
         long centerX = featureX * spacing * (long) PPM
                 + (long) spacing * PPM / 2L
                 + (long) jitterX * spacing * policy.jitterPpm() / PPM;
@@ -265,37 +358,41 @@ final class V12LandformElevationAlgorithm {
                 + (long) spacing * PPM / 2L
                 + (long) jitterY * spacing * policy.jitterPpm() / PPM;
 
-        int radiusCoordinate = randomPpm(random, LANDFORM_FEATURE, featureX, featureY, 2L);
+        int radiusCoordinate = randomPpm(random.landformFeature(), featureX, featureY, 2L);
         int radiusFactorPpm = policy.minimumRadiusPpm()
                 + (int) ((long) radiusCoordinate * policy.radiusRangePpm() / PPM);
         long radius = (long) spacing * radiusFactorPpm;
 
-        int magnitudeCoordinate = randomPpm(random, LANDFORM_FEATURE, featureX, featureY, 3L);
+        int magnitudeCoordinate = randomPpm(random.landformFeature(), featureX, featureY, 3L);
         int magnitudePpm = policy.minimumMagnitudePpm()
                 + (int) ((long) magnitudeCoordinate * policy.magnitudeRangePpm() / PPM);
-        int sign = landformSign(random, featureX, featureY, policy.balanceBlockSize());
+        int sign = landformSign(random.landformPattern(), featureX, featureY, policy.balanceBlockSize());
         return new LandformFeature(centerX, centerY, radius, sign * magnitudePpm);
     }
 
     private static int landformSign(
-            GenerationRandom random,
+            GenerationRandom.BoundSampler random,
             long featureX,
             long featureY,
             int balanceBlockSize) {
         long blockX = Math.floorDiv(featureX, balanceBlockSize);
         long blockY = Math.floorDiv(featureY, balanceBlockSize);
-        int phase = randomPpm(random, LANDFORM_PATTERN, blockX, blockY, 0L) >= PPM / 2 ? 1 : 0;
+        int phase = randomPpm(random, blockX, blockY, 0L) >= PPM / 2 ? 1 : 0;
         return ((featureX + featureY + phase) & 1L) == 0L ? 1 : -1;
     }
 
     private static int ridgeCrestPpm(
-            GenerationRandom random,
+            V12RandomStreams random,
+            OrganicWarpRowSampler warp,
             int x,
             int y,
             int scale,
             V12LandformRecipe recipe) {
-        int first = organicValueNoise(random, RIDGE_A, x, y, scale, recipe);
-        int second = organicValueNoise(random, RIDGE_B, x, y, scale, recipe);
+        long warped = warp.warpedCoordinates(x, y);
+        int warpedX = (int) (warped >> 32);
+        int warpedY = (int) warped;
+        int first = smoothValueNoise(random.ridgeA(), warpedX, warpedY, scale);
+        int second = smoothValueNoise(random.ridgeB(), warpedX, warpedY, scale);
         long differencePpm = (long) Math.abs(first - second) * PPM / SAMPLE_MAX;
         int rawRidgePpm = clampPpm(PPM - differencePpm * 2L);
         int threshold = recipe.noise().ridgeCrestThresholdPpm();
@@ -308,14 +405,13 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static long rollingFieldPpm(
-            GenerationRandom random,
+            SmoothValueNoiseRowSampler primarySampler,
+            SmoothValueNoiseRowSampler detailSampler,
             int x,
             int y,
-            int primaryScale,
-            int detailScale,
             V12LandformRecipe recipe) {
-        long primary = centeredPpm(smoothValueNoise(random, ROLLING, x, y, primaryScale));
-        long detail = centeredPpm(smoothValueNoise(random, ROLLING_DETAIL, x, y, detailScale));
+        long primary = centeredPpm(primarySampler.sampleAt(x, y));
+        long detail = centeredPpm(detailSampler.sampleAt(x, y));
         V12LandformRecipe.ReliefMix mix = recipe.relief();
         return (primary * mix.rollingPrimaryWeightPpm()
                 + detail * mix.rollingDetailWeightPpm()) / PPM;
@@ -401,33 +497,52 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static int randomPpm(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler random,
             long x,
             long y,
             long ordinal) {
-        int sample = (int) ((random.sampleLong(
-                ElevationGenerationStage.STAGE_ID,
-                purpose,
-                x,
-                y,
-                0L,
-                ordinal) >>> 48) & SAMPLE_MAX);
+        int sample = (int) ((random.sampleLong(x, y, 0L, ordinal) >>> 48) & SAMPLE_MAX);
         return sampleToPpm(sample);
     }
 
     private static int centeredRandomPpm(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler random,
             long x,
             long y,
             long ordinal) {
-        return randomPpm(random, purpose, x, y, ordinal) * 2 - PPM;
+        return randomPpm(random, x, y, ordinal) * 2 - PPM;
+    }
+
+    private static OrganicWarpRowSampler organicWarpSampler(
+            V12RandomStreams random,
+            WorldBounds bounds,
+            int scale,
+            V12LandformRecipe recipe) {
+        V12LandformRecipe.NoisePolicy noise = recipe.noise();
+        int warpScale = Math.max(noise.minimumWarpScale(), scale * noise.warpScaleMultiplier());
+        int warpAmplitude = Math.max(1, scale / noise.warpAmplitudeDivisor());
+        return new OrganicWarpRowSampler(
+                random.warpX(),
+                random.warpY(),
+                bounds.minX(),
+                bounds.maxX(),
+                warpScale,
+                warpAmplitude);
     }
 
     private static int organicValueNoise(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler purpose,
+            int x,
+            int y,
+            int scale,
+            OrganicWarpRowSampler warp) {
+        long warped = warp.warpedCoordinates(x, y);
+        return smoothValueNoise(purpose, (int) (warped >> 32), (int) warped, scale);
+    }
+
+    private static int organicValueNoise(
+            V12RandomStreams random,
+            GenerationRandom.BoundSampler purpose,
             int x,
             int y,
             int scale,
@@ -435,11 +550,11 @@ final class V12LandformElevationAlgorithm {
         V12LandformRecipe.NoisePolicy noise = recipe.noise();
         int warpScale = Math.max(noise.minimumWarpScale(), scale * noise.warpScaleMultiplier());
         int warpAmplitude = Math.max(1, scale / noise.warpAmplitudeDivisor());
-        int warpXSample = smoothValueNoise(random, WARP_X, x, y, warpScale);
-        int warpYSample = smoothValueNoise(random, WARP_Y, x, y, warpScale);
+        int warpXSample = smoothValueNoise(random.warpX(), x, y, warpScale);
+        int warpYSample = smoothValueNoise(random.warpY(), x, y, warpScale);
         int warpedX = x + centeredSampleOffset(warpXSample, warpAmplitude);
         int warpedY = y + centeredSampleOffset(warpYSample, warpAmplitude);
-        return smoothValueNoise(random, purpose, warpedX, warpedY, scale);
+        return smoothValueNoise(purpose, warpedX, warpedY, scale);
     }
 
     private static int centeredSampleOffset(int sample, int amplitude) {
@@ -448,8 +563,7 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static int smoothValueNoise(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler random,
             int x,
             int y,
             int scale) {
@@ -457,27 +571,20 @@ final class V12LandformElevationAlgorithm {
         long latticeY = Math.floorDiv((long) y, scale);
         int offsetX = (int) Math.floorMod((long) x, scale);
         int offsetY = (int) Math.floorMod((long) y, scale);
-        int lowerLeft = sample(random, purpose, latticeX, latticeY);
-        int lowerRight = sample(random, purpose, latticeX + 1L, latticeY);
-        int upperLeft = sample(random, purpose, latticeX, latticeY + 1L);
-        int upperRight = sample(random, purpose, latticeX + 1L, latticeY + 1L);
+        int lowerLeft = sample(random, latticeX, latticeY);
+        int lowerRight = sample(random, latticeX + 1L, latticeY);
+        int upperLeft = sample(random, latticeX, latticeY + 1L);
+        int upperRight = sample(random, latticeX + 1L, latticeY + 1L);
         int lower = smoothInterpolate(lowerLeft, lowerRight, offsetX, scale);
         int upper = smoothInterpolate(upperLeft, upperRight, offsetX, scale);
         return smoothInterpolate(lower, upper, offsetY, scale);
     }
 
     private static int sample(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler random,
             long latticeX,
             long latticeY) {
-        return (int) ((random.sampleLong(
-                ElevationGenerationStage.STAGE_ID,
-                purpose,
-                latticeX,
-                latticeY,
-                0L,
-                0L) >>> 48) & SAMPLE_MAX);
+        return (int) ((random.sampleLong(latticeX, latticeY, 0L, 0L) >>> 48) & SAMPLE_MAX);
     }
 
     private static int smoothInterpolate(int from, int to, int offset, int scale) {
@@ -504,11 +611,6 @@ final class V12LandformElevationAlgorithm {
 
     private static int clampPpm(long value) {
         return (int) Math.max(0L, Math.min((long) PPM, value));
-    }
-
-    private static long rankKey(int potential, int cellIndex) {
-        long invertedPotential = (long) SAMPLE_MAX - potential;
-        return (invertedPotential << 32) | (cellIndex & 0xffff_ffffL);
     }
 
     private static long positiveRankHeight(int rankFromExtreme, int count, long amplitude) {
@@ -540,10 +642,9 @@ final class V12LandformElevationAlgorithm {
             }
         }
 
-        int[] result = new int[land.length];
         if (!hasOcean) {
-            Arrays.fill(result, PPM);
-            return result;
+            Arrays.fill(distance, PPM);
+            return distance;
         }
 
         for (int y = 0; y < height; y++) {
@@ -571,9 +672,49 @@ final class V12LandformElevationAlgorithm {
             if (!land[index]) continue;
             long coordinate = Math.min(distance[index], transitionCells)
                     * (long) PPM / transitionCells;
-            result[index] = smoothStepPpm(coordinate);
+            distance[index] = smoothStepPpm(coordinate);
         }
-        return result;
+        return distance;
+    }
+
+    record PreparedLandRanking(
+            char[] potentialSamples,
+            int[] startRankByBucket) {
+        PreparedLandRanking {
+            if (potentialSamples == null || startRankByBucket == null) {
+                throw new IllegalArgumentException("prepared V12 ranking buffers must not be null");
+            }
+        }
+    }
+
+    /** Bound V12 semantic random streams reused by every hot sample in one world. */
+    private record V12RandomStreams(
+            GenerationRandom.BoundSampler landmass,
+            GenerationRandom.BoundSampler fragment,
+            GenerationRandom.BoundSampler uplift,
+            GenerationRandom.BoundSampler ridgeA,
+            GenerationRandom.BoundSampler ridgeB,
+            GenerationRandom.BoundSampler rolling,
+            GenerationRandom.BoundSampler rollingDetail,
+            GenerationRandom.BoundSampler landformFeature,
+            GenerationRandom.BoundSampler landformPattern,
+            GenerationRandom.BoundSampler warpX,
+            GenerationRandom.BoundSampler warpY) {
+
+        static V12RandomStreams bind(GenerationRandom random) {
+            return new V12RandomStreams(
+                    random.bind(ElevationGenerationStage.STAGE_ID, LANDMASS),
+                    random.bind(ElevationGenerationStage.STAGE_ID, FRAGMENT),
+                    random.bind(ElevationGenerationStage.STAGE_ID, UPLIFT),
+                    random.bind(ElevationGenerationStage.STAGE_ID, RIDGE_A),
+                    random.bind(ElevationGenerationStage.STAGE_ID, RIDGE_B),
+                    random.bind(ElevationGenerationStage.STAGE_ID, ROLLING),
+                    random.bind(ElevationGenerationStage.STAGE_ID, ROLLING_DETAIL),
+                    random.bind(ElevationGenerationStage.STAGE_ID, LANDFORM_FEATURE),
+                    random.bind(ElevationGenerationStage.STAGE_ID, LANDFORM_PATTERN),
+                    random.bind(ElevationGenerationStage.STAGE_ID, WARP_X),
+                    random.bind(ElevationGenerationStage.STAGE_ID, WARP_Y));
+        }
     }
 
     private record LandformFeature(
@@ -607,7 +748,7 @@ final class V12LandformElevationAlgorithm {
         }
 
         static LandformFeatureGrid create(
-                GenerationRandom random,
+                V12RandomStreams random,
                 WorldBounds bounds,
                 int spacing,
                 V12LandformRecipe recipe) {

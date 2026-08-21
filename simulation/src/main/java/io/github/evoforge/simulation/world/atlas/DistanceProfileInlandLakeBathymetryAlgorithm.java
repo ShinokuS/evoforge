@@ -47,23 +47,30 @@ final class DistanceProfileInlandLakeBathymetryAlgorithm implements InlandLakeBa
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
         long[] result = new long[area];
-        boolean[] water = new boolean[area];
+        int waterCellCount = 0;
         int index = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 long value = bathymetricTerrain.elevationSubunitsAt(x, y);
-                result[index] = value;
-                water[index] = value < ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
-                index++;
+                result[index++] = value;
+                if (value < ElevationGenerationStage.SEA_LEVEL_SUBUNITS) waterCellCount++;
             }
         }
 
-        boolean[] visited = new boolean[area];
-        int[] component = new int[area];
+        /*
+         * Water membership is already an immutable sign fact in result and remains negative when
+         * inland depth is refined. Avoid retaining a duplicate boolean world mask. Traversal state
+         * is bit-packed and the primitive BFS queue only needs capacity for water cells.
+         */
+        long[] visited = new long[Math.toIntExact(((long) area + 63L) >>> 6)];
+        int[] component = new int[waterCellCount];
         for (int start = 0; start < area; start++) {
-            if (!water[start] || visited[start]) continue;
+            if (result[start] >= ElevationGenerationStage.SEA_LEVEL_SUBUNITS
+                    || isMarked(visited, start)) {
+                continue;
+            }
             ComponentGeometry geometry = collectComponent(
-                    start, water, visited, component, width, height);
+                    start, result, visited, component, width, height);
             if (geometry.touchesBoundary()) continue;
             refineInlandComponent(
                     genesis,
@@ -74,7 +81,7 @@ final class DistanceProfileInlandLakeBathymetryAlgorithm implements InlandLakeBa
                     bounds,
                     recipe);
         }
-        return new DenseElevationField(bounds, result);
+        return DenseElevationField.takeOwnership(bounds, result);
     }
 
     private static void refineInlandComponent(
@@ -222,15 +229,15 @@ final class DistanceProfileInlandLakeBathymetryAlgorithm implements InlandLakeBa
 
     private static ComponentGeometry collectComponent(
             int start,
-            boolean[] water,
-            boolean[] visited,
+            long[] elevation,
+            long[] visited,
             int[] component,
             int width,
             int height) {
         int head = 0;
         int tail = 0;
         component[tail++] = start;
-        visited[start] = true;
+        mark(visited, start);
         int startX = start % width;
         int startY = start / width;
         int minX = startX;
@@ -253,12 +260,23 @@ final class DistanceProfileInlandLakeBathymetryAlgorithm implements InlandLakeBa
                 int ny = y + DY[direction];
                 if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
                 int next = ny * width + nx;
-                if (!water[next] || visited[next]) continue;
-                visited[next] = true;
+                if (elevation[next] >= ElevationGenerationStage.SEA_LEVEL_SUBUNITS
+                        || isMarked(visited, next)) {
+                    continue;
+                }
+                mark(visited, next);
                 component[tail++] = next;
             }
         }
         return new ComponentGeometry(tail, minX, maxX, minY, maxY, start, touchesBoundary);
+    }
+
+    private static boolean isMarked(long[] words, int index) {
+        return (words[index >>> 6] & (1L << (index & 63))) != 0L;
+    }
+
+    private static void mark(long[] words, int index) {
+        words[index >>> 6] |= 1L << (index & 63);
     }
 
     private static long mix64(long value) {

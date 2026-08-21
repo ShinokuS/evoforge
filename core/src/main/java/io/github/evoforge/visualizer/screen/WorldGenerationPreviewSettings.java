@@ -5,7 +5,7 @@ import java.util.function.LongSupplier;
 /** Mutable draft settings edited by the world-generation development UI. */
 final class WorldGenerationPreviewSettings {
     static final int MIN_HORIZONTAL_DIMENSION = 32;
-    static final int MAX_HORIZONTAL_DIMENSION = 2_048;
+    static final int MAX_HORIZONTAL_DIMENSION = Integer.MAX_VALUE;
 
     private int width = 64;
     private int length = 64;
@@ -107,7 +107,7 @@ final class WorldGenerationPreviewSettings {
     private static int requireDimension(int value, String name) {
         if (value < MIN_HORIZONTAL_DIMENSION || value > MAX_HORIZONTAL_DIMENSION) {
             throw new IllegalArgumentException(
-                    name + " must be in [" + MIN_HORIZONTAL_DIMENSION + ", " + MAX_HORIZONTAL_DIMENSION + "]");
+                    name + " must be at least " + MIN_HORIZONTAL_DIMENSION + " cells");
         }
         return value;
     }
