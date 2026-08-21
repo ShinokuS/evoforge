@@ -210,7 +210,7 @@ final class V12LandformElevationAlgorithm {
                 calibration.maximumReadableStepSubunits(),
                 landAmplitude,
                 recipe.slopes().relaxationPasses());
-        return new DenseElevationField(bounds, elevations);
+        return DenseElevationField.takeOwnership(bounds, elevations);
     }
 
     /**
