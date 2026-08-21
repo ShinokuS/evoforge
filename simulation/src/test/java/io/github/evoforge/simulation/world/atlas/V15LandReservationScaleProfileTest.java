@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 /** Diagnostic profile for the expensive V15 exact-land-compensation fallback. */
 final class V15LandReservationScaleProfileTest {
+    private static final int PPM = NormalizedValue.SCALE;
     private static final long[] SEEDS = {
         71_337L,
         991_337L,
@@ -31,31 +32,57 @@ final class V15LandReservationScaleProfileTest {
         int side = 300;
         int secondSynthesisCount = 0;
         long checksum = 0L;
+        InlandLakeDomainRecipe recipe = InlandLakeDomainRecipe.balanced();
 
         for (long seed : SEEDS) {
+            WorldGenesis original = genesis(side, seed);
+            WorldGenesis placement = predictedLandGenesis(original, recipe);
+            ElevationField placementBase = V14OceanicBaseTerrainGenerator.standard().generate(placement);
+            InlandLakeDomainCalibration calibration = InlandLakeDomainCalibrator.standard().calibrate(
+                    original,
+                    placementBase,
+                    recipe);
+            InlandLakeDomain domain = InlandLakeDomainAlgorithm.standard().generate(
+                    original,
+                    placementBase,
+                    calibration,
+                    recipe);
+
+            int predictedLakeCells = continentalCells(placement) - desiredDryCells(original);
+            int actualLakeCells = domain.lakeCellCount();
+            int targetLakeCells = calibration.targetLakeCells();
+
             AtomicInteger baseCalls = new AtomicInteger();
-            ElevationGenerator base = genesis -> {
+            ElevationGenerator base = requested -> {
                 baseCalls.incrementAndGet();
-                return V14OceanicBaseTerrainGenerator.standard().generate(genesis);
+                if (requested.generationIntent().landCoverage().partsPerMillion()
+                        == placement.generationIntent().landCoverage().partsPerMillion()) {
+                    return placementBase;
+                }
+                return V14OceanicBaseTerrainGenerator.standard().generate(requested);
             };
             V15InlandLakeBaseTerrainGenerator generator = new V15InlandLakeBaseTerrainGenerator(
                     base,
                     InlandLakeDomainCalibrator.standard(),
-                    InlandLakeDomainRecipe.balanced(),
+                    recipe,
                     InlandLakeDomainAlgorithm.standard(),
                     InlandLakeShoreConditioningAlgorithm.standard(),
                     true);
 
-            ElevationField result = generator.generate(genesis(side, seed));
+            ElevationField result = generator.generate(original);
             int calls = baseCalls.get();
             assertTrue(calls == 1 || calls == 2,
                     "predictive V15 path should synthesize continental base once or fall back once");
             if (calls == 2) secondSynthesisCount++;
             checksum ^= sample(result, seed);
             System.out.printf(Locale.ROOT,
-                    "V15_RESERVATION seed=%d side=%d continental_syntheses=%d%n",
+                    "V15_RESERVATION seed=%d side=%d predicted_lake=%d target_lake=%d actual_lake=%d delta=%+d continental_syntheses=%d%n",
                     seed,
                     side,
+                    predictedLakeCells,
+                    targetLakeCells,
+                    actualLakeCells,
+                    actualLakeCells - predictedLakeCells,
                     calls);
         }
 
@@ -66,6 +93,70 @@ final class V15LandReservationScaleProfileTest {
                 secondSynthesisCount / (double) SEEDS.length,
                 checksum);
         assertTrue(checksum != 0L);
+    }
+
+    private static WorldGenesis predictedLandGenesis(WorldGenesis genesis, InlandLakeDomainRecipe recipe) {
+        int lakeCoveragePpm = recipe.targetDryLandCoveragePpm();
+        if (lakeCoveragePpm <= 0) return genesis;
+        int area = DenseElevationField.cellCount(genesis.spec().bounds());
+        int desiredDryCells = desiredDryCells(genesis);
+        long denominator = PPM - (long) lakeCoveragePpm;
+        if (denominator <= 0L) return withLandCoverage(genesis, PPM);
+
+        int predictedLakeCells = Math.toIntExact(
+                ((long) desiredDryCells * lakeCoveragePpm + denominator / 2L) / denominator);
+        int width = Math.toIntExact(
+                (long) genesis.spec().bounds().maxX() - genesis.spec().bounds().minX() + 1L);
+        int height = Math.toIntExact(
+                (long) genesis.spec().bounds().maxY() - genesis.spec().bounds().minY() + 1L);
+        int limitingSpan = Math.min(width, height);
+        int minimumSpan = Math.max(
+                recipe.minimumComponentSpanCells(),
+                limitingSpan / recipe.componentSpanWorldDivisor());
+        int minimumLakeCells = Math.max(4, minimumSpan * minimumSpan / 2);
+        if (desiredDryCells > 0) predictedLakeCells = Math.max(predictedLakeCells, minimumLakeCells);
+
+        int predictedContinentalCells = Math.min(
+                area,
+                Math.addExact(desiredDryCells, Math.min(predictedLakeCells, area - desiredDryCells)));
+        return withContinentalCells(genesis, predictedContinentalCells, area);
+    }
+
+    private static int desiredDryCells(WorldGenesis genesis) {
+        int area = DenseElevationField.cellCount(genesis.spec().bounds());
+        return Math.toIntExact(
+                ((long) area * genesis.generationIntent().landCoverage().partsPerMillion() + PPM / 2L) / PPM);
+    }
+
+    private static int continentalCells(WorldGenesis genesis) {
+        int area = DenseElevationField.cellCount(genesis.spec().bounds());
+        return Math.toIntExact(
+                ((long) area * genesis.generationIntent().landCoverage().partsPerMillion() + PPM / 2L) / PPM);
+    }
+
+    private static WorldGenesis withContinentalCells(WorldGenesis genesis, int cells, int area) {
+        int coveragePpm = Math.toIntExact(Math.min(
+                (long) PPM,
+                ((long) cells * PPM + area / 2L) / area));
+        return withLandCoverage(genesis, coveragePpm);
+    }
+
+    private static WorldGenesis withLandCoverage(WorldGenesis genesis, int coveragePpm) {
+        WorldGenerationIntent intent = genesis.generationIntent();
+        return new WorldGenesis(
+                genesis.spec(),
+                genesis.masterSeed(),
+                genesis.generationRevision(),
+                genesis.rngRevision(),
+                new WorldGenerationIntent(
+                        NormalizedValue.ofPartsPerMillion(coveragePpm),
+                        intent.landmassScale(),
+                        intent.fragmentation(),
+                        intent.relief(),
+                        intent.localRelief(),
+                        intent.landformScale(),
+                        intent.ruggedness(),
+                        intent.mountains()));
     }
 
     private static long sample(ElevationField field, long seed) {
