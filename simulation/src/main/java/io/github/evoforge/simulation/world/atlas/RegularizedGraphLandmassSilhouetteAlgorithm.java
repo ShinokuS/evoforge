@@ -551,6 +551,12 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         double detailAmplitude = spacing
                 * coast.detailAmplitudeSpacingPpm() / (double) PPM
                 * DETAIL_ATTENUATION;
+        SmoothDoubleNoiseRowSampler warpXNoise = new SmoothDoubleNoiseRowSampler(
+                streams.warpX(), 0, width - 1, warpScale);
+        SmoothDoubleNoiseRowSampler warpYNoise = new SmoothDoubleNoiseRowSampler(
+                streams.warpY(), 0, width - 1, warpScale);
+        SmoothDoubleNoiseRowSampler detailNoise = new SmoothDoubleNoiseRowSampler(
+                streams.coastDetail(), 0, width - 1, detailScale);
 
         int guaranteedMargin = boundary.minimumOceanMarginCells();
         double deformationRampCells = Math.max(1d, spacing);
@@ -564,10 +570,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 double deformationFactor = smooth(clamp01(deformationCoordinate));
 
                 double px = localX
-                        + smoothNoise(streams.warpX(), localX, localY, warpScale)
+                        + warpXNoise.sampleAt(localX, localY)
                                 * warpAmplitude * deformationFactor;
                 double py = localY
-                        + smoothNoise(streams.warpY(), localX, localY, warpScale)
+                        + warpYNoise.sampleAt(localX, localY)
                                 * warpAmplitude * deformationFactor;
 
                 int approximateGx = (int) StrictMath.floor(px / spacing) + 2;
@@ -607,11 +613,8 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 }
 
                 double implicit = totalWeight > 0d ? signed / totalWeight : -1d;
-                double detail = smoothNoise(
-                        streams.coastDetail(),
-                        localX,
-                        localY,
-                        detailScale) * detailAmplitude * deformationFactor;
+                double detail = detailNoise.sampleAt(localX, localY)
+                        * detailAmplitude * deformationFactor;
 
                 double coastScore = implicit * spacing + detail;
                 if (edgeDistance < guaranteedMargin && coastScore >= 0d) {
