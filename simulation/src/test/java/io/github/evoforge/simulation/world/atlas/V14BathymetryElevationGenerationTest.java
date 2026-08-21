@@ -14,14 +14,14 @@ import org.junit.jupiter.api.Test;
 final class V14BathymetryElevationGenerationTest {
 
     @Test
-    void v14PreservesAcceptedV13LandAndSubmergedFootprintWhileAuthoringDepth() {
+    void v14PreservesOceanicMountainFootprintWhileAuthoringDepth() {
         WorldBounds finalBounds = new WorldBounds(-32, 31, -32, 31, -96, 96);
-        WorldBounds v13BaseBounds = new WorldBounds(-32, 31, -32, 31, -1, 96);
+        WorldBounds baseBounds = new WorldBounds(-32, 31, -32, 31, -1, 96);
         long seed = 4_217L;
         WorldGenerationIntent intent = WorldGenerationIntent.balanced();
 
-        WorldGenesis v13Genesis = new WorldGenesis(
-                new WorldSpec(v13BaseBounds),
+        WorldGenesis baseGenesis = new WorldGenesis(
+                new WorldSpec(baseBounds),
                 seed,
                 GenerationRevision.V13,
                 RngRevision.V1,
@@ -33,17 +33,33 @@ final class V14BathymetryElevationGenerationTest {
                 RngRevision.V1,
                 intent);
 
-        ElevationField v13 = new ElevationGenerationStage().generate(v13Genesis);
+        ElevationField oceanicMountains = new V13MountainTerrainGenerator(
+                V14OceanicBaseTerrainGenerator.standard(),
+                MountainCalibrator.standard(),
+                MountainRecipe.balanced())
+                .generate(baseGenesis);
         ElevationField v14 = new ElevationGenerationStage().generate(v14Genesis);
+        V12LandformCalibration terrain = V12LandformCalibrator.standard()
+                .calibrate(baseGenesis, V12LandformRecipe.balanced());
+        LandmassBoundaryRecipe boundaryRecipe = LandmassBoundaryRecipe.balanced();
+        LandmassBoundaryCalibration boundary = LandmassBoundaryCalibrator.standard()
+                .calibrate(baseGenesis, terrain, boundaryRecipe);
         boolean foundMeaningfulDepth = false;
+
+        assertEquals(
+                boundaryRecipe.boundary().guaranteedOceanEdgeCells(),
+                boundary.minimumOceanMarginCells(),
+                "finite-world boundary guarantee must be an explicit topology policy");
 
         for (int y = finalBounds.minY(); y <= finalBounds.maxY(); y++) {
             for (int x = finalBounds.minX(); x <= finalBounds.maxX(); x++) {
-                long base = v13.elevationSubunitsAt(x, y);
+                long base = oceanicMountains.elevationSubunitsAt(x, y);
                 long bathymetry = v14.elevationSubunitsAt(x, y);
-                assertEquals(base < 0L, bathymetry < 0L, "V14 must preserve the V13 submerged footprint");
+                assertEquals(base < 0L, bathymetry < 0L,
+                        "V14 bathymetry must preserve the oceanic submerged footprint");
                 if (base > 0L) {
-                    assertEquals(base, bathymetry, "V14 must preserve accepted V13 land exactly");
+                    assertEquals(base, bathymetry,
+                            "V14 bathymetry must preserve oceanic mountain land exactly");
                 } else if (bathymetry < -ElevationField.SUBUNITS_PER_CELL) {
                     foundMeaningfulDepth = true;
                 }

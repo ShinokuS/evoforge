@@ -6,11 +6,18 @@ import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /**
- * Replaceable V14 elevation pipeline: accepted V13 dry terrain plus standing-water bathymetry.
+ * Replaceable V14 elevation pipeline: accepted V12/V13 terrain character plus an ocean-bounded
+ * organic land domain and standing-water bathymetry.
  *
- * <p>The pipeline owns composition only. V13 base generation, bathymetry calibration and spatial
- * synthesis remain independent dependencies. V14 deliberately changes only already-submerged
- * elevation; Water, river carving, materials and concrete runtime Shapes remain later concerns.</p>
+ * <p>The standard composition authors the finite land silhouette during V12 landmass rank selection,
+ * before relief or mountain synthesis. A guaranteed external-ocean margin is only a safety guard;
+ * the actual continent/island boundary comes from a broad deterministic domain field blended with
+ * the accepted landmass potential. V12 and ordinary V13 generation remain on their accepted
+ * unconstrained landmass path.</p>
+ *
+ * <p>The pipeline owns composition only. Base generation, mountain synthesis, bathymetry calibration
+ * and bathymetry synthesis remain independent concerns. Water, river carving, materials and concrete
+ * runtime Shapes remain later concerns.</p>
  */
 public final class V14BathymetryTerrainGenerator implements ElevationGenerator {
     private final ElevationGenerator baseGenerator;
@@ -40,8 +47,12 @@ public final class V14BathymetryTerrainGenerator implements ElevationGenerator {
     }
 
     public static V14BathymetryTerrainGenerator standard() {
+        ElevationGenerator oceanicMountains = new V13MountainTerrainGenerator(
+                V14OceanicBaseTerrainGenerator.standard(),
+                MountainCalibrator.standard(),
+                MountainRecipe.balanced());
         return new V14BathymetryTerrainGenerator(
-                V13MountainTerrainGenerator.standard(),
+                oceanicMountains,
                 BathymetryCalibrator.standard(),
                 BathymetryRecipe.balanced());
     }
@@ -59,7 +70,7 @@ public final class V14BathymetryTerrainGenerator implements ElevationGenerator {
     }
 
     /**
-     * The accepted V13 land/ocean footprint is generated with only a minimal negative-Z floor.
+     * The V13-compatible footprint base is generated with only a minimal negative-Z floor.
      * V12/V13 use sign for membership; their legacy negative amplitude is not allowed to become
      * bathymetric policy. V14 then owns the full final negative-Z headroom itself.
      */

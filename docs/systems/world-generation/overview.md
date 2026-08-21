@@ -2,23 +2,42 @@
 
 ## In plain language
 
-World generation decides **what exists when a new world begins**. Runtime simulation decides **what happens after that world begins living**.
+World generation decides **what exists when a new world begins**. Runtime simulation decides what happens after that world starts living.
 
-EvoForge also separates **what a human asks for** from **how an algorithm produces it**. Authored controls express world character; calibrators and versioned model recipes convert that meaning into exact values used by replaceable deterministic algorithms.
+EvoForge deliberately separates a human request such as “large continents, moderate fragmentation, sparse tall mountains” from the mathematical constants used to produce it. Semantic intent is calibrated into world-specific operating values, then consumed by replaceable deterministic algorithms.
 
 ## Current status
 
-**Stage 0 — architecture stabilization / V12 normalization is complete.**  
-**Stage 1 — V13 Mountain Systems is complete and manually accepted.**  
-**Stage 2A — V14 Standing-Water Bathymetry is complete and manually accepted.**
+The accepted elevation chain is now:
 
-Stage 2 is now in progress. The next implementation concern is:
+```text
+V12 ordinary terrain
+   ↓
+V14 continental-domain owner around the V12 relief model
+   ↓
+V15 inland-lake footprint at Z = 0
+   ↓
+V13 mountain morphology over the water-aware terrain
+   ↓
+V14 standing-water bathymetry
+   ↓
+V15 inland-only lake-bottom refinement
+   ↓
+final V15 ElevationField
+```
 
-> **Stage 2B — Drainage and basin topology**
+Completed and manually accepted:
 
-Current code still contains useful typed seams with provisional drainage, hydrography, geology, initial-Water and material algorithms. Later stages replace/refine those algorithms behind their existing contracts where appropriate rather than accumulating feature-specific special cases.
+- **Stage 0 / V12** — ordinary terrain architecture and scale-stable landforms;
+- **Stage 1 / V13** — structural mountains;
+- **Stage 2A / V14** — standing-water bathymetry;
+- **Stage 2B / V14–V15** — organic continental domain plus terrain-derived inland lakes.
 
-## The central generation law
+Drainage topology and rivers are **not part of the completed Stage 2B code**. Experimental drainage/F4 scaffolding used during development was removed before Stage 2B was closed.
+
+See [Continental Domain and Inland Lakes](landmass-and-inland-lakes.md) for the complete current algorithms, formulas, invariants and sources.
+
+## Canonical generation architecture
 
 ```text
 human-authored semantic meaning
@@ -27,59 +46,41 @@ validate / compile meaning
             ↓
 world-specific domain calibration
             ↓
-versioned model recipe (when needed)
+versioned model recipe
             ↓
 replaceable generation algorithm
             ↓
-immutable typed generated facts
+immutable typed generated fact
             ↓
 preparation / materialization
             ↓
 ordinary SimulationRuntime ownership
 ```
 
-### Definitions and intent describe character
-
-Authored data says things like:
-
-```text
-land coverage = medium
-ordinary landforms = large
-ruggedness = moderate
-mountains = sparse, tall and elongated
-```
-
-Those values may be normalized semantic coordinates internally. They are not exact frequencies, slope limits, solver constants or rock identities.
-
-### Calibration creates exact operating values
-
-A domain calibrator combines semantic intent with world/environment context and resolves the exact values needed by one model.
-
-Examples:
-
-- V12 converts `landformScale` into exact ordinary-feature spacing and `ruggedness` into an exact local slope limit;
-- V13 converts mountain `Scale`, `Height`, `Chaininess` and `Peak sharpness` into exact structure widths/lengths, height limits and cardinal rise budgets appropriate for the world dimensions;
-- V14 bathymetry converts world dimensions and negative-Z headroom into exact depth/slope/shore-context operating limits.
-
-Calibration is domain-owned. There is no universal GodCalibrator.
-
-### Recipes own versioned model policy
-
-Values that are neither authored meaning nor world-specific calibration live in immutable model recipes.
+### Intent owns meaning
 
 Examples:
 
 ```text
-V12LandformRecipe
-MountainRecipe
-BathymetryRecipe
+Land             = requested dry-land amount
+Continent scale  = macro geographic scale
+Fragmentation    = separation/connectivity of major land masses
+Mountain height  = desired prominence
 ```
 
-This keeps model choices out of spatial loops and lets another revision/model replace them without redefining user intent accidentally.
+A semantic control must not secretly become a different control in a later algorithm. In particular, `Fragmentation` does not mean lake count, coastline noise or river density.
 
-### Algorithms create typed facts
+### Calibrators own world-specific numbers
 
-Downstream consumers see typed facts such as `ElevationField`. They do not need to know whether the surface came from V12, V13, V14 or a test algorithm.
+A calibrator combines semantic intent with world size/headroom and produces exact operating values. There is no universal GodCalibrator.
+
+### Recipes own model policy
+
+Stable model choices that are neither authored meaning nor world-specific calibration live in immutable recipes. Examples include `V12LandformRecipe`, `LandmassSilhouetteRecipe`, `MountainRecipe`, `BathymetryRecipe`, `InlandLakeDomainRecipe` and `InlandLakeBathymetryRecipe`.
+
+### Algorithms own spatial synthesis
+
+Algorithms receive typed calibrated/model inputs and return typed generated facts. Orchestrators only compose these owners.
 
 ## Deterministic provenance
 
@@ -93,327 +94,110 @@ RngRevision
 WorldGenerationIntent
 ```
 
-Generation randomness is call-order-independent and addressed by semantic stage/purpose + scope coordinates + ordinal. Historical revisions remain executable; intentional changes to durable generation semantics require explicit revision handling.
+Generation randomness is addressable rather than call-order driven. A sample is derived from semantic stage/purpose identifiers plus stable coordinates/ordinals, so unrelated call reordering does not silently alter a world.
 
 See [World Genesis](world-genesis.md).
 
-## World Atlas: typed pre-runtime facts
+## Stage 0 — V12 ordinary terrain **[COMPLETE]**
 
-The current `WorldAtlas` contains:
+V12 owns the ordinary land-surface height model: broad uplift, hills/depressions, rolling relief, rugged structure and bounded readable slopes. Its algorithms remain independently replaceable behind the elevation contract.
 
-```text
-WorldGenesis
-ElevationField
-GeologyField
-ClimateNormalsField
-DrainageField
-HydrographyField
-SurfaceHydrologyField
-```
+The current continental-domain owner is composed around this relief model rather than allowing V12 local noise to reopen shoreline membership.
 
-V13 mountains and V14 bathymetry remain part of the precise `ElevationField`; there is no separate mountain or bathymetry fact merely for naming those features because no independent downstream owner currently requires one.
+See [Terrain Generation](terrain-generation.md).
 
-The Atlas is not live Terrain, Water, Soil, weather or a scheduler.
+## Stage 1 — V13 mountains **[COMPLETE]**
 
-See [World Atlas](world-atlas.md).
+V13 owns dedicated mountain elevation contribution. `Abundance`, `Scale`, `Height`, `Chaininess` and `Peak sharpness` retain separate meanings. Mountains consume the already water-aware terrain and do not own coast/lake membership.
 
-## Stage 0 — V12 ordinary base morphology **[COMPLETE]**
+See [V13 Mountain Generation](mountain-generation.md).
 
-The accepted V12 path is:
+## Stage 2A — V14 standing-water bathymetry **[COMPLETE]**
 
-```text
-WorldGenerationIntent
-        ↓
-V12LandformCalibrator
-        ↓
-V12LandformCalibration
-        +
-V12LandformRecipe
-        ↓
-V12LandformElevationAlgorithm
-        ↓
-ElevationField
-```
-
-V12 supplies:
-
-- rank-calibrated land/ocean membership;
-- coherent landmasses and fragmentation;
-- coast interiority/gating;
-- broad uplift;
-- explicit ordinary hills/depressions;
-- rolling relief;
-- rugged ridge crests;
-- bounded readable ordinary slopes.
-
-It remains the ordinary-landscape base, not the dedicated mountain system.
-
-## Stage 1 — V13 Mountain Systems **[COMPLETE]**
-
-V13 composes a capped V12 base with a separate mountain stage:
-
-```text
-WorldGenerationIntent.mountains
-        ↓
-MountainCalibrator
-        ↓
-MountainCalibration
-        +
-MountainRecipe
-        ↓
-MountainElevationAlgorithm
-        ↓
-ElevationField
-```
-
-The standard implementation generates deterministic asymmetric elongated structures. The important semantic ownership is:
-
-```text
-Abundance  -> expected mountain coverage on V12 land
-Scale      -> individual transverse size / source lattice
-Height     -> bounded vertical prominence
-Chaininess -> long-axis elongation
-Sharpness  -> readable geometric slope character
-```
-
-Height is constrained by vertical headroom, horizontal world size, Scale and the slope budget. If a requested height cannot fit a readable authored footprint, height is capped instead of inflating one structure across a continent.
-
-The standard profile is constructed to produce broad discrete Z bands directly. Coast handling uses a compatible local-rise cap, and overlapping structures compose with `max` rather than additive spikes.
-
-Mountain synthesis knows nothing about concrete Terrain Shapes or rock identity. Generic shape fitting runs later and deliberately uses sparse irregular coherent transitions rather than making every mountain fully traversable.
-
-See [V13 Mountain Generation](mountain-generation.md) and [Terrain Generation](terrain-generation.md).
-
-## Stage 2A — V14 Standing-Water Bathymetry **[COMPLETE]**
-
-V14 starts from accepted V13 land and submerged membership:
-
-```text
-accepted V13 ElevationField membership
-        ↓
-BathymetryCalibrator
-        +
-BathymetryRecipe
-        ↓
-StructuredBathymetryAlgorithm
-        ├─ BathymetryMorphologyAlgorithm
-        └─ DeepBathymetryStructureAlgorithm
-        ↓
-V14 ElevationField
-```
-
-The accepted contract is deliberately narrow:
-
-- V13 land elevation remains exact;
-- the complete V13 submerged footprint/shoreline membership remains exact;
-- V14 re-authors only underwater Z;
-- no standing-water body is created or deleted;
-- coastal/littoral morphology remains smooth, readable and broad;
-- broad adjacent land relief may causally affect ocean-connected descent;
-- competing coasts blend rather than creating nearest-owner wedges;
-- narrow water remains shallow when geometry cannot support clean depth;
-- large/deep interiors may contain several broad basins, highs and saddles;
-- deep structure is deterministic and does not use high-frequency noise;
-- source morphology remains slope/world-floor bounded rather than relying on downstream repair.
-
-`StructuredBathymetryAlgorithm` composes the accepted coast first and the independently replaceable deep-interior algorithm second. This protects the accepted littoral result from later deep-structure tuning.
-
-The development preview's negative-Z `Z contrast` is presentation-only: deeper bottom is darker, positive-Z land behavior is unchanged, and generated elevation is unaffected.
+V14 re-authors submerged depth while preserving the accepted wet/dry footprint. Near-shore morphology and deep-water structure have separate replaceable owners. Narrow water remains shallow when there is insufficient room; deep structure remains broad and avoids cell-scale noise.
 
 See [V14 Standing-Water Bathymetry](bathymetry-generation.md).
 
-## Causal separation rules
+## Stage 2B — continental domain and inland lakes **[COMPLETE]**
 
-### Mountains are geometry first
+Stage 2B closed two prerequisites that had previously been entangled:
 
-```text
-mountain generation
-        ↓
-elevation geometry
+1. **continental domain** — an organic regularized graph phase owns external ocean/continent topology;
+2. **inland lakes** — broad real continental lowlands may become negative-Z lake domains before mountains.
 
-geology
-        ↓
-rock identity
+Current generated ocean and lake surfaces share `Z = 0`. Significant lakes are rejected unless their geometry can honestly support at least a 5-Z deep profile. Lake-bottom refinement follows shoreline distance with broad deterministic asymmetry and cannot change shoreline membership.
 
-surface synthesis
-        ↓
-soil / sediment / exposed rock
-```
+See [Continental Domain and Inland Lakes](landmass-and-inland-lakes.md).
 
-Therefore generic code must not contain `if mountain -> granite`.
+## Ownership matrix
 
-### Standing-water bottom is geometry before Water
+| Concern | Owner | Must not own |
+|---|---|---|
+| continent/island topology | landmass silhouette | relief, mountains, lakes, rivers |
+| ordinary terrestrial height | V12 relief | macro water membership |
+| inland lake footprint | inland-lake domain | mountains, river routing, lake depth |
+| mountain elevation | V13 mountain owner | coast/lake membership |
+| general submerged depth | V14 bathymetry | wet/dry membership |
+| inland lake depth refinement | lake bathymetry | shoreline membership, ocean rewrite |
+| future drainage | not implemented | terrain mutation |
+| future river network | not implemented | lake identity, mountain generation |
+| future channel carving | not implemented | river-route ownership |
 
-Accepted V14 bathymetry is dry bottom geometry. The sea-level plane shown by the development preview is not authoritative initial Water.
+The dependency direction is forward. A downstream owner may react causally to upstream facts but must not silently rewrite their responsibilities.
 
-Later stages may consume that geometry, but they do not reopen the accepted lake/sea/ocean footprint or bottom merely to make a later river/material behavior convenient.
+## What comes next
 
-### Rivers are dry geometry before Water
+The next world-generation semantic work starts only after the separate large-world performance and preview-UI work requested for the accepted Stage 2B baseline.
 
-The remaining canonical order is:
-
-```text
-accepted V14 morphology + standing-water bathymetry
-        ↓
-drainage / watersheds / basins
-        ↓
-river hierarchy + outlets
-        ↓
-dry valley/channel carving
-        ↓
-depositional/erosional context
-        ↓
-surface-material synthesis
-        ↓
-ONLY THEN finite initial Water
-```
-
-A river must still exist as geometry when Water rendering/quantity is absent.
-
-### Shore does not mean sand
-
-A shore may expose sand, gravel, silt, soil or rock according to completed morphology, geology and depositional causes. A coast/river/lake label alone does not own material selection.
-
-### Puddles are runtime consequences
-
-Puddles arise from terrain geometry, Soil hydraulics, precipitation and finite runtime Water. They are not painted world-generation objects.
-
-## Canonical milestone sequence
-
-### Stage 0 — Architecture stabilization and V12 normalization **[COMPLETE]**
-
-- generation ownership audited;
-- semantic intent separated from calibration/model/spatial synthesis;
-- accepted V12 appearance protected;
-- algorithms exposed through typed replaceable seams;
-- preparation/runtime handoff documented and tested.
-
-### Stage 1 — V13 Mountain Systems **[COMPLETE]**
-
-- dedicated semantic `MountainIntent`;
-- replaceable `MountainCalibrator` and `MountainElevationAlgorithm`;
-- immutable `MountainCalibration` and versioned `MountainRecipe`;
-- deterministic asymmetric mountain structures with bounded coverage/height/slope semantics;
-- V12 land/ocean mask preserved;
-- generic sparse shape-fitting remains independent;
-- headless tests, Generated World Audit and manual 2D/3D acceptance completed.
-
-### Stage 2 — Dry hydrography and carving **[IN PROGRESS]**
-
-#### Stage 2A — Standing-water bathymetry **[COMPLETE]**
-
-- V14 preserves V13 land and standing-water membership;
-- accepted coast/littoral depth morphology;
-- accepted broad deep-water basins/highs/saddles where room exists;
-- no Water and no new waterbody creation;
-- automated and manual acceptance complete.
-
-#### Stage 2B — Drainage and basin topology **[NEXT]**
-
-Starting from accepted V14 elevation:
-
-- derive/reconcile drainage directions and terminals;
-- derive catchments/watersheds and closed basins;
-- resolve basin/outlet topology required by river generation;
-- remain completely dry;
-- preserve accepted V14 standing-water geometry.
-
-#### Stage 2C — River network
-
-- produce real tributary/confluence/outlet hierarchy from drainage facts;
-- keep network semantics replaceable independently of carving when appropriate.
-
-#### Stage 2D — River / valley carving
-
-- carve readable dry channels and valleys from the accepted network;
-- interact with accepted standing water only through explicit mouth/outlet rules;
-- remain completely dry.
-
-Typed topology/morphology tests and manual dry-geometry acceptance are required before Stage 2 closes.
-
-### Stage 3 — Coherent geology
-
-Replace placeholder geology with coherent formations/strata and only the deposit bodies required by the real model. Geology answers which material occupies underground volume, not where mountains should be.
-
-### Stage 4 — Caves
-
-Generate coherent underground voids through a separate replaceable algorithm using the geology/morphology causes available at that stage.
-
-### Stage 5 — Causal surface layers and materials
-
-Combine completed dry morphology, hydrographic/depositional facts, geology and calibrated semantic material/Soil definitions to synthesize surface/subsurface/sediment/exposed-bedrock composition.
-
-### Stage 6 — Complete dry-world acceptance
-
-Accept land/ocean morphology, mountains, standing-water bathymetry, dry drainage/river geometry, geology/deposits, caves and surface/subsurface material structure before initial Water exists.
-
-### Stage 7 — Finite initial Water fill
-
-Put finite Water into already prepared oceans/lakes/channels. Generation owns initial placement only; ordinary runtime liquid/hydrology systems own later behavior.
-
-### Stage 8 — Runtime handoff audit
-
-Verify no generator, preparation helper or bootstrap remains a second source of truth after runtime starts.
-
-## Provisional components
-
-- current drainage provides useful topology but Stage 2B owns final drainage/basin topology;
-- current threshold hydrography is provisional until Stage 2C;
-- current geology algorithm is provisional until Stage 3;
-- current surface-hydrology/initial-Water ordering is historical compatibility infrastructure;
-- current slope/concavity/drainage/shoreline material logic is an early slice until Stage 5.
-
-## Structural authoring rule
-
-Future channels, strata, deposits or caves follow the same law:
+Future hydrography should be introduced as new independently accepted slices:
 
 ```text
-simple semantic character
+final accepted terrain
         ↓
-domain calibration
+drainage / catchments
         ↓
-exact model input
+river network
+        ↓
+channel / valley morphology
 ```
 
-Do not build a universal formation framework until multiple real consumers prove the common concept exists.
+Routing and terrain incision should remain separate owners. No unfinished river implementation is retained in the completed Stage 2B production code.
 
 ## Development protocol
 
-World-generation work follows the repository-wide [Green Checkpoint Development](../../decisions/022-green-checkpoint-development.md) rule:
+World-generation work follows [Green Checkpoint Development](../../decisions/022-green-checkpoint-development.md):
 
 ```text
 one contract
    ↓
 one independently meaningful component
    ↓
-focused evidence/check
+focused evidence
    ↓
 green commit
    ↓
-next block
+manual visual gate when appearance is semantic
 ```
 
-A stage that changes visible facts remains Draft until required manual visual acceptance. An unexplained red checkpoint blocks further semantic work; diagnostic hypotheses are isolated instead of being accumulated into the production PR.
+Strict replaceable boundaries follow [ADR-023](../../decisions/023-strict-modular-architecture.md).
+
+Documentation follows the repository [Documentation Guide](../../guides/documentation.md): each non-trivial implementation must be explained both precisely and in accessible language, including diagrams, formulas/symbol definitions, invariants, limitations, tests and source classification where relevant.
 
 ## Anti-patterns
 
 Do not introduce:
 
-- one giant generator/calibrator for unrelated domains;
-- mutable universal generation contexts/service locators;
-- material/rock/soil-name branches in generic orchestration;
-- coordinate-random material placement as a substitute for causal structure;
-- exact-physics authoring knobs where semantic coordinates are sufficient;
-- scattered tunable magic constants inside spatial loops;
-- parallel duplicate river/geology/formation frameworks beside existing typed seams;
-- Water before dry channels/surface structure are accepted;
-- visual-only fake rivers/lakes not backed by generated facts;
-- downstream repair passes before proving which upstream stage first emits the wrong fact;
-- reopening accepted V14 standing-water geometry merely to repair a later-stage defect;
-- a generator that continues controlling the world after runtime starts.
+- a god generator/calibrator/context for unrelated domains;
+- downstream repair passes that hide an upstream ownership error;
+- `Fragmentation` branches for lake count, coast noise or river density;
+- random painted lakes/rivers not represented by generated terrain/facts;
+- cell-scale noise as a substitute for broad geomorphology;
+- one-cell depth/height layers where the accepted model requires readable bands;
+- Water/runtime state as a source of dry generation geometry;
+- unfinished “future” frameworks in production merely because a later stage may need them.
 
 ## Sources
 
-The generation architecture is project-owned. External terrain research informs later physical models but V12/V13/V14 are not claimed as direct implementations of a tectonic or erosion paper.
+The architecture itself is EvoForge-specific. External algorithm lineage and conceptual influences are documented on the owning pages rather than used to imply physical fidelity that the implementation does not have.
 
-See [References](../../references.md), [Project Context](../../project-context.md), [Roadmap](../../roadmap.md), [World Genesis](world-genesis.md), [World Atlas](world-atlas.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md) and [ADR-022](../../decisions/022-green-checkpoint-development.md).
+See [References](../../references.md), [Continental Domain and Inland Lakes](landmass-and-inland-lakes.md), [Terrain Generation](terrain-generation.md), [V13 Mountain Generation](mountain-generation.md), [V14 Standing-Water Bathymetry](bathymetry-generation.md), [ADR-011](../../decisions/011-world-generation-algorithm-contracts.md), [ADR-022](../../decisions/022-green-checkpoint-development.md) and [ADR-023](../../decisions/023-strict-modular-architecture.md).

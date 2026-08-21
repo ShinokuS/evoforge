@@ -80,7 +80,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         rootContent.add(title).left().padBottom(4f);
         rootContent.row();
-        Label subtitle = new Label("V13 structural mountains over accepted V12 base", skin, "subtitle");
+        Label subtitle = new Label("V15 landmasses and inland lakes", skin, "subtitle");
         rootContent.add(subtitle).left().padBottom(10f);
         rootContent.row();
 
@@ -251,7 +251,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         addViewModeControl(content, viewMode);
         addLivePercentControl(content, "Z contrast", elevationTintPpm, elevationTint);
         addVisibilityControl(content, "Terrain surface", showSurface, surfaceVisibility);
-        addVisibilityControl(content, "Ocean water", showOcean, oceanVisibility);
+        addVisibilityControl(content, "Standing water", showOcean, oceanVisibility);
         return content;
     }
 

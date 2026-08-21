@@ -11,7 +11,7 @@ authored meaning
       ↓
 validated / calibrated data
       ↓
-authoritative simulation systems
+authoritative systems and generated facts
       ↓
 observable world state
       ↓
@@ -30,13 +30,13 @@ assets/       authored definition/presentation data
 docs/         canonical explanations, decisions, guides and journal
 ```
 
-The most important dependency rule is one-way: `simulation` must not depend on libGDX or presentation code.
+`simulation` must not depend on libGDX/presentation code.
 
 ## Central architectural rules
 
 Every mutable fact has one authoritative owner. Systems exchange narrow typed facts/capabilities rather than sharing one giant mutable world object.
 
-Generation follows the same ownership discipline:
+Generation follows the same rule:
 
 ```text
 semantic intent
@@ -54,252 +54,191 @@ preparation / materialization
 runtime owner
 ```
 
-Meaning, calibration, model policy, spatial synthesis, generated facts and runtime ownership are deliberately separate concerns.
+Meaning, calibration, model policy, spatial synthesis, generated facts and runtime ownership are separate concerns.
 
-### Strict modularity is a project-wide invariant
+### Strict modularity
 
-Every non-trivial subsystem must remain decomposable into small cohesive blocks with clear owners, clear typed inputs/outputs and explicit one-way dependencies.
+Every non-trivial subsystem remains decomposable into small cohesive blocks with clear owners, typed inputs/outputs and one-way dependencies. Independently meaningful algorithms/calibrators/planners/selectors are replaceable through composition. Orchestrators compose; they do not accumulate spatial model policy.
 
-Independently meaningful algorithms, calibrators, planners, selectors and runtime processes are replaceable through composition. Generic orchestration depends on their contracts, not concrete implementation classes. A compatible implementation should be swappable without editing unrelated consumers.
+Use abstraction at real semantic boundaries and simple concrete implementation inside a boundary. Do not manufacture interfaces for private helpers without an independent consumer.
 
-Package/file structure is part of this contract. Names and directories must make ownership discoverable; unrelated responsibilities must not accumulate in giant stage classes or generic dumping-ground packages merely because they are convenient.
+See [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md).
 
-At the same time, EvoForge does **not** abstract every private helper. The rule is:
+### Green checkpoints
 
-```text
-strong abstraction at real semantic boundaries
-+ simple concrete implementation inside the boundary
-+ explicit composition
-```
+World-generation work advances one independently meaningful concern at a time. A green automated checkpoint plus explicit manual visual acceptance is required before a visually semantic layer is called complete.
 
-This is [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md). It has the same mandatory status as the green-checkpoint development rule in ADR-022.
+See [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md).
+
+## Documentation is part of the implementation
+
+The repository [Documentation Guide](guides/documentation.md) is canonical and already encodes the required standard:
+
+- explain the system first in language understandable without programming knowledge;
+- show ownership/lifecycle diagrams;
+- document the actual algorithm, not only class names;
+- define every symbol in formulas;
+- record invariants, limitations, interactions, representative tests and code entry points;
+- cite primary/reusable sources when an external algorithm/model is actually used;
+- explicitly label conceptual influence vs direct implementation vs internal EvoForge design;
+- never rely on old chat history to reconstruct current semantics.
+
+A feature is incomplete if code is green but normative documentation cannot explain it independently.
 
 ## Current stable capabilities
 
-The integration line already contains working foundations for:
+The integration line contains working foundations for deterministic time/scheduling, Definitions, spatial ownership, Terrain/Geometry/Navigation, occupancy and movement, deterministic 3D pathfinding, autonomous agents, finite resources, finite liquids/Water/Soil hydrology, observer-only visualization and deterministic world-generation provenance.
 
-- deterministic discrete simulation time and scheduled processes;
-- object identity, immutable definitions and explicit runtime assembly;
-- finite optional world bounds and discrete XYZ spatial addressing;
-- terrain geometry including full cells and cardinal ramps;
-- navigation, occupancy, timed movement and deterministic 3D A* / `MoveTo`;
-- autonomous agents with needs, perception, opportunities, utility and committed intents;
-- finite consumables/regrowth;
-- generic finite liquids, Water, Soil-retained liquid, precipitation, infiltration, local flow and evaporation;
-- observer-only developer visualization and headless diagnostic/audit tooling;
-- deterministic world provenance and typed replaceable generation/preparation algorithms;
-- manually accepted V12 ordinary base terrain;
-- manually accepted V13 structural mountains over V12;
-- manually accepted V14 standing-water bathymetry over the existing V13 submerged footprint.
-
-The [Roadmap](roadmap.md) is the detailed status list. Individual mechanics are explained under [Systems](systems/).
+The current accepted world-generation elevation baseline is **V15**.
 
 ## Accepted world-generation baseline
 
-### Stage 0 — V12 ordinary morphology
+### V12 — ordinary terrain
 
-```text
-WorldGenerationIntent
-        ↓
-V12LandformCalibrator
-        ↓
-V12LandformCalibration + V12LandformRecipe
-        ↓
-V12LandformElevationAlgorithm
-        ↓
-ElevationField
-```
+V12 owns ordinary terrestrial height morphology: broad uplift, ordinary hills/depressions, rolling relief, rugged structures and bounded readable slopes.
 
-V12 owns land/ocean membership, coherent landmasses/coasts, broad uplift, ordinary hills/depressions, rolling relief and rugged ridges. It intentionally remains the ordinary landscape baseline.
+### Accepted continental domain around V12 relief
 
-### Stage 1 — V13 dedicated mountains
+The standard `LandmassSilhouetteAlgorithm` is `RegularizedGraphLandmassSilhouetteAlgorithm`.
 
-```text
-WorldGenerationIntent.mountains
-        ↓
-MountainCalibrator
-        ↓
-MountainCalibration + MountainRecipe
-        ↓
-MountainElevationAlgorithm
-        ↓
-ElevationField
-```
+It owns:
 
-V13 composes a capped V12 base with dedicated deterministic mountain uplift. Its important ownership is:
+- external ocean vs continental support;
+- continent/island macro geometry;
+- macro separation/connectivity controlled by `Fragmentation`.
 
-```text
-Abundance  -> expected mountain coverage on V12 land
-Scale      -> individual transverse size / source spacing
-Height     -> bounded prominence
-Chaininess -> elongation
-Sharpness  -> readable geometric slope character
-```
+It does not own relief, mountains, lakes, rivers, geology or materials.
 
-`V13MountainTerrainGenerator` composes replaceable base-generation, calibration and mountain-algorithm dependencies. The accepted standard implementation is `MountainMorphologyAlgorithm`; another compatible implementation can be substituted behind `MountainElevationAlgorithm` without changing orchestration or downstream fact consumers.
+The accepted implementation uses an irregular geometric control graph, separated nuclei, broad geographic forcing, fixed-volume graph phase regularization and continuous coast-field materialization. The old compact frontier-growth fallback has been removed.
 
-Mountain generation does not own geology, concrete runtime Shapes, navigation connectivity or Water. Generic shape fitting runs later from the final precise elevation.
+### V13 — mountains
+
+V13 owns dedicated mountain elevation contribution. Mountain controls retain independent semantics (`Abundance`, `Scale`, `Height`, `Chaininess`, `Peak sharpness`). Mountains consume already accepted water membership rather than changing it.
 
 See [V13 Mountain Generation](systems/world-generation/mountain-generation.md).
 
-### Stage 2A — V14 standing-water bathymetry
+### V14 — standing-water bathymetry
 
-```text
-accepted V13 land + submerged membership
-        ↓
-BathymetryCalibrator + BathymetryRecipe
-        ↓
-StructuredBathymetryAlgorithm
-        ├─ BathymetryMorphologyAlgorithm
-        └─ DeepBathymetryStructureAlgorithm
-        ↓
-ElevationField
-```
-
-V14 preserves all V13 land elevations and the complete standing-water footprint while re-authoring negative-Z bottom geometry.
-
-The accepted Stage 2A ownership is:
-
-- V13 owns land and the 2D footprint/shoreline membership of the currently accepted standing-water bodies;
-- `BathymetryMorphologyAlgorithm` owns the accepted coastal/littoral and ordinary submerged depth profile;
-- `DeepBathymetryStructureAlgorithm` independently adds broad basins/highs only where a water body is sufficiently deep and spacious;
-- shoreline distance is a depth/clearance envelope, not the sole final deep morphology generator;
-- deep structures are broad deterministic slope-bounded surfaces, not cell-scale noise;
-- Water, rivers, geology, materials and concrete runtime Shapes remain outside bathymetry ownership.
-
-The shape and bottom morphology of the current lake/sea/ocean bodies are now protected accepted input for later work. A future genuinely new standing-water body requires a new explicit contract rather than an incidental Stage 2 change.
+V14 re-authors submerged depth while preserving wet/dry membership. Near-shore bathymetry and deep-interior structure remain independent replaceable responsibilities. Deep structure is broad/deterministic rather than cell-scale noise.
 
 See [V14 Standing-Water Bathymetry](systems/world-generation/bathymetry-generation.md).
 
-## World-generation direction
+### V15 — terrain-derived inland lakes
 
-The causal milestone order is now:
+V15 adds independently owned inland lakes without returning lake ownership to the landmass algorithm.
 
 ```text
-Stage 0   V12 architecture + ordinary base morphology      COMPLETE
-   ↓
-Stage 1   V13 mountain systems                             COMPLETE
-   ↓
-Stage 2A  V14 standing-water bathymetry                    COMPLETE
-   ↓
-Stage 2B  drainage + basin topology                        NEXT
-   ↓
-Stage 2C  river network
-   ↓
-Stage 2D  dry river / valley carving
-   ↓
-Stage 3   coherent layered geology and required deposits
-   ↓
-Stage 4   caves
-   ↓
-Stage 5   causal surface/subsurface material synthesis
-   ↓
-Stage 6   complete dry-world acceptance
-   ↓
-Stage 7   finite initial Water fill
-   ↓
-Stage 8   runtime handoff audit
+accepted continental relief
+        ↓
+broad interior-lowland selection
+        ↓
+8-direction footprint regularization
+        ↓
+reject candidates too small for meaningful depth
+        ↓
+selected cells cross below Z = 0
+        ↓
+V13 mountains
+        ↓
+V14 bathymetry
+        ↓
+inland-only broad asymmetric depth refinement
+        ↓
+final V15 ElevationField
 ```
 
-Water remains intentionally late. Stage 2B starts from the accepted V14 `ElevationField`. Drainage analysis may identify watersheds, outlets and closed basins, but it must not silently reopen accepted standing-water shoreline/bottom morphology.
+Current generated oceans and lakes share water-surface level `Z = 0`.
 
-See [World Generation](systems/world-generation/overview.md) for the full contract.
+Important accepted lake invariants:
 
-## Important provisional components
+- lake placement follows real broad continental lowlands;
+- `Fragmentation` does not directly own lake count;
+- one-cell tendrils/corridors are rejected;
+- there is no synthetic one-block dry shoreline ridge;
+- a generated geographic lake must be wide enough for a genuine depth profile of at least `5 Z`;
+- lake-bottom refinement cannot change wet/dry membership;
+- bottom depth is governed by room away from shore and broad deterministic asymmetry, not authored pits/noise;
+- cardinal depth changes remain at most `1 Z` per cell;
+- boundary-connected ocean remains separately owned.
 
-Code can exist behind a useful typed seam without being the final accepted algorithm:
+See [Continental Domain and Inland Lakes](systems/world-generation/landmass-and-inland-lakes.md).
 
-- current drainage/hydrography is useful analytical infrastructure, not final Stage 2B/2C topology;
-- current geology generation is a placeholder until Stage 3;
-- current terrain-material slope/deposition behavior is an early causal slice until Stage 5;
-- current generated initial-Water path is compatibility infrastructure; canonical generation fills finite Water only after complete dry-world acceptance.
+## What Stage 2B does not contain
 
-Do not accumulate feature-specific patches in those placeholders. Replace or narrow the owning algorithm when its stage becomes active.
+The completed Stage 2B branch intentionally contains **no unfinished river/drainage implementation**.
+
+Removed before completion:
+
+- experimental drainage-basin/Priority-Flood production scaffolding;
+- provisional standing-water route/spill graphs;
+- unfinished river prerequisites presented as if they were current facts;
+- F4 hydrology diagnostic renderer;
+- separate inland-water 3D meshes for obsolete local spill-level lakes.
+
+Those experiments were useful during design but are not part of the accepted current architecture.
+
+## Immediate next work
+
+Before adding new hydrography semantics, the accepted baseline receives two engineering passes.
+
+### 1. Large-world generation performance
+
+Target practical default generation of at least `10,000 × 10,000`, with larger worlds kept architecturally possible.
+
+The performance pass must study asymptotic/memory behavior across the whole accepted pipeline and may replace algorithms/representations only with measured evidence and no visual quality regression.
+
+### 2. World-generation preview UI
+
+After performance work, align the generation UI with scenario style, group controls, add tooltips, place Generate prominently with `G` hotkey, and move generation off the render thread behind progress/stage reporting.
+
+The UI remains observer/control plumbing; it never becomes a generation owner.
+
+See [Roadmap](roadmap.md).
+
+## Future hydrography direction
+
+Future drainage/rivers restart from the accepted final elevation with new typed contracts rather than reviving deleted scaffolding.
+
+Intended causal chain:
+
+```text
+accepted final terrain
+        ↓
+drainage / catchments
+        ↓
+river network
+        ↓
+channel / valley morphology
+```
+
+Routing and terrain incision should be separate owners. A river must eventually exist as real generated geometry, not as a visual overlay.
 
 ## Rules future work must preserve
 
 1. **Determinism:** same authoritative inputs and compatible generation revision produce the same result.
-2. **One owner per mutable fact:** no duplicate truth in visualizer, bootstrap or helpers.
-3. **Observer independence:** camera/visibility never changes simulation fidelity or rules.
+2. **One owner per fact:** no duplicate truth in visualizer/bootstrap/helpers.
+3. **Observer independence:** camera/visibility never changes simulation/generation fidelity.
 4. **Typed replaceable algorithms:** orchestration depends on contracts, not concrete implementations.
 5. **Semantic authoring:** authors describe meaning; domain calibration resolves exact operating values.
-6. **No concrete-content branching in generic code:** no `if mountain -> granite`, `if river -> sand`, material-name switches or similar shortcuts.
-7. **Headless evidence + manual acceptance where needed:** tests prove invariants; visual quality is explicitly reviewed rather than inferred from numbers.
-8. **No premature universal framework:** extract shared abstractions only after real consumers prove a common concept.
-9. **Green checkpoints:** one independently meaningful concern is implemented and verified before the next semantic change is added.
-10. **Strict modular architecture:** classes/packages have clear single responsibilities, independently meaningful algorithms/processes are replaceable behind narrow typed seams, composition is separate from policy, and package/file structure visibly mirrors ownership.
-11. **Abstraction at boundaries, simplicity inside:** do not hard-wire replaceable implementations, but also do not create speculative interfaces/frameworks for private details without a real independent consumer.
-12. **Accepted-stage protection:** later stages consume accepted world facts; they do not incidentally rewrite a prior accepted morphology to hide a downstream defect.
+6. **No concrete-content branching in generic code:** no permanent `mountain -> granite`, `river -> sand` shortcuts.
+7. **Headless evidence + manual visual acceptance:** tests prove invariants; visual quality is reviewed explicitly.
+8. **No premature universal framework:** shared abstractions require real independent consumers.
+9. **Green checkpoints:** one independently meaningful concern before the next semantic concern.
+10. **Strict modular architecture:** package/file structure visibly mirrors ownership.
+11. **Abstraction at boundaries, simplicity inside.**
+12. **Accepted-stage protection:** downstream work consumes accepted facts instead of rewriting them to hide downstream defects.
+13. **Documentation completeness:** current behavior must be recoverable from normative docs without chat history.
 
-See [Architecture](architecture.md), [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md) and [ADR-023: Strict modular architecture](decisions/023-strict-modular-architecture.md).
-
-## Development rule
-
-Production work advances in this order:
-
-```text
-state one contract / ownership question
-        ↓
-identify owner + typed seam + package/file placement
-        ↓
-smallest meaningful implementation step
-        ↓
-focused evidence and check
-        ↓
-understood green checkpoint
-        ↓
-coherent commit
-        ↓
-next concern
-```
-
-An unexplained red checkpoint blocks further semantic work. Diagnose the earliest stage that emits the wrong fact before adding downstream repair. Refactors that claim to preserve behavior stay separate from semantic changes.
-
-Before extending a subsystem, confirm the change does not widen an already-confused owner. If a compatible algorithm/process cannot be replaced without unrelated edits, fix the missing boundary first rather than adding more concrete coupling.
-
-The detailed procedure lives in [Development Workflow](guides/development-workflow.md).
-
-## How to recover context in five minutes
+## Fast recovery path
 
 Read in this order:
 
-1. **This page** — current state and direction.
-2. [Architecture](architecture.md) — global rules, especially ownership and modularity.
-3. [Roadmap](roadmap.md) — complete/next/deferred work.
-4. The relevant group under [Systems](systems/) — current system semantics/algorithms.
-5. [Decisions](decisions/) — durable rationale, especially ADR-022 and ADR-023 before non-trivial development.
-6. [Development Journal](journal/) only for historical investigation/acceptance records.
-
-Then verify the owning production package, its contracts and its tests before changing semantics. The repository structure should itself make the responsible block discoverable; if it does not, treat that as architecture debt rather than guessing from old chat history.
-
-## Documentation truth hierarchy
-
 ```text
-production code + executable tests
-        ↓
-current normative docs (Architecture / Systems / Guides / Roadmap)
-        ↓
-accepted ADRs explaining why
-        ↓
-Journal records describing historical reasoning/acceptance
-        ↓
-chat history / prototypes
+project-context.md
+architecture.md
+roadmap.md
+systems/world-generation/overview.md
+systems/world-generation/landmass-and-inland-lakes.md
 ```
 
-Historical notes never override current code and normative documentation merely because they are more detailed.
-
-## Before continuing Stage 2
-
-Confirm all of the following:
-
-- Stage 2A V14 standing-water bathymetry is the protected elevation input;
-- current lake/sea/ocean footprint and bathymetry are not reopened incidentally;
-- Stage 2B begins with one clear drainage/basin-topology ownership contract rather than extending provisional threshold hydrography blindly;
-- drainage analysis, basin/hierarchy decisions, river-network semantics and spatial carving remain separate when they have independent ownership/replacement value;
-- each replaceable algorithm/process has a narrow typed seam and a package location that communicates its owner before implementation grows around it;
-- each component is built as a green checkpoint with focused tests/diagnostics before the next component;
-- river geometry is observable while still completely dry;
-- finite Water remains later than completed dry morphology/material acceptance;
-- any durable pipeline/ownership change updates normative documentation and an ADR when required.
-
-This checklist exists specifically to prevent future work from rediscovering or contradicting already accepted decisions.
+Then inspect the owning code/tests named by the System page.

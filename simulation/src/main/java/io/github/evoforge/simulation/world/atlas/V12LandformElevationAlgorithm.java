@@ -11,8 +11,8 @@ import java.util.Arrays;
  * Pure deterministic spatial synthesis for the accepted V12 base terrain.
  *
  * <p>All world-specific operating values arrive through {@link V12LandformCalibration}; all V12
- * model choices arrive through {@link V12LandformRecipe}. The algorithm therefore contains only
- * deterministic spatial mechanics and representation constants, not authored-world policy.</p>
+ * model choices arrive through {@link V12LandformRecipe}. Later compositions may supply a typed
+ * landmass silhouette before rank selection without changing accepted V12 relief behavior.</p>
  */
 final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId LANDMASS = GenerationPurposeId.of("world:landmass");
@@ -37,17 +37,38 @@ final class V12LandformElevationAlgorithm {
             WorldGenesis genesis,
             V12LandformCalibration calibration,
             V12LandformRecipe recipe) {
-        if (genesis == null || calibration == null || recipe == null) {
+        if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
+        return generate(
+                genesis,
+                calibration,
+                recipe,
+                LandmassSilhouette.unconstrained(genesis.spec().bounds()));
+    }
+
+    ElevationField generate(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette) {
+        if (genesis == null || calibration == null || recipe == null || silhouette == null) {
             throw new IllegalArgumentException("V12 generation inputs must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
+        if (!bounds.equals(silhouette.bounds())) {
+            throw new IllegalArgumentException("landmass silhouette must match generation bounds");
+        }
         int width = calibration.width();
         int height = calibration.height();
         int area = calibration.area();
         GenerationRandom random = GenerationRandom.from(genesis);
 
-        long[] rankKeys = calibratedLandRankKeys(random, bounds, calibration, recipe);
-        int landCount = calibration.landCount();
+        long[] rankKeys = calibratedLandRankKeys(
+                random,
+                bounds,
+                calibration,
+                recipe,
+                silhouette);
+        int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
         boolean[] land = new boolean[area];
         for (int rank = 0; rank < landCount; rank++) {
             land[(int) rankKeys[rank]] = true;
@@ -149,7 +170,8 @@ final class V12LandformElevationAlgorithm {
             GenerationRandom random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
-            V12LandformRecipe recipe) {
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette) {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
@@ -176,6 +198,16 @@ final class V12LandformElevationAlgorithm {
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
+                if (!silhouette.supportsIndex(index)) {
+                    potential = -1;
+                } else if (silhouette.constrained()) {
+                    int basePpm = sampleToPpm(potential);
+                    int influencePpm = silhouette.influencePpm();
+                    int blendedPpm = Math.toIntExact(
+                            ((long) basePpm * (PPM - influencePpm)
+                                    + (long) silhouette.potentialPpmAtIndex(index) * influencePpm) / PPM);
+                    potential = ppmToSample(blendedPpm);
+                }
                 rankKeys[index] = rankKey(potential, index);
                 index++;
             }
@@ -466,12 +498,16 @@ final class V12LandformElevationAlgorithm {
         return (int) ((long) sample * PPM / SAMPLE_MAX);
     }
 
+    private static int ppmToSample(int ppm) {
+        return (int) ((long) clampPpm(ppm) * SAMPLE_MAX / PPM);
+    }
+
     private static int clampPpm(long value) {
         return (int) Math.max(0L, Math.min((long) PPM, value));
     }
 
     private static long rankKey(int potential, int cellIndex) {
-        long invertedPotential = SAMPLE_MAX - potential;
+        long invertedPotential = (long) SAMPLE_MAX - potential;
         return (invertedPotential << 32) | (cellIndex & 0xffff_ffffL);
     }
 
