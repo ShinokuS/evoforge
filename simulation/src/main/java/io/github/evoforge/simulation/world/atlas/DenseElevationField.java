@@ -59,6 +59,16 @@ final class DenseElevationField implements ElevationField {
         return (int) area;
     }
 
+    /**
+     * Internal zero-copy read path for package-local generation stages.
+     *
+     * <p>The returned storage remains owned by this immutable field and must never be mutated. It is
+     * intentionally package-private so public consumers cannot bypass the field contract.</p>
+     */
+    long[] readOnlyStorage() {
+        return elevationSubunits;
+    }
+
     @Override
     public WorldBounds bounds() {
         return bounds;
