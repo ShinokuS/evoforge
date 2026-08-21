@@ -48,6 +48,38 @@ final class GenerationRandomTest {
     }
 
     @Test
+    void boundSamplerIsBitIdenticalToAddressedSampling() {
+        GenerationRandom random = GenerationRandom.from(WorldGenesis.current(SPEC, 0x4d595df4d0f33173L));
+        GenerationStageId stage = GenerationStageId.of("world:elevation");
+        GenerationPurposeId purpose = GenerationPurposeId.of("world:lattice");
+        GenerationRandom.BoundSampler bound = random.bind(stage, purpose);
+
+        long[][] addresses = {
+                {0L, 0L, 0L, 0L},
+                {1L, -1L, 7L, 1L},
+                {-10_000L, 9_999L, -96L, 3L},
+                {Long.MIN_VALUE + 1L, Long.MAX_VALUE, 0L, 17L}
+        };
+        for (long[] address : addresses) {
+            assertEquals(
+                    random.sampleLong(stage, purpose, address[0], address[1], address[2], address[3]),
+                    bound.sampleLong(address[0], address[1], address[2], address[3]));
+        }
+    }
+
+    @Test
+    void boundSamplerRemainsCallOrderIndependent() {
+        GenerationRandom random = GenerationRandom.from(WorldGenesis.current(SPEC, 99L));
+        GenerationRandom.BoundSampler bound = random.bind(
+                GenerationStageId.of("world:elevation"),
+                GenerationPurposeId.of("world:detail"));
+
+        long first = bound.sampleLong(41L, -12L, 3L, 5L);
+        bound.sampleLong(-99L, 12_337L, -4L, 2L);
+        assertEquals(first, bound.sampleLong(41L, -12L, 3L, 5L));
+    }
+
+    @Test
     void samplingOrderDoesNotBecomeHiddenRandomState() {
         GenerationRandom first = GenerationRandom.from(WorldGenesis.current(SPEC, 99L));
         GenerationStageId stage = GenerationStageId.of("world:elevation");
@@ -109,6 +141,13 @@ final class GenerationRandomTest {
                 () -> random.sampleLong(stage, null, 0, 0, 0, 0));
         assertThrows(IllegalArgumentException.class,
                 () -> random.sampleLong(stage, purpose, 0, 0, 0, -1));
+        assertThrows(IllegalArgumentException.class,
+                () -> random.bind(null, purpose));
+        assertThrows(IllegalArgumentException.class,
+                () -> random.bind(stage, null));
+        GenerationRandom.BoundSampler bound = random.bind(stage, purpose);
+        assertThrows(IllegalArgumentException.class,
+                () -> bound.sampleLong(0, 0, 0, -1));
     }
 
     private static void assertSample(
