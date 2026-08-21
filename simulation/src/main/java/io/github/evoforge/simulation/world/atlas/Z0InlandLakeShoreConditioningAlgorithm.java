@@ -49,7 +49,7 @@ final class Z0InlandLakeShoreConditioningAlgorithm implements InlandLakeShoreCon
                 }
             }
         }
-        return new DenseElevationField(bounds, result);
+        return DenseElevationField.takeOwnership(bounds, result);
     }
 
     private static boolean sameHorizontalBounds(WorldBounds first, WorldBounds second) {
