@@ -12,7 +12,7 @@ on:
       side:
         description: "Square world side length in cells"
         required: true
-        default: "1024"
+        default: "2048"
         type: string
 
 permissions:
@@ -51,7 +51,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "side=${{ inputs.side }}" >> "$GITHUB_OUTPUT"
           else
-            echo "side=1024" >> "$GITHUB_OUTPUT"
+            echo "side=2048" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run worldgen profile
