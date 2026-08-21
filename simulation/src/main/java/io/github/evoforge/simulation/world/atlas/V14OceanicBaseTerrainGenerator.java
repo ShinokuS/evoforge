@@ -10,8 +10,15 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  * calibration and geometry are independently replaceable and own the actual geographic footprint.
  * The V12 elevation algorithm consumes that typed footprint but continues to own relief exactly as
  * before.</p>
+ *
+ * <p>The standard calibrators make continent geometry independent of semantic Land coverage: only
+ * the final V12 {@code landCount} changes. {@link #prepare(WorldGenesis)} therefore retains the
+ * accepted silhouette across a Land-only retarget. Injected calibrators remain safe: if any
+ * supposedly invariant operating value changes, materialization falls back to a normal unprepared
+ * generation rather than reusing invalid geometry.</p>
  */
-public final class V14OceanicBaseTerrainGenerator implements ElevationGenerator {
+public final class V14OceanicBaseTerrainGenerator
+        implements LandCoverageRetargetableElevationGenerator {
     private final V12LandformCalibrator terrainCalibrator;
     private final V12LandformRecipe terrainRecipe;
     private final LandmassBoundaryCalibrator boundaryCalibrator;
@@ -92,8 +99,51 @@ public final class V14OceanicBaseTerrainGenerator implements ElevationGenerator 
     }
 
     @Override
-    public ElevationField generate(WorldGenesis genesis) {
+    public PreparedLandCoverageElevation prepare(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
+        PreparedInputs prepared = prepareInputs(genesis);
+        return targetGenesis -> materializePrepared(genesis, prepared, targetGenesis);
+    }
+
+    private ElevationField materializePrepared(
+            WorldGenesis preparationGenesis,
+            PreparedInputs prepared,
+            WorldGenesis targetGenesis) {
+        if (targetGenesis == null) throw new IllegalArgumentException("target genesis must not be null");
+        if (!sameNonIntentIdentity(preparationGenesis, targetGenesis)) {
+            return generateUnprepared(targetGenesis);
+        }
+
+        V12LandformCalibration targetTerrain = terrainCalibrator.calibrate(targetGenesis, terrainRecipe);
+        if (targetTerrain == null) {
+            throw new IllegalStateException("V14 terrain calibrator returned null");
+        }
+        LandmassBoundaryCalibration targetBoundary = boundaryCalibrator.calibrate(
+                targetGenesis,
+                targetTerrain,
+                boundaryRecipe);
+        LandmassSilhouetteCalibration targetSilhouetteCalibration = silhouetteCalibrator.calibrate(
+                targetGenesis,
+                targetTerrain,
+                silhouetteRecipe);
+        if (targetBoundary == null || targetSilhouetteCalibration == null) {
+            throw new IllegalStateException("V14 landmass calibrator returned null");
+        }
+
+        if (!sameTerrainExceptLandCount(prepared.terrain(), targetTerrain)
+                || !prepared.boundary().equals(targetBoundary)
+                || !prepared.silhouetteCalibration().equals(targetSilhouetteCalibration)) {
+            return generateUnprepared(targetGenesis);
+        }
+        return algorithm.generate(targetGenesis, targetTerrain, terrainRecipe, prepared.silhouette());
+    }
+
+    private ElevationField generateUnprepared(WorldGenesis genesis) {
+        PreparedInputs prepared = prepareInputs(genesis);
+        return algorithm.generate(genesis, prepared.terrain(), terrainRecipe, prepared.silhouette());
+    }
+
+    private PreparedInputs prepareInputs(WorldGenesis genesis) {
         V12LandformCalibration terrain = terrainCalibrator.calibrate(genesis, terrainRecipe);
         if (terrain == null) {
             throw new IllegalStateException("V14 terrain calibrator returned null");
@@ -117,6 +167,40 @@ public final class V14OceanicBaseTerrainGenerator implements ElevationGenerator 
         if (silhouette == null) {
             throw new IllegalStateException("V14 landmass silhouette algorithm returned null");
         }
-        return algorithm.generate(genesis, terrain, terrainRecipe, silhouette);
+        return new PreparedInputs(terrain, boundary, silhouetteCalibration, silhouette);
+    }
+
+    private static boolean sameNonIntentIdentity(WorldGenesis first, WorldGenesis second) {
+        return first.spec().equals(second.spec())
+                && first.masterSeed() == second.masterSeed()
+                && first.generationRevision().equals(second.generationRevision())
+                && first.rngRevision().equals(second.rngRevision());
+    }
+
+    private static boolean sameTerrainExceptLandCount(
+            V12LandformCalibration first,
+            V12LandformCalibration second) {
+        return first.width() == second.width()
+                && first.height() == second.height()
+                && first.area() == second.area()
+                && first.coherentLandmassScale() == second.coherentLandmassScale()
+                && first.fragmentedLandmassScale() == second.fragmentedLandmassScale()
+                && first.fragmentationPpm() == second.fragmentationPpm()
+                && first.landformSpacing() == second.landformSpacing()
+                && first.upliftScale() == second.upliftScale()
+                && first.ridgeScale() == second.ridgeScale()
+                && first.rollingScale() == second.rollingScale()
+                && first.rollingDetailScale() == second.rollingDetailScale()
+                && first.reliefPpm() == second.reliefPpm()
+                && first.localReliefPpm() == second.localReliefPpm()
+                && first.ruggednessPpm() == second.ruggednessPpm()
+                && first.maximumReadableStepSubunits() == second.maximumReadableStepSubunits();
+    }
+
+    private record PreparedInputs(
+            V12LandformCalibration terrain,
+            LandmassBoundaryCalibration boundary,
+            LandmassSilhouetteCalibration silhouetteCalibration,
+            LandmassSilhouette silhouette) {
     }
 }
