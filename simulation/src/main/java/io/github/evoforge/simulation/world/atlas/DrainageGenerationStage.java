@@ -26,12 +26,22 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         long[] heights = denseOrMaterializedHeights(elevation, bounds, width, height, count);
         int[] downstream = new int[count];
         int[] traversalScratch = new int[count];
+        int[] stateOrIncoming = new int[count];
         Arrays.fill(downstream, DenseDrainageField.TERMINAL);
 
         assignStrictDownhill(width, height, heights, downstream);
-        resolveEqualElevationFlats(width, height, heights, downstream, traversalScratch);
+        resolveEqualElevationFlats(
+                width,
+                height,
+                heights,
+                downstream,
+                traversalScratch,
+                stateOrIncoming);
 
-        long[] contributingArea = accumulateContributingArea(downstream, traversalScratch);
+        long[] contributingArea = accumulateContributingArea(
+                downstream,
+                traversalScratch,
+                stateOrIncoming);
         int[] terminal = resolveTerminals(downstream, traversalScratch);
         return DenseDrainageField.takeOwnership(bounds, downstream, contributingArea, terminal);
     }
@@ -105,15 +115,19 @@ public final class DrainageGenerationStage implements DrainageGenerator {
      * distance-propagation queue. The state array combines the old visited mask and distance field:
      * completed cells use a negative sentinel while the current component uses -1/0/positive
      * distances. This preserves the old deterministic neighbor and tie-breaking order while avoiding
-     * {@code ArrayDeque<Integer>} and {@code List<Integer>} allocation.</p>
+     * {@code ArrayDeque<Integer>} and {@code List<Integer>} allocation. Its storage is caller-owned
+     * scratch and is reused as the contributing-area incoming-degree raster after flat resolution.</p>
      */
     private static void resolveEqualElevationFlats(
             int width,
             int height,
             long[] elevations,
             int[] downstream,
-            int[] work) {
-        int[] state = new int[elevations.length];
+            int[] work,
+            int[] state) {
+        if (state.length != elevations.length) {
+            throw new IllegalArgumentException("flat drainage state scratch must match elevation area");
+        }
         Arrays.fill(state, FLAT_UNSEEN);
 
         for (int start = 0; start < elevations.length; start++) {
@@ -275,8 +289,14 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         return best;
     }
 
-    private static long[] accumulateContributingArea(int[] downstream, int[] queue) {
-        int[] incoming = new int[downstream.length];
+    private static long[] accumulateContributingArea(
+            int[] downstream,
+            int[] queue,
+            int[] incoming) {
+        if (incoming.length != downstream.length) {
+            throw new IllegalArgumentException("drainage incoming scratch must match topology area");
+        }
+        Arrays.fill(incoming, 0);
         long[] area = new long[downstream.length];
         Arrays.fill(area, 1L);
         for (int next : downstream) {
