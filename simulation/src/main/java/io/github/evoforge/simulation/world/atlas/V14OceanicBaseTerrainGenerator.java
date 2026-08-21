@@ -19,6 +19,9 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  */
 public final class V14OceanicBaseTerrainGenerator
         implements LandCoverageRetargetableElevationGenerator {
+    private static final boolean PROFILE_MEMORY =
+            Boolean.parseBoolean(System.getenv().getOrDefault("EVOFORGE_WORLDGEN_MEMORY_PROFILE", "false"));
+
     private final V12LandformCalibrator terrainCalibrator;
     private final V12LandformRecipe terrainRecipe;
     private final LandmassBoundaryCalibrator boundaryCalibrator;
@@ -101,7 +104,9 @@ public final class V14OceanicBaseTerrainGenerator
     @Override
     public PreparedLandCoverageElevation prepare(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
+        profileMemory("v14.prepare.before_inputs");
         PreparedInputs prepared = prepareInputs(genesis);
+        profileMemory("v14.prepare.after_inputs");
         return targetGenesis -> materializePrepared(genesis, prepared, targetGenesis);
     }
 
@@ -135,12 +140,15 @@ public final class V14OceanicBaseTerrainGenerator
                 || !prepared.silhouetteCalibration().equals(targetSilhouetteCalibration)) {
             return generateUnprepared(targetGenesis);
         }
-        return algorithm.generate(
+        profileMemory("v14.materialize.before_v12");
+        ElevationField result = algorithm.generate(
                 targetGenesis,
                 targetTerrain,
                 terrainRecipe,
                 prepared.silhouette(),
                 prepared.landRanking());
+        profileMemory("v14.materialize.after_v12");
+        return result;
     }
 
     private ElevationField generateUnprepared(WorldGenesis genesis) {
@@ -169,6 +177,7 @@ public final class V14OceanicBaseTerrainGenerator
         if (boundary == null || silhouetteCalibration == null) {
             throw new IllegalStateException("V14 landmass calibrator returned null");
         }
+        profileMemory("v14.prepare.before_silhouette");
         LandmassSilhouette silhouette = silhouetteAlgorithm.generate(
                 genesis,
                 boundary,
@@ -177,11 +186,13 @@ public final class V14OceanicBaseTerrainGenerator
         if (silhouette == null) {
             throw new IllegalStateException("V14 landmass silhouette algorithm returned null");
         }
+        profileMemory("v14.prepare.after_silhouette");
         V12LandformElevationAlgorithm.PreparedLandRanking landRanking = algorithm.prepareLandRanking(
                 genesis,
                 terrain,
                 terrainRecipe,
                 silhouette);
+        profileMemory("v14.prepare.after_land_ranking");
         return new PreparedInputs(
                 terrain,
                 boundary,
@@ -215,6 +226,18 @@ public final class V14OceanicBaseTerrainGenerator
                 && first.localReliefPpm() == second.localReliefPpm()
                 && first.ruggednessPpm() == second.ruggednessPpm()
                 && first.maximumReadableStepSubunits() == second.maximumReadableStepSubunits();
+    }
+
+    private static void profileMemory(String stage) {
+        if (!PROFILE_MEMORY) return;
+        Runtime runtime = Runtime.getRuntime();
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        System.out.printf(
+                "WORLDGEN_MEMORY stage=%s used_mib=%.2f committed_mib=%.2f max_mib=%.2f%n",
+                stage,
+                used / 1048576.0,
+                runtime.totalMemory() / 1048576.0,
+                runtime.maxMemory() / 1048576.0);
     }
 
     private record PreparedInputs(
