@@ -198,16 +198,44 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
             }
         }
 
-        long[] firstMass = boxSumField(characterMass, width, height, contextRadius);
-        long[] firstSupport = boxSumField(shorelineSupport, width, height, contextRadius);
         int blendRadius = Math.max(2, contextRadius / 2);
-        long[] blendedMass = boxSumField(firstMass, width, height, blendRadius);
-        long[] blendedSupport = boxSumField(firstSupport, width, height, blendRadius);
+        DenseSlidingBoxSum.Workspace boxWorkspace = DenseSlidingBoxSum.workspace(
+                width,
+                height,
+                Math.max(contextRadius, blendRadius));
+        DenseSlidingBoxSum.sumInto(
+                characterMass,
+                width,
+                height,
+                contextRadius,
+                characterMass,
+                boxWorkspace);
+        DenseSlidingBoxSum.sumInto(
+                shorelineSupport,
+                width,
+                height,
+                contextRadius,
+                shorelineSupport,
+                boxWorkspace);
+        DenseSlidingBoxSum.sumInto(
+                characterMass,
+                width,
+                height,
+                blendRadius,
+                characterMass,
+                boxWorkspace);
+        DenseSlidingBoxSum.sumInto(
+                shorelineSupport,
+                width,
+                height,
+                blendRadius,
+                shorelineSupport,
+                boxWorkspace);
 
         int[] nearshoreCharacter = new int[elevation.length];
         for (int cell = 0; cell < elevation.length; cell++) {
-            if (blendedSupport[cell] <= 0L || blendedMass[cell] <= 0L) continue;
-            nearshoreCharacter[cell] = (int) Math.min(PPM, blendedMass[cell] / blendedSupport[cell]);
+            if (shorelineSupport[cell] <= 0L || characterMass[cell] <= 0L) continue;
+            nearshoreCharacter[cell] = (int) Math.min(PPM, characterMass[cell] / shorelineSupport[cell]);
         }
 
         int[] componentScratch = propagateCoastalCharacterInPlace(
@@ -521,44 +549,6 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
             }
         }
         return new LandReliefIntegral(stride, positiveHeightSum, positiveLandCount);
-    }
-
-    private static long[] boxSumField(
-            long[] values,
-            int width,
-            int height,
-            int radius) {
-        int stride = width + 1;
-        long[] integral = new long[Math.multiplyExact(stride, height + 1)];
-        for (int y = 1; y <= height; y++) {
-            for (int x = 1; x <= width; x++) {
-                int cell = y * stride + x;
-                int above = cell - stride;
-                int left = cell - 1;
-                int diagonal = above - 1;
-                integral[cell] = Math.addExact(
-                        values[(y - 1) * width + (x - 1)],
-                        integral[above] + integral[left] - integral[diagonal]);
-            }
-        }
-
-        long[] result = new long[values.length];
-        for (int y = 0; y < height; y++) {
-            int minY = Math.max(0, y - radius);
-            int maxY = Math.min(height - 1, y + radius);
-            for (int x = 0; x < width; x++) {
-                int minX = Math.max(0, x - radius);
-                int maxX = Math.min(width - 1, x + radius);
-                result[y * width + x] = rectangleSum(
-                        integral,
-                        stride,
-                        minX,
-                        minY,
-                        maxX,
-                        maxY);
-            }
-        }
-        return result;
     }
 
     private static int collectComponent(
