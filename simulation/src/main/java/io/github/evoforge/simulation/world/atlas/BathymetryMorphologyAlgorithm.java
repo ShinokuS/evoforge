@@ -164,12 +164,11 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
     /**
      * Produces one broad causal coastal-character field before underwater depth is authored.
      *
-     * <p>Shoreline land cells first derive character from a broad land-only relief context. Their
-     * character is blended over a wide source neighborhood, then the first submerged ring seeds an
-     * inward propagation ordered by shoreline distance. The propagated fact is finally averaged over
-     * a connected-water window whose radius is the same world-scaled coastal context. Horizontal and
-     * vertical passes are evaluated in both orders and averaged so the blend has no preferred axis.
-     * None of these operations touches final elevation.</p>
+     * <p>Two long fields first hold positive land height and positive-land membership. The same
+     * bounded-memory square-window kernel used for later blending converts them in place to local
+     * land relief sums/counts. Once shoreline character has been derived, those same arrays become
+     * character mass and shoreline support, so land-relief analysis and coastal blending never have
+     * overlapping world-sized storage lifetimes.</p>
      */
     private static CoastalCharacterResult coastalCharacterField(
             long[] elevation,
@@ -178,24 +177,13 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
             int height,
             int contextRadius,
             BathymetryRecipe recipe) {
-        LandReliefIntegral landRelief = landReliefIntegral(elevation, width, height);
         long[] characterMass = new long[elevation.length];
         long[] shorelineSupport = new long[elevation.length];
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
-                if (elevation[cell] < 0L || !touchesWater(cell, elevation, width, height)) continue;
-                shorelineSupport[cell] = 1L;
-                characterMass[cell] = coastalLandReliefPpm(
-                        x,
-                        y,
-                        width,
-                        height,
-                        landRelief,
-                        contextRadius,
-                        recipe);
-            }
+        for (int cell = 0; cell < elevation.length; cell++) {
+            long value = elevation[cell];
+            if (value <= 0L) continue;
+            characterMass[cell] = value;
+            shorelineSupport[cell] = 1L;
         }
 
         int blendRadius = Math.max(2, contextRadius / 2);
@@ -203,6 +191,35 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                 width,
                 height,
                 Math.max(contextRadius, blendRadius));
+        DenseSlidingBoxSum.sumInto(
+                characterMass,
+                width,
+                height,
+                contextRadius,
+                characterMass,
+                boxWorkspace);
+        DenseSlidingBoxSum.sumInto(
+                shorelineSupport,
+                width,
+                height,
+                contextRadius,
+                shorelineSupport,
+                boxWorkspace);
+
+        for (int cell = 0; cell < elevation.length; cell++) {
+            if (elevation[cell] < 0L || !touchesWater(cell, elevation, width, height)) {
+                characterMass[cell] = 0L;
+                shorelineSupport[cell] = 0L;
+                continue;
+            }
+            characterMass[cell] = coastalLandReliefPpm(
+                    characterMass[cell],
+                    shorelineSupport[cell],
+                    contextRadius,
+                    recipe);
+            shorelineSupport[cell] = 1L;
+        }
+
         DenseSlidingBoxSum.sumInto(
                 characterMass,
                 width,
@@ -524,33 +541,6 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
         return y + 1 < height && elevation[cell + width] < 0L;
     }
 
-    private static LandReliefIntegral landReliefIntegral(long[] elevation, int width, int height) {
-        int stride = width + 1;
-        int cells = Math.multiplyExact(stride, height + 1);
-        long[] positiveHeightSum = new long[cells];
-        int[] positiveLandCount = new int[cells];
-
-        for (int y = 1; y <= height; y++) {
-            for (int x = 1; x <= width; x++) {
-                long value = elevation[(y - 1) * width + (x - 1)];
-                long positiveHeight = Math.max(0L, value);
-                int positiveLand = value > 0L ? 1 : 0;
-                int cell = y * stride + x;
-                int above = cell - stride;
-                int left = cell - 1;
-                int diagonal = above - 1;
-                positiveHeightSum[cell] = Math.addExact(
-                        positiveHeight,
-                        positiveHeightSum[above] + positiveHeightSum[left] - positiveHeightSum[diagonal]);
-                positiveLandCount[cell] = positiveLand
-                        + positiveLandCount[above]
-                        + positiveLandCount[left]
-                        - positiveLandCount[diagonal];
-            }
-        }
-        return new LandReliefIntegral(stride, positiveHeightSum, positiveLandCount);
-    }
-
     private static int collectComponent(
             int start,
             long[] elevation,
@@ -716,76 +706,20 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
         return Math.min(bodyDepthCap, Math.min(geometricDepth, parallelDepth));
     }
 
-    private static int coastalLandReliefPpm(
-            int x,
-            int y,
-            int width,
-            int height,
-            LandReliefIntegral integral,
+    private static long coastalLandReliefPpm(
+            long positiveHeightSum,
+            long positiveLandCount,
             int radius,
             BathymetryRecipe recipe) {
-        int minX = Math.max(0, x - radius);
-        int maxX = Math.min(width - 1, x + radius);
-        int minY = Math.max(0, y - radius);
-        int maxY = Math.min(height - 1, y + radius);
-        long sum = rectangleSum(
-                integral.positiveHeightSum(),
-                integral.stride(),
-                minX,
-                minY,
-                maxX,
-                maxY);
-        int count = rectangleSum(
-                integral.positiveLandCount(),
-                integral.stride(),
-                minX,
-                minY,
-                maxX,
-                maxY);
-        if (count <= 0 || sum <= 0L) return 0;
-
-        long averageLandHeight = sum / count;
+        if (positiveLandCount <= 0L || positiveHeightSum <= 0L) return 0L;
+        long averageLandHeight = positiveHeightSum / positiveLandCount;
         long horizontalReference = Math.multiplyExact(
                 (long) radius,
                 ElevationField.SUBUNITS_PER_CELL);
         long reliefPpm = averageLandHeight * PPM / horizontalReference;
-        return (int) Math.min(
+        return Math.min(
                 recipe.coastalReliefFullScalePpm(),
                 Math.max(0L, reliefPpm));
-    }
-
-    private static long rectangleSum(
-            long[] integral,
-            int stride,
-            int minX,
-            int minY,
-            int maxX,
-            int maxY) {
-        int left = minX;
-        int top = minY;
-        int right = maxX + 1;
-        int bottom = maxY + 1;
-        return integral[bottom * stride + right]
-                - integral[top * stride + right]
-                - integral[bottom * stride + left]
-                + integral[top * stride + left];
-    }
-
-    private static int rectangleSum(
-            int[] integral,
-            int stride,
-            int minX,
-            int minY,
-            int maxX,
-            int maxY) {
-        int left = minX;
-        int top = minY;
-        int right = maxX + 1;
-        int bottom = maxY + 1;
-        return integral[bottom * stride + right]
-                - integral[top * stride + right]
-                - integral[bottom * stride + left]
-                + integral[top * stride + left];
     }
 
     private static long bodyDepthCap(
@@ -837,11 +771,5 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
     private record CoastalCharacterResult(
             int[] character,
             int[] componentScratch) {
-    }
-
-    private record LandReliefIntegral(
-            int stride,
-            long[] positiveHeightSum,
-            int[] positiveLandCount) {
     }
 }
