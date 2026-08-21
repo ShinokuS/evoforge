@@ -652,13 +652,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
 
         double cutoff = 0d;
         if (positiveCount > maximumLandCells) {
-            double[] positive = new double[positiveCount];
-            int positiveIndex = 0;
-            for (double value : score) {
-                if (value > 0d) positive[positiveIndex++] = value;
-            }
-            Arrays.sort(positive);
-            cutoff = positive[positiveCount - maximumLandCells];
+            cutoff = PositiveDoubleRadixSelector.select(
+                    score,
+                    positiveCount,
+                    positiveCount - maximumLandCells);
         }
 
         boolean[] support = new boolean[score.length];
