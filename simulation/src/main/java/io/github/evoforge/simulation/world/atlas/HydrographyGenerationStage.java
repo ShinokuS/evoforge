@@ -33,11 +33,11 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
-        boolean[] channels = new boolean[area];
+        long[] channelWords = DenseHydrographyField.newPackedMask(area);
 
         GenerationRevision revision = genesis.generationRevision();
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
-            return new DenseHydrographyField(bounds, channels);
+            return DenseHydrographyField.takePackedOwnership(bounds, channelWords);
         }
         if (!usesGeneratedChannels(revision)) {
             throw new IllegalArgumentException(
@@ -51,11 +51,14 @@ public final class HydrographyGenerationStage implements HydrographyGenerator {
             for (long x = bounds.minX(); x <= (long) bounds.maxX(); x++) {
                 int worldX = (int) x;
                 long contributing = drainage.contributingAreaAt(worldX, worldY);
-                channels[index++] = contributing >= threshold
-                        && elevation.elevationAt(worldX, worldY) < bounds.maxZ();
+                if (contributing >= threshold
+                        && elevation.elevationAt(worldX, worldY) < bounds.maxZ()) {
+                    DenseHydrographyField.setPacked(channelWords, index);
+                }
+                index++;
             }
         }
-        return new DenseHydrographyField(bounds, channels);
+        return DenseHydrographyField.takePackedOwnership(bounds, channelWords);
     }
 
     private static boolean usesGeneratedChannels(GenerationRevision revision) {
