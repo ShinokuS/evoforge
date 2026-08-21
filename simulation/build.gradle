@@ -57,6 +57,17 @@ tasks.register('worldgenScaleProfile', Test) {
     systemProperty 'evoforge.worldgen.profile.side',
             System.getProperty('evoforge.worldgen.profile.side', '512')
 
+    if (Boolean.parseBoolean(System.getProperty('evoforge.worldgen.profile.jfr', 'false'))) {
+        def recording = layout.buildDirectory.file('jfr/worldgen-profile.jfr').get().asFile
+        doFirst {
+            recording.parentFile.mkdirs()
+            if (recording.exists()) {
+                recording.delete()
+            }
+        }
+        jvmArgs "-XX:StartFlightRecording=filename=${recording.absolutePath},settings=profile,dumponexit=true"
+    }
+
     testLogging {
         events "passed", "skipped", "failed"
         exceptionFormat = "full"
