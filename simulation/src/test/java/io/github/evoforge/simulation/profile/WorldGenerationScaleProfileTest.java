@@ -20,6 +20,7 @@ final class WorldGenerationScaleProfileTest {
     private static final long SEED = 4_859_186_304_997_574_751L;
     private static final int LAND_COVERAGE_PPM = 830_000;
     private static final int SAMPLE_COUNT = 4_096;
+    private static final int BREAKDOWN_SIDE = 512;
 
     @Test
     @Tag("worldgen-scale-profile")
@@ -28,8 +29,8 @@ final class WorldGenerationScaleProfileTest {
         if (side < 32) {
             throw new IllegalArgumentException("worldgen profile side must be >= 32");
         }
-        WorldGenesis genesis = genesis(side);
         WorldGenerationAlgorithms algorithms = WorldGenerationAlgorithms.standard();
+        WorldGenesis genesis = genesis(side, GenerationRevision.V15);
 
         Runtime runtime = Runtime.getRuntime();
         long beforeBytes = usedHeap(runtime);
@@ -57,6 +58,35 @@ final class WorldGenerationScaleProfileTest {
                 millis(start, afterElevation), mib(elevationBytes - beforeBytes),
                 millis(afterElevation, end), mib(finalBytes - elevationBytes),
                 millis(start, end), mib(finalBytes - beforeBytes), checksum);
+
+        profileElevationRevisionBreakdown(Math.min(BREAKDOWN_SIDE, side), algorithms);
+    }
+
+    private static void profileElevationRevisionBreakdown(
+            int side,
+            WorldGenerationAlgorithms algorithms) {
+        System.out.printf(Locale.ROOT,
+                "WORLDGEN_REVISION_BREAKDOWN side=%d cells=%d seed=%d%n",
+                side,
+                Math.multiplyExact(side, side),
+                SEED);
+        for (GenerationRevision revision : new GenerationRevision[] {
+                GenerationRevision.V12,
+                GenerationRevision.V13,
+                GenerationRevision.V14,
+                GenerationRevision.V15
+        }) {
+            WorldGenesis genesis = genesis(side, revision);
+            long start = System.nanoTime();
+            var elevation = algorithms.elevation().generate(genesis);
+            long end = System.nanoTime();
+            long checksum = sampledElevationChecksum(side, elevation);
+            System.out.printf(Locale.ROOT,
+                    "  revision=%s elevation_ms=%.3f checksum=%016x%n",
+                    revision,
+                    millis(start, end),
+                    checksum);
+        }
     }
 
     private static long sampledChecksum(
@@ -83,7 +113,26 @@ final class WorldGenerationScaleProfileTest {
         return state;
     }
 
-    private static WorldGenesis genesis(int side) {
+    private static long sampledElevationChecksum(
+            int side,
+            io.github.evoforge.simulation.world.atlas.ElevationField elevation) {
+        WorldBounds bounds = elevation.bounds();
+        int area = Math.multiplyExact(side, side);
+        int samples = Math.min(SAMPLE_COUNT, area);
+        long state = 0x243f6a8885a308d3L;
+        for (int sample = 0; sample < samples; sample++) {
+            long mixed = mix64(SEED ^ (sample * 0x9e3779b97f4a7c15L));
+            int index = (int) Long.remainderUnsigned(mixed, area);
+            int localY = index / side;
+            int localX = index - localY * side;
+            int x = bounds.minX() + localX;
+            int y = bounds.minY() + localY;
+            state = mix64(state ^ elevation.elevationSubunitsAt(x, y));
+        }
+        return state;
+    }
+
+    private static WorldGenesis genesis(int side, GenerationRevision revision) {
         int min = -side / 2;
         WorldBounds bounds = new WorldBounds(
                 min, min + side - 1,
@@ -102,7 +151,7 @@ final class WorldGenerationScaleProfileTest {
         return new WorldGenesis(
                 new WorldSpec(bounds),
                 SEED,
-                GenerationRevision.V15,
+                revision,
                 RngRevision.V1,
                 intent);
     }
