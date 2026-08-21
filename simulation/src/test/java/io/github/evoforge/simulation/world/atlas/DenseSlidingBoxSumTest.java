@@ -28,11 +28,14 @@ final class DenseSlidingBoxSumTest {
             for (int cell = 0; cell < area; cell++) {
                 source[cell] = random.nextInt(1_000_001);
             }
+            DenseSlidingBoxSum.Workspace workspace = DenseSlidingBoxSum.workspace(
+                    width,
+                    height,
+                    radii[radii.length - 1]);
 
             for (int radius : radii) {
-                long[] scratch = new long[area];
                 long[] actual = new long[area];
-                DenseSlidingBoxSum.sumInto(source, width, height, radius, scratch, actual);
+                DenseSlidingBoxSum.sumInto(source, width, height, radius, actual, workspace);
                 assertArrayEquals(
                         reference(source, width, height, radius),
                         actual,
@@ -42,7 +45,7 @@ final class DenseSlidingBoxSumTest {
     }
 
     @Test
-    void mayReplaceSourceInPlaceAfterHorizontalScratchIsComplete() {
+    void mayReplaceSourceInPlaceAfterContributingRowsAreBuffered() {
         int width = 7;
         int height = 5;
         int radius = 2;
@@ -51,23 +54,42 @@ final class DenseSlidingBoxSumTest {
             source[cell] = cell * 17L + 3L;
         }
         long[] expected = reference(source, width, height, radius);
-        long[] scratch = new long[source.length];
+        DenseSlidingBoxSum.Workspace workspace = DenseSlidingBoxSum.workspace(width, height, radius);
 
-        DenseSlidingBoxSum.sumInto(source, width, height, radius, scratch, source);
+        DenseSlidingBoxSum.sumInto(source, width, height, radius, source, workspace);
 
         assertArrayEquals(expected, source);
     }
 
     @Test
-    void rejectsScratchAliasingBecauseItsLifetimeOverlapsBothPasses() {
+    void workspaceCanBeReusedAcrossFieldsAndSmallerRadii() {
+        int width = 9;
+        int height = 8;
+        DenseSlidingBoxSum.Workspace workspace = DenseSlidingBoxSum.workspace(width, height, 5);
+        long[] first = new long[width * height];
+        long[] second = new long[width * height];
+        for (int cell = 0; cell < first.length; cell++) {
+            first[cell] = cell + 1L;
+            second[cell] = (cell * 13L + 5L) % 101L;
+        }
+        long[] expectedFirst = reference(first, width, height, 5);
+        long[] expectedSecond = reference(second, width, height, 2);
+
+        DenseSlidingBoxSum.sumInto(first, width, height, 5, first, workspace);
+        DenseSlidingBoxSum.sumInto(second, width, height, 2, second, workspace);
+
+        assertArrayEquals(expectedFirst, first);
+        assertArrayEquals(expectedSecond, second);
+    }
+
+    @Test
+    void rejectsWorkspaceThatCannotCoverRequestedRadius() {
         long[] source = {1L, 2L, 3L, 4L};
         long[] output = new long[4];
+        DenseSlidingBoxSum.Workspace workspace = DenseSlidingBoxSum.workspace(2, 2, 1);
         assertThrows(
                 IllegalArgumentException.class,
-                () -> DenseSlidingBoxSum.sumInto(source, 2, 2, 1, source, output));
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> DenseSlidingBoxSum.sumInto(source, 2, 2, 1, output, output));
+                () -> DenseSlidingBoxSum.sumInto(source, 2, 2, 2, output, workspace));
     }
 
     private static long[] reference(long[] source, int width, int height, int radius) {
