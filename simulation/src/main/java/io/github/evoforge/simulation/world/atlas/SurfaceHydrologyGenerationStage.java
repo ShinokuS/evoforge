@@ -83,11 +83,12 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = Math.multiplyExact(width, height);
         int[] initialWater = new int[area];
-        boolean[] shoreline = new boolean[area];
+        long[] shorelineWords = DenseSurfaceHydrologyField.newPackedShoreline(area);
 
         GenerationRevision revision = genesis.generationRevision();
         if (GenerationRevision.V1.equals(revision) || GenerationRevision.V2.equals(revision)) {
-            return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
+            return DenseSurfaceHydrologyField.takePackedOwnership(
+                    bounds, initialWater, shorelineWords);
         }
         boolean climateAware = usesClimateMoistureBalance(revision);
         if (!GenerationRevision.V3.equals(revision)
@@ -123,11 +124,14 @@ public final class SurfaceHydrologyGenerationStage implements SurfaceHydrologyGe
             for (int localX = 0; localX < width; localX++) {
                 int index = localY * width + localX;
                 if (initialWater[index] > CellVolume.EMPTY) continue;
-                shoreline[index] = hasWetNeighbor(localX, localY, width, height, initialWater);
+                if (hasWetNeighbor(localX, localY, width, height, initialWater)) {
+                    DenseSurfaceHydrologyField.setPacked(shorelineWords, index);
+                }
             }
         }
 
-        return new DenseSurfaceHydrologyField(bounds, initialWater, shoreline);
+        return DenseSurfaceHydrologyField.takePackedOwnership(
+                bounds, initialWater, shorelineWords);
     }
 
     private static boolean usesClimateMoistureBalance(GenerationRevision revision) {
