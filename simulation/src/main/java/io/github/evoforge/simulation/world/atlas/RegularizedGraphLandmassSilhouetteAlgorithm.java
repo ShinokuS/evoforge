@@ -195,7 +195,12 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         int[][] neighbors = new int[count][];
         double[][] neighborWeights = new double[count][];
         for (int site = 0; site < count; site++) {
-            NeighborSet set = nearestLocalNeighbors(site, columns, rows, x, y);
+            NeighborSet set = nearestLocalNeighbors(
+                    site,
+                    columns,
+                    rows,
+                    x,
+                    y);
             neighbors[site] = set.sites();
             neighborWeights[site] = set.weights();
         }
@@ -325,7 +330,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                     int seed = seeds[existing];
                     double dx = graph.x()[site] - graph.x()[seed];
                     double dy = graph.y()[site] - graph.y()[seed];
-                    minimumDistanceSquared = Math.min(minimumDistanceSquared, dx * dx + dy * dy);
+                    minimumDistanceSquared = Math.min(
+                            minimumDistanceSquared,
+                            dx * dx + dy * dy);
                 }
                 double jitter = 0.92d + 0.16d
                         * randomPpm(streams.seedJitter(), site, seedIndex, 0L) / PPM;
@@ -360,8 +367,11 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                     / (double) PPM * TWO_PI;
             axisX[cluster] = StrictMath.cos(angle);
             axisY[cluster] = StrictMath.sin(angle);
-            elongation[cluster] = centeredUnit(streams.clusterElongation(), cluster, 0L, 0L)
-                    * MAX_CLUSTER_ELONGATION;
+            elongation[cluster] = centeredUnit(
+                    streams.clusterElongation(),
+                    cluster,
+                    0L,
+                    0L) * MAX_CLUSTER_ELONGATION;
         }
 
         double geographyScale = Math.max(3d, graph.spacingCells() * 3.8d);
@@ -397,8 +407,12 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
 
             double normalizedDistance = bestDistance / Math.max(1d, graph.spacingCells());
             double broadNoise = smoothNoise(
-                    streams.geography(), graph.x()[site], graph.y()[site], geographyScale);
-            double geographicScore = -normalizedDistance + broadNoise * GEOGRAPHY_NOISE_AMPLITUDE;
+                    streams.geography(),
+                    graph.x()[site],
+                    graph.y()[site],
+                    geographyScale);
+            double geographicScore = -normalizedDistance
+                    + broadNoise * GEOGRAPHY_NOISE_AMPLITUDE;
 
             double separator = 0d;
             if (seeds.length > 1 && Double.isFinite(secondDistance)) {
@@ -473,7 +487,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         }
     }
 
-    private static boolean[] selectVolume(ControlGraph graph, double[] score, int desiredSites) {
+    private static boolean[] selectVolume(
+            ControlGraph graph,
+            double[] score,
+            int desiredSites) {
         RankedSite[] ranked = new RankedSite[graph.interiorCount()];
         int count = 0;
         for (int site = 0; site < graph.x().length; site++) {
@@ -511,10 +528,6 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
 
         double spacing = graph.spacingCells();
         double kernelRadius = Math.max(3d, spacing * KERNEL_RADIUS_IN_SPACING);
-        double kernelRadiusSquaredCull = kernelRadius * kernelRadius;
-        for (int ulp = 0; ulp < 4; ulp++) {
-            kernelRadiusSquaredCull = Math.nextUp(kernelRadiusSquaredCull);
-        }
         double maximumJitterInSpacing = scaffold.siteJitterPpm() / (double) PPM;
         /*
          * A control point at lattice offset k starts half a spacing from the raster cell's lattice
@@ -574,8 +587,6 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                         int site = gy * graph.columns() + gx;
                         double dx = px - graph.x()[site];
                         double dy = py - graph.y()[site];
-                        double distanceSquared = dx * dx + dy * dy;
-                        if (distanceSquared > kernelRadiusSquaredCull) continue;
                         double distance = StrictMath.hypot(dx, dy);
                         if (distance >= kernelRadius) continue;
                         double weight = wendlandC2(distance / kernelRadius);
@@ -585,6 +596,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                     }
                 }
 
+                /* External ocean is a negative boundary condition in the same implicit field. */
                 double boundaryRadius = Math.max(2d, spacing * 1.15d);
                 double boundaryDistance = Math.max(0d, edgeDistance);
                 if (boundaryDistance < boundaryRadius) {
@@ -631,7 +643,8 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             if (value > 0d) positiveCount++;
         }
         if (positiveCount == 0) {
-            throw new IllegalStateException("regularized land phase produced no terrestrial support");
+            throw new IllegalStateException(
+                    "regularized land phase produced no terrestrial support");
         }
 
         double cutoff = 0d;
@@ -653,7 +666,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             if (!(score[cellIndex] > cutoff)) continue;
             support[cellIndex] = true;
             supportCount++;
-            maximumInterior = Math.max(maximumInterior, score[cellIndex] - cutoff);
+            maximumInterior = Math.max(
+                    maximumInterior,
+                    score[cellIndex] - cutoff);
         }
 
         if (supportCount == 0 || supportCount > maximumLandCells) {
@@ -666,7 +681,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             if (!support[cellIndex]) continue;
             long normalized = StrictMath.round(
                     (score[cellIndex] - cutoff) / denominator * PPM);
-            potentialPpm[cellIndex] = (int) Math.max(1L, Math.min((long) PPM, normalized));
+            potentialPpm[cellIndex] = (int) Math.max(
+                    1L,
+                    Math.min((long) PPM, normalized));
         }
 
         return new LandmassSilhouette(
@@ -677,7 +694,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 influencePpm);
     }
 
-    private static boolean contains(int[] values, int length, int target) {
+    private static boolean contains(
+            int[] values,
+            int length,
+            int target) {
         for (int index = 0; index < length; index++) {
             if (values[index] == target) return true;
         }
@@ -709,7 +729,8 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             long x,
             long y,
             long ordinal) {
-        return randomPpm(sampler, x, y, ordinal) / (double) PPM * 2d - 1d;
+        return randomPpm(sampler, x, y, ordinal)
+                / (double) PPM * 2d - 1d;
     }
 
     private static int randomPpm(
@@ -717,11 +738,18 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             long x,
             long y,
             long ordinal) {
-        int sample = (int) ((sampler.sampleLong(x, y, 0L, ordinal) >>> 48) & SAMPLE_MAX);
+        int sample = (int) ((sampler.sampleLong(
+                x,
+                y,
+                0L,
+                ordinal) >>> 48) & SAMPLE_MAX);
         return (int) ((long) sample * PPM / SAMPLE_MAX);
     }
 
-    private static double lerp(double from, double to, double amount) {
+    private static double lerp(
+            double from,
+            double to,
+            double amount) {
         return from + (to - from) * amount;
     }
 
@@ -733,7 +761,11 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         return Math.max(0d, Math.min(1d, value));
     }
 
-    private static int edgeDistance(int x, int y, int width, int height) {
+    private static int edgeDistance(
+            int x,
+            int y,
+            int width,
+            int height) {
         return Math.min(
                 Math.min(x, width - 1 - x),
                 Math.min(y, height - 1 - y));
@@ -775,16 +807,24 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             int interiorCount) {
     }
 
-    private record NeighborSet(int[] sites, double[] weights) {
+    private record NeighborSet(
+            int[] sites,
+            double[] weights) {
     }
 
-    private record CandidateNeighbor(int site, double distanceSquared) {
+    private record CandidateNeighbor(
+            int site,
+            double distanceSquared) {
     }
 
-    private record GeographicForcing(double[] score, double[] separationPenalty) {
+    private record GeographicForcing(
+            double[] score,
+            double[] separationPenalty) {
     }
 
-    private record RankedSite(int site, double score) {
+    private record RankedSite(
+            int site,
+            double score) {
     }
 
     private record CoastField(double[] score) {
