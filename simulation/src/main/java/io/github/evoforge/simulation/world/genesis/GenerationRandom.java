@@ -51,15 +51,7 @@ public final class GenerationRandom {
      * tiles. Sampling order is irrelevant.</p>
      */
     public BoundSampler bind(GenerationStageId stage, GenerationPurposeId purpose) {
-        if (stage == null) {
-            throw new IllegalArgumentException("stage must not be null");
-        }
-        if (purpose == null) {
-            throw new IllegalArgumentException("purpose must not be null");
-        }
-        long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
-        long purposeState = mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
-        return new BoundSampler(purposeState);
+        return new BoundSampler(semanticState(stage, purpose));
     }
 
     public long sampleLong(
@@ -69,7 +61,21 @@ public final class GenerationRandom {
             long y,
             long z,
             long ordinal) {
-        return bind(stage, purpose).sampleLong(x, y, z, ordinal);
+        if (ordinal < 0) {
+            throw new IllegalArgumentException("ordinal must be >= 0");
+        }
+        return sampleFromState(semanticState(stage, purpose), x, y, z, ordinal);
+    }
+
+    private long semanticState(GenerationStageId stage, GenerationPurposeId purpose) {
+        if (stage == null) {
+            throw new IllegalArgumentException("stage must not be null");
+        }
+        if (purpose == null) {
+            throw new IllegalArgumentException("purpose must not be null");
+        }
+        long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
+        return mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
     }
 
     /** A stateless deterministic sampler with master seed, stage and purpose already bound. */
@@ -84,11 +90,20 @@ public final class GenerationRandom {
             if (ordinal < 0) {
                 throw new IllegalArgumentException("ordinal must be >= 0");
             }
-            long state = mix64(semanticState ^ x ^ X_SALT);
-            state = mix64(state ^ y ^ Y_SALT);
-            state = mix64(state ^ z ^ Z_SALT);
-            return mix64(state ^ ordinal ^ ORDINAL_SALT);
+            return sampleFromState(semanticState, x, y, z, ordinal);
         }
+    }
+
+    private static long sampleFromState(
+            long semanticState,
+            long x,
+            long y,
+            long z,
+            long ordinal) {
+        long state = mix64(semanticState ^ x ^ X_SALT);
+        state = mix64(state ^ y ^ Y_SALT);
+        state = mix64(state ^ z ^ Z_SALT);
+        return mix64(state ^ ordinal ^ ORDINAL_SALT);
     }
 
     private static long stableStringHash(String value) {
