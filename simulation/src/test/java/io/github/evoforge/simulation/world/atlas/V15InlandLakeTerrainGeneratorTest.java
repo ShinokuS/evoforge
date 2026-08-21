@@ -64,8 +64,7 @@ final class V15InlandLakeTerrainGeneratorTest {
                 calibrator,
                 InlandLakeDomainRecipe.balanced(),
                 lakeAlgorithm,
-                InlandLakeShoreConditioningAlgorithm.standard(),
-                V12LandformRecipe.balanced().coast());
+                InlandLakeShoreConditioningAlgorithm.standard());
 
         ElevationField result = generator.generate(genesis);
         assertEquals(50, dryCellCount(result),
@@ -105,7 +104,6 @@ final class V15InlandLakeTerrainGeneratorTest {
                 recipe,
                 fixedLake(bounds, 40, 6),
                 InlandLakeShoreConditioningAlgorithm.standard(),
-                V12LandformRecipe.balanced().coast(),
                 true);
 
         ElevationField result = generator.generate(genesis);
