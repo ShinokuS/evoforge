@@ -1,8 +1,0 @@
-{
-    "key": "core:temperate_terrain",
-    "presets": [
-        "core:natural_ground",
-        "core:depositional_sand"
-    ],
-    "materialSet": "core:temperate_ground"
-}

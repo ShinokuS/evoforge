@@ -1,41 +1,31 @@
 package io.github.evoforge.simulation.definition;
 
-import java.math.BigDecimal;
-
 /**
- * Exact authored coordinate on the closed normalized interval {@code [0, 1]}.
+ * Human-authored semantic coordinate on the closed interval {@code [0, 1]}.
  *
- * <p>JSON may remain convenient decimal notation, while domain code stores an exact fixed-point
- * value. The coordinate is semantic: it expresses relative authored intent and carries no physical
- * unit by itself.</p>
+ * <p>The value deliberately has no physical unit, fixed-point scale, cell count, threshold or
+ * simulation constant attached to it. A domain compiler may later translate this intent into the
+ * exact representation required by generation or simulation logic.</p>
  */
-public record NormalizedValue(int partsPerMillion) {
-    public static final int SCALE = 1_000_000;
-
+public record NormalizedValue(double value) {
     public NormalizedValue {
-        if (partsPerMillion < 0 || partsPerMillion > SCALE) {
-            throw new IllegalArgumentException(
-                    "normalized value must be within 0..1_000_000 parts per million");
+        if (!Double.isFinite(value) || value < 0.0 || value > 1.0) {
+            throw new IllegalArgumentException("normalized value must be finite and within 0..1");
         }
     }
 
-    public static NormalizedValue ofPartsPerMillion(int partsPerMillion) {
-        return new NormalizedValue(partsPerMillion);
+    public static NormalizedValue of(double value) {
+        return new NormalizedValue(value);
     }
 
-    /** Parses an authored decimal exactly; values needing more than six decimal places are rejected. */
     public static NormalizedValue parse(String decimal) {
         if (decimal == null) {
             throw new IllegalArgumentException("normalized decimal must not be null");
         }
         try {
-            BigDecimal value = new BigDecimal(decimal);
-            int partsPerMillion = value.movePointRight(6).intValueExact();
-            return new NormalizedValue(partsPerMillion);
-        } catch (NumberFormatException | ArithmeticException exception) {
-            throw new IllegalArgumentException(
-                    "normalized value must be an exact decimal within 0..1 with at most six decimal places",
-                    exception);
+            return new NormalizedValue(Double.parseDouble(decimal));
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("normalized value must be a decimal within 0..1", exception);
         }
     }
 }

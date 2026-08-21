@@ -16,7 +16,7 @@ final class GeologyProfileCompilerTest {
     void canonicalAssetMatchesCoreCompositionAndUsesStableSortedOrder() {
         CompiledGeologyProfile assetProfile = new GeologyProfileCompiler().compile(
                 new GeologyProfileLoader().load(asset(
-                        "assets/definitions/worldgen/geology/temperate-crust.json")));
+                        "assets/definitions/geology/temperate-crust.json")));
         CompiledGeologyProfile coreProfile = GeologyProfiles.temperateCrust();
 
         assertEquals(GeologyProfiles.TEMPERATE_CRUST, assetProfile.key());
@@ -32,7 +32,7 @@ final class GeologyProfileCompilerTest {
     @Test
     void authoredUnitOrderDoesNotChangeCompiledGenerationOrder() {
         GeologyProfileDefinition original = new GeologyProfileLoader().load(asset(
-                "assets/definitions/worldgen/geology/temperate-crust.json"));
+                "assets/definitions/geology/temperate-crust.json"));
         List<GeologyProfileDefinition.UnitDefinition> reversed = new ArrayList<>(original.units());
         Collections.reverse(reversed);
 

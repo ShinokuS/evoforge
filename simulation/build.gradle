@@ -13,7 +13,7 @@ dependencies {
 
 test {
     useJUnitPlatform {
-        excludeTags 'scale-profile', 'worldgen-scale-profile', 'generated-world-audit'
+        excludeTags 'scale-profile'
     }
 
     testLogging {
@@ -34,64 +34,6 @@ tasks.register('scaleProfile', Test) {
 
     systemProperty 'evoforge.scale.profile',
             System.getProperty('evoforge.scale.profile', 'medium')
-
-    testLogging {
-        events "passed", "skipped", "failed"
-        exceptionFormat = "full"
-        showStandardStreams = true
-    }
-
-    outputs.upToDateWhen { false }
-}
-
-tasks.register('worldgenScaleProfile', Test) {
-    description = 'Runs deterministic end-to-end world-generation profiling at a configurable side length.'
-    group = 'verification'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    maxHeapSize = System.getProperty('evoforge.worldgen.profile.maxHeap', '6g')
-
-    useJUnitPlatform {
-        includeTags 'worldgen-scale-profile'
-    }
-
-    systemProperty 'evoforge.worldgen.profile.side',
-            System.getProperty('evoforge.worldgen.profile.side', '512')
-
-    if (Boolean.parseBoolean(System.getProperty('evoforge.worldgen.profile.jfr', 'false'))) {
-        def recording = layout.buildDirectory.file('jfr/worldgen-profile.jfr').get().asFile
-        doFirst {
-            recording.parentFile.mkdirs()
-            if (recording.exists()) {
-                recording.delete()
-            }
-        }
-        jvmArgs "-XX:StartFlightRecording=filename=${recording.absolutePath},settings=profile,dumponexit=true"
-    }
-
-    testLogging {
-        events "passed", "skipped", "failed"
-        exceptionFormat = "full"
-        showStandardStreams = true
-    }
-
-    outputs.upToDateWhen { false }
-}
-
-tasks.register('generatedWorldAudit', Test) {
-    description = 'Runs deterministic generated-world warmup audits and prints checkpoint snapshots.'
-    group = 'verification'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-
-    useJUnitPlatform {
-        includeTags 'generated-world-audit'
-    }
-
-    systemProperty 'evoforge.generated.audit.ticks',
-            System.getProperty('evoforge.generated.audit.ticks', '100')
-    systemProperty 'evoforge.generated.audit.side',
-            System.getProperty('evoforge.generated.audit.side', '32')
 
     testLogging {
         events "passed", "skipped", "failed"

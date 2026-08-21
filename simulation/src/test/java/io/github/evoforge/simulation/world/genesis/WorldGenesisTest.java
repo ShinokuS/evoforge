@@ -3,65 +3,49 @@ package io.github.evoforge.simulation.world.genesis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import org.junit.jupiter.api.Test;
 
 final class WorldGenesisTest {
 
     @Test
-    void currentGenesisCapturesRequestedSpecSeedAndExplicitRevisions() {
+    void genesisContainsOnlyStructuralInputsSeedAndHumanAuthoredDefinition() {
         WorldSpec spec = new WorldSpec(new WorldBounds(-20, 30, -10, 40, -5, 12));
+        WorldGenerationIntent intent = definition();
 
-        WorldGenesis genesis = WorldGenesis.current(spec, Long.MIN_VALUE);
+        WorldGenesis genesis = new WorldGenesis(spec, Long.MIN_VALUE, intent);
 
         assertEquals(spec, genesis.spec());
         assertEquals(Long.MIN_VALUE, genesis.masterSeed());
-        assertEquals(GenerationRevision.V7, genesis.generationRevision());
-        assertEquals(RngRevision.V1, genesis.rngRevision());
+        assertEquals(intent, genesis.generationIntent());
     }
 
     @Test
-    void provenanceAllowsOlderOrFutureRevisionMetadataToRemainRepresentable() {
-        WorldSpec spec = new WorldSpec(new WorldBounds(0, 1, 0, 1, 0, 1));
-        WorldGenesis genesis = new WorldGenesis(
-                spec,
-                7L,
-                GenerationRevision.of("test:worldgen-v17"),
-                RngRevision.of("test:rng-v4"));
-
-        assertEquals("test:worldgen-v17", genesis.generationRevision().value());
-        assertEquals("test:rng-v4", genesis.rngRevision().value());
-    }
-
-    @Test
-    void genesisRejectsMissingRequiredMetadata() {
+    void genesisRejectsMissingRequiredInputs() {
         WorldSpec spec = new WorldSpec(new WorldBounds(0, 0, 0, 0, 0, 0));
+        WorldGenerationIntent intent = definition();
 
         assertThrows(IllegalArgumentException.class, () -> new WorldSpec(null));
-        assertThrows(IllegalArgumentException.class, () -> new WorldGenesis(
-                null, 0L, GenerationRevision.V1, RngRevision.V1));
-        assertThrows(IllegalArgumentException.class, () -> new WorldGenesis(
-                spec, 0L, null, RngRevision.V1));
-        assertThrows(IllegalArgumentException.class, () -> new WorldGenesis(
-                spec, 0L, GenerationRevision.V1, null));
+        assertThrows(IllegalArgumentException.class, () -> new WorldGenesis(null, 0L, intent));
+        assertThrows(IllegalArgumentException.class, () -> new WorldGenesis(spec, 0L, null));
     }
 
-    @Test
-    void stableGenesisIdentifiersUseNamespacedKeys() {
-        assertEquals("world:elevation", GenerationStageId.of("world:elevation").value());
-        assertEquals("world:base", GenerationPurposeId.of("world:base").value());
-        assertEquals("evoforge:worldgen-v1", GenerationRevision.V1.value());
-        assertEquals("evoforge:worldgen-v2", GenerationRevision.V2.value());
-        assertEquals("evoforge:worldgen-v3", GenerationRevision.V3.value());
-        assertEquals("evoforge:worldgen-v4", GenerationRevision.V4.value());
-        assertEquals("evoforge:worldgen-v5", GenerationRevision.V5.value());
-        assertEquals("evoforge:worldgen-v6", GenerationRevision.V6.value());
-        assertEquals("evoforge:worldgen-v7", GenerationRevision.V7.value());
-        assertEquals("evoforge:worldgen-v8", GenerationRevision.V8.value());
-
-        assertThrows(IllegalArgumentException.class, () -> GenerationStageId.of("Elevation"));
-        assertThrows(IllegalArgumentException.class, () -> GenerationPurposeId.of("world base"));
-        assertThrows(IllegalArgumentException.class, () -> GenerationRevision.of("v1"));
-        assertThrows(IllegalArgumentException.class, () -> RngRevision.of(""));
+    private static WorldGenerationIntent definition() {
+        return new WorldGenerationIntent(
+                NormalizedValue.of(0.5),
+                NormalizedValue.of(0.5),
+                NormalizedValue.of(0.35),
+                NormalizedValue.of(0.6),
+                NormalizedValue.of(0.45),
+                NormalizedValue.of(0.5),
+                NormalizedValue.of(0.35),
+                new MountainIntent(
+                        NormalizedValue.of(0.35),
+                        NormalizedValue.of(0.52),
+                        NormalizedValue.of(0.5),
+                        NormalizedValue.of(0.55),
+                        NormalizedValue.of(0.6),
+                        NormalizedValue.of(0.18)));
     }
 }

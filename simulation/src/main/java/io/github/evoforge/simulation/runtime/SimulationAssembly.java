@@ -10,7 +10,6 @@ import io.github.evoforge.simulation.world.agent.need.NeedSpec;
 import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinition;
 import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinition;
 import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinition;
-import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
 import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
@@ -20,9 +19,6 @@ import io.github.evoforge.simulation.world.landscape.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
 import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
 import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.materialization.TerrainMaterialResolver;
-import io.github.evoforge.simulation.world.materialization.TerrainMaterializationResult;
-import io.github.evoforge.simulation.world.materialization.WorldTerrainMaterializer;
 import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinition;
 import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinition;
@@ -196,42 +192,6 @@ public final class SimulationAssembly {
         }
         atmosphericWaterForcing = forcing;
         return this;
-    }
-
-    /** @deprecated Use {@link #atmosphericWaterForcing(AtmosphericWaterForcing)}. */
-    @Deprecated(forRemoval = true)
-    public SimulationAssembly generatedHydroClimate(AtmosphericWaterForcing forcing) {
-        return atmosphericWaterForcing(forcing);
-    }
-
-    /**
-     * Materializes generated elevation into the still-unstarted Landscape through the canonical
-     * one-way materialization boundary.
-     */
-    public TerrainMaterializationResult materializeGeneratedTerrain(
-            ElevationField elevation,
-            TerrainMaterialResolver materials) {
-        requireNotStarted();
-        if (elevation == null || materials == null) {
-            throw new IllegalArgumentException(
-                    "generated terrain materialization inputs must not be null");
-        }
-        if (worldBounds == null) {
-            throw new IllegalStateException(
-                    "world bounds must be configured before generated terrain materialization");
-        }
-        if (!worldBounds.equals(elevation.bounds())) {
-            throw new IllegalArgumentException(
-                    "generated elevation bounds must match runtime world bounds");
-        }
-
-        return new WorldTerrainMaterializer(
-                elevation,
-                materials,
-                definitions.landscape,
-                world.landscape.terrainExtents(),
-                world.landscape)
-                .materialize();
     }
 
     /** Defines the physical volume represented by one completely open simulation cell. */
