@@ -137,7 +137,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 recipe.scaffold(),
                 recipe.coast());
 
-        CoastField relaxed = new CoastField(CoastFieldRelaxationAlgorithm.standard().relax(
+        CoastField relaxed = new CoastField(CoastFieldRelaxationAlgorithm.standard().relaxOwned(
                 coast.score(),
                 width,
                 height,
