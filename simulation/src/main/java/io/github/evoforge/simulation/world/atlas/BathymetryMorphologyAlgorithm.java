@@ -27,6 +27,8 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
     private static final int CARDINAL_CHARACTER_WEIGHT = 1_000;
     private static final int DIAGONAL_CHARACTER_WEIGHT = 707;
     private static final int INFINITE_DISTANCE = Integer.MAX_VALUE / 4;
+    private static final int RADIX = 256;
+    private static final int RADIX_LEVELS = Long.BYTES;
 
     @Override
     public ElevationField generate(
@@ -50,18 +52,19 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
 
         long[] elevation = copyBaseElevation(base, bounds, width, height);
         int[] shorelineDistance = shorelineDistance(elevation, width, height);
-        int[] coastalCharacter = coastalCharacterField(
+        CoastalCharacterResult coastal = coastalCharacterField(
                 elevation,
                 shorelineDistance,
                 width,
                 height,
                 calibration.coastalContextRadiusCells(),
                 recipe);
-        boolean[] visited = new boolean[elevation.length];
-        int[] component = new int[elevation.length];
+        int[] coastalCharacter = coastal.character();
+        int[] component = coastal.componentScratch();
+        long[] visited = new long[Math.toIntExact(((long) elevation.length + 63L) >>> 6)];
 
         for (int cell = 0; cell < elevation.length; cell++) {
-            if (elevation[cell] >= 0L || visited[cell]) continue;
+            if (elevation[cell] >= 0L || isMarked(visited, cell)) continue;
             int componentSize = collectComponent(
                     cell,
                     elevation,
@@ -81,7 +84,7 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                     recipe);
         }
 
-        return new DenseElevationField(bounds, elevation);
+        return DenseElevationField.takeOwnership(bounds, elevation);
     }
 
     private static long[] copyBaseElevation(
@@ -89,6 +92,14 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
             WorldBounds targetBounds,
             int width,
             int height) {
+        if (base instanceof DenseElevationField dense) {
+            long[] storage = dense.readOnlyStorage();
+            if (storage.length != Math.multiplyExact(width, height)) {
+                throw new IllegalStateException("dense bathymetry base storage does not match world area");
+            }
+            return storage.clone();
+        }
+
         long[] elevation = new long[Math.multiplyExact(width, height)];
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
@@ -160,7 +171,7 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
      * vertical passes are evaluated in both orders and averaged so the blend has no preferred axis.
      * None of these operations touches final elevation.</p>
      */
-    private static int[] coastalCharacterField(
+    private static CoastalCharacterResult coastalCharacterField(
             long[] elevation,
             int[] shorelineDistance,
             int width,
@@ -199,48 +210,58 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
             nearshoreCharacter[cell] = (int) Math.min(PPM, blendedMass[cell] / blendedSupport[cell]);
         }
 
-        int[] propagated = propagateCoastalCharacter(
+        int[] componentScratch = propagateCoastalCharacterInPlace(
                 nearshoreCharacter,
                 elevation,
                 shorelineDistance,
                 width,
                 height);
-        return broadBlendConnectedWaterCharacter(
-                propagated,
+        broadBlendConnectedWaterCharacterInPlace(
+                nearshoreCharacter,
                 elevation,
                 width,
                 height,
                 contextRadius);
+        return new CoastalCharacterResult(nearshoreCharacter, componentScratch);
     }
 
-    private static int[] propagateCoastalCharacter(
-            int[] nearshoreCharacter,
+    /**
+     * Propagates in exact (distance, cell-index) order without a 64-bit key array or comparison sort.
+     *
+     * <p>The existing nearshore array is safe to update in place because every dependency has a
+     * strictly smaller shoreline distance. Before a cell is visited its entry still contains the
+     * original nearshore fallback; afterwards it contains the propagated value. The primitive cell
+     * order is retained and later reused as the component BFS workspace.</p>
+     */
+    private static int[] propagateCoastalCharacterInPlace(
+            int[] character,
             long[] elevation,
             int[] shorelineDistance,
             int width,
             int height) {
         int waterCount = 0;
+        int finiteCount = 0;
         for (int cell = 0; cell < elevation.length; cell++) {
-            if (elevation[cell] < 0L && shorelineDistance[cell] < INFINITE_DISTANCE) waterCount++;
+            if (elevation[cell] >= 0L) continue;
+            waterCount++;
+            if (shorelineDistance[cell] < INFINITE_DISTANCE) finiteCount++;
         }
 
-        long[] order = new long[waterCount];
+        int[] order = new int[waterCount];
         int orderIndex = 0;
         for (int cell = 0; cell < elevation.length; cell++) {
             if (elevation[cell] >= 0L || shorelineDistance[cell] >= INFINITE_DISTANCE) continue;
-            order[orderIndex++] = ((long) shorelineDistance[cell] << 32)
-                    | (cell & 0xffff_ffffL);
+            order[orderIndex++] = cell;
         }
-        Arrays.sort(order);
+        if (orderIndex != finiteCount) {
+            throw new IllegalStateException("bathymetry propagation count changed during materialization");
+        }
+        radixSortPropagationOrder(order, finiteCount, shorelineDistance);
 
-        int[] propagated = new int[elevation.length];
-        for (long key : order) {
-            int cell = (int) key;
+        for (int orderPosition = 0; orderPosition < finiteCount; orderPosition++) {
+            int cell = order[orderPosition];
             int distance = shorelineDistance[cell];
-            if (distance <= DIAGONAL_DISTANCE) {
-                propagated[cell] = nearshoreCharacter[cell];
-                continue;
-            }
+            if (distance <= DIAGONAL_DISTANCE) continue;
 
             int x = cell % width;
             int y = cell / width;
@@ -258,125 +279,208 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
                     int weight = dx == 0 || dy == 0
                             ? CARDINAL_CHARACTER_WEIGHT
                             : DIAGONAL_CHARACTER_WEIGHT;
-                    weightedCharacter += (long) propagated[neighbor] * weight;
+                    weightedCharacter += (long) character[neighbor] * weight;
                     totalWeight += weight;
                 }
             }
-            propagated[cell] = totalWeight > 0
-                    ? (int) (weightedCharacter / totalWeight)
-                    : nearshoreCharacter[cell];
+            if (totalWeight > 0) {
+                character[cell] = (int) (weightedCharacter / totalWeight);
+            }
         }
-        return propagated;
+        return order;
     }
 
-    private static int[] broadBlendConnectedWaterCharacter(
+    /** In-place MSD American-flag radix sort for the exact legacy 64-bit propagation key. */
+    private static void radixSortPropagationOrder(
+            int[] order,
+            int length,
+            int[] shorelineDistance) {
+        if (length <= 1) return;
+        int[][] counts = new int[RADIX_LEVELS][RADIX];
+        int[][] starts = new int[RADIX_LEVELS][RADIX];
+        int[][] next = new int[RADIX_LEVELS][RADIX];
+        radixSortPropagationRange(
+                order,
+                0,
+                length,
+                56,
+                0,
+                shorelineDistance,
+                counts,
+                starts,
+                next);
+    }
+
+    private static void radixSortPropagationRange(
+            int[] order,
+            int from,
+            int to,
+            int shift,
+            int depth,
+            int[] shorelineDistance,
+            int[][] countsByDepth,
+            int[][] startsByDepth,
+            int[][] nextByDepth) {
+        if (to - from <= 1 || shift < 0) return;
+
+        int[] counts = countsByDepth[depth];
+        int[] starts = startsByDepth[depth];
+        int[] next = nextByDepth[depth];
+        Arrays.fill(counts, 0);
+        for (int index = from; index < to; index++) {
+            counts[propagationKeyByte(order[index], shorelineDistance, shift)]++;
+        }
+
+        int position = from;
+        for (int bucket = 0; bucket < RADIX; bucket++) {
+            starts[bucket] = position;
+            next[bucket] = position;
+            position += counts[bucket];
+        }
+
+        for (int bucket = 0; bucket < RADIX; bucket++) {
+            int end = starts[bucket] + counts[bucket];
+            while (next[bucket] < end) {
+                int positionInBucket = next[bucket];
+                int value = order[positionInBucket];
+                int target = propagationKeyByte(value, shorelineDistance, shift);
+                if (target == bucket) {
+                    next[bucket]++;
+                    continue;
+                }
+                int targetPosition = next[target]++;
+                int displaced = order[targetPosition];
+                order[targetPosition] = value;
+                order[positionInBucket] = displaced;
+            }
+        }
+
+        for (int bucket = 0; bucket < RADIX; bucket++) {
+            int bucketFrom = starts[bucket];
+            int bucketTo = bucketFrom + counts[bucket];
+            if (bucketTo - bucketFrom > 1) {
+                radixSortPropagationRange(
+                        order,
+                        bucketFrom,
+                        bucketTo,
+                        shift - 8,
+                        depth + 1,
+                        shorelineDistance,
+                        countsByDepth,
+                        startsByDepth,
+                        nextByDepth);
+            }
+        }
+    }
+
+    private static int propagationKeyByte(int cell, int[] shorelineDistance, int shift) {
+        long key = ((long) shorelineDistance[cell] << 32) | (cell & 0xffff_ffffL);
+        return (int) ((key >>> shift) & 0xffL);
+    }
+
+    /**
+     * Applies the same connected-water square-window blend as before in linear work.
+     *
+     * <p>Within one contiguous water run, stopping at the first land cell is exactly equivalent to
+     * clipping the radius window to that run. Prefix sums therefore replace the old per-cell
+     * radius walk without changing integer averages. Two world-sized scratch arrays are reused for
+     * both axis orders, and {@code source} becomes the final result in place.</p>
+     */
+    private static void broadBlendConnectedWaterCharacterInPlace(
             int[] source,
             long[] elevation,
             int width,
             int height,
             int radius) {
-        int[] horizontalThenVertical = blendVertical(
-                blendHorizontal(source, elevation, width, height, radius),
-                elevation,
-                width,
-                height,
-                radius);
-        int[] verticalThenHorizontal = blendHorizontal(
-                blendVertical(source, elevation, width, height, radius),
-                elevation,
-                width,
-                height,
-                radius);
+        int[] first = new int[source.length];
+        int[] second = new int[source.length];
+        long[] prefix = new long[Math.max(width, height) + 1];
 
-        int[] result = source.clone();
-        for (int cell = 0; cell < result.length; cell++) {
+        blendHorizontalInto(source, elevation, width, height, radius, first, prefix);
+        blendVerticalInto(first, elevation, width, height, radius, second, prefix);
+
+        blendVerticalInto(source, elevation, width, height, radius, first, prefix);
+        blendHorizontalInto(first, elevation, width, height, radius, source, prefix);
+
+        for (int cell = 0; cell < source.length; cell++) {
             if (elevation[cell] >= 0L) continue;
-            result[cell] = (horizontalThenVertical[cell] + verticalThenHorizontal[cell]) / 2;
+            source[cell] = (second[cell] + source[cell]) / 2;
         }
-        return result;
     }
 
-    private static int[] blendHorizontal(
+    private static void blendHorizontalInto(
             int[] source,
             long[] elevation,
             int width,
             int height,
-            int radius) {
-        int[] result = source.clone();
+            int radius,
+            int[] result,
+            long[] prefix) {
         for (int y = 0; y < height; y++) {
             int row = y * width;
-            for (int x = 0; x < width; x++) {
+            int x = 0;
+            while (x < width) {
                 int cell = row + x;
-                if (elevation[cell] >= 0L) continue;
-                long sum = source[cell];
-                int count = 1;
-                boolean leftOpen = true;
-                boolean rightOpen = true;
-                for (int step = 1; step <= radius && (leftOpen || rightOpen); step++) {
-                    if (leftOpen) {
-                        int leftX = x - step;
-                        if (leftX >= 0 && elevation[row + leftX] < 0L) {
-                            sum += source[row + leftX];
-                            count++;
-                        } else {
-                            leftOpen = false;
-                        }
-                    }
-                    if (rightOpen) {
-                        int rightX = x + step;
-                        if (rightX < width && elevation[row + rightX] < 0L) {
-                            sum += source[row + rightX];
-                            count++;
-                        } else {
-                            rightOpen = false;
-                        }
-                    }
+                if (elevation[cell] >= 0L) {
+                    result[cell] = source[cell];
+                    x++;
+                    continue;
                 }
-                result[cell] = (int) (sum / count);
+
+                int runStart = x;
+                int runEnd = x + 1;
+                while (runEnd < width && elevation[row + runEnd] < 0L) runEnd++;
+                int runLength = runEnd - runStart;
+                prefix[0] = 0L;
+                for (int offset = 0; offset < runLength; offset++) {
+                    prefix[offset + 1] = prefix[offset] + source[row + runStart + offset];
+                }
+                for (int offset = 0; offset < runLength; offset++) {
+                    int left = Math.max(0, offset - radius);
+                    int right = Math.min(runLength - 1, offset + radius);
+                    long sum = prefix[right + 1] - prefix[left];
+                    result[row + runStart + offset] = (int) (sum / (right - left + 1));
+                }
+                x = runEnd;
             }
         }
-        return result;
     }
 
-    private static int[] blendVertical(
+    private static void blendVerticalInto(
             int[] source,
             long[] elevation,
             int width,
             int height,
-            int radius) {
-        int[] result = source.clone();
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
+            int radius,
+            int[] result,
+            long[] prefix) {
+        for (int x = 0; x < width; x++) {
+            int y = 0;
+            while (y < height) {
                 int cell = y * width + x;
-                if (elevation[cell] >= 0L) continue;
-                long sum = source[cell];
-                int count = 1;
-                boolean upOpen = true;
-                boolean downOpen = true;
-                for (int step = 1; step <= radius && (upOpen || downOpen); step++) {
-                    if (upOpen) {
-                        int upY = y - step;
-                        if (upY >= 0 && elevation[upY * width + x] < 0L) {
-                            sum += source[upY * width + x];
-                            count++;
-                        } else {
-                            upOpen = false;
-                        }
-                    }
-                    if (downOpen) {
-                        int downY = y + step;
-                        if (downY < height && elevation[downY * width + x] < 0L) {
-                            sum += source[downY * width + x];
-                            count++;
-                        } else {
-                            downOpen = false;
-                        }
-                    }
+                if (elevation[cell] >= 0L) {
+                    result[cell] = source[cell];
+                    y++;
+                    continue;
                 }
-                result[cell] = (int) (sum / count);
+
+                int runStart = y;
+                int runEnd = y + 1;
+                while (runEnd < height && elevation[runEnd * width + x] < 0L) runEnd++;
+                int runLength = runEnd - runStart;
+                prefix[0] = 0L;
+                for (int offset = 0; offset < runLength; offset++) {
+                    prefix[offset + 1] = prefix[offset] + source[(runStart + offset) * width + x];
+                }
+                for (int offset = 0; offset < runLength; offset++) {
+                    int top = Math.max(0, offset - radius);
+                    int bottom = Math.min(runLength - 1, offset + radius);
+                    long sum = prefix[bottom + 1] - prefix[top];
+                    result[(runStart + offset) * width + x] = (int) (sum / (bottom - top + 1));
+                }
+                y = runEnd;
             }
         }
-        return result;
     }
 
     private static boolean touchesWater(
@@ -460,14 +564,14 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
     private static int collectComponent(
             int start,
             long[] elevation,
-            boolean[] visited,
+            long[] visited,
             int[] queue,
             int width,
             int height) {
         int head = 0;
         int tail = 0;
         queue[tail++] = start;
-        visited[start] = true;
+        mark(visited, start);
 
         while (head < tail) {
             int cell = queue[head++];
@@ -484,13 +588,21 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
     private static int enqueueWater(
             int cell,
             long[] elevation,
-            boolean[] visited,
+            long[] visited,
             int[] queue,
             int tail) {
-        if (visited[cell] || elevation[cell] >= 0L) return tail;
-        visited[cell] = true;
+        if (isMarked(visited, cell) || elevation[cell] >= 0L) return tail;
+        mark(visited, cell);
         queue[tail] = cell;
         return tail + 1;
+    }
+
+    private static boolean isMarked(long[] words, int index) {
+        return (words[index >>> 6] & (1L << (index & 63))) != 0L;
+    }
+
+    private static void mark(long[] words, int index) {
+        words[index >>> 6] |= 1L << (index & 63);
     }
 
     private static void authorComponentBathymetry(
@@ -730,6 +842,11 @@ public final class BathymetryMorphologyAlgorithm implements BathymetryElevationA
 
     private static int horizontalHeight(WorldBounds bounds) {
         return Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
+    }
+
+    private record CoastalCharacterResult(
+            int[] character,
+            int[] componentScratch) {
     }
 
     private record LandReliefIntegral(
