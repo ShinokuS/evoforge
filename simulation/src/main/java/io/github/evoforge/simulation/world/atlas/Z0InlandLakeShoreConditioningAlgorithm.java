@@ -5,10 +5,10 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 /**
  * Materializes an already accepted inland-lake footprint below Z=0.
  *
- * <p>The lake-domain stage is responsible for choosing a naturally compatible lowland. Shore
- * conditioning therefore never manufactures a dry terrace/collar around the water: every non-lake
- * terrain cell remains bit-identical. This keeps the accepted surrounding relief intact and avoids
- * a synthetic one-Z ridge tracing the shoreline.</p>
+ * <p>The lake-domain stage is responsible for choosing a naturally compatible lowland. Materialization
+ * therefore never manufactures a dry terrace/collar around the water: every non-lake terrain cell
+ * remains bit-identical. This keeps the accepted surrounding relief intact and avoids a synthetic
+ * one-Z ridge tracing the shoreline.</p>
  */
 final class Z0InlandLakeShoreConditioningAlgorithm implements InlandLakeShoreConditioningAlgorithm {
     static final Z0InlandLakeShoreConditioningAlgorithm INSTANCE =
@@ -20,9 +20,8 @@ final class Z0InlandLakeShoreConditioningAlgorithm implements InlandLakeShoreCon
     @Override
     public ElevationField condition(
             ElevationField continentalBase,
-            InlandLakeDomain lakeDomain,
-            V12LandformRecipe.CoastProfile coastProfile) {
-        if (continentalBase == null || lakeDomain == null || coastProfile == null) {
+            InlandLakeDomain lakeDomain) {
+        if (continentalBase == null || lakeDomain == null) {
             throw new IllegalArgumentException("lake shoreline inputs must not be null");
         }
         WorldBounds bounds = continentalBase.bounds();
