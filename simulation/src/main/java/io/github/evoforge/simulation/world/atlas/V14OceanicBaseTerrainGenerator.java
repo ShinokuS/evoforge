@@ -13,9 +13,9 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  *
  * <p>The standard calibrators make continent geometry independent of semantic Land coverage: only
  * the final V12 {@code landCount} changes. {@link #prepare(WorldGenesis)} therefore retains the
- * accepted silhouette across a Land-only retarget. Injected calibrators remain safe: if any
- * supposedly invariant operating value changes, materialization falls back to a normal unprepared
- * generation rather than reusing invalid geometry.</p>
+ * accepted silhouette and its exact V12 land ranking across a Land-only retarget. Injected
+ * calibrators remain safe: if any supposedly invariant operating value changes, materialization
+ * falls back to a normal unprepared generation rather than reusing invalid prepared facts.</p>
  */
 public final class V14OceanicBaseTerrainGenerator
         implements LandCoverageRetargetableElevationGenerator {
@@ -135,12 +135,22 @@ public final class V14OceanicBaseTerrainGenerator
                 || !prepared.silhouetteCalibration().equals(targetSilhouetteCalibration)) {
             return generateUnprepared(targetGenesis);
         }
-        return algorithm.generate(targetGenesis, targetTerrain, terrainRecipe, prepared.silhouette());
+        return algorithm.generate(
+                targetGenesis,
+                targetTerrain,
+                terrainRecipe,
+                prepared.silhouette(),
+                prepared.landRanking());
     }
 
     private ElevationField generateUnprepared(WorldGenesis genesis) {
         PreparedInputs prepared = prepareInputs(genesis);
-        return algorithm.generate(genesis, prepared.terrain(), terrainRecipe, prepared.silhouette());
+        return algorithm.generate(
+                genesis,
+                prepared.terrain(),
+                terrainRecipe,
+                prepared.silhouette(),
+                prepared.landRanking());
     }
 
     private PreparedInputs prepareInputs(WorldGenesis genesis) {
@@ -167,7 +177,17 @@ public final class V14OceanicBaseTerrainGenerator
         if (silhouette == null) {
             throw new IllegalStateException("V14 landmass silhouette algorithm returned null");
         }
-        return new PreparedInputs(terrain, boundary, silhouetteCalibration, silhouette);
+        V12LandformElevationAlgorithm.PreparedLandRanking landRanking = algorithm.prepareLandRanking(
+                genesis,
+                terrain,
+                terrainRecipe,
+                silhouette);
+        return new PreparedInputs(
+                terrain,
+                boundary,
+                silhouetteCalibration,
+                silhouette,
+                landRanking);
     }
 
     private static boolean sameNonIntentIdentity(WorldGenesis first, WorldGenesis second) {
@@ -201,6 +221,7 @@ public final class V14OceanicBaseTerrainGenerator
             V12LandformCalibration terrain,
             LandmassBoundaryCalibration boundary,
             LandmassSilhouetteCalibration silhouetteCalibration,
-            LandmassSilhouette silhouette) {
+            LandmassSilhouette silhouette,
+            V12LandformElevationAlgorithm.PreparedLandRanking landRanking) {
     }
 }
