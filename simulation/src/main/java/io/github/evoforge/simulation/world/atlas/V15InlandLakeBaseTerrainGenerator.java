@@ -16,6 +16,8 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  */
 public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerator {
     private static final int PPM = NormalizedValue.SCALE;
+    private static final boolean PROFILE_MEMORY =
+            Boolean.parseBoolean(System.getenv().getOrDefault("EVOFORGE_WORLDGEN_MEMORY_PROFILE", "false"));
 
     private final ElevationGenerator continentalBaseGenerator;
     private final InlandLakeDomainCalibrator lakeCalibrator;
@@ -75,14 +77,18 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
     public ElevationField generate(WorldGenesis genesis) {
         if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
 
+        profileMemory("v15.start");
         WorldGenesis placementGenesis = predictiveLandReservation
                 ? predictedLandGenesis(genesis, lakeRecipe)
                 : genesis;
+        profileMemory("v15.before_prepare_base");
         LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase =
                 prepareRetargetableBase(placementGenesis);
+        profileMemory("v15.after_prepare_base");
         ElevationField placementBase = requireBase(preparedBase != null
                 ? preparedBase.materialize(placementGenesis)
                 : continentalBaseGenerator.generate(placementGenesis));
+        profileMemory("v15.after_placement_materialize");
 
         InlandLakeDomainCalibration calibration = lakeCalibrator.calibrate(
                 genesis,
@@ -91,6 +97,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (calibration == null) {
             throw new IllegalStateException("V15 inland lake calibrator returned null");
         }
+        profileMemory("v15.after_lake_calibration");
         InlandLakeDomain domain = lakeAlgorithm.generate(
                 genesis,
                 placementBase,
@@ -99,6 +106,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (domain == null) {
             throw new IllegalStateException("V15 inland lake domain algorithm returned null");
         }
+        profileMemory("v15.after_lake_domain");
 
         WorldGenesis exactGenesis = domain.lakeCellCount() == 0
                 ? genesis
@@ -107,18 +115,24 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (sameLandCoverage(placementGenesis, exactGenesis)) {
             authoritativeBase = placementBase;
         } else if (preparedBase != null) {
+            profileMemory("v15.before_exact_materialize");
             authoritativeBase = requireBase(preparedBase.materialize(exactGenesis));
+            profileMemory("v15.after_exact_materialize");
         } else {
+            profileMemory("v15.before_exact_regenerate");
             authoritativeBase = requireBase(continentalBaseGenerator.generate(exactGenesis));
+            profileMemory("v15.after_exact_regenerate");
         }
 
         if (domain.lakeCellCount() == 0) return authoritativeBase;
         verifyLakeDomainRemainsDry(authoritativeBase, domain);
+        profileMemory("v15.after_domain_verification");
 
         ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
         if (conditioned == null) {
             throw new IllegalStateException("V15 inland lake shore algorithm returned null");
         }
+        profileMemory("v15.after_shore_conditioning");
         return conditioned;
     }
 
@@ -235,5 +249,17 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                         - authoritativeBase.bounds().minY() + 1L))) {
             throw new IllegalStateException("unexpected lake-domain verification area");
         }
+    }
+
+    private static void profileMemory(String stage) {
+        if (!PROFILE_MEMORY) return;
+        Runtime runtime = Runtime.getRuntime();
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        System.out.printf(
+                "WORLDGEN_MEMORY stage=%s used_mib=%.2f committed_mib=%.2f max_mib=%.2f%n",
+                stage,
+                used / 1048576.0,
+                runtime.totalMemory() / 1048576.0,
+                runtime.maxMemory() / 1048576.0);
     }
 }
