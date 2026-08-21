@@ -4,172 +4,63 @@ The Roadmap answers two questions: **what is already real in EvoForge, and what 
 
 ## Current position
 
-Completed world-generation slices:
+EvoForge has deliberately retired the previous dense V12–V15 world-generation line. Its atlas/bootstrap/preparation/terrain/materialization/calibration/generated climate-weather generation layers and their stale regression suite are no longer the production baseline.
 
-- **Stage 0 / V12** — architecture stabilization and accepted ordinary terrain;
-- **Stage 1 / V13** — accepted structural mountains;
-- **Stage 2A / V14** — accepted standing-water bathymetry;
-- **Stage 2B / V14–V15** — accepted organic continental domain and terrain-derived inland lakes.
+The current world-generation baseline is the small **Continuum foundation**:
 
-Stage 2B is closed as a self-contained generation slice. The experimental drainage/river topology and F4 diagnostic scaffolding explored during development were deliberately removed before completion; they are not production commitments.
+- large logical coordinates without whole-world allocation;
+- deterministic addressable sampling;
+- bounded window materialization;
+- equality of shared coordinates across overlapping requests;
+- no dependency on the deleted V-numbered generator.
 
-Before new river semantics, the accepted generation baseline will receive two engineering passes:
+See [World Generation — Continuum](systems/world-generation/overview.md) and the canonical [Continuum World Development Plan](systems/world-generation/continuum-development-plan.md).
 
-1. **large-world generation performance** — target practical generation of at least `10,000 × 10,000` worlds without visible quality loss, with larger worlds kept possible by architecture;
-2. **world-generation preview UI** — scenario-style controls, grouped/collapsible settings, tooltips, generation hotkey and non-blocking progress reporting.
+## Immediate next milestone — Continuum Phase 0
 
-Those passes optimize/present the accepted model; they do not reopen its visual semantics without a new explicit acceptance decision.
+Phase 0 is the first executable large-world proof. It must prove the architecture before real geography is reintroduced.
 
-For current algorithms see [World Generation](systems/world-generation/overview.md) and [Continental Domain and Inland Lakes](systems/world-generation/landmass-and-inland-lakes.md).
+Required scope:
 
-## Completed simulation foundations
+- construct 10,000 × 10,000, 100,000 × 100,000 and 1,000,000 × 1,000,000 logical worlds without allocation proportional to area;
+- materialize only bounded requested windows/pages;
+- add an explicit bounded cache with deterministic eviction/rematerialization;
+- expose cache/page counters and resident-memory evidence;
+- prove query order and cache history cannot change generated values;
+- provide a preview capable of pan/zoom over the logical world without full-world generation;
+- display request/page/cache diagnostics in the GUI.
 
-The wider project already has deterministic simulation/runtime foundations, typed Definitions, scheduled processes, finite world bounds, Terrain/Geometry/Navigation, deterministic movement/pathfinding, autonomous-agent foundations, finite Water/Soil/surface hydrology, and observer-only diagnostic tooling.
+Acceptance is based on deterministic tests plus measured time/allocation/resident-memory evidence. A large logical address space that merely fits on one developer machine by allocating the whole raster fails this milestone.
 
-Those runtime systems remain separate from world generation. A generator authors initial facts; it does not remain a second runtime owner.
+## After Phase 0
 
-## World-generation architecture law
+The master plan then advances one independently meaningful concern at a time: compact structural geography, continental/oceanic structure, geological causes, coherent orography, drainage/depression topology, rivers/lakes, continuous terrain reconstruction, exact XYZ materialization, climate and later runtime handoff.
 
-```text
-semantic intent
-    ↓
-world-specific calibration
-    +
-versioned recipe
-    ↓
-replaceable spatial algorithm
-    ↓
-immutable generated fact
-```
+No later phase may silently reintroduce these rejected patterns:
 
-A later stage may consume an earlier fact but must not silently steal its responsibility.
+- giant full-world authoritative rasters as the default representation;
+- camera-driven simulation fidelity;
+- feature painters that own unrelated geography;
+- V16/V17/V18-style whole-generator lineages;
+- definitions containing arbitrary algorithm tuning constants as if they were semantic content;
+- a universal mutable `WorldCell` or `WorldFact` truth store.
 
-## Stage 0 — V12 ordinary terrain **[COMPLETE]**
+## Stable non-worldgen foundations
 
-V12 established the generation architecture and accepted ordinary land-surface morphology: broad uplift, ordinary hills/depressions, rolling relief, rugged structures and bounded readable slopes.
+The repository retains the accepted simulation/runtime work outside the retired generator: deterministic scheduling/time foundations, Definitions, Terrain/Geometry/Navigation, occupancy/movement/pathfinding, autonomous agents, finite Water/Soil mechanics and observer-only diagnostics.
 
-## Stage 1 — V13 Mountain Systems **[COMPLETE]**
+World generation must hand initial facts to those ordinary owners rather than remain a second runtime simulation.
 
-V13 added independently calibrated/replaceable mountain morphology. Mountain semantic controls retain distinct meanings, and mountains do not own water/coast membership or rock identity.
+## Development rule
 
-See [V13 Mountain Generation](systems/world-generation/mountain-generation.md).
+Each Continuum phase is a green checkpoint. Applicable stages require:
 
-## Stage 2A — V14 Standing-Water Bathymetry **[COMPLETE]**
+- semantic correctness tests;
+- determinism/locality and seam tests;
+- substitution tests at real algorithm boundaries;
+- measured performance/allocation/resident-memory evidence;
+- visual diagnostics as soon as a spatial result is meaningful;
+- explicit manual acceptance for morphology;
+- documentation updated in the same PR.
 
-V14 preserved wet/dry membership while re-authoring submerged depth. Accepted properties include smooth coast/littoral descent, broad deep structure, no cell-scale depth noise, bounded slopes and independent near-shore/deep-interior responsibilities.
-
-See [V14 Standing-Water Bathymetry](systems/world-generation/bathymetry-generation.md).
-
-## Stage 2B — Continental Domain and Inland Lakes **[COMPLETE]**
-
-Stage 2B separated two responsibilities that had previously been coupled accidentally.
-
-### Continental domain
-
-- `RegularizedGraphLandmassSilhouetteAlgorithm` is the accepted standard owner;
-- external ocean/continent topology is produced by an irregular geometric graph + regularized land phase;
-- `Fragmentation` owns macro land-mass separation/connectivity only;
-- local V12 relief cannot reopen the accepted shoreline;
-- obvious grid/Voronoi structure, thin tendrils and sharp coarse appendages are rejected by the model rather than painted over downstream.
-
-### Inland lakes
-
-- lakes are selected from real broad continental lowlands;
-- lake existence is independent of `Fragmentation` as a direct control;
-- current generated water surface is `Z = 0`;
-- a geographic lake is rejected unless its geometry can support a meaningful `>= 5 Z` depth profile;
-- lake shoreline membership exists before mountains;
-- mountains therefore naturally respect lakes instead of being carved after the fact;
-- lake-bottom refinement uses broad shoreline-distance morphology and deterministic asymmetry, not random pits;
-- lake bathymetry cannot change the accepted lake footprint;
-- no synthetic one-block dry shoreline ridge is authored.
-
-See [Continental Domain and Inland Lakes](systems/world-generation/landmass-and-inland-lakes.md).
-
-## Engineering pass A — Large-world performance **[NEXT]**
-
-Target: make at least `10,000 × 10,000` worlds a practical default-scale workload and keep larger worlds architecturally possible.
-
-This is not a blind micro-optimization pass. It will first identify asymptotic and memory costs across the complete accepted pipeline, research appropriate mathematical/algorithmic alternatives, and then replace expensive representations/algorithms only when visual equivalence can be demonstrated.
-
-Required acceptance:
-
-- deterministic output semantics remain stable or receive an explicit revision if intentionally changed;
-- no loss of accepted landmass/lake/mountain/bathymetry quality;
-- measured time and memory budgets on representative large worlds;
-- no hidden full-world duplicate passes where local/chunked/streaming computation is sufficient;
-- documentation of complexity, memory ownership and any approximations introduced.
-
-## Engineering pass B — World-generation preview UI **[AFTER PERFORMANCE]**
-
-Target: make generation inspection pleasant without changing world semantics.
-
-Planned work:
-
-- align styling with scenario UI;
-- group settings into clear collapsible sections;
-- provide concise tooltips for each semantic control;
-- remove large explanatory prose from the control panel;
-- move Generate to a prominent top position;
-- bind generation to `G`;
-- move expensive generation off the render thread;
-- show progress and current generation stage while work is running.
-
-Presentation remains observer-only; UI code never becomes a generation owner.
-
-## Future Stage 2 hydrography **[DEFERRED UNTIL AFTER ENGINEERING PASSES]**
-
-Hydrography will restart from the accepted final elevation instead of reviving the deleted experiment.
-
-The intended responsibility chain is:
-
-```text
-accepted final terrain
-        ↓
-drainage / catchment topology
-        ↓
-river network
-        ↓
-channel / valley morphology
-```
-
-Important planned boundary:
-
-```text
-river routing owns where the river goes
-channel morphology owns how terrain is incised
-```
-
-A river must become real generated geometry, not a visual blue line. Future drainage analysis must not silently regenerate accepted continents/lakes merely to make routing easier.
-
-## Later milestones
-
-### Coherent geology
-
-Replace placeholder geology with coherent formations/strata and only the deposit bodies genuinely required by the model. Rock identity remains separate from mountain shape.
-
-### Caves
-
-Generate coherent underground voids behind a replaceable algorithm using available morphology/geology causes.
-
-### Causal surface/subsurface material synthesis
-
-Combine final morphology, hydrographic/depositional facts, geology and calibrated semantic material/Soil definitions. Avoid permanent feature-name shortcuts such as `river -> sand` or `mountain -> granite`.
-
-### Complete dry-world acceptance
-
-Accept terrain, mountains, standing-water geometry, rivers/valleys, geology/deposits, caves and surface/subsurface materials before initial finite Water is authored.
-
-### Finite initial Water fill
-
-Fill already-created oceans/lakes/channels with finite Water. Generation owns initial placement only; normal runtime liquid/hydrology systems own subsequent Water behavior.
-
-### Runtime handoff audit
-
-Verify generated facts materialize exactly once and no generator/preparation/bootstrap object remains a second runtime owner.
-
-## Documentation rule
-
-The repository [Documentation Guide](guides/documentation.md) is already the canonical rule requested for future work: documentation must serve both a non-programmer and an implementer. Non-trivial system pages explain purpose in plain language, ownership, diagrams/lifecycle, exact algorithms, formulas with every symbol defined, invariants, limitations, representative code/tests and classified sources. Project-specific algorithms are labelled as such rather than given misleading academic citations.
-
-A feature is not complete merely because code/tests are green if its normative documentation still requires chat history to understand the implementation.
+A phase is not complete if its current semantics still require chat history to reconstruct.

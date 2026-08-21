@@ -1,9 +1,0 @@
-{
-    "key": "core:temperate_ground",
-    "bindings": {
-        "surface": "core:topsoil",
-        "subsurface": "core:soil",
-        "sediment": "core:sand",
-        "bedrock": "core:granite"
-    }
-}
