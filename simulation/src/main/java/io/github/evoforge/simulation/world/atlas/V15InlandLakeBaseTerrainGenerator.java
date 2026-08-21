@@ -5,12 +5,12 @@ import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
 /**
- * V15 pre-mountain composition: accepted V14 continental base plus independently selected Z=0
+ * V15 pre-mountain composition: accepted continental terrain plus independently selected Z=0
  * inland-water domains.
  *
  * <p>The standard path reserves the balanced lake budget before the expensive continental synthesis.
  * When the selected footprint matches that prediction, the already generated base is authoritative
- * and no second V14-base synthesis is needed. Shape validity still has priority over quota: if the
+ * and no second base synthesis is needed. Shape validity still has priority over quota: if the
  * actual footprint materially differs, the coordinator falls back to exact post-selection land
  * compensation rather than silently changing the meaning of {@code Land}.</p>
  */
@@ -22,7 +22,6 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
     private final InlandLakeDomainRecipe lakeRecipe;
     private final InlandLakeDomainAlgorithm lakeAlgorithm;
     private final InlandLakeShoreConditioningAlgorithm shoreAlgorithm;
-    private final V12LandformRecipe.CoastProfile coastProfile;
     private final boolean predictiveLandReservation;
 
     public V15InlandLakeBaseTerrainGenerator(
@@ -30,15 +29,13 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
             InlandLakeDomainCalibrator lakeCalibrator,
             InlandLakeDomainRecipe lakeRecipe,
             InlandLakeDomainAlgorithm lakeAlgorithm,
-            InlandLakeShoreConditioningAlgorithm shoreAlgorithm,
-            V12LandformRecipe.CoastProfile coastProfile) {
+            InlandLakeShoreConditioningAlgorithm shoreAlgorithm) {
         this(
                 continentalBaseGenerator,
                 lakeCalibrator,
                 lakeRecipe,
                 lakeAlgorithm,
                 shoreAlgorithm,
-                coastProfile,
                 false);
     }
 
@@ -48,14 +45,12 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
             InlandLakeDomainRecipe lakeRecipe,
             InlandLakeDomainAlgorithm lakeAlgorithm,
             InlandLakeShoreConditioningAlgorithm shoreAlgorithm,
-            V12LandformRecipe.CoastProfile coastProfile,
             boolean predictiveLandReservation) {
         if (continentalBaseGenerator == null
                 || lakeCalibrator == null
                 || lakeRecipe == null
                 || lakeAlgorithm == null
-                || shoreAlgorithm == null
-                || coastProfile == null) {
+                || shoreAlgorithm == null) {
             throw new IllegalArgumentException("V15 lake-base dependencies must not be null");
         }
         this.continentalBaseGenerator = continentalBaseGenerator;
@@ -63,7 +58,6 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         this.lakeRecipe = lakeRecipe;
         this.lakeAlgorithm = lakeAlgorithm;
         this.shoreAlgorithm = shoreAlgorithm;
-        this.coastProfile = coastProfile;
         this.predictiveLandReservation = predictiveLandReservation;
     }
 
@@ -74,7 +68,6 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                 InlandLakeDomainRecipe.balanced(),
                 InlandLakeDomainAlgorithm.standard(),
                 InlandLakeShoreConditioningAlgorithm.standard(),
-                V12LandformRecipe.balanced().coast(),
                 true);
     }
 
@@ -112,7 +105,7 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         if (domain.lakeCellCount() == 0) return authoritativeBase;
         verifyLakeDomainRemainsDry(authoritativeBase, domain);
 
-        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain, coastProfile);
+        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
         if (conditioned == null) {
             throw new IllegalStateException("V15 inland lake shore algorithm returned null");
         }
