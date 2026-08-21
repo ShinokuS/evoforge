@@ -2,15 +2,18 @@
 
 ## In plain language
 
-The Visualizer is EvoForge's **window into the simulation**. It may display Terrain, Water, agents, routes and diagnostics, but it never decides what is physically true.
+The Visualizer is EvoForge's **window into the simulation and generated facts**. It may display Terrain, Water, agents, routes, Continuum technical pages and diagnostics, but it never decides what is physically true.
 
 Camera position, zoom, hidden layers and debug overlays are presentation only. They cannot change simulation or generation fidelity.
 
 ## Current status
 
-The current visualizer is a runtime inspection tool built around ordinary production capabilities. The retired V12–V15 world-generation preview was removed with the old dense generator.
+The current visualizer has two deliberately separate inspection paths:
 
-A new Continuum preview is planned as part of Phase 0. It does not exist yet.
+- runtime scenarios built around ordinary production `SimulationRuntime` capabilities;
+- a Phase 0 Continuum technical-page inspector built directly on the production Continuum page/cache contracts.
+
+The retired V12–V15 world-generation preview remains removed. The new Continuum inspector is not a replacement generator and does not bootstrap Continuum into runtime.
 
 ## Runtime observer boundary
 
@@ -45,6 +48,52 @@ Focused deterministic scenarios make mechanics understandable and visually inspe
 
 Scenarios complement headless tests; they do not replace deterministic or invariant tests.
 
+## Continuum Phase 0 inspector
+
+From the scenario menu, `F2` opens the Continuum technical-page inspector.
+
+It currently shows a 1,000,000 × 1,000,000 logical domain while materializing only a bounded local 3×3 requested neighborhood. The cache may retain at most twelve 256×256 diagnostic scalar pages in this visual workload. Those dimensions are inspection defaults, not final world laws.
+
+The overlay distinguishes:
+
+```text
+all visible technical page boundaries
+requested 3×3 neighborhood
+currently resident cache pages
+pages evicted by the most recent move
+focused page
+```
+
+It also displays:
+
+- logical/world coordinates;
+- seed;
+- resident page count and scalar payload budget;
+- hits, misses, loads and evictions;
+- zoom in pixels per technical page.
+
+The shaded scalar is explicitly marked **diagnostic only — not geography**. It exists so page materialization is visible before continents/relief exist.
+
+Controls:
+
+```text
+Arrows / WASD      move one technical page
+Shift + move       move eight pages
++ / - / wheel      zoom presentation only
+Home               return to logical center
+Esc                return to scenario menu
+```
+
+Critical law:
+
+```text
+presentation detail may change
+requested/resident representation may change
+coordinate-addressed world truth may not
+```
+
+Panning causes bounded page requests and therefore real cache hit/miss/eviction behavior. Zoom changes only how many page boundaries fit on screen; it does not request higher/lower-fidelity world truth.
+
 ## Presentation perspectives
 
 ### Surface
@@ -69,32 +118,6 @@ World interaction is cell-first. Selection reads authoritative facts at the chos
 
 Water visuals read authoritative quantity and geometry. Optical depth, opacity, animation phase and tiny-flux suppression are presentation choices only; they cannot suppress hydraulic simulation work.
 
-## Continuum inspection direction
-
-Phase 0 will introduce a replacement world-generation inspection surface built around the production Continuum contracts.
-
-It must support at minimum:
-
-```text
-pan / zoom across large logical coordinates
-requested-window visualization
-page/cache boundary overlay
-resident/evicted page diagnostics
-cache hit/miss/load/eviction metrics
-seed + coordinate inspection
-```
-
-Critical law:
-
-```text
-presentation detail may change
-world truth may not
-```
-
-The preview must never materialize the whole logical world merely to draw an overview. It asks for bounded working windows and visualizes the returned facts.
-
-Later generation stages add their own overlays to the same inspection approach rather than creating independent debug generators.
-
 ## Manual visual acceptance versus tests
 
 Every visually meaningful generation stage requires both:
@@ -102,20 +125,23 @@ Every visually meaningful generation stage requires both:
 - automated deterministic/invariant tests;
 - manual inspection of the production result through the visualizer.
 
-Performance metrics are also part of acceptance. A visually correct stage is not complete if inspection reveals unbounded allocation or avoidable frame stalls.
+The Continuum inspector model is headlessly tested for bounded 3×3 requests, overlap reuse, eviction and stable rematerialized values. The screen itself is the manual visual inspection surface.
+
+Performance metrics are also part of acceptance. A visually correct stage is not complete if inspection reveals unbounded allocation or avoidable stalls.
 
 ## Invariants
 
 - Visualizer never owns authoritative simulation state.
 - Camera/view/zoom/LOD never changes simulation or generation semantics.
 - Runtime interactions go through production command/domain paths.
-- A future Continuum preview must consume production Continuum contracts.
+- Continuum inspector consumes production `ContinuumPageLayout` / `ContinuumScalarPageCache` contracts.
+- Continuum page/cache state remains technical representation only.
 - Debug overlays never become hidden Navigation, Water, AI or generation truth.
 - Visual acceptance complements, but never replaces, headless tests.
 
 ## Current limitations
 
-There is currently no production Continuum world-generation preview. Phase 0 owns that work together with bounded page/cache materialization and metrics.
+The Continuum inspector currently visualizes only the Phase 0 diagnostic scalar and technical page/cache state. Geography overlays, seed controls, arbitrary coordinate entry and later generation layers will be added as those production facts exist.
 
 ## Code and tests
 
@@ -125,7 +151,15 @@ Runtime presentation lives primarily under:
 core/.../visualizer/
 ```
 
-Continuum generation currently lives under:
+Continuum inspection:
+
+```text
+core/.../visualizer/continuum/ContinuumInspectorModel.java
+core/.../visualizer/screen/ContinuumInspectorScreen.java
+core/.../visualizer/continuum/ContinuumInspectorModelTest.java
+```
+
+Continuum generation/materialization lives under:
 
 ```text
 simulation/.../world/continuum/
@@ -135,4 +169,4 @@ simulation/.../world/continuum/
 
 **Internal EvoForge tooling/presentation design.** The observer boundary and visual acceptance workflow are project infrastructure.
 
-See [Debug Scenarios Guide](../../guides/debug-scenarios.md), [World Generation](../world-generation/overview.md), [Continuum Development Plan](../world-generation/continuum-development-plan.md), [ADR-004](../../decisions/004-typed-presentation-bindings.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).
+See [Debug Scenarios Guide](../../guides/debug-scenarios.md), [World Generation](../world-generation/overview.md), [Continuum Technical Pages and Cache](../world-generation/continuum-pages.md), [Continuum Development Plan](../world-generation/continuum-development-plan.md), [ADR-004](../../decisions/004-typed-presentation-bindings.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).

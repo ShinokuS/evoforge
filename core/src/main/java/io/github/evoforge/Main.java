@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.GL20;
 import io.github.evoforge.logging.Slf4jApplicationLogger;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
+import io.github.evoforge.visualizer.screen.ContinuumInspectorScreen;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
 import org.slf4j.Logger;
@@ -58,6 +59,10 @@ public final class Main extends Game {
         Gdx.app.postRunnable(() -> showScenarioNow(scenario));
     }
 
+    private void requestContinuumInspector() {
+        Gdx.app.postRunnable(this::showContinuumInspectorNow);
+    }
+
     private void requestExit() {
         Gdx.app.postRunnable(Gdx.app::exit);
     }
@@ -66,6 +71,7 @@ public final class Main extends Game {
         replaceScreen(new ScenarioMenuScreen(
                 scenarios,
                 this::requestScenario,
+                this::requestContinuumInspector,
                 this::requestExit));
     }
 
@@ -74,6 +80,10 @@ public final class Main extends Game {
                 scenario,
                 () -> requestScenario(scenario),
                 this::requestScenarioMenu));
+    }
+
+    private void showContinuumInspectorNow() {
+        replaceScreen(new ContinuumInspectorScreen(this::requestScenarioMenu));
     }
 
     private void replaceScreen(Screen next) {
