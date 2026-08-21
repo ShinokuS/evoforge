@@ -8,11 +8,11 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
  * V15 pre-mountain composition: accepted continental terrain plus independently selected Z=0
  * inland-water domains.
  *
- * <p>The standard path reserves the balanced lake budget before the expensive continental synthesis.
- * When the selected footprint matches that prediction, the already generated base is authoritative
- * and no second base synthesis is needed. Shape validity still has priority over quota: if the
- * actual footprint materially differs, the coordinator falls back to exact post-selection land
- * compensation rather than silently changing the meaning of {@code Land}.</p>
+ * <p>The standard path reserves a plausible lake budget before continental materialization, then
+ * discovers the actual terrain-derived lake footprint. Exact dry-land compensation remains
+ * authoritative. When the continental generator supports Land retarget preparation, expensive
+ * Land-independent geometry is retained across the placement and exact materializations instead of
+ * being rebuilt from scratch.</p>
  */
 public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerator {
     private static final int PPM = NormalizedValue.SCALE;
@@ -78,7 +78,12 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         WorldGenesis placementGenesis = predictiveLandReservation
                 ? predictedLandGenesis(genesis, lakeRecipe)
                 : genesis;
-        ElevationField placementBase = requireBase(continentalBaseGenerator.generate(placementGenesis));
+        LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase =
+                prepareRetargetableBase(placementGenesis);
+        ElevationField placementBase = requireBase(preparedBase != null
+                ? preparedBase.materialize(placementGenesis)
+                : continentalBaseGenerator.generate(placementGenesis));
+
         InlandLakeDomainCalibration calibration = lakeCalibrator.calibrate(
                 genesis,
                 placementBase,
@@ -98,9 +103,14 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         WorldGenesis exactGenesis = domain.lakeCellCount() == 0
                 ? genesis
                 : compensatedLandGenesis(genesis, domain.lakeCellCount());
-        ElevationField authoritativeBase = sameLandCoverage(placementGenesis, exactGenesis)
-                ? placementBase
-                : requireBase(continentalBaseGenerator.generate(exactGenesis));
+        ElevationField authoritativeBase;
+        if (sameLandCoverage(placementGenesis, exactGenesis)) {
+            authoritativeBase = placementBase;
+        } else if (preparedBase != null) {
+            authoritativeBase = requireBase(preparedBase.materialize(exactGenesis));
+        } else {
+            authoritativeBase = requireBase(continentalBaseGenerator.generate(exactGenesis));
+        }
 
         if (domain.lakeCellCount() == 0) return authoritativeBase;
         verifyLakeDomainRemainsDry(authoritativeBase, domain);
@@ -110,6 +120,14 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
             throw new IllegalStateException("V15 inland lake shore algorithm returned null");
         }
         return conditioned;
+    }
+
+    private LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation prepareRetargetableBase(
+            WorldGenesis placementGenesis) {
+        if (continentalBaseGenerator instanceof LandCoverageRetargetableElevationGenerator retargetable) {
+            return retargetable.prepare(placementGenesis);
+        }
+        return null;
     }
 
     private ElevationField requireBase(ElevationField base) {
