@@ -10,6 +10,7 @@ import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.lang.management.ManagementFactory;
 import java.util.Locale;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ final class WorldGenerationScaleProfileTest {
     private static final int LAND_COVERAGE_PPM = 830_000;
     private static final int SAMPLE_COUNT = 4_096;
     private static final int BREAKDOWN_SIDE = 512;
+    private static final com.sun.management.ThreadMXBean ALLOCATION_BEAN = threadAllocationBean();
 
     @Test
     @Tag("worldgen-scale-profile")
@@ -34,30 +36,43 @@ final class WorldGenerationScaleProfileTest {
 
         Runtime runtime = Runtime.getRuntime();
         long beforeBytes = usedHeap(runtime);
+        long beforeAllocatedBytes = allocatedBytes();
 
         long start = System.nanoTime();
         var elevation = algorithms.elevation().generate(genesis);
         long afterElevation = System.nanoTime();
         long elevationBytes = usedHeap(runtime);
+        long elevationAllocatedBytes = allocatedBytes();
 
+        long drainageStart = System.nanoTime();
         var drainage = algorithms.drainage().generate(elevation);
         long end = System.nanoTime();
         long finalBytes = usedHeap(runtime);
+        long finalAllocatedBytes = allocatedBytes();
 
         long checksum = sampledChecksum(side, elevation, drainage);
         assertTrue(checksum != 0L, "profile checksum must exercise generated facts");
 
+        double elevationMillis = millis(start, afterElevation);
+        double drainageMillis = millis(drainageStart, end);
         System.out.printf(Locale.ROOT,
                 "WORLDGEN_PROFILE revision=V15 side=%d cells=%d seed=%d%n"
-                        + "  elevation_ms=%.3f retained_delta_mib=%.2f%n"
-                        + "  drainage_ms=%.3f retained_delta_mib=%.2f%n"
-                        + "  total_ms=%.3f retained_total_mib=%.2f checksum=%016x%n",
+                        + "  elevation_ms=%.3f retained_delta_mib=%.2f allocated_mib=%.2f%n"
+                        + "  drainage_ms=%.3f retained_delta_mib=%.2f allocated_mib=%.2f%n"
+                        + "  total_ms=%.3f retained_total_mib=%.2f allocated_total_mib=%.2f checksum=%016x%n",
                 side,
                 Math.multiplyExact(side, side),
                 SEED,
-                millis(start, afterElevation), mib(elevationBytes - beforeBytes),
-                millis(afterElevation, end), mib(finalBytes - elevationBytes),
-                millis(start, end), mib(finalBytes - beforeBytes), checksum);
+                elevationMillis,
+                mib(elevationBytes - beforeBytes),
+                allocationMib(beforeAllocatedBytes, elevationAllocatedBytes),
+                drainageMillis,
+                mib(finalBytes - elevationBytes),
+                allocationMib(elevationAllocatedBytes, finalAllocatedBytes),
+                elevationMillis + drainageMillis,
+                mib(finalBytes - beforeBytes),
+                allocationMib(beforeAllocatedBytes, finalAllocatedBytes),
+                checksum);
 
         profileElevationRevisionBreakdown(Math.min(BREAKDOWN_SIDE, side), algorithms);
     }
@@ -154,6 +169,32 @@ final class WorldGenerationScaleProfileTest {
                 revision,
                 RngRevision.V1,
                 intent);
+    }
+
+    private static com.sun.management.ThreadMXBean threadAllocationBean() {
+        java.lang.management.ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+        if (!(bean instanceof com.sun.management.ThreadMXBean allocationBean)
+                || !allocationBean.isThreadAllocatedMemorySupported()) {
+            return null;
+        }
+        try {
+            if (!allocationBean.isThreadAllocatedMemoryEnabled()) {
+                allocationBean.setThreadAllocatedMemoryEnabled(true);
+            }
+            return allocationBean;
+        } catch (UnsupportedOperationException | SecurityException ignored) {
+            return null;
+        }
+    }
+
+    private static long allocatedBytes() {
+        if (ALLOCATION_BEAN == null) return -1L;
+        return ALLOCATION_BEAN.getThreadAllocatedBytes(Thread.currentThread().threadId());
+    }
+
+    private static double allocationMib(long from, long to) {
+        if (from < 0L || to < 0L) return -1d;
+        return mib(to - from);
     }
 
     private static long usedHeap(Runtime runtime) {
