@@ -63,3 +63,22 @@ jobs:
           :simulation:worldgenScaleProfile
           --no-daemon
           --console=plain
+
+      - name: Record JFR hotspot profile
+        env:
+          JAVA_TOOL_OPTIONS: -Xmx6g
+        run: >-
+          ./gradlew
+          -Devoforge.worldgen.profile.side=1024
+          -Devoforge.worldgen.profile.jfr=true
+          :simulation:worldgenScaleProfile
+          --no-daemon
+          --console=plain
+
+      - name: Report JFR hot methods
+        shell: bash
+        run: |
+          recording="simulation/build/jfr/worldgen-profile.jfr"
+          test -s "$recording"
+          jfr summary "$recording"
+          jfr view --width 180 hot-methods "$recording"
