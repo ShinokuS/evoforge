@@ -11,12 +11,10 @@ import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
-import io.github.evoforge.visualizer.screen.VisualizerHomeScreen;
-import io.github.evoforge.visualizer.screen.WorldGenerationPreviewScreen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Launches the focused EvoForge development visualizer workspaces. */
+/** Launches the EvoForge development visualizer. */
 public final class Main extends Game {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
@@ -40,7 +38,7 @@ public final class Main extends Game {
                 .log("EvoForge application ready");
 
         scenarios = ScenarioCatalog.standard();
-        showHomeNow();
+        showScenarioMenuNow();
     }
 
     @Override
@@ -52,33 +50,23 @@ public final class Main extends Game {
         if (current != null) current.dispose();
     }
 
-    private void requestHome() {
-        Gdx.app.postRunnable(this::showHomeNow);
-    }
-
     private void requestScenarioMenu() {
         Gdx.app.postRunnable(this::showScenarioMenuNow);
-    }
-
-    private void requestWorldPreview() {
-        Gdx.app.postRunnable(this::showWorldPreviewNow);
     }
 
     private void requestScenario(VisualizerScenario scenario) {
         Gdx.app.postRunnable(() -> showScenarioNow(scenario));
     }
 
-    private void showHomeNow() {
-        replaceScreen(new VisualizerHomeScreen(
-                this::requestScenarioMenu,
-                this::requestWorldPreview));
+    private void requestExit() {
+        Gdx.app.postRunnable(Gdx.app::exit);
     }
 
     private void showScenarioMenuNow() {
         replaceScreen(new ScenarioMenuScreen(
                 scenarios,
                 this::requestScenario,
-                this::requestHome));
+                this::requestExit));
     }
 
     private void showScenarioNow(VisualizerScenario scenario) {
@@ -86,10 +74,6 @@ public final class Main extends Game {
                 scenario,
                 () -> requestScenario(scenario),
                 this::requestScenarioMenu));
-    }
-
-    private void showWorldPreviewNow() {
-        replaceScreen(new WorldGenerationPreviewScreen(this::requestHome));
     }
 
     private void replaceScreen(Screen next) {
