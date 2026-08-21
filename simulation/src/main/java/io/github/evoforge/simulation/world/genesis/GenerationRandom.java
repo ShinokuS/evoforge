@@ -1,6 +1,8 @@
 package io.github.evoforge.simulation.world.genesis;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Pure deterministic random sampler for world generation.
@@ -24,6 +26,14 @@ public final class GenerationRandom {
     private static final long ORDINAL_SALT = 0xc0ac29b7c97c50ddL;
     private static final long FNV_OFFSET_BASIS = 0xcbf29ce484222325L;
     private static final long FNV_PRIME = 0x100000001b3L;
+
+    /*
+     * Stage/purpose identifiers are a tiny semantic vocabulary reused millions of times during
+     * generation. Cache their exact FNV-64 value once so direct semantic sampling does not repeatedly
+     * allocate UTF-8 byte arrays and re-hash the same strings. The cache changes only computation
+     * cost: the mixed RNG state remains bit-identical to the uncached definition.
+     */
+    private static final ConcurrentMap<String, Long> SEMANTIC_HASHES = new ConcurrentHashMap<>();
 
     private final long masterSeed;
     private final long seededState;
@@ -107,6 +117,10 @@ public final class GenerationRandom {
     }
 
     private static long stableStringHash(String value) {
+        return SEMANTIC_HASHES.computeIfAbsent(value, GenerationRandom::computeStableStringHash);
+    }
+
+    private static long computeStableStringHash(String value) {
         long hash = FNV_OFFSET_BASIS;
         for (byte item : value.getBytes(StandardCharsets.UTF_8)) {
             hash ^= item & 0xffL;
