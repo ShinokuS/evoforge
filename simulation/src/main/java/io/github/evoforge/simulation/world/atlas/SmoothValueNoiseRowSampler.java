@@ -7,9 +7,9 @@ import io.github.evoforge.simulation.world.genesis.GenerationRandom;
  * Exact row-cached sampler for the deterministic smooth value-noise lattice used by V12.
  *
  * <p>The mathematical result is identical to sampling four lattice corners independently for every
- * cell. The sampler instead retains the two lattice rows that bound the current world Y and hashes
- * each lattice point at most once while that row is active. Memory is O(width / scale), independent
- * of world height.</p>
+ * cell. The sampler retains the two active lattice rows, precomputes the horizontal lattice address
+ * and fade for every world X, and caches the vertical lattice address/fade once per raster row.
+ * Memory remains O(width / scale + width), independent of world height.</p>
  */
 final class SmoothValueNoiseRowSampler {
     private static final int SAMPLE_MAX = 65_535;
@@ -21,9 +21,14 @@ final class SmoothValueNoiseRowSampler {
     private final int scale;
     private final long minLatticeX;
     private final int latticeWidth;
+    private final int[] localLatticeXByWorldX;
+    private final int[] horizontalFadeByWorldX;
     private int[] lowerSamples;
     private int[] upperSamples;
     private long cachedLowerLatticeY = Long.MIN_VALUE;
+    private int cachedWorldY;
+    private int cachedVerticalFade;
+    private boolean hasCachedWorldY;
 
     SmoothValueNoiseRowSampler(
             GenerationRandom.BoundSampler random,
@@ -43,30 +48,44 @@ final class SmoothValueNoiseRowSampler {
         this.latticeWidth = Math.toIntExact(maxLatticeX - minLatticeX + 1L);
         this.lowerSamples = new int[latticeWidth];
         this.upperSamples = new int[latticeWidth];
+
+        int worldWidth = Math.toIntExact((long) maxX - minX + 1L);
+        this.localLatticeXByWorldX = new int[worldWidth];
+        this.horizontalFadeByWorldX = new int[worldWidth];
+        for (int localX = 0; localX < worldWidth; localX++) {
+            long worldX = (long) minX + localX;
+            long latticeX = Math.floorDiv(worldX, scale);
+            int offsetX = (int) Math.floorMod(worldX, scale);
+            localLatticeXByWorldX[localX] = Math.toIntExact(latticeX - minLatticeX);
+            horizontalFadeByWorldX[localX] = fadeForOffset(offsetX, scale);
+        }
     }
 
     int sampleAt(int x, int y) {
         if (x < minX || x > maxX) {
             throw new IllegalArgumentException("noise sample x lies outside cached world span");
         }
-        long latticeY = Math.floorDiv((long) y, scale);
-        ensureRows(latticeY);
+        if (!hasCachedWorldY || cachedWorldY != y) {
+            long latticeY = Math.floorDiv((long) y, scale);
+            ensureRows(latticeY);
+            int offsetY = (int) Math.floorMod((long) y, scale);
+            cachedWorldY = y;
+            cachedVerticalFade = fadeForOffset(offsetY, scale);
+            hasCachedWorldY = true;
+        }
 
-        long latticeX = Math.floorDiv((long) x, scale);
-        int localX = Math.toIntExact(latticeX - minLatticeX);
-        int offsetX = (int) Math.floorMod((long) x, scale);
-        int offsetY = (int) Math.floorMod((long) y, scale);
-        int lower = smoothInterpolate(
-                lowerSamples[localX],
-                lowerSamples[localX + 1],
-                offsetX,
-                scale);
-        int upper = smoothInterpolate(
-                upperSamples[localX],
-                upperSamples[localX + 1],
-                offsetX,
-                scale);
-        return smoothInterpolate(lower, upper, offsetY, scale);
+        int worldLocalX = Math.toIntExact((long) x - minX);
+        int localLatticeX = localLatticeXByWorldX[worldLocalX];
+        int horizontalFade = horizontalFadeByWorldX[worldLocalX];
+        int lower = interpolateWithFade(
+                lowerSamples[localLatticeX],
+                lowerSamples[localLatticeX + 1],
+                horizontalFade);
+        int upper = interpolateWithFade(
+                upperSamples[localLatticeX],
+                upperSamples[localLatticeX + 1],
+                horizontalFade);
+        return interpolateWithFade(lower, upper, cachedVerticalFade);
     }
 
     private void ensureRows(long latticeY) {
@@ -97,9 +116,12 @@ final class SmoothValueNoiseRowSampler {
         return (int) ((random.sampleLong(latticeX, latticeY, 0L, 0L) >>> 48) & SAMPLE_MAX);
     }
 
-    private static int smoothInterpolate(int from, int to, int offset, int scale) {
+    private static int fadeForOffset(int offset, int scale) {
         long coordinate = ((long) offset * PPM) / scale;
-        int fade = smoothStepPpm(coordinate);
+        return smoothStepPpm(coordinate);
+    }
+
+    private static int interpolateWithFade(int from, int to, int fade) {
         return (int) (((long) from * (PPM - fade) + (long) to * fade) / PPM);
     }
 
