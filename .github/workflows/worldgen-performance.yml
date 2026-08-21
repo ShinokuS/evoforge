@@ -51,13 +51,12 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "side=${{ inputs.side }}" >> "$GITHUB_OUTPUT"
           else
-            echo "side=8000" >> "$GITHUB_OUTPUT"
+            echo "side=2048" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run worldgen profile
         env:
           JAVA_TOOL_OPTIONS: -Xmx6g
-          EVOFORGE_WORLDGEN_MEMORY_PROFILE: "true"
         run: >-
           ./gradlew
           -Devoforge.worldgen.profile.side=${{ steps.profile.outputs.side }}
