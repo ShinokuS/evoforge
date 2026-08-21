@@ -128,23 +128,26 @@ final class WorldGenerationPreviewSettingsTest {
     }
 
     @Test
-    void dimensionsAcceptInclusiveInteractiveStressRange() {
+    void dimensionsAcceptTenThousandCellWorldsWithoutGuiCap() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
 
-        settings.width(WorldGenerationPreviewSettings.MIN_HORIZONTAL_DIMENSION);
-        settings.length(WorldGenerationPreviewSettings.MAX_HORIZONTAL_DIMENSION);
+        settings.width(10_000);
+        settings.length(10_000);
 
-        assertEquals(32, settings.width());
-        assertEquals(2_048, settings.length());
-        assertEquals(2_048, settings.maxHorizontalDimension());
+        WorldGenerationPreviewConfig snapshot = settings.snapshot();
+        assertEquals(10_000, settings.width());
+        assertEquals(10_000, settings.length());
+        assertEquals(10_000, settings.maxHorizontalDimension());
+        assertEquals(100_000_000L, snapshot.columnCount());
+        assertEquals(new WorldBounds(-5_000, 4_999, -5_000, 4_999, -96, 96), snapshot.bounds());
     }
 
     @Test
-    void settingsRejectOutOfRangeDimensionsAndIntent() {
+    void settingsRejectTooSmallDimensionsAndInvalidIntent() {
         WorldGenerationPreviewSettings settings = new WorldGenerationPreviewSettings();
 
         assertThrows(IllegalArgumentException.class, () -> settings.width(31));
-        assertThrows(IllegalArgumentException.class, () -> settings.length(2_049));
+        assertThrows(IllegalArgumentException.class, () -> settings.length(0));
         assertThrows(IllegalArgumentException.class, () -> settings.coveragePpm(-1));
         assertThrows(IllegalArgumentException.class, () -> settings.reliefPpm(1_000_001));
         assertThrows(IllegalArgumentException.class, () -> settings.localReliefPpm(-1));
