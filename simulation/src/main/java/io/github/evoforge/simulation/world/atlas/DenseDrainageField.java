@@ -11,11 +11,34 @@ final class DenseDrainageField implements DrainageField {
     private final long[] contributingArea;
     private final int[] terminal;
 
+    /** Copy-safe constructor for callers that retain ownership of their input arrays. */
     DenseDrainageField(
             WorldBounds bounds,
             int[] downstream,
             long[] contributingArea,
             int[] terminal) {
+        this(bounds, downstream, contributingArea, terminal, true);
+    }
+
+    /**
+     * Transfers exclusive ownership of freshly produced drainage buffers without cloning them.
+     *
+     * <p>The caller must never mutate any supplied array after this call.</p>
+     */
+    static DenseDrainageField takeOwnership(
+            WorldBounds bounds,
+            int[] downstream,
+            long[] contributingArea,
+            int[] terminal) {
+        return new DenseDrainageField(bounds, downstream, contributingArea, terminal, false);
+    }
+
+    private DenseDrainageField(
+            WorldBounds bounds,
+            int[] downstream,
+            long[] contributingArea,
+            int[] terminal,
+            boolean copyArrays) {
         if (bounds == null) {
             throw new IllegalArgumentException("bounds must not be null");
         }
@@ -43,9 +66,9 @@ final class DenseDrainageField implements DrainageField {
         }
         this.bounds = bounds;
         this.width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
-        this.downstream = downstream.clone();
-        this.contributingArea = contributingArea.clone();
-        this.terminal = terminal.clone();
+        this.downstream = copyArrays ? downstream.clone() : downstream;
+        this.contributingArea = copyArrays ? contributingArea.clone() : contributingArea;
+        this.terminal = copyArrays ? terminal.clone() : terminal;
     }
 
     @Override
