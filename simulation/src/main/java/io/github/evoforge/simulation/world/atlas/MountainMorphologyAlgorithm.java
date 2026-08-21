@@ -64,7 +64,7 @@ final class MountainMorphologyAlgorithm implements MountainElevationAlgorithm {
         if (calibration.targetCoveragePpm() == 0
                 || calibration.typicalUpliftSubunits() == 0L
                 || landCount == 0) {
-            return new DenseElevationField(bounds, baseHeights);
+            return DenseElevationField.takeOwnership(bounds, baseHeights);
         }
 
         long[] mountainUplift = new long[calibration.area()];
@@ -97,7 +97,7 @@ final class MountainMorphologyAlgorithm implements MountainElevationAlgorithm {
             if (!land[cell] || mountainUplift[cell] <= 0L) continue;
             result[cell] = Math.min(ceiling, Math.addExact(result[cell], mountainUplift[cell]));
         }
-        return new DenseElevationField(bounds, result);
+        return DenseElevationField.takeOwnership(bounds, result);
     }
 
     /**
