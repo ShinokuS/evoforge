@@ -49,6 +49,7 @@ tasks.register('worldgenScaleProfile', Test) {
     group = 'verification'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
+    maxHeapSize = System.getProperty('evoforge.worldgen.profile.maxHeap', '6g')
 
     useJUnitPlatform {
         includeTags 'worldgen-scale-profile'
