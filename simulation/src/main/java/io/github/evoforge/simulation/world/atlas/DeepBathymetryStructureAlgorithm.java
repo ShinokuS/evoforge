@@ -61,7 +61,7 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
                     recipe);
         }
 
-        return new DenseElevationField(bounds, elevation);
+        return DenseElevationField.takeOwnership(bounds, elevation);
     }
 
     private static void authorDeepStructure(
