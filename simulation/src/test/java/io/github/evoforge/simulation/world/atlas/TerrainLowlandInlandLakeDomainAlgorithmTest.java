@@ -163,8 +163,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithmTest {
         }
         InlandLakeDomain domain = new InlandLakeDomain(bounds, lake, 9);
 
-        ElevationField conditioned = InlandLakeShoreConditioningAlgorithm.standard().condition(
-                base, domain, V12LandformRecipe.balanced().coast());
+        ElevationField conditioned = InlandLakeShoreConditioningAlgorithm.standard().condition(base, domain);
 
         assertEquals(-1L, conditioned.elevationSubunitsAt(10, 10));
         for (int y = 0; y <= 20; y++) {
