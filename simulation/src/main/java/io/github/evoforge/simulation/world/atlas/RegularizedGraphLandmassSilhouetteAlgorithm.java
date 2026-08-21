@@ -579,6 +579,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                         int site = gy * graph.columns() + gx;
                         double dx = px - graph.x()[site];
                         double dy = py - graph.y()[site];
+                        if (dx <= -kernelRadius || dx >= kernelRadius
+                                || dy <= -kernelRadius || dy >= kernelRadius) {
+                            continue;
+                        }
                         double distance = StrictMath.hypot(dx, dy);
                         if (distance >= kernelRadius) continue;
                         double weight = wendlandC2(distance / kernelRadius);
