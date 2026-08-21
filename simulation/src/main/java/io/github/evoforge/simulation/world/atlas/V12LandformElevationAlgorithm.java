@@ -128,6 +128,16 @@ final class V12LandformElevationAlgorithm {
                 bounds.minX(),
                 bounds.maxX(),
                 calibration.rollingDetailScale());
+        OrganicWarpRowSampler upliftWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.upliftScale(),
+                recipe);
+        OrganicWarpRowSampler ridgeWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.ridgeScale(),
+                recipe);
 
         int[] seenByBucket = new int[POTENTIAL_BUCKETS];
         for (int cell = 0; cell < area; cell++) {
@@ -148,15 +158,15 @@ final class V12LandformElevationAlgorithm {
             int interiorityPpm = coastalInteriority[cell];
 
             long upliftPpm = centeredPpm(organicValueNoise(
-                    random,
                     random.uplift(),
                     x,
                     y,
                     calibration.upliftScale(),
-                    recipe));
+                    upliftWarp));
             long landformPpm = landformFieldPpm(landforms, x, y, recipe.features());
             int ridgePpm = ridgeCrestPpm(
                     random,
+                    ridgeWarp,
                     x,
                     y,
                     calibration.ridgeScale(),
@@ -373,12 +383,16 @@ final class V12LandformElevationAlgorithm {
 
     private static int ridgeCrestPpm(
             V12RandomStreams random,
+            OrganicWarpRowSampler warp,
             int x,
             int y,
             int scale,
             V12LandformRecipe recipe) {
-        int first = organicValueNoise(random, random.ridgeA(), x, y, scale, recipe);
-        int second = organicValueNoise(random, random.ridgeB(), x, y, scale, recipe);
+        long warped = warp.warpedCoordinates(x, y);
+        int warpedX = (int) (warped >> 32);
+        int warpedY = (int) warped;
+        int first = smoothValueNoise(random.ridgeA(), warpedX, warpedY, scale);
+        int second = smoothValueNoise(random.ridgeB(), warpedX, warpedY, scale);
         long differencePpm = (long) Math.abs(first - second) * PPM / SAMPLE_MAX;
         int rawRidgePpm = clampPpm(PPM - differencePpm * 2L);
         int threshold = recipe.noise().ridgeCrestThresholdPpm();
@@ -497,6 +511,33 @@ final class V12LandformElevationAlgorithm {
             long y,
             long ordinal) {
         return randomPpm(random, x, y, ordinal) * 2 - PPM;
+    }
+
+    private static OrganicWarpRowSampler organicWarpSampler(
+            V12RandomStreams random,
+            WorldBounds bounds,
+            int scale,
+            V12LandformRecipe recipe) {
+        V12LandformRecipe.NoisePolicy noise = recipe.noise();
+        int warpScale = Math.max(noise.minimumWarpScale(), scale * noise.warpScaleMultiplier());
+        int warpAmplitude = Math.max(1, scale / noise.warpAmplitudeDivisor());
+        return new OrganicWarpRowSampler(
+                random.warpX(),
+                random.warpY(),
+                bounds.minX(),
+                bounds.maxX(),
+                warpScale,
+                warpAmplitude);
+    }
+
+    private static int organicValueNoise(
+            GenerationRandom.BoundSampler purpose,
+            int x,
+            int y,
+            int scale,
+            OrganicWarpRowSampler warp) {
+        long warped = warp.warpedCoordinates(x, y);
+        return smoothValueNoise(purpose, (int) (warped >> 32), (int) warped, scale);
     }
 
     private static int organicValueNoise(
