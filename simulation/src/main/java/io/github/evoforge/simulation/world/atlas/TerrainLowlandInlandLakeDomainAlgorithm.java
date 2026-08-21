@@ -115,17 +115,17 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 2,
                 (calibration.minimumComponentSpanCells() + 1) / 2);
         int requiredHalfWidthScaled = requiredHalfWidth * DISTANCE_SCALE;
-        boolean[] broadCore = new boolean[area];
-        for (int cell = 0; cell < area; cell++) {
-            broadCore[cell] = support[cell] && supportWidth[cell] > requiredHalfWidthScaled;
-        }
+        int[] distanceToCore = chamferDistanceFromSupportCore(
+                support,
+                supportWidth,
+                requiredHalfWidthScaled,
+                width,
+                height);
 
-        int[] distanceToCore = chamferDistanceFromTrue(broadCore, width, height);
-
-        /* broadCore is dead once core distance exists, so reuse it as the regularized/final mask. */
-        boolean[] regularized = broadCore;
+        /* The support mask is now dead in its broad form; overwrite it with the final regularized mask. */
+        boolean[] regularized = support;
         for (int cell = 0; cell < area; cell++) {
-            regularized[cell] = support[cell]
+            regularized[cell] = regularized[cell]
                     && supportWidth[cell] > DISTANCE_SCALE
                     && distanceToCore[cell] <= requiredHalfWidthScaled;
         }
@@ -290,11 +290,19 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         chamferPasses(distance, width, height);
     }
 
-    private static int[] chamferDistanceFromTrue(boolean[] source, int width, int height) {
-        int[] distance = new int[source.length];
+    private static int[] chamferDistanceFromSupportCore(
+            boolean[] support,
+            int[] supportWidth,
+            int minimumCoreWidth,
+            int width,
+            int height) {
+        if (support.length != supportWidth.length) {
+            throw new IllegalArgumentException("support width must match support mask area");
+        }
+        int[] distance = new int[support.length];
         boolean any = false;
-        for (int cell = 0; cell < source.length; cell++) {
-            if (source[cell]) {
+        for (int cell = 0; cell < support.length; cell++) {
+            if (support[cell] && supportWidth[cell] > minimumCoreWidth) {
                 distance[cell] = 0;
                 any = true;
             } else {
