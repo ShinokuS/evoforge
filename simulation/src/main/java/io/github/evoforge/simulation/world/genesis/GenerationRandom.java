@@ -7,7 +7,12 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>Samples are addressed by semantic stage and purpose plus three stable scope coordinates and an
  * ordinal. Direct cell-scoped generation uses global XYZ; macro stages may use their own stable
- * lattice coordinates. Call order is not part of the random state.
+ * lattice coordinates. Call order is not part of the random state.</p>
+ *
+ * <p>Hot generation code should normally {@link #bind(GenerationStageId, GenerationPurposeId)} a
+ * semantic stream once and reuse the returned sampler. Binding only precomputes the master-seed,
+ * stage and purpose prefix; coordinate and ordinal mixing is exactly the same as in
+ * {@link #sampleLong(GenerationStageId, GenerationPurposeId, long, long, long, long)}.</p>
  */
 public final class GenerationRandom {
     private static final long SEED_SALT = 0x243f6a8885a308d3L;
@@ -21,9 +26,11 @@ public final class GenerationRandom {
     private static final long FNV_PRIME = 0x100000001b3L;
 
     private final long masterSeed;
+    private final long seededState;
 
     private GenerationRandom(long masterSeed) {
         this.masterSeed = masterSeed;
+        this.seededState = mix64(masterSeed ^ SEED_SALT);
     }
 
     public static GenerationRandom from(WorldGenesis genesis) {
@@ -37,6 +44,24 @@ public final class GenerationRandom {
         return new GenerationRandom(genesis.masterSeed());
     }
 
+    /**
+     * Binds the invariant semantic prefix of a generation random stream.
+     *
+     * <p>The returned sampler is immutable, stateless and safe to share between deterministic worker
+     * tiles. Sampling order is irrelevant.</p>
+     */
+    public BoundSampler bind(GenerationStageId stage, GenerationPurposeId purpose) {
+        if (stage == null) {
+            throw new IllegalArgumentException("stage must not be null");
+        }
+        if (purpose == null) {
+            throw new IllegalArgumentException("purpose must not be null");
+        }
+        long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
+        long purposeState = mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
+        return new BoundSampler(purposeState);
+    }
+
     public long sampleLong(
             GenerationStageId stage,
             GenerationPurposeId purpose,
@@ -44,23 +69,26 @@ public final class GenerationRandom {
             long y,
             long z,
             long ordinal) {
-        if (stage == null) {
-            throw new IllegalArgumentException("stage must not be null");
-        }
-        if (purpose == null) {
-            throw new IllegalArgumentException("purpose must not be null");
-        }
-        if (ordinal < 0) {
-            throw new IllegalArgumentException("ordinal must be >= 0");
+        return bind(stage, purpose).sampleLong(x, y, z, ordinal);
+    }
+
+    /** A stateless deterministic sampler with master seed, stage and purpose already bound. */
+    public static final class BoundSampler {
+        private final long semanticState;
+
+        private BoundSampler(long semanticState) {
+            this.semanticState = semanticState;
         }
 
-        long state = mix64(masterSeed ^ SEED_SALT);
-        state = mix64(state ^ stableStringHash(stage.value()) ^ STAGE_SALT);
-        state = mix64(state ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
-        state = mix64(state ^ x ^ X_SALT);
-        state = mix64(state ^ y ^ Y_SALT);
-        state = mix64(state ^ z ^ Z_SALT);
-        return mix64(state ^ ordinal ^ ORDINAL_SALT);
+        public long sampleLong(long x, long y, long z, long ordinal) {
+            if (ordinal < 0) {
+                throw new IllegalArgumentException("ordinal must be >= 0");
+            }
+            long state = mix64(semanticState ^ x ^ X_SALT);
+            state = mix64(state ^ y ^ Y_SALT);
+            state = mix64(state ^ z ^ Z_SALT);
+            return mix64(state ^ ordinal ^ ORDINAL_SALT);
+        }
     }
 
     private static long stableStringHash(String value) {
