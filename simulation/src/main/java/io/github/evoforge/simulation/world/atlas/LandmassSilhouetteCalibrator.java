@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 
-/** Resolves semantic continent scale and fragmentation into compact-region operating values. */
+/** Resolves semantic continent scale and fragmentation into structural landmass operating values. */
 @FunctionalInterface
 public interface LandmassSilhouetteCalibrator {
     LandmassSilhouetteCalibration calibrate(
