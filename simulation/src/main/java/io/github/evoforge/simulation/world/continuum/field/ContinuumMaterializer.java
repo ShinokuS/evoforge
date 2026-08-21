@@ -15,6 +15,10 @@ public final class ContinuumMaterializer {
         this.field = field;
     }
 
+    public ContinuumWorldDomain domain() {
+        return domain;
+    }
+
     public ContinuumScalarPage materialize(ContinuumSampleWindow window) {
         if (window == null) {
             throw new IllegalArgumentException("window must not be null");
