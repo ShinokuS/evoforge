@@ -35,6 +35,15 @@ public final class GenerationRandom {
      */
     private static final ConcurrentMap<String, Long> SEMANTIC_HASHES = new ConcurrentHashMap<>();
 
+    /*
+     * Direct semantic sampling often evaluates several coordinates from the same stream back-to-back
+     * (for example the four lattice corners of value noise). Remember only the most recent exact
+     * binding per worker thread. This is an advisory computation cache, not random state: order and
+     * cross-thread interleaving cannot affect sampled values.
+     */
+    private static final ThreadLocal<DirectSemanticCache> DIRECT_SEMANTIC_CACHE =
+            ThreadLocal.withInitial(DirectSemanticCache::new);
+
     private final long masterSeed;
     private final long seededState;
 
@@ -61,7 +70,7 @@ public final class GenerationRandom {
      * tiles. Sampling order is irrelevant.</p>
      */
     public BoundSampler bind(GenerationStageId stage, GenerationPurposeId purpose) {
-        return new BoundSampler(semanticState(stage, purpose));
+        return new BoundSampler(computeSemanticState(stage, purpose));
     }
 
     public long sampleLong(
@@ -78,14 +87,42 @@ public final class GenerationRandom {
     }
 
     private long semanticState(GenerationStageId stage, GenerationPurposeId purpose) {
+        validateSemanticIds(stage, purpose);
+        DirectSemanticCache cache = DIRECT_SEMANTIC_CACHE.get();
+        if (cache.seededState == seededState
+                && cache.stage == stage
+                && cache.purpose == purpose) {
+            return cache.semanticState;
+        }
+        long state = computeSemanticStateValidated(stage, purpose);
+        cache.seededState = seededState;
+        cache.stage = stage;
+        cache.purpose = purpose;
+        cache.semanticState = state;
+        return state;
+    }
+
+    private long computeSemanticState(GenerationStageId stage, GenerationPurposeId purpose) {
+        validateSemanticIds(stage, purpose);
+        return computeSemanticStateValidated(stage, purpose);
+    }
+
+    private long computeSemanticStateValidated(
+            GenerationStageId stage,
+            GenerationPurposeId purpose) {
+        long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
+        return mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
+    }
+
+    private static void validateSemanticIds(
+            GenerationStageId stage,
+            GenerationPurposeId purpose) {
         if (stage == null) {
             throw new IllegalArgumentException("stage must not be null");
         }
         if (purpose == null) {
             throw new IllegalArgumentException("purpose must not be null");
         }
-        long stageState = mix64(seededState ^ stableStringHash(stage.value()) ^ STAGE_SALT);
-        return mix64(stageState ^ stableStringHash(purpose.value()) ^ PURPOSE_SALT);
     }
 
     /** A stateless deterministic sampler with master seed, stage and purpose already bound. */
@@ -102,6 +139,13 @@ public final class GenerationRandom {
             }
             return sampleFromState(semanticState, x, y, z, ordinal);
         }
+    }
+
+    private static final class DirectSemanticCache {
+        private long seededState;
+        private GenerationStageId stage;
+        private GenerationPurposeId purpose;
+        private long semanticState;
     }
 
     private static long sampleFromState(
