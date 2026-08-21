@@ -1,16 +1,17 @@
 package io.github.evoforge.simulation.world.atlas;
 
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /** Deterministic D8-style closed-world drainage over precise Atlas elevation. */
 public final class DrainageGenerationStage implements DrainageGenerator {
     private static final int[] DX = {-1, 0, 1, -1, 1, -1, 0, 1};
     private static final int[] DY = {-1, -1, -1, 0, 0, 1, 1, 1};
     private static final double SQRT_TWO = StrictMath.sqrt(2.0);
+
+    private static final int FLAT_UNSEEN = Integer.MIN_VALUE;
+    private static final int FLAT_COMPLETE = Integer.MIN_VALUE + 1;
+    private static final int FLAT_DISCOVERED = -1;
 
     @Override
     public DrainageField generate(ElevationField elevation) {
@@ -24,6 +25,7 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         int count = Math.multiplyExact(width, height);
         long[] heights = new long[count];
         int[] downstream = new int[count];
+        int[] traversalScratch = new int[count];
         Arrays.fill(downstream, DenseDrainageField.TERMINAL);
 
         for (int localY = 0; localY < height; localY++) {
@@ -36,11 +38,11 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         }
 
         assignStrictDownhill(width, height, heights, downstream);
-        resolveEqualElevationFlats(width, height, heights, downstream);
+        resolveEqualElevationFlats(width, height, heights, downstream, traversalScratch);
 
-        long[] contributingArea = accumulateContributingArea(downstream);
-        int[] terminal = resolveTerminals(downstream);
-        return new DenseDrainageField(bounds, downstream, contributingArea, terminal);
+        long[] contributingArea = accumulateContributingArea(downstream, traversalScratch);
+        int[] terminal = resolveTerminals(downstream, traversalScratch);
+        return DenseDrainageField.takeOwnership(bounds, downstream, contributingArea, terminal);
     }
 
     private static void assignStrictDownhill(
@@ -79,48 +81,64 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         }
     }
 
+    /**
+     * Resolves equal-elevation flats without boxed cell indices.
+     *
+     * <p>One primitive scratch array is reused first as component BFS storage and then as the
+     * distance-propagation queue. The state array combines the old visited mask and distance field:
+     * completed cells use a negative sentinel while the current component uses -1/0/positive
+     * distances. This preserves the old deterministic neighbor and tie-breaking order while avoiding
+     * {@code ArrayDeque<Integer>} and {@code List<Integer>} allocation.</p>
+     */
     private static void resolveEqualElevationFlats(
             int width,
             int height,
             long[] elevations,
-            int[] downstream) {
-        boolean[] visited = new boolean[elevations.length];
-        int[] distance = new int[elevations.length];
-        Arrays.fill(distance, -1);
+            int[] downstream,
+            int[] work) {
+        int[] state = new int[elevations.length];
+        Arrays.fill(state, FLAT_UNSEEN);
 
         for (int start = 0; start < elevations.length; start++) {
-            if (visited[start]) {
+            if (state[start] == FLAT_COMPLETE) {
                 continue;
+            }
+            if (state[start] != FLAT_UNSEEN) {
+                throw new IllegalStateException("flat drainage state leaked across components");
             }
             if (!hasEqualNeighbor(start, width, height, elevations)) {
-                visited[start] = true;
+                state[start] = FLAT_COMPLETE;
                 continue;
             }
 
-            List<Integer> component = collectFlat(
-                    start, width, height, elevations, visited);
-            ArrayDeque<Integer> frontier = new ArrayDeque<>();
-            boolean hasOutlet = false;
+            int componentSize = collectFlatInto(
+                    start, width, height, elevations, state, work);
+            int minimumCell = work[0];
+            int seedCount = 0;
 
-            for (int cell : component) {
+            /*
+             * Stable in-place compaction is safe because the write cursor never passes the read
+             * cursor. It therefore preserves the old component-order outlet seeding exactly.
+             */
+            for (int read = 0; read < componentSize; read++) {
+                int cell = work[read];
+                minimumCell = Math.min(minimumCell, cell);
                 if (downstream[cell] != DenseDrainageField.TERMINAL) {
-                    distance[cell] = 0;
-                    frontier.addLast(cell);
-                    hasOutlet = true;
+                    state[cell] = 0;
+                    work[seedCount++] = cell;
                 }
             }
 
-            if (!hasOutlet) {
-                int terminal = component.get(0);
-                for (int cell : component) {
-                    terminal = Math.min(terminal, cell);
-                }
-                distance[terminal] = 0;
-                frontier.addLast(terminal);
+            if (seedCount == 0) {
+                state[minimumCell] = 0;
+                work[0] = minimumCell;
+                seedCount = 1;
             }
 
-            while (!frontier.isEmpty()) {
-                int cell = frontier.removeFirst();
+            int head = 0;
+            int tail = seedCount;
+            while (head < tail) {
+                int cell = work[head++];
                 int x = cell % width;
                 int y = cell / width;
                 for (int neighbor = 0; neighbor < DX.length; neighbor++) {
@@ -130,22 +148,28 @@ public final class DrainageGenerationStage implements DrainageGenerator {
                         continue;
                     }
                     int candidate = ny * width + nx;
-                    if (elevations[candidate] != elevations[cell] || distance[candidate] >= 0) {
+                    if (elevations[candidate] != elevations[cell]
+                            || state[candidate] != FLAT_DISCOVERED) {
                         continue;
                     }
-                    distance[candidate] = distance[cell] + 1;
-                    frontier.addLast(candidate);
+                    state[candidate] = state[cell] + 1;
+                    work[tail++] = candidate;
                 }
             }
 
-            for (int cell : component) {
-                if (distance[cell] > 0) {
+            if (tail != componentSize) {
+                throw new IllegalStateException("flat drainage propagation did not cover component");
+            }
+
+            for (int index = 0; index < tail; index++) {
+                int cell = work[index];
+                if (state[cell] > 0) {
                     downstream[cell] = equalNeighborTowardOutlet(
-                            cell, width, height, elevations, distance);
+                            cell, width, height, elevations, state);
                 }
             }
-            for (int cell : component) {
-                distance[cell] = -1;
+            for (int index = 0; index < tail; index++) {
+                state[work[index]] = FLAT_COMPLETE;
             }
         }
     }
@@ -170,21 +194,21 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         return false;
     }
 
-    private static List<Integer> collectFlat(
+    private static int collectFlatInto(
             int start,
             int width,
             int height,
             long[] elevations,
-            boolean[] visited) {
-        List<Integer> component = new ArrayList<>();
-        ArrayDeque<Integer> frontier = new ArrayDeque<>();
+            int[] state,
+            int[] work) {
         long flatElevation = elevations[start];
-        visited[start] = true;
-        frontier.addLast(start);
+        int head = 0;
+        int tail = 0;
+        state[start] = FLAT_DISCOVERED;
+        work[tail++] = start;
 
-        while (!frontier.isEmpty()) {
-            int cell = frontier.removeFirst();
-            component.add(cell);
+        while (head < tail) {
+            int cell = work[head++];
             int x = cell % width;
             int y = cell / width;
             for (int neighbor = 0; neighbor < DX.length; neighbor++) {
@@ -194,13 +218,14 @@ public final class DrainageGenerationStage implements DrainageGenerator {
                     continue;
                 }
                 int candidate = ny * width + nx;
-                if (!visited[candidate] && elevations[candidate] == flatElevation) {
-                    visited[candidate] = true;
-                    frontier.addLast(candidate);
+                if (state[candidate] == FLAT_UNSEEN
+                        && elevations[candidate] == flatElevation) {
+                    state[candidate] = FLAT_DISCOVERED;
+                    work[tail++] = candidate;
                 }
             }
         }
-        return component;
+        return tail;
     }
 
     private static int equalNeighborTowardOutlet(
@@ -233,7 +258,7 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         return best;
     }
 
-    private static long[] accumulateContributingArea(int[] downstream) {
+    private static long[] accumulateContributingArea(int[] downstream, int[] queue) {
         int[] incoming = new int[downstream.length];
         long[] area = new long[downstream.length];
         Arrays.fill(area, 1L);
@@ -243,23 +268,24 @@ public final class DrainageGenerationStage implements DrainageGenerator {
             }
         }
 
-        ArrayDeque<Integer> ready = new ArrayDeque<>();
+        int head = 0;
+        int tail = 0;
         for (int index = 0; index < incoming.length; index++) {
             if (incoming[index] == 0) {
-                ready.addLast(index);
+                queue[tail++] = index;
             }
         }
 
         int processed = 0;
-        while (!ready.isEmpty()) {
-            int cell = ready.removeFirst();
+        while (head < tail) {
+            int cell = queue[head++];
             processed++;
             int next = downstream[cell];
             if (next != DenseDrainageField.TERMINAL) {
                 area[next] = Math.addExact(area[next], area[cell]);
                 incoming[next]--;
                 if (incoming[next] == 0) {
-                    ready.addLast(next);
+                    queue[tail++] = next;
                 }
             }
         }
@@ -269,7 +295,7 @@ public final class DrainageGenerationStage implements DrainageGenerator {
         return area;
     }
 
-    private static int[] resolveTerminals(int[] downstream) {
+    private static int[] resolveTerminals(int[] downstream, int[] path) {
         int[] terminal = new int[downstream.length];
         Arrays.fill(terminal, DenseDrainageField.TERMINAL);
         for (int start = 0; start < downstream.length; start++) {
@@ -277,18 +303,18 @@ public final class DrainageGenerationStage implements DrainageGenerator {
                 continue;
             }
             int current = start;
-            ArrayDeque<Integer> path = new ArrayDeque<>();
+            int pathLength = 0;
             while (downstream[current] != DenseDrainageField.TERMINAL
                     && terminal[current] == DenseDrainageField.TERMINAL) {
-                path.addLast(current);
+                path[pathLength++] = current;
                 current = downstream[current];
             }
             int sink = terminal[current] != DenseDrainageField.TERMINAL
                     ? terminal[current]
                     : current;
             terminal[current] = sink;
-            while (!path.isEmpty()) {
-                terminal[path.removeLast()] = sink;
+            while (pathLength > 0) {
+                terminal[path[--pathLength]] = sink;
             }
         }
         return terminal;
