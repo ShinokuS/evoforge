@@ -134,6 +134,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 width,
                 height,
                 boundary,
+                recipe.scaffold(),
                 recipe.coast());
 
         CoastField relaxed = new CoastField(CoastFieldRelaxationAlgorithm.standard().relax(
@@ -520,15 +521,23 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
             int width,
             int height,
             LandmassBoundaryCalibration boundary,
+            LandmassSilhouetteRecipe.ScaffoldPolicy scaffold,
             LandmassSilhouetteRecipe.CoastPolicy coast) {
         int area = Math.multiplyExact(width, height);
         double[] score = new double[area];
 
         double spacing = graph.spacingCells();
         double kernelRadius = Math.max(3d, spacing * KERNEL_RADIUS_IN_SPACING);
+        double maximumJitterInSpacing = scaffold.siteJitterPpm() / (double) PPM;
+        /*
+         * A control point at lattice offset k starts half a spacing from the raster cell's lattice
+         * origin and can move by at most siteJitter. Any integer k with
+         * |k| >= kernelRadius/spacing + 0.5 + jitter can never enter the compact-support kernel.
+         */
         int latticeRadius = Math.max(
-                2,
-                (int) StrictMath.ceil(kernelRadius / spacing) + 1);
+                1,
+                (int) StrictMath.ceil(
+                        kernelRadius / spacing + 0.5d + maximumJitterInSpacing) - 1);
 
         double warpScale = Math.max(
                 3d,
