@@ -82,7 +82,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         int height = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         int area = DenseElevationField.cellCount(bounds);
         if (area == 0 || boundary.maximumLandCells() == 0) {
-            return new LandmassSilhouette(
+            return LandmassSilhouette.takeOwnership(
                     bounds,
                     new boolean[area],
                     new int[area],
@@ -686,7 +686,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                     Math.min((long) PPM, normalized));
         }
 
-        return new LandmassSilhouette(
+        return LandmassSilhouette.takeOwnership(
                 bounds,
                 support,
                 potentialPpm,
