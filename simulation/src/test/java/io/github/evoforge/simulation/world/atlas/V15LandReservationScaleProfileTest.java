@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
@@ -14,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/** Diagnostic profile for the expensive V15 exact-land-compensation fallback. */
+/** Diagnostic profile for V15 predictive placement followed by exact Land compensation. */
 final class V15LandReservationScaleProfileTest {
     private static final int PPM = NormalizedValue.SCALE;
     private static final long[] SEEDS = {
@@ -28,9 +29,9 @@ final class V15LandReservationScaleProfileTest {
 
     @Test
     @Tag("worldgen-scale-profile")
-    void reportPredictiveReservationFallbackFrequency() {
+    void reportPreparedReservationMaterializationFrequency() {
         int side = 300;
-        int secondSynthesisCount = 0;
+        int secondMaterializationCount = 0;
         long checksum = 0L;
         InlandLakeDomainRecipe recipe = InlandLakeDomainRecipe.balanced();
 
@@ -52,15 +53,8 @@ final class V15LandReservationScaleProfileTest {
             int actualLakeCells = domain.lakeCellCount();
             int targetLakeCells = calibration.targetLakeCells();
 
-            AtomicInteger baseCalls = new AtomicInteger();
-            ElevationGenerator base = requested -> {
-                baseCalls.incrementAndGet();
-                if (requested.generationIntent().landCoverage().partsPerMillion()
-                        == placement.generationIntent().landCoverage().partsPerMillion()) {
-                    return placementBase;
-                }
-                return V14OceanicBaseTerrainGenerator.standard().generate(requested);
-            };
+            CountingRetargetableBase base = new CountingRetargetableBase(
+                    V14OceanicBaseTerrainGenerator.standard());
             V15InlandLakeBaseTerrainGenerator generator = new V15InlandLakeBaseTerrainGenerator(
                     base,
                     InlandLakeDomainCalibrator.standard(),
@@ -70,27 +64,32 @@ final class V15LandReservationScaleProfileTest {
                     true);
 
             ElevationField result = generator.generate(original);
-            int calls = baseCalls.get();
-            assertTrue(calls == 1 || calls == 2,
-                    "predictive V15 path should synthesize continental base once or fall back once");
-            if (calls == 2) secondSynthesisCount++;
+            int prepares = base.prepareCalls();
+            int materializations = base.materializeCalls();
+            assertEquals(1, prepares,
+                    "standard V15 should prepare Land-independent continental facts exactly once");
+            assertTrue(materializations == 1 || materializations == 2,
+                    "V15 should materialize placement once and exact compensation at most once");
+            if (materializations == 2) secondMaterializationCount++;
             checksum ^= sample(result, seed);
             System.out.printf(Locale.ROOT,
-                    "V15_RESERVATION seed=%d side=%d predicted_lake=%d target_lake=%d actual_lake=%d delta=%+d continental_syntheses=%d%n",
+                    "V15_RESERVATION seed=%d side=%d predicted_lake=%d target_lake=%d actual_lake=%d delta=%+d prepares=%d materializations=%d%n",
                     seed,
                     side,
                     predictedLakeCells,
                     targetLakeCells,
                     actualLakeCells,
                     actualLakeCells - predictedLakeCells,
-                    calls);
+                    prepares,
+                    materializations);
         }
 
         System.out.printf(Locale.ROOT,
-                "V15_RESERVATION_SUMMARY seeds=%d second_synthesis=%d rate=%.3f checksum=%016x%n",
+                "V15_RESERVATION_SUMMARY seeds=%d prepares=%d second_materialization=%d rate=%.3f checksum=%016x%n",
                 SEEDS.length,
-                secondSynthesisCount,
-                secondSynthesisCount / (double) SEEDS.length,
+                SEEDS.length,
+                secondMaterializationCount,
+                secondMaterializationCount / (double) SEEDS.length,
                 checksum);
         assertTrue(checksum != 0L);
     }
@@ -205,5 +204,34 @@ final class V15LandReservationScaleProfileTest {
         mixed = (mixed ^ (mixed >>> 30)) * 0xbf58476d1ce4e5b9L;
         mixed = (mixed ^ (mixed >>> 27)) * 0x94d049bb133111ebL;
         return mixed ^ (mixed >>> 31);
+    }
+
+    private static final class CountingRetargetableBase
+            implements LandCoverageRetargetableElevationGenerator {
+        private final LandCoverageRetargetableElevationGenerator delegate;
+        private final AtomicInteger prepareCalls = new AtomicInteger();
+        private final AtomicInteger materializeCalls = new AtomicInteger();
+
+        private CountingRetargetableBase(LandCoverageRetargetableElevationGenerator delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public PreparedLandCoverageElevation prepare(WorldGenesis genesis) {
+            prepareCalls.incrementAndGet();
+            PreparedLandCoverageElevation prepared = delegate.prepare(genesis);
+            return targetGenesis -> {
+                materializeCalls.incrementAndGet();
+                return prepared.materialize(targetGenesis);
+            };
+        }
+
+        int prepareCalls() {
+            return prepareCalls.get();
+        }
+
+        int materializeCalls() {
+            return materializeCalls.get();
+        }
     }
 }
