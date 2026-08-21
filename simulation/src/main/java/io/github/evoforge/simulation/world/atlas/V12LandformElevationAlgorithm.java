@@ -31,6 +31,7 @@ final class V12LandformElevationAlgorithm {
     private static final GenerationPurposeId WARP_Y = GenerationPurposeId.of("world:v12-warp-y");
 
     private static final int SAMPLE_MAX = 65_535;
+    private static final int POTENTIAL_BUCKETS = SAMPLE_MAX + 2;
     private static final int PPM = NormalizedValue.SCALE;
 
     ElevationField generate(
@@ -62,17 +63,14 @@ final class V12LandformElevationAlgorithm {
         int area = calibration.area();
         GenerationRandom random = GenerationRandom.from(genesis);
 
-        long[] rankKeys = calibratedLandRankKeys(
+        CalibratedLandRanking ranking = calibratedLandRanking(
                 random,
                 bounds,
                 calibration,
                 recipe,
                 silhouette);
         int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
-        boolean[] land = new boolean[area];
-        for (int rank = 0; rank < landCount; rank++) {
-            land[(int) rankKeys[rank]] = true;
-        }
+        boolean[] land = selectedLand(ranking, silhouette, landCount);
         int[] coastalInteriority = coastalInteriorityPpm(
                 land,
                 width,
@@ -93,8 +91,10 @@ final class V12LandformElevationAlgorithm {
         V12LandformRecipe.ReliefMix relief = recipe.relief();
         V12LandformRecipe.CoastProfile coast = recipe.coast();
 
-        for (int rank = 0; rank < area; rank++) {
-            int cell = (int) rankKeys[rank];
+        int[] seenByBucket = new int[POTENTIAL_BUCKETS];
+        for (int cell = 0; cell < area; cell++) {
+            int bucket = rankingBucket(ranking, silhouette, cell);
+            int rank = ranking.startRankByBucket()[bucket] + seenByBucket[bucket]++;
             if (!land[cell]) {
                 elevations[cell] = -positiveRankHeight(
                         area - 1 - rank,
@@ -166,7 +166,15 @@ final class V12LandformElevationAlgorithm {
         return new DenseElevationField(bounds, elevations);
     }
 
-    private static long[] calibratedLandRankKeys(
+    /**
+     * Computes the exact old comparison-sort rank from a bounded 16-bit potential domain.
+     *
+     * <p>Bucket zero represents unsupported potential -1. Supported potential {@code p} uses bucket
+     * {@code p + 1}. Start ranks are accumulated from highest potential to lowest. A later linear
+     * scan increments {@code seen[bucket]}, reproducing the old cell-index tie-break exactly without
+     * allocating or sorting one 64-bit key per cell.</p>
+     */
+    private static CalibratedLandRanking calibratedLandRanking(
             GenerationRandom random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
@@ -175,12 +183,19 @@ final class V12LandformElevationAlgorithm {
         int width = calibration.width();
         int height = calibration.height();
         int fragmentPpm = calibration.fragmentationPpm();
-        long[] rankKeys = new long[calibration.area()];
+        char[] potentialSamples = new char[calibration.area()];
+        int[] bucketCounts = new int[POTENTIAL_BUCKETS];
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
             int y = bounds.minY() + localY;
             for (int localX = 0; localX < width; localX++) {
+                if (!silhouette.supportsIndex(index)) {
+                    bucketCounts[0]++;
+                    index++;
+                    continue;
+                }
+
                 int x = bounds.minX() + localX;
                 int coherent = organicValueNoise(
                         random,
@@ -198,9 +213,7 @@ final class V12LandformElevationAlgorithm {
                         recipe);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
-                if (!silhouette.supportsIndex(index)) {
-                    potential = -1;
-                } else if (silhouette.constrained()) {
+                if (silhouette.constrained()) {
                     int basePpm = sampleToPpm(potential);
                     int influencePpm = silhouette.influencePpm();
                     int blendedPpm = Math.toIntExact(
@@ -208,12 +221,45 @@ final class V12LandformElevationAlgorithm {
                                     + (long) silhouette.potentialPpmAtIndex(index) * influencePpm) / PPM);
                     potential = ppmToSample(blendedPpm);
                 }
-                rankKeys[index] = rankKey(potential, index);
+                potentialSamples[index] = (char) potential;
+                bucketCounts[potential + 1]++;
                 index++;
             }
         }
-        Arrays.sort(rankKeys);
-        return rankKeys;
+
+        int[] startRankByBucket = new int[POTENTIAL_BUCKETS];
+        int runningRank = 0;
+        for (int bucket = POTENTIAL_BUCKETS - 1; bucket >= 0; bucket--) {
+            startRankByBucket[bucket] = runningRank;
+            runningRank = Math.addExact(runningRank, bucketCounts[bucket]);
+        }
+        if (runningRank != calibration.area()) {
+            throw new IllegalStateException("V12 potential histogram did not cover generation area");
+        }
+        return new CalibratedLandRanking(potentialSamples, startRankByBucket);
+    }
+
+    private static boolean[] selectedLand(
+            CalibratedLandRanking ranking,
+            LandmassSilhouette silhouette,
+            int landCount) {
+        boolean[] land = new boolean[ranking.potentialSamples().length];
+        int[] seenByBucket = new int[POTENTIAL_BUCKETS];
+        for (int cell = 0; cell < land.length; cell++) {
+            int bucket = rankingBucket(ranking, silhouette, cell);
+            int rank = ranking.startRankByBucket()[bucket] + seenByBucket[bucket]++;
+            if (rank < landCount) land[cell] = true;
+        }
+        return land;
+    }
+
+    private static int rankingBucket(
+            CalibratedLandRanking ranking,
+            LandmassSilhouette silhouette,
+            int cell) {
+        return silhouette.supportsIndex(cell)
+                ? ranking.potentialSamples()[cell] + 1
+                : 0;
     }
 
     private static long landformFieldPpm(
@@ -506,11 +552,6 @@ final class V12LandformElevationAlgorithm {
         return (int) Math.max(0L, Math.min((long) PPM, value));
     }
 
-    private static long rankKey(int potential, int cellIndex) {
-        long invertedPotential = (long) SAMPLE_MAX - potential;
-        return (invertedPotential << 32) | (cellIndex & 0xffff_ffffL);
-    }
-
     private static long positiveRankHeight(int rankFromExtreme, int count, long amplitude) {
         if (count <= 0) return 0L;
         if (count == 1) return Math.max(1L, amplitude);
@@ -540,10 +581,9 @@ final class V12LandformElevationAlgorithm {
             }
         }
 
-        int[] result = new int[land.length];
         if (!hasOcean) {
-            Arrays.fill(result, PPM);
-            return result;
+            Arrays.fill(distance, PPM);
+            return distance;
         }
 
         for (int y = 0; y < height; y++) {
@@ -571,9 +611,14 @@ final class V12LandformElevationAlgorithm {
             if (!land[index]) continue;
             long coordinate = Math.min(distance[index], transitionCells)
                     * (long) PPM / transitionCells;
-            result[index] = smoothStepPpm(coordinate);
+            distance[index] = smoothStepPpm(coordinate);
         }
-        return result;
+        return distance;
+    }
+
+    private record CalibratedLandRanking(
+            char[] potentialSamples,
+            int[] startRankByBucket) {
     }
 
     private record LandformFeature(
