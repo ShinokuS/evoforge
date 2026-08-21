@@ -23,18 +23,24 @@ The visual result and deterministic generation contracts remain authoritative. P
 
 ## Current status
 
-The accepted V15 generation result is the quality baseline. The current performance milestone begins from squash merge `bf53773e01f01b6bd7c671923928e8647cf6d334`.
+The accepted V15 generation result is the quality baseline. This performance milestone begins from squash merge `bf53773e01f01b6bd7c671923928e8647cf6d334`.
 
-The target for this milestone is:
+The milestone target is:
 
 ```text
 minimum normal target: 10,000 × 10,000 = 100,000,000 cells
 future direction: larger worlds without redesigning every algorithm again
 ```
 
-The first audit shows that the current pipeline is not yet suitable for that target. Several algorithms are asymptotically or memory-bandwidth expensive even though they are acceptable at small preview sizes.
+Hosted validation now reaches the minimum target without changing accepted deterministic output. On the GitHub Actions Java 21 runner with `-Xmx6g`, V15 generation plus drainage completed for `10,000 × 10,000` (100,000,000 cells). The validated run at commit `0e9c80b3fbfa46fead2de10a44d8b6fa651d792c` recorded about 159.8 s elevation, 8.9 s drainage and 168.7 s total, with checksum `46016f50f9d012ce`.
 
-No wall-clock requirement is yet declared as an invariant. Hardware differs too much for ordinary CI to assert a useful absolute generation time. Instead we first remove known asymptotic and allocation pathologies, add a repeatable benchmark harness, and then establish measured budgets.
+Stage memory snapshots (GC-timing-sensitive, but useful as live-set evidence) were about 4,346 MiB after inland-lake domain selection and 5,592 MiB after exact retarget materialization, below the 6,144 MiB heap limit. Thread allocation traffic was about 14,456 MiB for elevation and 2,289 MiB for drainage; this is cumulative allocation traffic, not peak heap.
+
+The 10k capacity milestone is therefore met for the accepted single-process dense in-memory baseline. Future work can still reduce allocation traffic, remove the routine second V15 materialization and add deterministic tiled parallelism, but those are no longer prerequisites for fitting the accepted 10k world in the measured 6 GiB heap.
+
+The implementation audit below records the beginning-of-milestone state and is intentionally historical: later sections describe the optimization directions that produced the validated result above.
+
+No wall-clock requirement is yet declared as an invariant. Hardware differs too much for ordinary CI to assert a useful absolute generation time. Instead we remove known asymptotic and allocation pathologies, keep a repeatable benchmark harness, and use measured budgets to guide further work.
 
 ## Mental model
 
