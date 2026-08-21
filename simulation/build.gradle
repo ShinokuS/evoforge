@@ -13,7 +13,7 @@ dependencies {
 
 test {
     useJUnitPlatform {
-        excludeTags 'scale-profile', 'generated-world-audit'
+        excludeTags 'scale-profile', 'worldgen-scale-profile', 'generated-world-audit'
     }
 
     testLogging {
@@ -34,6 +34,28 @@ tasks.register('scaleProfile', Test) {
 
     systemProperty 'evoforge.scale.profile',
             System.getProperty('evoforge.scale.profile', 'medium')
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+        showStandardStreams = true
+    }
+
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('worldgenScaleProfile', Test) {
+    description = 'Runs deterministic end-to-end world-generation profiling at a configurable side length.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'worldgen-scale-profile'
+    }
+
+    systemProperty 'evoforge.worldgen.profile.side',
+            System.getProperty('evoforge.worldgen.profile.side', '512')
 
     testLogging {
         events "passed", "skipped", "failed"
