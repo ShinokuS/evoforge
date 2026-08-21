@@ -92,14 +92,17 @@ final class WorldGenerationScaleProfileTest {
                 GenerationRevision.V15
         }) {
             WorldGenesis genesis = genesis(side, revision);
+            long beforeAllocatedBytes = allocatedBytes();
             long start = System.nanoTime();
             var elevation = algorithms.elevation().generate(genesis);
             long end = System.nanoTime();
+            long afterAllocatedBytes = allocatedBytes();
             long checksum = sampledElevationChecksum(side, elevation);
             System.out.printf(Locale.ROOT,
-                    "  revision=%s elevation_ms=%.3f checksum=%016x%n",
+                    "  revision=%s elevation_ms=%.3f allocated_mib=%.2f checksum=%016x%n",
                     revision,
                     millis(start, end),
+                    allocationMib(beforeAllocatedBytes, afterAllocatedBytes),
                     checksum);
         }
     }
