@@ -51,7 +51,37 @@ final class V12LandformElevationAlgorithm {
             V12LandformCalibration calibration,
             V12LandformRecipe recipe,
             LandmassSilhouette silhouette) {
+        PreparedLandRanking ranking = prepareLandRanking(genesis, calibration, recipe, silhouette);
+        return generate(genesis, calibration, recipe, silhouette, ranking);
+    }
+
+    PreparedLandRanking prepareLandRanking(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette) {
         if (genesis == null || calibration == null || recipe == null || silhouette == null) {
+            throw new IllegalArgumentException("V12 generation inputs must not be null");
+        }
+        WorldBounds bounds = genesis.spec().bounds();
+        if (!bounds.equals(silhouette.bounds())) {
+            throw new IllegalArgumentException("landmass silhouette must match generation bounds");
+        }
+        V12RandomStreams random = V12RandomStreams.bind(GenerationRandom.from(genesis));
+        return calibratedLandRanking(random, bounds, calibration, recipe, silhouette);
+    }
+
+    ElevationField generate(
+            WorldGenesis genesis,
+            V12LandformCalibration calibration,
+            V12LandformRecipe recipe,
+            LandmassSilhouette silhouette,
+            PreparedLandRanking ranking) {
+        if (genesis == null
+                || calibration == null
+                || recipe == null
+                || silhouette == null
+                || ranking == null) {
             throw new IllegalArgumentException("V12 generation inputs must not be null");
         }
         WorldBounds bounds = genesis.spec().bounds();
@@ -61,14 +91,12 @@ final class V12LandformElevationAlgorithm {
         int width = calibration.width();
         int height = calibration.height();
         int area = calibration.area();
+        if (ranking.potentialSamples().length != area
+                || ranking.startRankByBucket().length != POTENTIAL_BUCKETS) {
+            throw new IllegalArgumentException("prepared V12 land ranking must match generation area");
+        }
         V12RandomStreams random = V12RandomStreams.bind(GenerationRandom.from(genesis));
 
-        CalibratedLandRanking ranking = calibratedLandRanking(
-                random,
-                bounds,
-                calibration,
-                recipe,
-                silhouette);
         int landCount = Math.min(calibration.landCount(), silhouette.supportCellCount());
         boolean[] land = selectedLand(ranking, silhouette, landCount);
         int[] coastalInteriority = coastalInteriorityPpm(
@@ -174,7 +202,7 @@ final class V12LandformElevationAlgorithm {
      * scan increments {@code seen[bucket]}, reproducing the old cell-index tie-break exactly without
      * allocating or sorting one 64-bit key per cell.</p>
      */
-    private static CalibratedLandRanking calibratedLandRanking(
+    private static PreparedLandRanking calibratedLandRanking(
             V12RandomStreams random,
             WorldBounds bounds,
             V12LandformCalibration calibration,
@@ -236,11 +264,11 @@ final class V12LandformElevationAlgorithm {
         if (runningRank != calibration.area()) {
             throw new IllegalStateException("V12 potential histogram did not cover generation area");
         }
-        return new CalibratedLandRanking(potentialSamples, startRankByBucket);
+        return new PreparedLandRanking(potentialSamples, startRankByBucket);
     }
 
     private static boolean[] selectedLand(
-            CalibratedLandRanking ranking,
+            PreparedLandRanking ranking,
             LandmassSilhouette silhouette,
             int landCount) {
         boolean[] land = new boolean[ranking.potentialSamples().length];
@@ -254,7 +282,7 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static int rankingBucket(
-            CalibratedLandRanking ranking,
+            PreparedLandRanking ranking,
             LandmassSilhouette silhouette,
             int cell) {
         return silhouette.supportsIndex(cell)
@@ -600,9 +628,14 @@ final class V12LandformElevationAlgorithm {
         return distance;
     }
 
-    private record CalibratedLandRanking(
+    record PreparedLandRanking(
             char[] potentialSamples,
             int[] startRankByBucket) {
+        PreparedLandRanking {
+            if (potentialSamples == null || startRankByBucket == null) {
+                throw new IllegalArgumentException("prepared V12 ranking buffers must not be null");
+            }
+        }
     }
 
     /** Bound V12 semantic random streams reused by every hot sample in one world. */
