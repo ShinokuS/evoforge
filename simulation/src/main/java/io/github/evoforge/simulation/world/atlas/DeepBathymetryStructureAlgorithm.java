@@ -106,12 +106,15 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
                 recipe);
         if (cores.size() < interior.minimumCoreCount()) return;
 
-        long[] acceptedDepth = new long[elevation.length];
+        /*
+         * Structural depth exists only for this water component. Keeping it component-local avoids
+         * two complete world-sized long rasters per component while preserving the exact cell order
+         * and max/min composition used by the former global-index buffers.
+         */
+        long[] structuredDepth = new long[componentSize];
         for (int index = 0; index < componentSize; index++) {
-            int cell = component[index];
-            acceptedDepth[cell] = -elevation[cell];
+            structuredDepth[index] = -elevation[component[index]];
         }
-        long[] structuredDepth = acceptedDepth.clone();
 
         for (Core core : cores) {
             for (int index = 0; index < componentSize; index++) {
@@ -121,13 +124,13 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
                 long radialChange = structureSlope * radialDistance / DISTANCE_SCALE;
                 if (core.basin()) {
                     long surfaceDepth = core.targetDepthSubunits() - radialChange;
-                    if (surfaceDepth > structuredDepth[cell]) {
-                        structuredDepth[cell] = Math.min(depthCap, surfaceDepth);
+                    if (surfaceDepth > structuredDepth[index]) {
+                        structuredDepth[index] = Math.min(depthCap, surfaceDepth);
                     }
                 } else {
                     long ceilingDepth = core.targetDepthSubunits() + radialChange;
-                    if (ceilingDepth < structuredDepth[cell]) {
-                        structuredDepth[cell] = Math.max(1L, ceilingDepth);
+                    if (ceilingDepth < structuredDepth[index]) {
+                        structuredDepth[index] = Math.max(1L, ceilingDepth);
                     }
                 }
             }
@@ -136,7 +139,7 @@ public final class DeepBathymetryStructureAlgorithm implements BathymetryElevati
         for (int index = 0; index < componentSize; index++) {
             int cell = component[index];
             if (shorelineDistance[cell] <= protectedBandDistance) continue;
-            elevation[cell] = -Math.max(1L, Math.min(depthCap, structuredDepth[cell]));
+            elevation[cell] = -Math.max(1L, Math.min(depthCap, structuredDepth[index]));
         }
     }
 
