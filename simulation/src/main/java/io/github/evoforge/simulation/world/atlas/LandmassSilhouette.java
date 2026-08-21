@@ -9,18 +9,53 @@ final class LandmassSilhouette {
     private static final int PPM = NormalizedValue.SCALE;
 
     private final WorldBounds bounds;
+    private final int cellCount;
     private final boolean[] support;
     private final int[] potentialPpm;
     private final int supportCellCount;
     private final int influencePpm;
     private final boolean constrained;
 
+    /**
+     * Copy-safe constructor for callers that retain ownership of their input arrays.
+     */
     LandmassSilhouette(
             WorldBounds bounds,
             boolean[] support,
             int[] potentialPpm,
             int supportCellCount,
             int influencePpm) {
+        this(bounds, support, potentialPpm, supportCellCount, influencePpm, true);
+    }
+
+    /**
+     * Transfers exclusive ownership of freshly produced silhouette arrays without copying them.
+     *
+     * <p>This is package-private on purpose: generation algorithms may use it only when they have
+     * just allocated the arrays and never expose or mutate them again.</p>
+     */
+    static LandmassSilhouette takeOwnership(
+            WorldBounds bounds,
+            boolean[] support,
+            int[] potentialPpm,
+            int supportCellCount,
+            int influencePpm) {
+        return new LandmassSilhouette(
+                bounds,
+                support,
+                potentialPpm,
+                supportCellCount,
+                influencePpm,
+                false);
+    }
+
+    private LandmassSilhouette(
+            WorldBounds bounds,
+            boolean[] support,
+            int[] potentialPpm,
+            int supportCellCount,
+            int influencePpm,
+            boolean copyArrays) {
         if (bounds == null || support == null || potentialPpm == null) {
             throw new IllegalArgumentException("landmass silhouette facts must not be null");
         }
@@ -45,19 +80,25 @@ final class LandmassSilhouette {
             throw new IllegalArgumentException("landmass silhouette support count must match support mask");
         }
         this.bounds = bounds;
-        this.support = Arrays.copyOf(support, support.length);
-        this.potentialPpm = Arrays.copyOf(potentialPpm, potentialPpm.length);
+        this.cellCount = expected;
+        this.support = copyArrays ? Arrays.copyOf(support, support.length) : support;
+        this.potentialPpm = copyArrays ? Arrays.copyOf(potentialPpm, potentialPpm.length) : potentialPpm;
         this.supportCellCount = supportCellCount;
         this.influencePpm = influencePpm;
         this.constrained = true;
     }
 
+    /**
+     * Lightweight sentinel for an unconstrained V12 call.
+     *
+     * <p>No per-cell support or potential arrays are required because every cell is supported and
+     * silhouette influence is zero by definition.</p>
+     */
     private LandmassSilhouette(WorldBounds bounds, int cellCount) {
         this.bounds = bounds;
-        this.support = new boolean[cellCount];
-        this.potentialPpm = new int[cellCount];
-        Arrays.fill(this.support, true);
-        Arrays.fill(this.potentialPpm, PPM);
+        this.cellCount = cellCount;
+        this.support = null;
+        this.potentialPpm = null;
         this.supportCellCount = cellCount;
         this.influencePpm = 0;
         this.constrained = false;
@@ -86,16 +127,16 @@ final class LandmassSilhouette {
 
     boolean supportsIndex(int index) {
         requireIndex(index);
-        return support[index];
+        return !constrained || support[index];
     }
 
     int potentialPpmAtIndex(int index) {
         requireIndex(index);
-        return potentialPpm[index];
+        return constrained ? potentialPpm[index] : PPM;
     }
 
     private void requireIndex(int index) {
-        if (index < 0 || index >= support.length) {
+        if (index < 0 || index >= cellCount) {
             throw new IllegalArgumentException("landmass silhouette index outside world domain: " + index);
         }
     }
