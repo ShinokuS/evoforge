@@ -85,6 +85,51 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase =
                 prepareRetargetableBase(placementGenesis);
         profileMemory("v15.after_prepare_base");
+
+        PlacementAssessment placement = assessPlacement(
+                genesis,
+                placementGenesis,
+                preparedBase);
+        InlandLakeDomain domain = placement.domain();
+        WorldGenesis exactGenesis = placement.exactGenesis();
+        profileMemory("v15.after_placement_assessment");
+
+        ElevationField authoritativeBase;
+        if (placement.reusablePlacementBase() != null) {
+            authoritativeBase = placement.reusablePlacementBase();
+        } else if (preparedBase != null) {
+            profileMemory("v15.before_exact_materialize");
+            authoritativeBase = requireBase(preparedBase.materialize(exactGenesis));
+            profileMemory("v15.after_exact_materialize");
+        } else {
+            profileMemory("v15.before_exact_regenerate");
+            authoritativeBase = requireBase(continentalBaseGenerator.generate(exactGenesis));
+            profileMemory("v15.after_exact_regenerate");
+        }
+
+        if (domain.lakeCellCount() == 0) return authoritativeBase;
+        verifyLakeDomainRemainsDry(authoritativeBase, domain);
+        profileMemory("v15.after_domain_verification");
+
+        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
+        if (conditioned == null) {
+            throw new IllegalStateException("V15 inland lake shore algorithm returned null");
+        }
+        profileMemory("v15.after_shore_conditioning");
+        return conditioned;
+    }
+
+    /**
+     * Materializes the placement terrain only inside this frame so that a retargeted second
+     * materialization cannot accidentally retain the first full elevation raster as a GC root.
+     *
+     * <p>If exact land coverage equals placement coverage, the same placement field is deliberately
+     * returned for reuse and behavior is identical to the former single-frame implementation.</p>
+     */
+    private PlacementAssessment assessPlacement(
+            WorldGenesis genesis,
+            WorldGenesis placementGenesis,
+            LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation preparedBase) {
         ElevationField placementBase = requireBase(preparedBase != null
                 ? preparedBase.materialize(placementGenesis)
                 : continentalBaseGenerator.generate(placementGenesis));
@@ -111,29 +156,10 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
         WorldGenesis exactGenesis = domain.lakeCellCount() == 0
                 ? genesis
                 : compensatedLandGenesis(genesis, domain.lakeCellCount());
-        ElevationField authoritativeBase;
-        if (sameLandCoverage(placementGenesis, exactGenesis)) {
-            authoritativeBase = placementBase;
-        } else if (preparedBase != null) {
-            profileMemory("v15.before_exact_materialize");
-            authoritativeBase = requireBase(preparedBase.materialize(exactGenesis));
-            profileMemory("v15.after_exact_materialize");
-        } else {
-            profileMemory("v15.before_exact_regenerate");
-            authoritativeBase = requireBase(continentalBaseGenerator.generate(exactGenesis));
-            profileMemory("v15.after_exact_regenerate");
-        }
-
-        if (domain.lakeCellCount() == 0) return authoritativeBase;
-        verifyLakeDomainRemainsDry(authoritativeBase, domain);
-        profileMemory("v15.after_domain_verification");
-
-        ElevationField conditioned = shoreAlgorithm.condition(authoritativeBase, domain);
-        if (conditioned == null) {
-            throw new IllegalStateException("V15 inland lake shore algorithm returned null");
-        }
-        profileMemory("v15.after_shore_conditioning");
-        return conditioned;
+        ElevationField reusablePlacementBase = sameLandCoverage(placementGenesis, exactGenesis)
+                ? placementBase
+                : null;
+        return new PlacementAssessment(domain, exactGenesis, reusablePlacementBase);
     }
 
     private LandCoverageRetargetableElevationGenerator.PreparedLandCoverageElevation prepareRetargetableBase(
@@ -261,5 +287,11 @@ public final class V15InlandLakeBaseTerrainGenerator implements ElevationGenerat
                 used / 1048576.0,
                 runtime.totalMemory() / 1048576.0,
                 runtime.maxMemory() / 1048576.0);
+    }
+
+    private record PlacementAssessment(
+            InlandLakeDomain domain,
+            WorldGenesis exactGenesis,
+            ElevationField reusablePlacementBase) {
     }
 }
