@@ -74,7 +74,7 @@ final class DistanceProfileInlandLakeBathymetryAlgorithm implements InlandLakeBa
                     bounds,
                     recipe);
         }
-        return new DenseElevationField(bounds, result);
+        return DenseElevationField.takeOwnership(bounds, result);
     }
 
     private static void refineInlandComponent(
