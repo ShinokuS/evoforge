@@ -20,6 +20,29 @@ interface CoastFieldRelaxationAlgorithm {
             int plateSpacingCells,
             LandmassSilhouetteRecipe.CoastRelaxationPolicy policy);
 
+    /**
+     * Relaxes a freshly allocated field whose storage ownership is transferred to this algorithm.
+     *
+     * <p>The default remains copy-safe for alternate implementations. The standard implementation
+     * overrides this method so production may recycle the transferred source as one of its two
+     * ping-pong buffers without changing relaxation arithmetic or the public copy-safe contract.</p>
+     */
+    default double[] relaxOwned(
+            double[] ownedSource,
+            int width,
+            int height,
+            int lockedOceanEdgeCells,
+            int plateSpacingCells,
+            LandmassSilhouetteRecipe.CoastRelaxationPolicy policy) {
+        return relax(
+                ownedSource,
+                width,
+                height,
+                lockedOceanEdgeCells,
+                plateSpacingCells,
+                policy);
+    }
+
     static CoastFieldRelaxationAlgorithm standard() {
         return WeightedCoastFieldRelaxationAlgorithm.INSTANCE;
     }
@@ -40,6 +63,107 @@ final class WeightedCoastFieldRelaxationAlgorithm implements CoastFieldRelaxatio
             int lockedOceanEdgeCells,
             int plateSpacingCells,
             LandmassSilhouetteRecipe.CoastRelaxationPolicy policy) {
+        requireInputs(source, width, height, lockedOceanEdgeCells, plateSpacingCells, policy);
+        return relaxOwned(
+                source.clone(),
+                width,
+                height,
+                lockedOceanEdgeCells,
+                plateSpacingCells,
+                policy);
+    }
+
+    @Override
+    public double[] relaxOwned(
+            double[] ownedSource,
+            int width,
+            int height,
+            int lockedOceanEdgeCells,
+            int plateSpacingCells,
+            LandmassSilhouetteRecipe.CoastRelaxationPolicy policy) {
+        requireInputs(ownedSource, width, height, lockedOceanEdgeCells, plateSpacingCells, policy);
+
+        if (policy.passes() == 0) return ownedSource;
+
+        double bandWidth = Math.max(
+                1.5d,
+                plateSpacingCells * policy.bandWidthSpacingPpm() / (double) PPM);
+        double maximumShift = policy.maximumShiftPpmOfCell() / (double) PPM;
+        double[] current = ownedSource;
+        double[] next = ownedSource.clone();
+
+        for (int pass = 0; pass < policy.passes(); pass++) {
+            if (pass > 0) {
+                System.arraycopy(current, 0, next, 0, current.length);
+            }
+            relaxPass(
+                    current,
+                    next,
+                    width,
+                    height,
+                    lockedOceanEdgeCells,
+                    bandWidth,
+                    maximumShift,
+                    policy);
+            double[] swap = current;
+            current = next;
+            next = swap;
+        }
+        return current;
+    }
+
+    private static void relaxPass(
+            double[] current,
+            double[] next,
+            int width,
+            int height,
+            int lockedOceanEdgeCells,
+            double bandWidth,
+            double maximumShift,
+            LandmassSilhouetteRecipe.CoastRelaxationPolicy policy) {
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (edgeDistance(x, y, width, height) < lockedOceanEdgeCells) {
+                    continue;
+                }
+                int index = y * width + x;
+                double center = current[index];
+                if (!Double.isFinite(center) || StrictMath.abs(center) > bandWidth) {
+                    continue;
+                }
+
+                double weighted = center * policy.selfWeightPpm();
+                long totalWeight = policy.selfWeightPpm();
+                for (int oy = -1; oy <= 1; oy++) {
+                    for (int ox = -1; ox <= 1; ox++) {
+                        if (ox == 0 && oy == 0) continue;
+                        int nx = x + ox;
+                        int ny = y + oy;
+                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                        double neighbor = current[ny * width + nx];
+                        if (!Double.isFinite(neighbor)) continue;
+                        int weight = ox == 0 || oy == 0
+                                ? policy.orthogonalNeighborWeightPpm()
+                                : policy.diagonalNeighborWeightPpm();
+                        weighted += neighbor * weight;
+                        totalWeight += weight;
+                    }
+                }
+
+                double target = weighted / totalWeight;
+                double shift = Math.max(-maximumShift, Math.min(maximumShift, target - center));
+                next[index] = center + shift;
+            }
+        }
+    }
+
+    private static void requireInputs(
+            double[] source,
+            int width,
+            int height,
+            int lockedOceanEdgeCells,
+            int plateSpacingCells,
+            LandmassSilhouetteRecipe.CoastRelaxationPolicy policy) {
         if (source == null || policy == null) {
             throw new IllegalArgumentException("coast relaxation inputs must not be null");
         }
@@ -49,52 +173,6 @@ final class WeightedCoastFieldRelaxationAlgorithm implements CoastFieldRelaxatio
         if (lockedOceanEdgeCells < 0 || plateSpacingCells <= 0) {
             throw new IllegalArgumentException("coast relaxation geometry must be positive");
         }
-
-        double bandWidth = Math.max(
-                1.5d,
-                plateSpacingCells * policy.bandWidthSpacingPpm() / (double) PPM);
-        double maximumShift = policy.maximumShiftPpmOfCell() / (double) PPM;
-        double[] current = source.clone();
-
-        for (int pass = 0; pass < policy.passes(); pass++) {
-            double[] next = current.clone();
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (edgeDistance(x, y, width, height) < lockedOceanEdgeCells) {
-                        continue;
-                    }
-                    int index = y * width + x;
-                    double center = current[index];
-                    if (!Double.isFinite(center) || StrictMath.abs(center) > bandWidth) {
-                        continue;
-                    }
-
-                    double weighted = center * policy.selfWeightPpm();
-                    long totalWeight = policy.selfWeightPpm();
-                    for (int oy = -1; oy <= 1; oy++) {
-                        for (int ox = -1; ox <= 1; ox++) {
-                            if (ox == 0 && oy == 0) continue;
-                            int nx = x + ox;
-                            int ny = y + oy;
-                            if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-                            double neighbor = current[ny * width + nx];
-                            if (!Double.isFinite(neighbor)) continue;
-                            int weight = ox == 0 || oy == 0
-                                    ? policy.orthogonalNeighborWeightPpm()
-                                    : policy.diagonalNeighborWeightPpm();
-                            weighted += neighbor * weight;
-                            totalWeight += weight;
-                        }
-                    }
-
-                    double target = weighted / totalWeight;
-                    double shift = Math.max(-maximumShift, Math.min(maximumShift, target - center));
-                    next[index] = center + shift;
-                }
-            }
-            current = next;
-        }
-        return current;
     }
 
     private static int edgeDistance(int x, int y, int width, int height) {
