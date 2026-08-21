@@ -31,8 +31,9 @@ final class LandmassSilhouette {
     /**
      * Transfers exclusive ownership of freshly produced silhouette arrays without copying them.
      *
-     * <p>This is package-private on purpose: generation algorithms may use it only when they have
-     * just allocated the arrays and never expose or mutate them again.</p>
+     * <p>When positive potential entries exactly encode support, the redundant boolean mask is not
+     * retained. Callers with intentionally independent support/potential semantics keep the explicit
+     * mask unchanged.</p>
      */
     static LandmassSilhouette takeOwnership(
             WorldBounds bounds,
@@ -112,16 +113,22 @@ final class LandmassSilhouette {
         validateInfluence(influencePpm);
 
         int counted = 0;
+        boolean potentialEncodesSupport = true;
         for (int index = 0; index < expected; index++) {
-            validatePotential(potentialPpm[index]);
-            if (support[index]) counted++;
+            int potential = potentialPpm[index];
+            validatePotential(potential);
+            boolean supported = support[index];
+            if (supported) counted++;
+            if (supported != (potential > 0)) potentialEncodesSupport = false;
         }
         if (counted != supportCellCount) {
             throw new IllegalArgumentException("landmass silhouette support count must match support mask");
         }
         this.bounds = bounds;
         this.cellCount = expected;
-        this.support = copyArrays ? Arrays.copyOf(support, support.length) : support;
+        this.support = copyArrays || !potentialEncodesSupport
+                ? (copyArrays ? Arrays.copyOf(support, support.length) : support)
+                : null;
         this.potentialPpm = copyArrays ? Arrays.copyOf(potentialPpm, potentialPpm.length) : potentialPpm;
         this.supportCellCount = supportCellCount;
         this.influencePpm = influencePpm;
