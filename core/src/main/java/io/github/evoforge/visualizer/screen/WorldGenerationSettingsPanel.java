@@ -80,7 +80,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         Label title = new Label("WORLD GENERATION", skin, "window");
         rootContent.add(title).left().padBottom(4f);
         rootContent.row();
-        Label subtitle = new Label("V15 continental basins over accepted V14 terrain", skin, "subtitle");
+        Label subtitle = new Label("V15 landmasses and inland lakes", skin, "subtitle");
         rootContent.add(subtitle).left().padBottom(10f);
         rootContent.row();
 
