@@ -1,53 +1,59 @@
-# ADR-013: Environmental rates use explicit exact dimensions
+# ADR-013: Environmental rates use explicit dimensions
 
-- Status: Superseded
+- Status: Accepted
 - Scope: Environmental rate representation
-- Decision: The original exact `CellVolumeRate`-per-simulation-tick climate representation has been superseded for generated physical climate by explicit physical depth/time plus `PhysicalSpaceScale` and `SimulationTimeScale`; exact rational simulation rates remain valid where they are still the owning runtime/scenario representation.
+- Decision: A rate must state the dimensions it belongs to. Runtime simulation-unit rates may use exact rational cell-volume/tick values; any conversion from physical world units requires explicit space and time scales rather than an implicit tick duration or cell size.
 
 ## Context
 
-The original climate slice needed exact long-term finite-volume rates without inventing an arbitrary “per N ticks” reference period or assigning a real-world duration to every existing simulation tick prematurely.
+Environmental mechanics need exact repeatable rates without silently assigning real-world dimensions to a simulation tick. Later world-generation stages may also need physical units. Treating those as the same number would hide assumptions and make calibration fragile.
 
 ## Decision
 
-The historical decision introduced reduced non-negative rational `CellVolumeRate` values:
+Runtime mechanics may use exact reduced rational rates such as:
 
 ```text
 volumeUnitsNumerator / tickDenominator
 ```
 
-and derived exact long-run rates from operational precipitation/evaporation schedules. For cyclic precipitation the mean was:
+when the owning model is explicitly expressed in simulation units.
+
+A future physical model must instead carry its physical dimension and convert only at an explicit boundary with the required spatial and temporal scale.
 
 ```text
-amountPerPulse * floor(activeTicks / intervalTicks) / cycleTicks
+physical rate
+ + explicit space scale
+ + explicit time scale
+        ↓
+conversion boundary
+        ↓
+runtime simulation-unit rate
 ```
 
-At that time the simulation tick was the only explicit time dimension and no physical tick duration was assumed.
-
-The project later gained an explicit physical-space/time calibration boundary for generated environmental physics. Generated climate now uses physical `WaterDepthRate`/`ClimateSpec` facts and requires explicit `PhysicalSpaceScale` + `SimulationTimeScale` when converting to runtime cell-volume/tick quantities.
+No subsystem may infer a universal real-world tick duration or cell size from convenience.
 
 ## Why
 
-The original exact-rational principle prevented hidden arbitrary cadence. The later physical-scale model became necessary once generated Soil/climate algorithms genuinely needed real dimensions. Superseding the old universal representation is safer than pretending a tick-only rate still represents all climate semantics.
+This preserves deterministic exact runtime accounting while keeping physical calibration honest. UI/render speed remains unrelated to authoritative simulation time.
 
 ## Consequences
 
-- Existing exact rational simulation-rate types remain useful for mechanics/scenario schedules that are explicitly expressed in simulation units.
-- Generated physical climate uses physical dimensions and an explicit conversion boundary.
-- UI/render speed remains unrelated to authoritative simulation time.
-- No implicit physical duration is assigned when the owning subsystem has not declared one.
+- Exact rational simulation rates remain valid where simulation units are the owning representation.
+- Future Continuum climate/Soil/environment models may introduce physical units only with explicit conversion inputs.
+- Conversion/quantization failures are handled at the boundary rather than hidden inside runtime loops.
+- No implicit physical duration is assigned globally.
 
 ## Alternatives considered
 
-Floating-point long-term rates and arbitrary fixed “per N ticks” reference periods were rejected. Declaring one universal real-world duration for every tick before a consumer required physical scale was also rejected.
+Floating-point long-term rates, arbitrary fixed reference periods and one universal hidden real-world tick duration were rejected.
 
 ## Current implementation
 
-`CellVolumeRate` still exists for simulation-unit rate contracts. Generated-world physical climate/Soil paths instead use `WaterDepthRate`, `PhysicalSpaceScale` and `SimulationTimeScale`, with conversion performed before runtime where required. Current generated-world docs and ADR-021 describe the newer canonical preparation/calibration boundary.
+Runtime rate types continue to support deterministic simulation-unit mechanics. The retired V12–V15 generated physical climate/Soil preparation path has been removed; future Continuum stages will define new physical-unit contracts only when real consumers require them.
 
 ## Related documentation
 
 - [Time and Scheduling](../systems/foundations/time.md)
 - [Surface Hydrology](../systems/environment/hydrology.md)
 - [Soil Hydraulics](../systems/environment/soil-hydraulics.md)
-- [ADR-021](021-world-preparation-and-calibration-boundary.md)
+- [Continuum Development Plan](../systems/world-generation/continuum-development-plan.md)
