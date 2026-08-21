@@ -91,8 +91,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         }
 
         GenerationRandom random = GenerationRandom.from(genesis);
+        LandmassRandomStreams streams = LandmassRandomStreams.bind(random);
         ControlGraph graph = createControlGraph(
-                random,
+                streams,
                 width,
                 height,
                 boundary,
@@ -109,9 +110,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         int clusterCount = Math.min(
                 Math.min(calibration.landClusterCount(), desiredSites),
                 graph.interiorCount());
-        int[] seeds = chooseSeparatedSeeds(random, graph, clusterCount);
+        int[] seeds = chooseSeparatedSeeds(streams, graph, clusterCount);
         GeographicForcing forcing = resolveGeographicForcing(
-                random,
+                streams,
                 graph,
                 seeds,
                 calibration.fragmentationPpm());
@@ -127,7 +128,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         }
 
         CoastField coast = materializeImplicitCoast(
-                random,
+                streams,
                 graph,
                 phase,
                 width,
@@ -151,7 +152,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
     }
 
     private static ControlGraph createControlGraph(
-            GenerationRandom random,
+            LandmassRandomStreams streams,
             int width,
             int height,
             LandmassBoundaryCalibration boundary,
@@ -178,9 +179,9 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 int latticeX = gx - 2;
                 double baseX = (latticeX + 0.5d) * spacing;
                 x[index] = baseX
-                        + centeredUnit(random, SITE_JITTER, latticeX, latticeY, 0L) * jitter;
+                        + centeredUnit(streams.siteJitter(), latticeX, latticeY, 0L) * jitter;
                 y[index] = baseY
-                        + centeredUnit(random, SITE_JITTER, latticeX, latticeY, 1L) * jitter;
+                        + centeredUnit(streams.siteJitter(), latticeX, latticeY, 1L) * jitter;
                 forcedOcean[index] = x[index] < oceanBand
                         || y[index] < oceanBand
                         || x[index] > width - 1d - oceanBand
@@ -289,7 +290,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
     }
 
     private static int[] chooseSeparatedSeeds(
-            GenerationRandom random,
+            LandmassRandomStreams streams,
             ControlGraph graph,
             int clusterCount) {
         if (clusterCount <= 0) return new int[0];
@@ -308,7 +309,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         int bestRank = -1;
         for (int candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++) {
             int site = candidates[candidateIndex];
-            int rank = randomPpm(random, FIRST_SEED, site, 0L, 0L);
+            int rank = randomPpm(streams.firstSeed(), site, 0L, 0L);
             if (rank > bestRank || rank == bestRank && site < first) {
                 bestRank = rank;
                 first = site;
@@ -333,7 +334,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                             dx * dx + dy * dy);
                 }
                 double jitter = 0.92d + 0.16d
-                        * randomPpm(random, SEED_JITTER, site, seedIndex, 0L) / PPM;
+                        * randomPpm(streams.seedJitter(), site, seedIndex, 0L) / PPM;
                 double score = minimumDistanceSquared * jitter;
                 if (score > selectedScore || score == selectedScore && site < selected) {
                     selectedScore = score;
@@ -349,7 +350,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
     }
 
     private static GeographicForcing resolveGeographicForcing(
-            GenerationRandom random,
+            LandmassRandomStreams streams,
             ControlGraph graph,
             int[] seeds,
             int fragmentationPpm) {
@@ -361,13 +362,12 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         double[] axisY = new double[seeds.length];
         double[] elongation = new double[seeds.length];
         for (int cluster = 0; cluster < seeds.length; cluster++) {
-            double angle = randomPpm(random, CLUSTER_AXIS, cluster, 0L, 0L)
+            double angle = randomPpm(streams.clusterAxis(), cluster, 0L, 0L)
                     / (double) PPM * TWO_PI;
             axisX[cluster] = StrictMath.cos(angle);
             axisY[cluster] = StrictMath.sin(angle);
             elongation[cluster] = centeredUnit(
-                    random,
-                    CLUSTER_ELONGATION,
+                    streams.clusterElongation(),
                     cluster,
                     0L,
                     0L) * MAX_CLUSTER_ELONGATION;
@@ -406,8 +406,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
 
             double normalizedDistance = bestDistance / Math.max(1d, graph.spacingCells());
             double broadNoise = smoothNoise(
-                    random,
-                    GEOGRAPHY,
+                    streams.geography(),
                     graph.x()[site],
                     graph.y()[site],
                     geographyScale);
@@ -515,7 +514,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
     }
 
     private static CoastField materializeImplicitCoast(
-            GenerationRandom random,
+            LandmassRandomStreams streams,
             ControlGraph graph,
             boolean[] phase,
             int width,
@@ -556,10 +555,10 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                 double deformationFactor = smooth(clamp01(deformationCoordinate));
 
                 double px = localX
-                        + smoothNoise(random, WARP_X, localX, localY, warpScale)
+                        + smoothNoise(streams.warpX(), localX, localY, warpScale)
                                 * warpAmplitude * deformationFactor;
                 double py = localY
-                        + smoothNoise(random, WARP_Y, localX, localY, warpScale)
+                        + smoothNoise(streams.warpY(), localX, localY, warpScale)
                                 * warpAmplitude * deformationFactor;
 
                 int approximateGx = (int) StrictMath.floor(px / spacing) + 2;
@@ -579,10 +578,6 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
                         int site = gy * graph.columns() + gx;
                         double dx = px - graph.x()[site];
                         double dy = py - graph.y()[site];
-                        if (dx <= -kernelRadius || dx >= kernelRadius
-                                || dy <= -kernelRadius || dy >= kernelRadius) {
-                            continue;
-                        }
                         double distance = StrictMath.hypot(dx, dy);
                         if (distance >= kernelRadius) continue;
                         double weight = wendlandC2(distance / kernelRadius);
@@ -604,8 +599,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
 
                 double implicit = totalWeight > 0d ? signed / totalWeight : -1d;
                 double detail = smoothNoise(
-                        random,
-                        COAST_DETAIL,
+                        streams.coastDetail(),
                         localX,
                         localY,
                         detailScale) * detailAmplitude * deformationFactor;
@@ -702,8 +696,7 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
     }
 
     private static double smoothNoise(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler sampler,
             double x,
             double y,
             double scale) {
@@ -713,34 +706,30 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         long y0 = (long) StrictMath.floor(gridY);
         double tx = smooth(gridX - x0);
         double ty = smooth(gridY - y0);
-        double a = centeredUnit(random, purpose, x0, y0, 0L);
-        double b = centeredUnit(random, purpose, x0 + 1L, y0, 0L);
-        double c = centeredUnit(random, purpose, x0, y0 + 1L, 0L);
-        double d = centeredUnit(random, purpose, x0 + 1L, y0 + 1L, 0L);
+        double a = centeredUnit(sampler, x0, y0, 0L);
+        double b = centeredUnit(sampler, x0 + 1L, y0, 0L);
+        double c = centeredUnit(sampler, x0, y0 + 1L, 0L);
+        double d = centeredUnit(sampler, x0 + 1L, y0 + 1L, 0L);
         double top = a + (b - a) * tx;
         double bottom = c + (d - c) * tx;
         return top + (bottom - top) * ty;
     }
 
     private static double centeredUnit(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler sampler,
             long x,
             long y,
             long ordinal) {
-        return randomPpm(random, purpose, x, y, ordinal)
+        return randomPpm(sampler, x, y, ordinal)
                 / (double) PPM * 2d - 1d;
     }
 
     private static int randomPpm(
-            GenerationRandom random,
-            GenerationPurposeId purpose,
+            GenerationRandom.BoundSampler sampler,
             long x,
             long y,
             long ordinal) {
-        int sample = (int) ((random.sampleLong(
-                ElevationGenerationStage.STAGE_ID,
-                purpose,
+        int sample = (int) ((sampler.sampleLong(
                 x,
                 y,
                 0L,
@@ -771,6 +760,30 @@ final class RegularizedGraphLandmassSilhouetteAlgorithm implements LandmassSilho
         return Math.min(
                 Math.min(x, width - 1 - x),
                 Math.min(y, height - 1 - y));
+    }
+
+    private record LandmassRandomStreams(
+            GenerationRandom.BoundSampler siteJitter,
+            GenerationRandom.BoundSampler firstSeed,
+            GenerationRandom.BoundSampler seedJitter,
+            GenerationRandom.BoundSampler clusterAxis,
+            GenerationRandom.BoundSampler clusterElongation,
+            GenerationRandom.BoundSampler geography,
+            GenerationRandom.BoundSampler warpX,
+            GenerationRandom.BoundSampler warpY,
+            GenerationRandom.BoundSampler coastDetail) {
+        private static LandmassRandomStreams bind(GenerationRandom random) {
+            return new LandmassRandomStreams(
+                    random.bind(ElevationGenerationStage.STAGE_ID, SITE_JITTER),
+                    random.bind(ElevationGenerationStage.STAGE_ID, FIRST_SEED),
+                    random.bind(ElevationGenerationStage.STAGE_ID, SEED_JITTER),
+                    random.bind(ElevationGenerationStage.STAGE_ID, CLUSTER_AXIS),
+                    random.bind(ElevationGenerationStage.STAGE_ID, CLUSTER_ELONGATION),
+                    random.bind(ElevationGenerationStage.STAGE_ID, GEOGRAPHY),
+                    random.bind(ElevationGenerationStage.STAGE_ID, WARP_X),
+                    random.bind(ElevationGenerationStage.STAGE_ID, WARP_Y),
+                    random.bind(ElevationGenerationStage.STAGE_ID, COAST_DETAIL));
+        }
     }
 
     private record ControlGraph(
