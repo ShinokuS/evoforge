@@ -118,6 +118,16 @@ final class V12LandformElevationAlgorithm {
                 recipe);
         V12LandformRecipe.ReliefMix relief = recipe.relief();
         V12LandformRecipe.CoastProfile coast = recipe.coast();
+        SmoothValueNoiseRowSampler rollingSampler = new SmoothValueNoiseRowSampler(
+                random.rolling(),
+                bounds.minX(),
+                bounds.maxX(),
+                calibration.rollingScale());
+        SmoothValueNoiseRowSampler rollingDetailSampler = new SmoothValueNoiseRowSampler(
+                random.rollingDetail(),
+                bounds.minX(),
+                bounds.maxX(),
+                calibration.rollingDetailScale());
 
         int[] seenByBucket = new int[POTENTIAL_BUCKETS];
         for (int cell = 0; cell < area; cell++) {
@@ -152,11 +162,10 @@ final class V12LandformElevationAlgorithm {
                     calibration.ridgeScale(),
                     recipe);
             long rollingPpm = rollingFieldPpm(
-                    random,
+                    rollingSampler,
+                    rollingDetailSampler,
                     x,
                     y,
-                    calibration.rollingScale(),
-                    calibration.rollingDetailScale(),
                     recipe);
 
             long macroSignalPpm = weightedCentered(upliftPpm, relief.upliftWeightPpm())
@@ -382,14 +391,13 @@ final class V12LandformElevationAlgorithm {
     }
 
     private static long rollingFieldPpm(
-            V12RandomStreams random,
+            SmoothValueNoiseRowSampler primarySampler,
+            SmoothValueNoiseRowSampler detailSampler,
             int x,
             int y,
-            int primaryScale,
-            int detailScale,
             V12LandformRecipe recipe) {
-        long primary = centeredPpm(smoothValueNoise(random.rolling(), x, y, primaryScale));
-        long detail = centeredPpm(smoothValueNoise(random.rollingDetail(), x, y, detailScale));
+        long primary = centeredPpm(primarySampler.sampleAt(x, y));
+        long detail = centeredPpm(detailSampler.sampleAt(x, y));
         V12LandformRecipe.ReliefMix mix = recipe.relief();
         return (primary * mix.rollingPrimaryWeightPpm()
                 + detail * mix.rollingDetailWeightPpm()) / PPM;
