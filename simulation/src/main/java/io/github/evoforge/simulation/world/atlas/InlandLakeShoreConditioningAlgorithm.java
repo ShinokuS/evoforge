@@ -5,8 +5,7 @@ package io.github.evoforge.simulation.world.atlas;
 public interface InlandLakeShoreConditioningAlgorithm {
     ElevationField condition(
             ElevationField continentalBase,
-            InlandLakeDomain lakeDomain,
-            V12LandformRecipe.CoastProfile coastProfile);
+            InlandLakeDomain lakeDomain);
 
     static InlandLakeShoreConditioningAlgorithm standard() {
         return Z0InlandLakeShoreConditioningAlgorithm.INSTANCE;
