@@ -3,7 +3,6 @@ package io.github.evoforge.simulation.world.atlas;
 import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -55,18 +54,11 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             return InlandLakeDomain.empty(bounds);
         }
 
-        long[] elevation = new long[area];
+        long[] elevation = denseOrMaterializedElevation(
+                continentalBase, bounds, width, height, area);
         boolean[] dry = new boolean[area];
-        int index = 0;
-        for (int localY = 0; localY < height; localY++) {
-            int y = bounds.minY() + localY;
-            for (int localX = 0; localX < width; localX++) {
-                int x = bounds.minX() + localX;
-                long value = continentalBase.elevationSubunitsAt(x, y);
-                elevation[index] = value;
-                dry[index] = value > ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
-                index++;
-            }
+        for (int cell = 0; cell < area; cell++) {
+            dry[cell] = elevation[cell] > ElevationGenerationStage.SEA_LEVEL_SUBUNITS;
         }
 
         int[] coastDistance = chamferDistanceInside(dry, width, height);
@@ -77,17 +69,15 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                 height,
                 calibration.smoothingRadiusCells());
 
-        boolean[] eligible = new boolean[area];
-        long[] eligibleHeights = new long[area];
+        /* dry is dead after broad smoothing, so the same mask now owns eligibility/support. */
+        boolean[] eligible = dry;
         int eligibleCount = 0;
         for (int cell = 0; cell < area; cell++) {
-            if (!dry[cell]
-                    || coastDistance[cell] < calibration.minimumInteriorClearanceCells() * DISTANCE_SCALE
-                    || elevation[cell] > calibration.maximumSourceElevationSubunits()) {
-                continue;
-            }
-            eligible[cell] = true;
-            eligibleHeights[eligibleCount++] = broadElevation[cell];
+            boolean accepted = eligible[cell]
+                    && coastDistance[cell] >= calibration.minimumInteriorClearanceCells() * DISTANCE_SCALE
+                    && elevation[cell] <= calibration.maximumSourceElevationSubunits();
+            eligible[cell] = accepted;
+            if (accepted) eligibleCount++;
         }
         if (eligibleCount == 0) return InlandLakeDomain.empty(bounds);
 
@@ -98,15 +88,18 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             return InlandLakeDomain.empty(bounds);
         }
 
-        Arrays.sort(eligibleHeights, 0, eligibleCount);
         int supportTarget = Math.min(
                 eligibleCount,
                 Math.max(desiredLakeCells, Math.multiplyExact(desiredLakeCells, 3)));
-        long threshold = eligibleHeights[Math.max(0, supportTarget - 1)];
-        boolean[] support = new boolean[area];
+        long threshold = selectEligibleThreshold(
+                broadElevation,
+                eligible,
+                eligibleCount,
+                Math.max(0, supportTarget - 1));
         for (int cell = 0; cell < area; cell++) {
-            support[cell] = eligible[cell] && broadElevation[cell] <= threshold;
+            eligible[cell] = eligible[cell] && broadElevation[cell] <= threshold;
         }
+        boolean[] support = eligible;
 
         int[] supportWidth = chamferDistanceInside(support, width, height);
 
@@ -126,19 +119,28 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         }
 
         int[] distanceToCore = chamferDistanceFromTrue(broadCore, width, height);
-        boolean[] regularized = new boolean[area];
+
+        /* broadCore is dead once core distance exists, so reuse it as the regularized/final mask. */
+        boolean[] regularized = broadCore;
         for (int cell = 0; cell < area; cell++) {
             regularized[cell] = support[cell]
                     && supportWidth[cell] > DISTANCE_SCALE
                     && distanceToCore[cell] <= requiredHalfWidthScaled;
         }
 
-        int[] componentIds = new int[area];
+        /*
+         * Both morphology distance fields are dead now. Reuse their int storage as component labels
+         * and the primitive BFS queue instead of allocating another two world-sized buffers or
+         * boxing cell indices in ArrayDeque<Integer>.
+         */
+        int[] componentIds = supportWidth;
         Arrays.fill(componentIds, -1);
+        int[] componentQueue = distanceToCore;
         List<Component> components = collectComponents(
                 regularized,
                 broadElevation,
                 componentIds,
+                componentQueue,
                 width,
                 height);
         if (components.isEmpty()) return InlandLakeDomain.empty(bounds);
@@ -172,7 +174,9 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             selectedCells += component.cellCount();
         }
 
-        boolean[] lake = new boolean[area];
+        /* Component membership has been captured in componentIds; recycle regularized as lake. */
+        boolean[] lake = regularized;
+        Arrays.fill(lake, false);
         int lakeCellCount = 0;
         for (int cell = 0; cell < area; cell++) {
             int componentId = componentIds[cell];
@@ -183,6 +187,80 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
         return lakeCellCount == 0
                 ? InlandLakeDomain.empty(bounds)
                 : new InlandLakeDomain(bounds, lake, lakeCellCount);
+    }
+
+    /** Borrows immutable dense storage and only materializes generic elevation implementations. */
+    private static long[] denseOrMaterializedElevation(
+            ElevationField elevation,
+            WorldBounds bounds,
+            int width,
+            int height,
+            int area) {
+        if (elevation instanceof DenseElevationField dense) {
+            long[] storage = dense.readOnlyStorage();
+            if (storage.length != area) {
+                throw new IllegalStateException("dense elevation storage does not match lake-domain area");
+            }
+            return storage;
+        }
+        long[] values = new long[area];
+        for (int localY = 0; localY < height; localY++) {
+            int y = bounds.minY() + localY;
+            for (int localX = 0; localX < width; localX++) {
+                int x = bounds.minX() + localX;
+                values[localY * width + localX] = elevation.elevationSubunitsAt(x, y);
+            }
+        }
+        return values;
+    }
+
+    /**
+     * Selects the exact zero-based kth signed-long value among eligible cells without materializing
+     * or sorting an eligible-height array.
+     *
+     * <p>Eight stable radix decisions identify the target value. XOR with Long.MIN_VALUE maps Java's
+     * signed long order to unsigned lexicographic bit order. Each pass only counts 256 buckets, so
+     * auxiliary storage is constant and work is O(8N).</p>
+     */
+    private static long selectEligibleThreshold(
+            long[] values,
+            boolean[] eligible,
+            int eligibleCount,
+            int rank) {
+        if (values.length != eligible.length || eligibleCount <= 0 || rank < 0 || rank >= eligibleCount) {
+            throw new IllegalArgumentException("eligible threshold selection inputs are inconsistent");
+        }
+
+        long prefix = 0L;
+        long prefixMask = 0L;
+        int remainingRank = rank;
+        int[] counts = new int[256];
+
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            Arrays.fill(counts, 0);
+            for (int cell = 0; cell < values.length; cell++) {
+                if (!eligible[cell]) continue;
+                long sortable = values[cell] ^ Long.MIN_VALUE;
+                if ((sortable & prefixMask) != prefix) continue;
+                counts[(int) ((sortable >>> shift) & 0xffL)]++;
+            }
+
+            int chosen = -1;
+            for (int bucket = 0; bucket < counts.length; bucket++) {
+                int count = counts[bucket];
+                if (remainingRank < count) {
+                    chosen = bucket;
+                    break;
+                }
+                remainingRank -= count;
+            }
+            if (chosen < 0) {
+                throw new IllegalStateException("radix threshold selection lost the requested rank");
+            }
+            prefix |= (long) chosen << shift;
+            prefixMask |= 0xffL << shift;
+        }
+        return prefix ^ Long.MIN_VALUE;
     }
 
     private static int[] chamferDistanceInside(boolean[] inside, int width, int height) {
@@ -310,15 +388,17 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             boolean[] candidate,
             long[] broadElevation,
             int[] componentIds,
+            int[] queue,
             int width,
             int height) {
         List<Component> components = new ArrayList<>();
-        ArrayDeque<Integer> queue = new ArrayDeque<>();
         for (int start = 0; start < candidate.length; start++) {
             if (!candidate[start] || componentIds[start] >= 0) continue;
             int id = components.size();
             componentIds[start] = id;
-            queue.addLast(start);
+            int head = 0;
+            int tail = 0;
+            queue[tail++] = start;
             int cellCount = 0;
             long sumBroad = 0L;
             int startX = start % width;
@@ -327,8 +407,8 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
             int maxX = startX;
             int minY = startY;
             int maxY = startY;
-            while (!queue.isEmpty()) {
-                int cell = queue.removeFirst();
+            while (head < tail) {
+                int cell = queue[head++];
                 int x = cell % width;
                 int y = cell / width;
                 cellCount++;
@@ -344,7 +424,7 @@ final class TerrainLowlandInlandLakeDomainAlgorithm implements InlandLakeDomainA
                     int next = ny * width + nx;
                     if (!candidate[next] || componentIds[next] >= 0) continue;
                     componentIds[next] = id;
-                    queue.addLast(next);
+                    queue[tail++] = next;
                 }
             }
             components.add(new Component(id, cellCount, sumBroad, minX, maxX, minY, maxY));
