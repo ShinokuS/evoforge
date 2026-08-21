@@ -232,6 +232,16 @@ final class V12LandformElevationAlgorithm {
         int fragmentPpm = calibration.fragmentationPpm();
         char[] potentialSamples = new char[calibration.area()];
         int[] bucketCounts = new int[POTENTIAL_BUCKETS];
+        OrganicWarpRowSampler coherentWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.coherentLandmassScale(),
+                recipe);
+        OrganicWarpRowSampler fragmentedWarp = organicWarpSampler(
+                random,
+                bounds,
+                calibration.fragmentedLandmassScale(),
+                recipe);
 
         int index = 0;
         for (int localY = 0; localY < height; localY++) {
@@ -245,19 +255,17 @@ final class V12LandformElevationAlgorithm {
 
                 int x = bounds.minX() + localX;
                 int coherent = organicValueNoise(
-                        random,
                         random.landmass(),
                         x,
                         y,
                         calibration.coherentLandmassScale(),
-                        recipe);
+                        coherentWarp);
                 int fragmented = organicValueNoise(
-                        random,
                         random.fragment(),
                         x,
                         y,
                         calibration.fragmentedLandmassScale(),
-                        recipe);
+                        fragmentedWarp);
                 int potential = (int) (((long) coherent * (PPM - fragmentPpm)
                         + (long) fragmented * fragmentPpm) / PPM);
                 if (silhouette.constrained()) {
