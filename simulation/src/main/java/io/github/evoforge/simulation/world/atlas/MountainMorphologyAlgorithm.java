@@ -91,13 +91,14 @@ final class MountainMorphologyAlgorithm implements MountainElevationAlgorithm {
                     calibration.maximumCardinalRiseSubunits());
         }
 
-        long[] result = baseHeights.clone();
         long ceiling = calibration.mountainCeilingSubunits();
-        for (int cell = 0; cell < result.length; cell++) {
+        for (int cell = 0; cell < baseHeights.length; cell++) {
             if (!land[cell] || mountainUplift[cell] <= 0L) continue;
-            result[cell] = Math.min(ceiling, Math.addExact(result[cell], mountainUplift[cell]));
+            baseHeights[cell] = Math.min(
+                    ceiling,
+                    Math.addExact(baseHeights[cell], mountainUplift[cell]));
         }
-        return DenseElevationField.takeOwnership(bounds, result);
+        return DenseElevationField.takeOwnership(bounds, baseHeights);
     }
 
     /**
