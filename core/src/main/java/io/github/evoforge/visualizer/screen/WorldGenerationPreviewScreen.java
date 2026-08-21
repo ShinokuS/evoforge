@@ -18,10 +18,6 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.atlas.ElevationGenerationStage;
-import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterBoundaryRoute;
-import io.github.evoforge.simulation.world.atlas.hydrology.StandingWaterHydrologyTopology;
-import io.github.evoforge.simulation.world.atlas.hydrology.WorldHydrologyTopology;
-import io.github.evoforge.simulation.world.atlas.hydrology.WorldHydrologyTopologyStage;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.genesis.RngRevision;
 import io.github.evoforge.simulation.world.genesis.WorldGenesis;
@@ -35,7 +31,7 @@ import java.util.List;
 
 /** Interactive 2D/3D inspection workspace for generated world morphology and surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
-    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V15;
+    private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V14;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
     private static final int SURFACE_CHUNK_INTERVALS = 128;
 
@@ -67,8 +63,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private final ShaderProgram shader = new ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     private final PreviewInput input = new PreviewInput();
     private final WorldGenerationShape2DRenderer shape2DRenderer = new WorldGenerationShape2DRenderer();
-    private final WorldGenerationHydrologyDiagnosticRenderer hydrologyDiagnosticRenderer =
-            new WorldGenerationHydrologyDiagnosticRenderer();
     private final VisualizerPerformanceTelemetry performance = new VisualizerPerformanceTelemetry();
     private final WorldGenerationSettingsPanel settingsPanel;
     private final InputMultiplexer inputMultiplexer;
@@ -78,14 +72,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private ElevationField generatedElevation;
     private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
     private TerrainShapeField generatedShapes;
-    private WorldHydrologyTopology generatedHydrologyTopology;
     private Mesh[] surfaceMeshes = new Mesh[0];
-    private Mesh[] inlandWaterMeshes = new Mesh[0];
     private Mesh oceanMesh;
     private boolean showSurface = true;
     private boolean showOcean = true;
     private boolean twoDimensional;
-    private boolean showHydrologyDiagnostics;
     private int elevationTintPpm = WorldGenerationElevationTint.DEFAULT_STRENGTH_PPM;
     private float yaw = 45f;
     private float pitch = 42f;
@@ -142,9 +133,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
         long afterUpdate;
         if (twoDimensional) {
-            boolean keyboardNavigation = !settingsPanel.keyboardInputActive();
-            shape2DRenderer.update(delta, keyboardNavigation);
-            hydrologyDiagnosticRenderer.update(delta, keyboardNavigation);
+            shape2DRenderer.update(delta, !settingsPanel.keyboardInputActive());
             afterUpdate = System.nanoTime();
             renderTwoDimensional();
         } else {
@@ -168,7 +157,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     }
 
     private void renderThreeDimensional() {
-        if (showOcean) ensureHydrologyTopology();
         updateCamera();
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
         shader.bind();
@@ -178,13 +166,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 surfaceMesh.render(shader, GL20.GL_TRIANGLES);
             }
         }
-        if (showOcean) {
+        if (showOcean && oceanMesh != null) {
             Gdx.gl.glEnable(GL20.GL_BLEND);
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-            if (oceanMesh != null) oceanMesh.render(shader, GL20.GL_TRIANGLES);
-            for (Mesh inlandWaterMesh : inlandWaterMeshes) {
-                inlandWaterMesh.render(shader, GL20.GL_TRIANGLES);
-            }
+            oceanMesh.render(shader, GL20.GL_TRIANGLES);
             Gdx.gl.glDisable(GL20.GL_BLEND);
         }
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
@@ -192,16 +177,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     private void renderTwoDimensional() {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
-        if (showOcean || showHydrologyDiagnostics) ensureHydrologyTopology();
         shape2DRenderer.render(
                 generatedElevation,
                 generatedShapes,
-                generatedHydrologyTopology == null ? null : generatedHydrologyTopology.inlandLakes(),
                 showSurface,
                 showOcean);
-        if (showHydrologyDiagnostics && generatedHydrologyTopology != null) {
-            hydrologyDiagnosticRenderer.render(generatedHydrologyTopology);
-        }
     }
 
     @Override
@@ -215,9 +195,9 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         camera.update();
         batch.getProjectionMatrix().setToOrtho2D(0f, 0f, width, height);
         settingsPanel.resize(width, height);
-        int previewViewportWidth = Math.max(1, Math.round(settingsPanel.previewRightEdge()));
-        shape2DRenderer.resize(previewViewportWidth, height);
-        hydrologyDiagnosticRenderer.resize(previewViewportWidth, height);
+        shape2DRenderer.resize(
+                Math.max(1, Math.round(settingsPanel.previewRightEdge())),
+                height);
     }
 
     @Override
@@ -234,7 +214,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         hide();
         disposeMeshes();
         shape2DRenderer.dispose();
-        hydrologyDiagnosticRenderer.dispose();
         settingsPanel.dispose();
         shader.dispose();
         batch.dispose();
@@ -259,7 +238,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 .generate(generatedElevation);
         elevationRange = WorldGenerationElevationRange.from(generatedElevation);
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
-        generatedHydrologyTopology = null;
 
         disposeMeshes();
         rebuildSurfaceMeshes();
@@ -267,26 +245,14 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         shape2DRenderer.setWorldBounds(bounds);
         shape2DRenderer.setElevationRange(elevationRange);
         shape2DRenderer.setElevationTintPpm(elevationTintPpm);
-        hydrologyDiagnosticRenderer.setWorldBounds(bounds);
         camera.far = cameraFarPlane();
-
-        if (showHydrologyDiagnostics) {
-            ensureHydrologyTopology();
-        }
 
         if (previous == null
                 || previous.width() != generatedConfig.width()
                 || previous.length() != generatedConfig.length()) {
             fitCameraToWorld();
             shape2DRenderer.fitToWorld();
-            hydrologyDiagnosticRenderer.fitToWorld();
         }
-    }
-
-    private void ensureHydrologyTopology() {
-        if (generatedHydrologyTopology != null || generatedElevation == null) return;
-        generatedHydrologyTopology = WorldHydrologyTopologyStage.standard().generate(generatedElevation);
-        rebuildInlandWaterMeshes();
     }
 
     private void setElevationTintPpm(int strengthPpm) {
@@ -303,7 +269,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         if (WorldGeneration3DDetail.maxAxisSamples() == samples) return;
         WorldGeneration3DDetail.maxAxisSamples(samples);
         rebuildSurfaceMeshes();
-        if (generatedHydrologyTopology != null) rebuildInlandWaterMeshes();
     }
 
     private void rebuildSurfaceMeshes() {
@@ -318,19 +283,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 previewWidth,
                 previewLength,
                 elevationTintPpm);
-    }
-
-    private void rebuildInlandWaterMeshes() {
-        disposeInlandWaterMeshes();
-        if (generatedHydrologyTopology == null || bounds == null || previewWidth < 1 || previewLength < 1) {
-            return;
-        }
-        inlandWaterMeshes = WorldGenerationInlandWater3DMeshBuilder.build(
-                generatedHydrologyTopology.inlandLakes(),
-                bounds,
-                previewWidth,
-                previewLength,
-                VERTICAL_EXAGGERATION);
     }
 
     private static Mesh[] buildSurfaceMeshes(
@@ -500,8 +452,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.draw(
                 batch,
                 twoDimensional
-                        ? "WORLD GENERATION / 2D SURFACE V15"
-                        : "WORLD GENERATION / CONTINENTAL BASINS V15",
+                        ? "WORLD GENERATION / 2D SURFACE V14"
+                        : "WORLD GENERATION / STANDING-WATER BATHYMETRY V14",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
         font.draw(batch, String.format(
@@ -547,21 +499,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     shape2DRenderer.lodStride()),
                     24f,
                     Gdx.graphics.getHeight() - 120f);
-            if (showHydrologyDiagnostics && generatedHydrologyTopology != null) {
-                font.setColor(Color.CYAN);
-                font.draw(batch, hydrologySummary(), 24f, Gdx.graphics.getHeight() - 144f);
-                font.setColor(Color.WHITE);
-            }
         } else {
             font.draw(batch, String.format(
-                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   terrain chunks %d   water chunks %d   axis cap %d",
+                    "FPS %d   frame %.1f ms   CPU %.1f ms   preview mesh %dx%d   chunks %d   axis cap %d",
                     Gdx.graphics.getFramesPerSecond(),
                     Gdx.graphics.getDeltaTime() * 1000f,
                     lastCpuMillis,
                     previewWidth,
                     previewLength,
                     surfaceMeshes.length,
-                    inlandWaterMeshes.length,
                     WorldGeneration3DDetail.maxAxisSamples()),
                     24f,
                     Gdx.graphics.getHeight() - 120f);
@@ -572,9 +518,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             font.draw(
                     batch,
                     "WASD / drag: pan | wheel: zoom (" + shape2DRenderer.zoomLabel()
-                            + ") | F: fit | F3: shape directions | F4: basin/lake topology "
-                            + (showHydrologyDiagnostics ? "ON" : "OFF")
-                            + " | Esc: development tools",
+                            + ") | F: fit | F3: shape directions | Esc: development tools",
                     24f,
                     24f);
         } else {
@@ -587,34 +531,8 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         batch.end();
     }
 
-    private String hydrologySummary() {
-        StandingWaterHydrologyTopology standing = generatedHydrologyTopology.standingWaterTopology();
-        int boundary = 0;
-        int routed = 0;
-        int closed = 0;
-        for (int bodyId = 0; bodyId < standing.bodyCount(); bodyId++) {
-            StandingWaterBoundaryRoute route = standing.boundaryRoutes().route(bodyId);
-            if (route.boundaryConnected()) {
-                boundary++;
-            } else if (route.reachesBoundaryWater()) {
-                routed++;
-            } else {
-                closed++;
-            }
-        }
-        return String.format(
-                "F4 HYDROLOGY: sea bodies %d   boundary %d   routed %d   closed %d   basins %d   lakes %d",
-                standing.bodyCount(),
-                boundary,
-                routed,
-                closed,
-                generatedHydrologyTopology.drainageBasins().basinCount(),
-                generatedHydrologyTopology.inlandLakes().lakeCount());
-    }
-
     private void disposeMeshes() {
         disposeSurfaceMeshes();
-        disposeInlandWaterMeshes();
         if (oceanMesh != null) {
             oceanMesh.dispose();
             oceanMesh = null;
@@ -626,13 +544,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             surfaceMesh.dispose();
         }
         surfaceMeshes = new Mesh[0];
-    }
-
-    private void disposeInlandWaterMeshes() {
-        for (Mesh inlandWaterMesh : inlandWaterMeshes) {
-            inlandWaterMesh.dispose();
-        }
-        inlandWaterMeshes = new Mesh[0];
     }
 
     private static int sampleCoordinate(int min, int max, int sampleIndex, int sampleCount) {
@@ -650,16 +561,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             }
             if (twoDimensional && keycode == Input.Keys.F) {
                 shape2DRenderer.fitToWorld();
-                hydrologyDiagnosticRenderer.fitToWorld();
                 return true;
             }
             if (twoDimensional && keycode == Input.Keys.F3) {
                 shape2DRenderer.toggleShapeDirections();
-                return true;
-            }
-            if (twoDimensional && keycode == Input.Keys.F4) {
-                showHydrologyDiagnostics = !showHydrologyDiagnostics;
-                if (showHydrologyDiagnostics) ensureHydrologyTopology();
                 return true;
             }
             return false;
@@ -693,10 +598,9 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         @Override
         public boolean touchDragged(int screenX, int screenY, int pointer) {
             if (panning2D) {
-                float deltaX = screenX - lastMouseX;
-                float deltaY = screenY - lastMouseY;
-                shape2DRenderer.panByPixels(deltaX, deltaY);
-                hydrologyDiagnosticRenderer.panByPixels(deltaX, deltaY);
+                shape2DRenderer.panByPixels(
+                        screenX - lastMouseX,
+                        screenY - lastMouseY);
                 lastMouseX = screenX;
                 lastMouseY = screenY;
                 return true;
@@ -716,7 +620,6 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
             }
             if (twoDimensional) {
                 shape2DRenderer.zoom(amountY);
-                hydrologyDiagnosticRenderer.zoom(amountY);
                 return true;
             }
             float minDistance = Math.max(24f, generatedConfig.maxHorizontalDimension() * 0.35f);

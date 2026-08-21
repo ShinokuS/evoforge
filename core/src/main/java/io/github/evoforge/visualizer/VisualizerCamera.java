@@ -198,18 +198,6 @@ public final class VisualizerCamera {
         return new WorldPoint(pick.x, pick.y);
     }
 
-    /** Projects a world-space point into this camera's pixel viewport. */
-    public ScreenPoint screenAt(
-            float worldX,
-            float worldY) {
-        if (!Float.isFinite(worldX) || !Float.isFinite(worldY)) {
-            throw new IllegalArgumentException("world coordinates must be finite");
-        }
-        pick.set(worldX, worldY, 0f);
-        camera.project(pick, 0f, 0f, screenWidth, screenHeight);
-        return new ScreenPoint(pick.x, pick.y);
-    }
-
     public float worldUnitsPerPixel() {
         float horizontal = camera.viewportWidth * camera.zoom
                 / Math.max(1, screenWidth);
@@ -251,11 +239,6 @@ public final class VisualizerCamera {
     }
 
     public record WorldPoint(
-            float x,
-            float y) {
-    }
-
-    public record ScreenPoint(
             float x,
             float y) {
     }
