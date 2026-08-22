@@ -8,8 +8,8 @@ otherwise leave behind:
 2. stale explicit imports when a project type has one unambiguous new location;
 3. source-path literals used by architecture tests to inspect production boundaries.
 
-The repair never guesses between multiple project types or multiple destination
-packages.
+The repair never guesses between multiple project types or multiple source-tree
+candidates.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "tools" / "semantic-capability-migration.py"
 PACKAGE_RE = re.compile(r"(?m)^package\s+([A-Za-z_][\w.]*)\s*;")
 IMPORT_LINE_RE = re.compile(r"(?m)^import\s+(static\s+)?([A-Za-z_][\w.]*)\s*;")
+SOURCE_LITERAL_RE = re.compile(r'"(src/(?:main|test)/java/[A-Za-z0-9_./$-]+)"')
 
 
 def load_pairs() -> list[tuple[str, str]]:
@@ -63,6 +64,33 @@ def explicit_imports(text: str) -> set[str]:
     return {match.group(2) for match in IMPORT_LINE_RE.finditer(text)}
 
 
+def resolve_missing_source_literal(literal: str) -> str | None:
+    existing = [module for module in ("simulation", "core") if (ROOT / module / literal).exists()]
+    if existing:
+        return literal
+
+    relative = Path(literal)
+    source_prefix = Path(*relative.parts[:4])  # src/main/java or src/test/java
+    leaf = relative.name
+    candidates: list[tuple[str, Path]] = []
+
+    for module in ("simulation", "core"):
+        source_root = ROOT / module / source_prefix
+        if not source_root.exists():
+            continue
+        if leaf.endswith(".java"):
+            found = [path for path in source_root.rglob(leaf) if path.is_file()]
+        else:
+            found = [path for path in source_root.rglob(leaf) if path.is_dir()]
+        for path in found:
+            candidates.append((module, path))
+
+    if len(candidates) != 1:
+        return None
+    module, target = candidates[0]
+    return target.relative_to(ROOT / module).as_posix()
+
+
 def repair_source_path_literals(
         text: str,
         file_path_moves: list[tuple[str, str]],
@@ -78,6 +106,17 @@ def repair_source_path_literals(
         if count:
             text = text.replace(old, new)
             repaired += count
+
+    replacements: list[tuple[str, str]] = []
+    for match in SOURCE_LITERAL_RE.finditer(text):
+        literal = match.group(1)
+        resolved = resolve_missing_source_literal(literal)
+        if resolved is not None and resolved != literal:
+            replacements.append((literal, resolved))
+    for old, new in replacements:
+        count = text.count(f'"{old}"')
+        text = text.replace(f'"{old}"', f'"{new}"')
+        repaired += count
     return text, repaired
 
 
