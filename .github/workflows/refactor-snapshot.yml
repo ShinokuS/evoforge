@@ -1,0 +1,40 @@
+name: Architecture Refactor Snapshot
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.head_ref == 'agent/simulation-architecture-reset'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Upload read-only refactor snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-refactor-snapshot
+          path: |
+            simulation
+            core
+            lwjgl3
+            docs
+            assets
+            .github
+            *.gradle
+            gradle.properties
+            gradlew
+            gradlew.bat
+            gradle
+            README.md
+            CONTRIBUTING.md
+          if-no-files-found: error
+          retention-days: 1
