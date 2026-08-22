@@ -319,7 +319,7 @@ Primary code lives under:
 
 ```text
 simulation/.../world/geometry/
-simulation/.../world/landscape/   Terrain-backed Geometry integration
+simulation/.../mechanics/terrainmutation/   Terrain-backed Geometry integration
 ```
 
 Tests cover ports/blocks, volume profiles, face openings, boundary continuity, role/factor ownership, terrain lifecycle, finite-world closure and Navigation/Liquid integration.

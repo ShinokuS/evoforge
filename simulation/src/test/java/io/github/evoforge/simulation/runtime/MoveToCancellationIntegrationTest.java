@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToComm
 import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToResult;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
@@ -20,7 +20,7 @@ final class MoveToCancellationIntegrationTest {
     void cancellationLetsCurrentAtomicEdgeFinishButStartsNoFurtherStep() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 5, -1, 1, -1, 1);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:cancel_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:cancel_ground");
         ObjectDefinitionId moverDefinition = assembly.objectDefinition("test:cancel_mover");
         assembly.movementRate(moverDefinition, 100L);
         assembly.exclusiveOccupancy(moverDefinition);
@@ -47,10 +47,10 @@ final class MoveToCancellationIntegrationTest {
         }
 
         assertFalse(runtime.view().moveTo().isActive(mover));
-        assertEquals(1, runtime.view().transforms().x(mover),
+        assertEquals(1, runtime.view().positions().x(mover),
                 "cancellation may finish the atomic edge but must not continue the route");
-        assertEquals(0, runtime.view().transforms().y(mover));
-        assertEquals(0, runtime.view().transforms().z(mover));
+        assertEquals(0, runtime.view().positions().y(mover));
+        assertEquals(0, runtime.view().positions().z(mover));
         assertEquals(
                 "movement:move_to_cancelled",
                 runtime.view().moveTo().lastCompletion(mover).code().value());

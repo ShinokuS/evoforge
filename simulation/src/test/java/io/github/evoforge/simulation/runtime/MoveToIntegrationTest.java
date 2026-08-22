@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.simulation.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
@@ -27,15 +27,15 @@ final class MoveToIntegrationTest {
         assertTrue(run.runtime().view().moveTo().isActive(run.objectId()));
         assertEquals(OccupancyState.RESERVED, run.runtime().view().occupancy().state(1, 0, 0));
         advance(run.runtime(), 3);
-        assertEquals(1, run.runtime().view().transforms().x(run.objectId()));
+        assertEquals(1, run.runtime().view().positions().x(run.objectId()));
         assertEquals(OccupancyState.RESERVED, run.runtime().view().occupancy().state(2, 0, 0));
         advance(run.runtime(), 3);
-        assertEquals(2, run.runtime().view().transforms().x(run.objectId()));
+        assertEquals(2, run.runtime().view().positions().x(run.objectId()));
         assertEquals(OccupancyState.RESERVED, run.runtime().view().occupancy().state(3, 0, 0));
         advance(run.runtime(), 3);
-        assertEquals(2, run.runtime().view().transforms().x(run.objectId()));
+        assertEquals(2, run.runtime().view().positions().x(run.objectId()));
         advance(run.runtime(), 1);
-        assertEquals(3, run.runtime().view().transforms().x(run.objectId()));
+        assertEquals(3, run.runtime().view().positions().x(run.objectId()));
         assertEquals(10, run.runtime().time().tick());
         assertFalse(run.runtime().view().moveTo().isActive(run.objectId()));
         MoveToCompletion completion = run.runtime().view().moveTo().lastCompletion(run.objectId());
@@ -56,7 +56,7 @@ final class MoveToIntegrationTest {
     @Test
     void moveToNoPathIsAcceptedIntentWithImmediateTerminalOutcome() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:isolated_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:isolated_ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:isolated_walker");
         assembly.movementRate(walker, 1000);
         ObjectId objectId = assembly.createObject(walker);
@@ -71,7 +71,7 @@ final class MoveToIntegrationTest {
         assertNotNull(completion);
         assertFalse(completion.reachedGoal());
         assertEquals("movement:no_path", completion.code().value());
-        assertEquals(0, runtime.view().transforms().x(objectId));
+        assertEquals(0, runtime.view().positions().x(objectId));
     }
 
     @Test
@@ -90,7 +90,7 @@ final class MoveToIntegrationTest {
     @Test
     void laterOccupiedRouteEdgeStopsAtLastCommittedCellAndReleasesClaim() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:occupied_route_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:occupied_route_ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:occupied_route_walker");
         assembly.movementRate(walker, 1000);
         assembly.exclusiveOccupancy(walker);
@@ -102,7 +102,7 @@ final class MoveToIntegrationTest {
         SimulationRuntime runtime = assembly.start();
         assertTrue(runtime.submit(new MoveToCommand(mover, 2, 0, 0)).accepted());
         runtime.stepper().advance();
-        assertEquals(1, runtime.view().transforms().x(mover));
+        assertEquals(1, runtime.view().positions().x(mover));
         assertFalse(runtime.view().moveTo().isActive(mover));
         MoveToCompletion completion = runtime.view().moveTo().lastCompletion(mover);
         assertNotNull(completion);
@@ -129,8 +129,8 @@ final class MoveToIntegrationTest {
         advance(routed.runtime(), 10);
         assertEquals(10, routed.runtime().time().tick());
         assertEquals(10, manual.runtime().time().tick());
-        assertEquals(3, routed.runtime().view().transforms().x(routed.objectId()));
-        assertEquals(3, manual.runtime().view().transforms().x(manual.objectId()));
+        assertEquals(3, routed.runtime().view().positions().x(routed.objectId()));
+        assertEquals(3, manual.runtime().view().positions().x(manual.objectId()));
         assertEquals(routed.runtime().view().occupancy().state(3, 0, 0),
                 manual.runtime().view().occupancy().state(3, 0, 0));
         assertTrue(routed.runtime().submit(
@@ -139,12 +139,12 @@ final class MoveToIntegrationTest {
                 new MoveStepCommand(manual.objectId(), 4, 0, 0)).accepted());
         advance(routed.runtime(), 2);
         advance(manual.runtime(), 2);
-        assertEquals(3, routed.runtime().view().transforms().x(routed.objectId()));
-        assertEquals(3, manual.runtime().view().transforms().x(manual.objectId()));
+        assertEquals(3, routed.runtime().view().positions().x(routed.objectId()));
+        assertEquals(3, manual.runtime().view().positions().x(manual.objectId()));
         advance(routed.runtime(), 1);
         advance(manual.runtime(), 1);
-        assertEquals(4, routed.runtime().view().transforms().x(routed.objectId()));
-        assertEquals(4, manual.runtime().view().transforms().x(manual.objectId()));
+        assertEquals(4, routed.runtime().view().positions().x(routed.objectId()));
+        assertEquals(4, manual.runtime().view().positions().x(manual.objectId()));
         assertEquals(13, routed.runtime().time().tick());
         assertEquals(13, manual.runtime().time().tick());
     }
@@ -152,7 +152,7 @@ final class MoveToIntegrationTest {
     @Test
     void moveToExecutesMultiZRouteThroughRamp() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ramp_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ramp_ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:ramp_walker");
         assembly.movementRate(walker, 10_000);
         assembly.exclusiveOccupancy(walker);
@@ -165,13 +165,13 @@ final class MoveToIntegrationTest {
         SimulationRuntime runtime = assembly.start();
         assertTrue(runtime.submit(new MoveToCommand(objectId, 0, 2, 1)).accepted());
         runtime.stepper().advance();
-        assertEquals(0, runtime.view().transforms().x(objectId));
-        assertEquals(1, runtime.view().transforms().y(objectId));
-        assertEquals(1, runtime.view().transforms().z(objectId));
+        assertEquals(0, runtime.view().positions().x(objectId));
+        assertEquals(1, runtime.view().positions().y(objectId));
+        assertEquals(1, runtime.view().positions().z(objectId));
         runtime.stepper().advance();
-        assertEquals(0, runtime.view().transforms().x(objectId));
-        assertEquals(2, runtime.view().transforms().y(objectId));
-        assertEquals(1, runtime.view().transforms().z(objectId));
+        assertEquals(0, runtime.view().positions().x(objectId));
+        assertEquals(2, runtime.view().positions().y(objectId));
+        assertEquals(1, runtime.view().positions().z(objectId));
         MoveToCompletion completion = runtime.view().moveTo().lastCompletion(objectId);
         assertNotNull(completion);
         assertTrue(completion.reachedGoal());
@@ -179,7 +179,7 @@ final class MoveToIntegrationTest {
 
     private static MovementRun linearMovementRun(int maxX, long rate, boolean exclusive) {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:linear_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:linear_ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:linear_walker");
         assembly.movementRate(walker, rate);
         if (exclusive) assembly.exclusiveOccupancy(walker);

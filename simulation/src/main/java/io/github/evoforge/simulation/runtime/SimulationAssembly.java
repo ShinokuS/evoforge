@@ -13,7 +13,7 @@ import io.github.evoforge.simulation.agents.perception.vision.VisionDefinition;
 import io.github.evoforge.simulation.mechanics.hydrology.AtmosphericWaterForcing;
 import io.github.evoforge.simulation.mechanics.hydrology.EvaporationSchedule;
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.liquid.LiquidTypeId;
 import io.github.evoforge.simulation.world.soil.SoilProperties;
@@ -79,13 +79,13 @@ public final class SimulationAssembly {
         return this;
     }
 
-    public LandscapeDefinitionId landscapeDefinition(String key) {
+    public MaterialDefinitionId landscapeDefinition(String key) {
         return landscapeDefinition(key, SurfaceTraversalCost.NEUTRAL_UNITS);
     }
 
-    public LandscapeDefinitionId landscapeDefinition(String key, long traversalCostUnits) {
+    public MaterialDefinitionId landscapeDefinition(String key, long traversalCostUnits) {
         requireNotStarted();
-        LandscapeDefinitionId definitionId = definitions.landscape.register(key);
+        MaterialDefinitionId definitionId = definitions.landscape.register(key);
         definitions.landscapeTraversal.put(
                 definitionId,
                 SurfaceTraversalCost.of(traversalCostUnits));
@@ -93,7 +93,7 @@ public final class SimulationAssembly {
     }
 
     public SimulationAssembly soilProperties(
-            LandscapeDefinitionId definitionId,
+            MaterialDefinitionId definitionId,
             int capacity,
             int permeability) {
         requireNotStarted();
@@ -124,7 +124,7 @@ public final class SimulationAssembly {
 
     /** Declares material microtopography that retains free liquid before horizontal runoff. */
     public SimulationAssembly surfaceRetention(
-            LandscapeDefinitionId definitionId,
+            MaterialDefinitionId definitionId,
             int capacity) {
         requireNotStarted();
         requireLandscapeDefinition(definitionId);
@@ -432,7 +432,7 @@ public final class SimulationAssembly {
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
         requireNotStarted();
         requireInsideWorld(x, y, z);
         OperationResults.requireAccepted(world.landscape.placeTerrain(x, y, z, definitionId));
@@ -494,7 +494,7 @@ public final class SimulationAssembly {
                         initialFacing));
     }
 
-    private void requireLandscapeDefinition(LandscapeDefinitionId definitionId) {
+    private void requireLandscapeDefinition(MaterialDefinitionId definitionId) {
         if (!definitions.landscape.contains(definitionId)) {
             throw new IllegalArgumentException(
                     "unknown landscape definition: " + definitionId);

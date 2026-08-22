@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +17,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void solidBodyTakesPriorityAndReportsProgressiveBodyDepth() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
 
         assembly.placeTerrain(0, 0, -1, ground);
         assembly.placeTerrain(0, 0, 0, ground);
@@ -36,7 +36,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void currentSurfaceQueryMatchesSliceRoleWithoutExposureAnalysis() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         assembly.placeTerrain(0, 0, 0, ground);
 
         LandscapeSliceResolver resolver = resolver(assembly.start());
@@ -50,7 +50,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void openSurfaceHasNoCoverAndZeroExposureDistance() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         assembly.placeTerrain(0, 0, -1, ground);
 
         LandscapeSliceResolver.Analysis analysis = resolver(assembly.start())
@@ -67,7 +67,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void nearestLowerSurfaceIsVisibleOnlyThroughOpenColumn() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         assembly.placeTerrain(0, 0, -3, ground);
 
         LandscapeSliceResolver resolver = resolver(assembly.start());
@@ -152,7 +152,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void genericOpaqueVolumeCanBlockViewWithoutBecomingTerrain() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         assembly.placeTerrain(0, 0, -3, ground);
         SimulationRuntime runtime = assembly.start();
 
@@ -198,7 +198,7 @@ final class LandscapeSliceResolverTest {
     @Test
     void slicePreservesConcreteRampShapeForPresentation() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         assembly.placeTerrain(0, 0, 0, ground);
         assembly.setShape(0, 0, 0, RampShape.POSITIVE_X);
 
@@ -214,7 +214,7 @@ final class LandscapeSliceResolverTest {
             int roofZ) {
 
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
 
         for (int x = 0; x <= 4; x++) {
             for (int y = 0; y <= 4; y++) {

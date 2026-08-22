@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -85,7 +85,7 @@ final class LivingWorldScaleWorkload {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(LANE_MIN_X - 1, LANE_MAX_X + 1, -1, maxY + 1, -1, 3);
 
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("profile:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("profile:ground");
         assembly.surfaceRetention(ground, 500_000);
 
         ObjectDefinitionId cowDefinition = assembly.objectDefinition("profile:cow");
@@ -166,9 +166,9 @@ final class LivingWorldScaleWorkload {
             waterTotal += water;
 
             canonical.append(cow.asLong()).append(':')
-                    .append(runtime.view().transforms().x(cow)).append(',')
-                    .append(runtime.view().transforms().y(cow)).append(',')
-                    .append(runtime.view().transforms().z(cow)).append(',')
+                    .append(runtime.view().positions().x(cow)).append(',')
+                    .append(runtime.view().positions().y(cow)).append(',')
+                    .append(runtime.view().positions().z(cow)).append(',')
                     .append(hunger).append(',')
                     .append(thirst).append(',')
                     .append(stock).append(',')

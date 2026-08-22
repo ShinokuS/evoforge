@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.sky.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
@@ -128,16 +128,16 @@ final class EvaporationSystemTest {
     }
 
     private static final class Fixture {
-        private final DefinitionRegistry<LandscapeDefinitionId> definitions =
+        private final DefinitionRegistry<MaterialDefinitionId> definitions =
                 new DefinitionRegistry<>(
-                        LandscapeDefinitionId::of,
-                        LandscapeDefinitionId::asInt);
-        private final LandscapeDefinitionId soil =
+                        MaterialDefinitionId::of,
+                        MaterialDefinitionId::asInt);
+        private final MaterialDefinitionId soil =
                 definitions.register("test:soil");
-        private final LandscapeDefinitionId rock =
+        private final MaterialDefinitionId rock =
                 definitions.register("test:rock");
-        private final LandscapeSystem landscape =
-                LandscapeSystem.create(
+        private final TerrainMutationWorkflow landscape =
+                TerrainMutationWorkflow.create(
                         new SparseTerrainStorage(),
                         definitions);
         private final SoilPropertiesDefinitions soilProperties =

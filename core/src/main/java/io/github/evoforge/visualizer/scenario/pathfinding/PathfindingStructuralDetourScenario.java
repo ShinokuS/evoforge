@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
@@ -19,7 +19,7 @@ public final class PathfindingStructuralDetourScenario implements VisualizerScen
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_detour_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_detour_ground");
         for (int x = 0; x <= 12; x++) {
             for (int y = -3; y <= 3; y++) {
                 if (x == 6 && y >= -2 && y <= 2) continue;

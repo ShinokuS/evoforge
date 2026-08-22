@@ -1,22 +1,17 @@
 /**
- * Authoritative world-model domains and lifecycle boundaries.
+ * Objective world semantics for EvoForge.
  *
- * <p>Navigation rule for this package tree:</p>
- * <ul>
- *   <li>domain concepts live with the domain that owns them, not in generic technical buckets;</li>
- *   <li>derived terrain facts live under {@code terrain} (for example {@code terrain.surface});</li>
- *   <li>developer-only observation helpers live under {@code diagnostics};</li>
- *   <li>{@code genesis}, {@code atlas}, {@code preparation}, {@code materialization} and
- *       {@code bootstrap} remain explicit lifecycle boundaries because each has a distinct owner
- *       and handoff contract;</li>
- *   <li>{@code navigation} and {@code pathfinding} remain separate because navigation owns world
- *       traversal semantics while pathfinding owns route-search algorithms;</li>
- *   <li>new top-level packages require a durable independent world responsibility. A single helper
- *       or implementation detail must be nested under its owning domain instead.</li>
- * </ul>
+ * <p>Top-level packages are independent semantic concepts, not technical
+ * lifecycle layers and not the first mechanics that consume them. Current
+ * roots include Continuum infrastructure, authored material identity, terrain,
+ * geometry, space (position/orientation/occupancy/placement/measurement),
+ * navigation (including traversal/pathfinding), object identity/state, liquid
+ * and water, soil, atmosphere, geology, sky exposure, and interaction access.
+ * Cross-concept causal orchestration belongs under {@code simulation.mechanics},
+ * while domain-neutral execution belongs under {@code simulation.kernel}.</p>
  *
- * <p>Do not introduce root-level {@code util}, {@code common}, {@code misc}, {@code helpers} or
- * similarly ownership-free packages. Package structure is part of the architecture and should make
- * the owner of a concept discoverable from its path.</p>
+ * <p>See ADR-026 and repository-root {@code AGENTS.md}. A new independent
+ * capability must receive its own semantic home rather than being nested under
+ * its first consumer.</p>
  */
 package io.github.evoforge.simulation.world;

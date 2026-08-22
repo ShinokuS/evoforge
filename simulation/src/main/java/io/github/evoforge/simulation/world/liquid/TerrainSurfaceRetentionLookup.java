@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.liquid;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 
 /**
@@ -28,7 +28,7 @@ public final class TerrainSurfaceRetentionLookup
 
     @Override
     public int capacityAt(int x, int y, int z) {
-        LandscapeDefinitionId current = terrain.find(x, y, z);
+        MaterialDefinitionId current = terrain.find(x, y, z);
         if (current != null) {
             return definitions.getOrZero(current);
         }

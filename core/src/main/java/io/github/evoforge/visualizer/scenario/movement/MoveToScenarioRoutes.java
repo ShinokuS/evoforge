@@ -16,9 +16,9 @@ final class MoveToScenarioRoutes {
             int goalY,
             int goalZ) {
         PathQuery query = PathQuery.between(
-                view.transforms().x(objectId),
-                view.transforms().y(objectId),
-                view.transforms().z(objectId),
+                view.positions().x(objectId),
+                view.positions().y(objectId),
+                view.positions().z(objectId),
                 goalX, goalY, goalZ);
         PathSearch search = complete(view.pathfinder().begin(query));
         return new MoveToScenarioPlan(

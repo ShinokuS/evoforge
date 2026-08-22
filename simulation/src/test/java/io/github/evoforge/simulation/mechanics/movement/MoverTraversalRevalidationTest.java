@@ -15,8 +15,8 @@ import io.github.evoforge.simulation.kernel.scheduling.HandlerRegistry;
 import io.github.evoforge.simulation.kernel.scheduling.Scheduler;
 import io.github.evoforge.simulation.kernel.time.SimulationClock;
 import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.geometry.GeometrySystem;
@@ -29,8 +29,8 @@ import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 
 final class MoverTraversalRevalidationTest {
 
@@ -59,7 +59,7 @@ final class MoverTraversalRevalidationTest {
             fixture.stepper.advance();
         }
 
-        assertEquals(0, fixture.spatial.transforms().x(fixture.objectId));
+        assertEquals(0, fixture.spatial.positions().x(fixture.objectId));
         assertFalse(fixture.state.isMoving(fixture.objectId));
         assertNotNull(fixture.completion[0]);
         assertFalse(fixture.completion[0].committed());
@@ -73,8 +73,8 @@ final class MoverTraversalRevalidationTest {
         private final MovementStepCompletion[] completion =
                 new MovementStepCompletion[1];
         private final ObjectRepository objects = new ObjectRepository();
-        private final CellSpatialIndex cells = new CellSpatialIndex();
-        private final SpatialSystem spatial = new SpatialSystem(cells);
+        private final CellPositionIndex cells = new CellPositionIndex();
+        private final PositionSystem spatial = new PositionSystem(cells);
         private final MovementStateStore state = new MovementStateStore();
         private final ObjectId objectId;
         private final SimulationStepper stepper;
@@ -83,18 +83,18 @@ final class MoverTraversalRevalidationTest {
         private Fixture(boolean initiallyAllowed) {
             allowed[0] = initiallyAllowed;
 
-            DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
+            DefinitionRegistry<MaterialDefinitionId> landscapeDefinitions =
                     new DefinitionRegistry<>(
-                            LandscapeDefinitionId::of,
-                            LandscapeDefinitionId::asInt);
-            LandscapeDefinitionId ground =
+                            MaterialDefinitionId::of,
+                            MaterialDefinitionId::asInt);
+            MaterialDefinitionId ground =
                     landscapeDefinitions.register("test:ground");
             landscapeDefinitions.freeze();
             TerrainSystem terrain = new TerrainSystem(
                     new SparseTerrainStorage(),
                     landscapeDefinitions);
             GeometrySystem geometry = new GeometrySystem(terrain.lookup());
-            LandscapeSystem landscape = new LandscapeSystem(terrain, geometry);
+            TerrainMutationWorkflow landscape = new TerrainMutationWorkflow(terrain, geometry);
             NavigationSystem navigation = new NavigationSystem(geometry.lookup());
             OperationResults.requireAccepted(
                     landscape.placeTerrain(0, 0, -1, ground));
@@ -136,7 +136,7 @@ final class MoverTraversalRevalidationTest {
             MovementActionProcessor actions = new MovementActionProcessor(
                     state,
                     objects,
-                    spatial.transforms(),
+                    spatial.positions(),
                     navigation.lookup(),
                     traversal,
                     occupancy,
@@ -147,7 +147,7 @@ final class MoverTraversalRevalidationTest {
 
             movement = new MovementSystem(
                     objects,
-                    spatial.transforms(),
+                    spatial.positions(),
                     navigation.lookup(),
                     movementDefinitions,
                     (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1000),

@@ -11,9 +11,9 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.world.space.placement.ObjectPlacementResult;
-import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSystem;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.placement.ObjectPlacementSystem;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 import org.junit.jupiter.api.Test;
 
 final class OccupancySystemTest {
@@ -58,7 +58,7 @@ final class OccupancySystemTest {
         assertEquals(
                 ObjectPlacementResult.DESTINATION_OCCUPIED,
                 fixture.placement.place(second, 0, 0, 0));
-        assertFalse(fixture.spatial.transforms().has(second));
+        assertFalse(fixture.spatial.positions().has(second));
         assertEquals(
                 OccupancyState.OCCUPIED,
                 fixture.occupancy.state(0, 0, 0));
@@ -173,8 +173,8 @@ final class OccupancySystemTest {
 
         ObjectRepository objects = new ObjectRepository();
         ObjectFactory factory = new ObjectFactory(objects, definitions);
-        CellSpatialIndex cells = new CellSpatialIndex();
-        SpatialSystem spatial = new SpatialSystem(cells);
+        CellPositionIndex cells = new CellPositionIndex();
+        PositionSystem spatial = new PositionSystem(cells);
 
         OccupancyDefinitions occupancyDefinitions =
                 new OccupancyDefinitions();
@@ -203,7 +203,7 @@ final class OccupancySystemTest {
             ObjectDefinitionId cow,
             ObjectDefinitionId bush,
             ObjectFactory factory,
-            SpatialSystem spatial,
+            PositionSystem spatial,
             OccupancySystem occupancy,
             ObjectPlacementSystem placement) {
     }

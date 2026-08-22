@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.geometry;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioTerrain;
@@ -20,7 +20,7 @@ public final class RampNavigationScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition(
+        MaterialDefinitionId ground = assembly.landscapeDefinition(
                 "scenario:ramp_ground");
 
         ScenarioTerrain.fill(assembly, ground, -10, 10, -8, 8, -1);

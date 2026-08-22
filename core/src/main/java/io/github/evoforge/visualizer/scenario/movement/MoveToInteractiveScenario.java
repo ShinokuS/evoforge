@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
@@ -30,9 +30,9 @@ public final class MoveToInteractiveScenario implements VisualizerScenario {
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-8, 8, -5, 5, -1, 3);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition(
+        MaterialDefinitionId ground = assembly.landscapeDefinition(
                 "scenario:surface_interior_ground");
-        LandscapeDefinitionId hill = assembly.landscapeDefinition(
+        MaterialDefinitionId hill = assembly.landscapeDefinition(
                 "scenario:surface_interior_hill");
         ObjectDefinitionId moverDefinition = assembly.objectDefinition(
                 "scenario:surface_interior_mover");

@@ -31,7 +31,7 @@ import io.github.evoforge.simulation.world.space.measurement.PhysicalCellVolume;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,7 +47,7 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
     private static final ResultCode UNAVAILABLE = ResultCode.of("drinking", "unavailable");
 
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final LiquidDrinkDefinitions definitions;
     private final NeedSolutionKnowledgeDefinitions knowledge;
     private final NeedMotivationDefinitions motivations;
@@ -62,7 +62,7 @@ public final class LiquidDrinkOpportunityProvider implements AgentOpportunityPro
 
     public LiquidDrinkOpportunityProvider(
             ObjectLookup objects,
-            TransformLookup transforms,
+            PositionLookup transforms,
             LiquidDrinkDefinitions definitions,
             NeedSolutionKnowledgeDefinitions knowledge,
             NeedMotivationDefinitions motivations,

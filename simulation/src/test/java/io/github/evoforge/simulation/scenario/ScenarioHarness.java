@@ -7,7 +7,7 @@ import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 
 public final class ScenarioHarness {
 
@@ -54,8 +54,8 @@ public final class ScenarioHarness {
         return runtime.view().objects();
     }
 
-    public TransformLookup transforms() {
-        return runtime.view().transforms();
+    public PositionLookup positions() {
+        return runtime.view().positions();
     }
 
     public TerrainLookup terrain() {

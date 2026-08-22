@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.geometry.GeometrySystem;
@@ -16,8 +16,8 @@ import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 final class NavigationMutationIntegrationTest {
 
-    private static final LandscapeDefinitionId TERRAIN =
-            LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId TERRAIN =
+            MaterialDefinitionId.of(0);
 
     @Test
     void terrainRemovalIsVisibleOnNextQuery() {
@@ -116,7 +116,7 @@ final class NavigationMutationIntegrationTest {
                 new DefinitionCatalog<>() {
 
                     @Override
-                    public LandscapeDefinitionId resolve(
+                    public MaterialDefinitionId resolve(
                             String key) {
 
                         return "core:test".equals(key)
@@ -126,7 +126,7 @@ final class NavigationMutationIntegrationTest {
 
                     @Override
                     public String keyOf(
-                            LandscapeDefinitionId id) {
+                            MaterialDefinitionId id) {
 
                         return TERRAIN.equals(id)
                                 ? "core:test"
@@ -135,7 +135,7 @@ final class NavigationMutationIntegrationTest {
 
                     @Override
                     public boolean contains(
-                            LandscapeDefinitionId id) {
+                            MaterialDefinitionId id) {
 
                         return TERRAIN.equals(id);
                     }

@@ -1,0 +1,176 @@
+package io.github.evoforge.simulation.mechanics.terrainmutation;
+
+import io.github.evoforge.simulation.definition.DefinitionCatalog;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
+import io.github.evoforge.simulation.world.terrain.TerrainExtentLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainPlacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainRemovalResult;
+import io.github.evoforge.simulation.world.terrain.TerrainReplacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainRevisionLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainStorage;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeTracker;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalRevisionLookup;
+
+public final class TerrainMutationWorkflow implements TerrainMutations {
+
+    private final TerrainSystem terrain;
+    private final GeometrySystem geometry;
+    private final TraversalChangeTracker traversalChanges =
+            new TraversalChangeTracker();
+
+    public TerrainMutationWorkflow(
+            TerrainSystem terrain,
+            GeometrySystem geometry) {
+
+        if (terrain == null) {
+            throw new IllegalArgumentException(
+                    "terrain must not be null");
+        }
+
+        if (geometry == null) {
+            throw new IllegalArgumentException(
+                    "geometry must not be null");
+        }
+
+        this.terrain = terrain;
+        this.geometry = geometry;
+    }
+
+    public static TerrainMutationWorkflow create(
+            TerrainStorage storage,
+            DefinitionCatalog<MaterialDefinitionId> definitions) {
+
+        TerrainSystem terrain = new TerrainSystem(
+                storage,
+                definitions);
+
+        GeometrySystem geometry = new GeometrySystem(
+                terrain.lookup());
+
+        return new TerrainMutationWorkflow(
+                terrain,
+                geometry);
+    }
+
+    public TerrainLookup terrain() {
+        return terrain.lookup();
+    }
+
+    public TerrainExtentLookup terrainExtents() {
+        return terrain.extents();
+    }
+
+    public TerrainSurfaceLookup terrainSurfaces() {
+        return terrain.surfaces();
+    }
+
+    public TerrainRevisionLookup terrainRevision() {
+        return terrain.revisions();
+    }
+
+    public TraversalRevisionLookup traversalRevision() {
+        return traversalChanges;
+    }
+
+    public TraversalChangeLookup traversalChanges() {
+        return traversalChanges;
+    }
+
+    public GeometryLookup geometry() {
+        return geometry.lookup();
+    }
+
+    public ShapeTraversalLowerBoundLookup shapeTraversalBounds() {
+        return geometry.traversalBounds();
+    }
+
+    public void setShape(
+            int x,
+            int y,
+            int z,
+            Shape shape) {
+
+        geometry.setShape(
+                x,
+                y,
+                z,
+                shape);
+        traversalChanges.changed(x, y, z);
+    }
+
+    @Override
+    public TerrainPlacementResult placeTerrain(
+            int x,
+            int y,
+            int z,
+            MaterialDefinitionId definitionId) {
+
+        TerrainPlacementResult result =
+                terrain.place(
+                        x,
+                        y,
+                        z,
+                        definitionId);
+
+        if (result.accepted()) {
+            geometry.clearShapeOverride(
+                    x,
+                    y,
+                    z);
+            traversalChanges.changed(x, y, z);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TerrainReplacementResult replaceTerrain(
+            int x,
+            int y,
+            int z,
+            MaterialDefinitionId definitionId) {
+
+        TerrainReplacementResult result = terrain.replace(
+                x,
+                y,
+                z,
+                definitionId);
+
+        if (result.accepted()) {
+            traversalChanges.changed(x, y, z);
+        }
+
+        return result;
+    }
+
+    @Override
+    public TerrainRemovalResult removeTerrain(
+            int x,
+            int y,
+            int z) {
+
+        TerrainRemovalResult result =
+                terrain.remove(
+                        x,
+                        y,
+                        z);
+
+        if (result.accepted()) {
+            geometry.clearShapeOverride(
+                    x,
+                    y,
+                    z);
+            traversalChanges.changed(x, y, z);
+        }
+
+        return result;
+    }
+}

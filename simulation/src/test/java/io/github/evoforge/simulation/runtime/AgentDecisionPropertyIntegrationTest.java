@@ -9,7 +9,7 @@ import io.github.evoforge.simulation.agents.decision.AgentDecisionTrace;
 import io.github.evoforge.simulation.agents.decision.AgentIntentPhase;
 import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -28,7 +28,7 @@ final class AgentDecisionPropertyIntegrationTest {
     void committedIntentSurvivesAChallengerBecomingSlightlyBetterDuringMovement() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-2, 2, -1, 1, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:commitment_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:commitment_ground");
         assembly.surfaceRetention(ground, 100_000);
         for (int x = -2; x <= 2; x++) assembly.placeTerrain(x, 0, 0, ground);
 
@@ -121,7 +121,7 @@ final class AgentDecisionPropertyIntegrationTest {
             int waterY) {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-3, 3, -3, 3, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:replay_ground_" + sample);
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:replay_ground_" + sample);
         assembly.surfaceRetention(ground, 100_000);
         for (int x = -3; x <= 3; x++) {
             for (int y = -3; y <= 3; y++) assembly.placeTerrain(x, y, 0, ground);
@@ -166,9 +166,9 @@ final class AgentDecisionPropertyIntegrationTest {
             int sample,
             int tick) {
         String context = "seed=" + REPLAY_SEED + ", sample=" + sample + ", tick=" + tick;
-        assertEquals(first.runtime.view().transforms().x(first.cow), second.runtime.view().transforms().x(second.cow), context);
-        assertEquals(first.runtime.view().transforms().y(first.cow), second.runtime.view().transforms().y(second.cow), context);
-        assertEquals(first.runtime.view().transforms().z(first.cow), second.runtime.view().transforms().z(second.cow), context);
+        assertEquals(first.runtime.view().positions().x(first.cow), second.runtime.view().positions().x(second.cow), context);
+        assertEquals(first.runtime.view().positions().y(first.cow), second.runtime.view().positions().y(second.cow), context);
+        assertEquals(first.runtime.view().positions().z(first.cow), second.runtime.view().positions().z(second.cow), context);
         assertEquals(first.runtime.view().needs().level(first.cow, HUNGER), second.runtime.view().needs().level(second.cow, HUNGER), context);
         assertEquals(first.runtime.view().needs().level(first.cow, THIRST), second.runtime.view().needs().level(second.cow, THIRST), context);
         assertEquals(first.runtime.view().consumableStocks().quantity(first.grass), second.runtime.view().consumableStocks().quantity(second.grass), context);

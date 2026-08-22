@@ -11,7 +11,7 @@ import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
@@ -22,9 +22,9 @@ final class WaterWadingRuntimeIntegrationTest {
     @Test
     void moveToPlansAroundCurrentTooDeepSurfaceWater() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId soil =
+        MaterialDefinitionId soil =
                 assembly.landscapeDefinition("test:wading_soil");
-        LandscapeDefinitionId basin =
+        MaterialDefinitionId basin =
                 assembly.landscapeDefinition("test:wading_basin");
         assembly.soilProperties(soil, 1_000_000, 1_000_000);
         assembly.periodicPrecipitation(300_000, 1L);
@@ -38,7 +38,7 @@ final class WaterWadingRuntimeIntegrationTest {
         // rain event creates a deep Water obstacle there while the detour stays dry.
         for (int x = 0; x <= 2; x++) {
             for (int y = 0; y <= 1; y++) {
-                LandscapeDefinitionId definition =
+                MaterialDefinitionId definition =
                         x == 1 && y == 0 ? basin : soil;
                 assembly.placeTerrain(x, y, 0, definition);
             }
@@ -70,9 +70,9 @@ final class WaterWadingRuntimeIntegrationTest {
     @Test
     void rainThatArrivesDuringTimedStepCancelsAuthoritativeCommit() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId soil =
+        MaterialDefinitionId soil =
                 assembly.landscapeDefinition("test:commit_soil");
-        LandscapeDefinitionId basin =
+        MaterialDefinitionId basin =
                 assembly.landscapeDefinition("test:commit_basin");
         assembly.soilProperties(soil, 1_000_000, 1_000_000);
         assembly.periodicPrecipitation(900_000, 1L);
@@ -105,15 +105,15 @@ final class WaterWadingRuntimeIntegrationTest {
 
         runtime.stepper().advance();
         assertEquals(2L, runtime.time().tick());
-        assertEquals(0, runtime.view().transforms().x(mover));
-        assertEquals(0, runtime.view().transforms().y(mover));
-        assertEquals(1, runtime.view().transforms().z(mover));
+        assertEquals(0, runtime.view().positions().x(mover));
+        assertEquals(0, runtime.view().positions().y(mover));
+        assertEquals(1, runtime.view().positions().z(mover));
     }
 
     @Test
     void moverWithoutWadingProfileKeepsPreviousWaterNeutralBehavior() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId basin =
+        MaterialDefinitionId basin =
                 assembly.landscapeDefinition("test:neutral_basin");
         assembly.periodicPrecipitation(300_000, 1L);
 

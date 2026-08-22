@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.geometry;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
@@ -26,7 +26,7 @@ public final class CutawayScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition(
+        MaterialDefinitionId ground = assembly.landscapeDefinition(
                 "scenario:cutaway_ground");
 
         buildLowerMeadow(assembly, ground);
@@ -41,7 +41,7 @@ public final class CutawayScenario implements VisualizerScenario {
 
     private static void buildLowerMeadow(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground) {
+            MaterialDefinitionId ground) {
         for (int x = -16; x <= 16; x++) {
             for (int y = -11; y <= 11; y++) {
                 if (x == SHAFT_X && y == SHAFT_Y) continue;
@@ -53,7 +53,7 @@ public final class CutawayScenario implements VisualizerScenario {
 
     private static void buildPlateau(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground) {
+            MaterialDefinitionId ground) {
         for (int x = -7; x <= 7; x++) {
             for (int y = -5; y <= 5; y++) {
                 if (x == SHAFT_X && y == SHAFT_Y) continue;
@@ -64,7 +64,7 @@ public final class CutawayScenario implements VisualizerScenario {
 
     private static void buildMountainCave(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground) {
+            MaterialDefinitionId ground) {
         for (int x = 1; x <= 6; x++) {
             for (int y = -4; y <= 4; y++) {
                 if (!isMountainCaveAir(x, y)) {
@@ -96,7 +96,7 @@ public final class CutawayScenario implements VisualizerScenario {
 
     private static void buildFlatRoofCavern(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground) {
+            MaterialDefinitionId ground) {
         int minX = -14;
         int maxX = -9;
         int minY = -4;

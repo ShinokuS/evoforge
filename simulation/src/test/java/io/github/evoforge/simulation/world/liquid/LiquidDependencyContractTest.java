@@ -24,7 +24,7 @@ final class LiquidDependencyContractTest {
         Path root = Files.isDirectory(ownerRoot)
                 ? ownerRoot
                 : mainJava.resolve(
-                        "io/github/evoforge/simulation/world/landscape/liquid");
+                        "io/github/evoforge/simulation/mechanics/terrainmutation/liquid");
         assertTrue(Files.isDirectory(root), "missing liquid source directory: " + root);
 
         try (var paths = Files.walk(root)) {

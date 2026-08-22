@@ -1,16 +1,16 @@
 package io.github.evoforge.simulation.world.terrain;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 public interface TerrainStorage {
 
-    LandscapeDefinitionId find(int x, int y, int z);
+    MaterialDefinitionId find(int x, int y, int z);
 
     void put(
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId);
+            MaterialDefinitionId definitionId);
 
     void remove(int x, int y, int z);
 }

@@ -3,7 +3,7 @@ package io.github.evoforge.visualizer.scenario.environment;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationLookup;
@@ -34,9 +34,9 @@ public final class RainHydrologyScenario implements VisualizerScenario {
                 RAIN_VOLUME, RAIN_INTERVAL, RAIN_TICKS, CYCLE);
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z);
-        LandscapeDefinitionId low = assembly.landscapeDefinition("scenario:rain_soil_low_capacity");
-        LandscapeDefinitionId high = assembly.landscapeDefinition("scenario:rain_soil_high_capacity");
-        LandscapeDefinitionId stone = assembly.landscapeDefinition("scenario:rain_stone");
+        MaterialDefinitionId low = assembly.landscapeDefinition("scenario:rain_soil_low_capacity");
+        MaterialDefinitionId high = assembly.landscapeDefinition("scenario:rain_soil_high_capacity");
+        MaterialDefinitionId stone = assembly.landscapeDefinition("scenario:rain_stone");
 
         assembly.soilProperties(low, LOW_CAPACITY, PERMEABILITY);
         assembly.soilProperties(high, HIGH_CAPACITY, PERMEABILITY);

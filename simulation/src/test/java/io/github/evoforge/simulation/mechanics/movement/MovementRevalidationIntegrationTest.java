@@ -13,8 +13,8 @@ import io.github.evoforge.simulation.kernel.scheduling.HandlerRegistry;
 import io.github.evoforge.simulation.kernel.scheduling.Scheduler;
 import io.github.evoforge.simulation.kernel.time.SimulationClock;
 import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
 import io.github.evoforge.simulation.world.geometry.GeometrySystem;
@@ -28,22 +28,22 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 import org.junit.jupiter.api.Test;
 
 final class MovementRevalidationIntegrationTest {
 
     @Test
     void interruptedTransitionCleansStateBeforePublishingCompletion() {
-        DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
-                new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
-        LandscapeDefinitionId ground = landscapeDefinitions.register("test:ground");
+        DefinitionRegistry<MaterialDefinitionId> landscapeDefinitions =
+                new DefinitionRegistry<>(MaterialDefinitionId::of, MaterialDefinitionId::asInt);
+        MaterialDefinitionId ground = landscapeDefinitions.register("test:ground");
         landscapeDefinitions.freeze();
 
         TerrainSystem terrain = new TerrainSystem(new SparseTerrainStorage(), landscapeDefinitions);
         GeometrySystem geometry = new GeometrySystem(terrain.lookup());
-        LandscapeSystem landscape = new LandscapeSystem(terrain, geometry);
+        TerrainMutationWorkflow landscape = new TerrainMutationWorkflow(terrain, geometry);
         NavigationSystem navigation = new NavigationSystem(geometry.lookup());
         OperationResults.requireAccepted(landscape.placeTerrain(0, 0, -1, ground));
         OperationResults.requireAccepted(landscape.placeTerrain(1, 0, -1, ground));
@@ -57,8 +57,8 @@ final class MovementRevalidationIntegrationTest {
         ObjectFactory objectFactory = new ObjectFactory(objects, objectDefinitions);
         WorldObject object = objectFactory.create(walker);
         ObjectId objectId = object.id();
-        CellSpatialIndex cells = new CellSpatialIndex();
-        SpatialSystem spatial = new SpatialSystem(cells);
+        CellPositionIndex cells = new CellPositionIndex();
+        PositionSystem spatial = new PositionSystem(cells);
         spatial.place(objectId, 0, 0, 0);
 
         OccupancyDefinitions occupancyDefinitions = new OccupancyDefinitions();
@@ -82,7 +82,7 @@ final class MovementRevalidationIntegrationTest {
         MovementActionProcessor actions = new MovementActionProcessor(
                 movementState,
                 objects,
-                spatial.transforms(),
+                spatial.positions(),
                 navigation.lookup(),
                 occupancy,
                 spatial,
@@ -96,7 +96,7 @@ final class MovementRevalidationIntegrationTest {
         HandlerId movementHandler = handlers.register(actions::complete);
         MovementSystem movement = new MovementSystem(
                 objects,
-                spatial.transforms(),
+                spatial.positions(),
                 navigation.lookup(),
                 movementDefinitions,
                 (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1000),
@@ -110,7 +110,7 @@ final class MovementRevalidationIntegrationTest {
 
         for (int tick = 0; tick < 10; tick++) stepper.advance();
 
-        assertEquals(0, spatial.transforms().x(objectId));
+        assertEquals(0, spatial.positions().x(objectId));
         assertFalse(movementState.isMoving(objectId));
         assertEquals(0, movementState.activeActionCount());
         assertEquals(OccupancyState.FREE, occupancy.state(1, 0, 0));

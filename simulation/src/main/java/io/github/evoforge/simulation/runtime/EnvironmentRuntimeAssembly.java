@@ -12,7 +12,7 @@ import io.github.evoforge.simulation.mechanics.hydrology.PeriodicPrecipitationSy
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationEventLookup;
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSystem;
 import io.github.evoforge.simulation.mechanics.hydrology.SkyPrecipitationSystem;
-import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.world.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidFlowProcess;
 import io.github.evoforge.simulation.world.liquid.LiquidFlowSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidSurfaceRetentionLookup;

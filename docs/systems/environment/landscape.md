@@ -13,10 +13,10 @@ There is no fake `air` material for ordinary empty space.
 Terrain state is conceptually:
 
 ```text
-XYZ -> LandscapeDefinitionId | absence
+XYZ -> MaterialDefinitionId | absence
 ```
 
-`TerrainSystem` owns presence/material identity. `LandscapeMutations` coordinates semantic Terrain mutations that also have Geometry lifecycle consequences.
+`TerrainSystem` owns presence/material identity. `TerrainMutations` coordinates semantic Terrain mutations that also have Geometry lifecycle consequences.
 
 Current storage is sparse, but storage layout is an implementation choice rather than public semantics.
 
@@ -25,7 +25,7 @@ Current storage is sparse, but storage layout is an implementation choice rather
 ### Owns
 
 - whether solid Terrain exists at an XYZ;
-- which `LandscapeDefinitionId` it uses;
+- which `MaterialDefinitionId` it uses;
 - Terrain-specific mutation invariants;
 - derived Terrain extents/revision facts maintained from accepted mutations.
 
@@ -46,11 +46,11 @@ A future streaming model must distinguish real empty space from unloaded/unknown
 
 ## Coordinated Landscape mutation
 
-Terrain and Geometry are different owners, but changing a Terrain anchor has Shape consequences. `LandscapeMutations` coordinates those owners.
+Terrain and Geometry are different owners, but changing a Terrain anchor has Shape consequences. `TerrainMutations` coordinates those owners.
 
 ```text
 external command ─┐
-future generation ├─> LandscapeMutations
+future generation ├─> TerrainMutations
 future erosion ───┘         │
                        ┌──────┴──────┐
                        ↓             ↓
@@ -66,7 +66,7 @@ future erosion ───┘         │
 One Terrain cell may participate in several independent facts:
 
 ```text
-LandscapeDefinitionId   material/content identity
+MaterialDefinitionId   material/content identity
 Shape                   local solid/free geometry
 SurfaceTraversalCost    intrinsic traversal contribution
 SoilProperties          porous capacity/permeability
@@ -104,7 +104,7 @@ Continuum generated facts
         ↓
 bounded materialization/transfer
         ↓
-LandscapeMutations + Geometry/Soil owners
+TerrainMutations + Geometry/Soil owners
         ↓
 ordinary mutable runtime truth
 ```
@@ -123,7 +123,7 @@ Terrain cells do not receive one runtime `WorldObject` identity each. Objects an
 
 - `TerrainSystem` is the only mutable owner of Terrain presence/material identity.
 - Ordinary open space is absence, not a fake material definition.
-- Cross-owner Terrain/Shape lifecycle uses `LandscapeMutations`.
+- Cross-owner Terrain/Shape lifecycle uses `TerrainMutations`.
 - Material identity and Shape geometry remain independent facts.
 - Mutable free/retained liquid never becomes a Terrain field.
 - Finite bounds use shared Geometry closure rather than fake boundary Terrain.
@@ -145,7 +145,7 @@ Not yet defined:
 Primary runtime code lives under:
 
 ```text
-simulation/.../world/landscape/
+simulation/.../mechanics/terrainmutation/
 ```
 
 Tests protect place/replace/remove semantics, definition identity, Geometry lifecycle, traversal invalidation, finite-world containment and separation between material capabilities and liquid state.

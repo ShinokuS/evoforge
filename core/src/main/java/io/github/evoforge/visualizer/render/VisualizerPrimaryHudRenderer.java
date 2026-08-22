@@ -14,7 +14,7 @@ import io.github.evoforge.simulation.agents.decision.AgentIntentPhase;
 import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.agents.search.AgentSearchTrace;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.soil.SoilProperties;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.geometry.CellSpace;
@@ -299,11 +299,11 @@ public final class VisualizerPrimaryHudRenderer {
     private List<Row> objectRows(ObjectId selected) {
         List<Row> rows = new ArrayList<>(18);
         WorldObject object = view.objects().get(selected);
-        if (object == null || !view.transforms().has(selected)) return rows;
+        if (object == null || !view.positions().has(selected)) return rows;
 
         rows.add(new Row(selectedObjectName(selected), true, TITLE));
-        rows.add(new Row("Position   " + view.transforms().x(selected) + ", "
-                + view.transforms().y(selected) + ", " + view.transforms().z(selected), false, TEXT));
+        rows.add(new Row("Position   " + view.positions().x(selected) + ", "
+                + view.positions().y(selected) + ", " + view.positions().z(selected), false, TEXT));
         boolean moving = view.moveTo().isActive(selected);
         rows.add(new Row("Movement   " + (moving ? "Moving" : "Idle"), false, moving ? MOVE : MUTED));
 
@@ -414,7 +414,7 @@ public final class VisualizerPrimaryHudRenderer {
         int y = cell.y();
         int selectedZ = cell.z();
         int terrainZ = selectedZ;
-        LandscapeDefinitionId terrain;
+        MaterialDefinitionId terrain;
         int waterZ = selectedZ;
         int waterAmount = 0;
         int opticalDepth = 0;
@@ -538,7 +538,7 @@ public final class VisualizerPrimaryHudRenderer {
 
     private ObjectId validSelectedObject() {
         ObjectId selected = state.selectedObject();
-        return selected != null && view.objects().isAlive(selected) && view.transforms().has(selected)
+        return selected != null && view.objects().isAlive(selected) && view.positions().has(selected)
                 ? selected
                 : null;
     }

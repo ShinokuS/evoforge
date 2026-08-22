@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 
 final class WorldBoundsHydrologyIntegrationTest {
@@ -14,7 +14,7 @@ final class WorldBoundsHydrologyIntegrationTest {
     void edgeWaterCannotEscapeFiniteWorldAndMassRemainsConserved() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 1, -1, 1, -1, 1);
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 assembly.landscapeDefinition("test:bounded_ground");
 
         for (int x = -1; x <= 1; x++) {
@@ -48,7 +48,7 @@ final class WorldBoundsHydrologyIntegrationTest {
     void setupMutationsOutsideConfiguredBoundsAreRejected() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 1, -1, 1, -1, 1);
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 assembly.landscapeDefinition("test:bounded_rejection_ground");
 
         assertThrows(

@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.water;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 
@@ -14,7 +14,7 @@ final class WaterScenarioSupport {
 
     static void fillFloor(
             SimulationAssembly assembly,
-            LandscapeDefinitionId definition,
+            MaterialDefinitionId definition,
             int minX,
             int maxX,
             int minY,
@@ -30,7 +30,7 @@ final class WaterScenarioSupport {
 
     static void ringWalls(
             SimulationAssembly assembly,
-            LandscapeDefinitionId definition,
+            MaterialDefinitionId definition,
             int minX,
             int maxX,
             int minY,

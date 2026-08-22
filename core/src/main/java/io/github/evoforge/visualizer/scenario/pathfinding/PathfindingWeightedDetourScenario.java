@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
@@ -23,8 +23,8 @@ public final class PathfindingWeightedDetourScenario implements VisualizerScenar
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_weighted_ground", 1000);
-        LandscapeDefinitionId costly = assembly.landscapeDefinition("scenario:path_weighted_costly", 6000);
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_weighted_ground", 1000);
+        MaterialDefinitionId costly = assembly.landscapeDefinition("scenario:path_weighted_costly", 6000);
         List<ScenarioCellMarker> warnings = new ArrayList<>();
         for (int x = 0; x <= 12; x++) {
             for (int y = -2; y <= 2; y++) {

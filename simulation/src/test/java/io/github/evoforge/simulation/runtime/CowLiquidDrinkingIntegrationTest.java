@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -25,9 +25,9 @@ final class CowLiquidDrinkingIntegrationTest {
 
         assertEquals(initialWater - 10_000, runtime.view().water().amount(1, 0, 0));
         assertTrue(runtime.view().needs().level(fixture.cow, THIRST) < 80L);
-        assertEquals(0, runtime.view().transforms().x(fixture.cow));
-        assertEquals(0, runtime.view().transforms().y(fixture.cow));
-        assertEquals(1, runtime.view().transforms().z(fixture.cow));
+        assertEquals(0, runtime.view().positions().x(fixture.cow));
+        assertEquals(0, runtime.view().positions().y(fixture.cow));
+        assertEquals(1, runtime.view().positions().z(fixture.cow));
     }
 
     @Test
@@ -40,8 +40,8 @@ final class CowLiquidDrinkingIntegrationTest {
 
         assertEquals(initialWater - 10_000, runtime.view().water().amount(1, 0, 1));
         assertTrue(runtime.view().needs().level(fixture.cow, THIRST) < 80L);
-        assertEquals(0, runtime.view().transforms().x(fixture.cow));
-        assertEquals(1, runtime.view().transforms().z(fixture.cow));
+        assertEquals(0, runtime.view().positions().x(fixture.cow));
+        assertEquals(1, runtime.view().positions().z(fixture.cow));
     }
 
     @Test
@@ -59,7 +59,7 @@ final class CowLiquidDrinkingIntegrationTest {
     void waterOutsideCurrentVisionNeverBecomesAConcreteCandidate() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-2, 6, -2, 2, -1, 3);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:vision_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:vision_ground");
         assembly.surfaceRetention(ground, 100_000);
         ObjectDefinitionId cowDefinition = assembly.objectDefinition("test:vision_cow");
         assembly.movementRate(cowDefinition, 1_000);
@@ -97,7 +97,7 @@ final class CowLiquidDrinkingIntegrationTest {
     void panoramicCowAtNorthShoreUsesCurrentNearestSiteBeforeFartherVisibleShore() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-4, 2, -2, 3, -2, 3);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:shore_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:shore_ground");
         assembly.surfaceRetention(ground, 100_000);
         ObjectDefinitionId cowDefinition = assembly.objectDefinition("test:shore_cow");
         assembly.movementRate(cowDefinition, 1_000);
@@ -139,9 +139,9 @@ final class CowLiquidDrinkingIntegrationTest {
         assertTrue(runtime.view().water().amount(0, 0, 0) < 20_000,
                 "the adjacent north-shore source must be used before a farther visible shore");
         assertEquals(20_000, runtime.view().water().amount(-2, 0, 0));
-        assertEquals(0, runtime.view().transforms().x(cow));
-        assertEquals(1, runtime.view().transforms().y(cow));
-        assertEquals(1, runtime.view().transforms().z(cow));
+        assertEquals(0, runtime.view().positions().x(cow));
+        assertEquals(1, runtime.view().positions().y(cow));
+        assertEquals(1, runtime.view().positions().z(cow));
     }
 
     private static void advanceUntilSatisfied(
@@ -162,7 +162,7 @@ final class CowLiquidDrinkingIntegrationTest {
 
         private Fixture(boolean sameLevelPuddle, int waterAmount) {
             assembly.worldBounds(-3, 3, -2, 2, -1, 3);
-            LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+            MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
             assembly.surfaceRetention(ground, 100_000);
 
             ObjectDefinitionId cowDefinition = assembly.objectDefinition("test:cow");

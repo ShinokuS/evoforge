@@ -2,9 +2,9 @@ package io.github.evoforge.simulation.mechanics.hydrology;
 
 import java.util.TreeSet;
 
-import io.github.evoforge.simulation.world.surface.SkySurface;
-import io.github.evoforge.simulation.world.surface.SkySurfaceLookup;
-import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.world.sky.SkySurface;
+import io.github.evoforge.simulation.world.sky.SkySurfaceLookup;
+import io.github.evoforge.simulation.world.sky.VerticalSkySurfaceSystem;
 import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
 import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceLookup;
 import io.github.evoforge.simulation.world.space.measurement.CellVolume;

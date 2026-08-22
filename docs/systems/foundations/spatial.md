@@ -8,13 +8,13 @@ A Cow may be walking toward another cell, a pathfinder may have planned a future
 
 ## Current status
 
-`SpatialSystem` is the sole authoritative owner of runtime object positions:
+`PositionSystem` is the sole authoritative owner of runtime object positions:
 
 ```text
 ObjectId -> (x, y, z)
 ```
 
-Cell-oriented indexes such as `CellSpatialIndex` / `CellObjectLookup` are derived read accelerators, not another owner.
+Cell-oriented indexes such as `CellPositionIndex` / `CellObjectLookup` are derived read accelerators, not another owner.
 
 ## Ownership and boundaries
 

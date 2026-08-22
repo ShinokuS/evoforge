@@ -13,7 +13,7 @@ import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 
 public final class MovementSystem {
 
@@ -39,7 +39,7 @@ public final class MovementSystem {
             ResultCode.of("movement", "destination_reserved");
 
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final NavigationLookup navigation;
     private final MovementDefinitions definitions;
     private final TransitionCostLookup transitionCosts;
@@ -50,7 +50,7 @@ public final class MovementSystem {
 
     public MovementSystem(
             ObjectLookup objects,
-            TransformLookup transforms,
+            PositionLookup transforms,
             NavigationLookup navigation,
             MovementDefinitions definitions,
             TransitionCostLookup transitionCosts,
@@ -72,7 +72,7 @@ public final class MovementSystem {
 
     public MovementSystem(
             ObjectLookup objects,
-            TransformLookup transforms,
+            PositionLookup transforms,
             NavigationLookup navigation,
             MovementDefinitions definitions,
             TransitionCostLookup transitionCosts,

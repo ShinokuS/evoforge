@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.profile;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -62,7 +62,7 @@ final class HydrologyScaleWorkload {
     private static SimulationRuntime create(int side) {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(0, side - 1, 0, side - 1, 0, 2);
-        LandscapeDefinitionId soil = assembly.landscapeDefinition("profile:hydrology-soil");
+        MaterialDefinitionId soil = assembly.landscapeDefinition("profile:hydrology-soil");
 
         assembly.soilProperties(soil, 250_000, 20_000);
         assembly.periodicPrecipitation(20_000, 5L);

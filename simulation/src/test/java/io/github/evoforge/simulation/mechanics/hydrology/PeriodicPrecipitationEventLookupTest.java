@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.kernel.time.SimulationTime;
-import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.sky.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
@@ -86,11 +86,11 @@ final class PeriodicPrecipitationEventLookupTest {
     private static PeriodicPrecipitationSystem periodic(
             PrecipitationSchedule schedule,
             MutableTime time) {
-        DefinitionRegistry<LandscapeDefinitionId> definitions =
+        DefinitionRegistry<MaterialDefinitionId> definitions =
                 new DefinitionRegistry<>(
-                        LandscapeDefinitionId::of,
-                        LandscapeDefinitionId::asInt);
-        LandscapeSystem landscape = LandscapeSystem.create(
+                        MaterialDefinitionId::of,
+                        MaterialDefinitionId::asInt);
+        TerrainMutationWorkflow landscape = TerrainMutationWorkflow.create(
                 new SparseTerrainStorage(),
                 definitions);
         LiquidTransportDefinitions transport = new LiquidTransportDefinitions();

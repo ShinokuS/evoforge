@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.soil;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 
 /**
@@ -28,7 +28,7 @@ public final class TerrainSoilPropertiesLookup implements SoilPropertiesLookup {
 
     @Override
     public SoilProperties find(int x, int y, int z) {
-        LandscapeDefinitionId id = terrain.find(x, y, z);
+        MaterialDefinitionId id = terrain.find(x, y, z);
         if (id == null || !definitions.has(id)) return null;
         return definitions.get(id);
     }

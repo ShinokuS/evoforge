@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.navigation.traversal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
@@ -15,15 +15,15 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
-import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.MaterialTraversalDefinitions;
 
 final class TransitionCostCalculatorTest {
 
     @Test
     void averagesBothSurfaceCosts() {
         Fixture fixture = new Fixture();
-        LandscapeDefinitionId source = fixture.definition(0, 1000);
-        LandscapeDefinitionId destination = fixture.definition(1, 1600);
+        MaterialDefinitionId source = fixture.definition(0, 1000);
+        MaterialDefinitionId destination = fixture.definition(1, 1600);
 
         fixture.cell(0, 0, -1, source, FullShape.INSTANCE);
         fixture.cell(1, 0, -1, destination, FullShape.INSTANCE);
@@ -39,7 +39,7 @@ final class TransitionCostCalculatorTest {
     @Test
     void appliesGridLengthAfterLocalAverage() {
         Fixture fixture = new Fixture();
-        LandscapeDefinitionId ground = fixture.definition(0, 1000);
+        MaterialDefinitionId ground = fixture.definition(0, 1000);
 
         fixture.cell(0, 0, -1, ground, FullShape.INSTANCE);
         fixture.cell(1, 1, -1, ground, FullShape.INSTANCE);
@@ -55,7 +55,7 @@ final class TransitionCostCalculatorTest {
     @Test
     void keepsDepartureAndArrivalContributionsOwnedByTheirShapes() {
         Fixture fixture = new Fixture();
-        LandscapeDefinitionId ground = fixture.definition(0, 1000);
+        MaterialDefinitionId ground = fixture.definition(0, 1000);
 
         fixture.cell(
                 0,
@@ -92,8 +92,8 @@ final class TransitionCostCalculatorTest {
     @Test
     void failsWhenTraversalDefinitionIsMissing() {
         Fixture fixture = new Fixture();
-        LandscapeDefinitionId source = fixture.definition(0, 1000);
-        LandscapeDefinitionId destination = LandscapeDefinitionId.of(1);
+        MaterialDefinitionId source = fixture.definition(0, 1000);
+        MaterialDefinitionId destination = MaterialDefinitionId.of(1);
 
         fixture.cell(0, 0, -1, source, FullShape.INSTANCE);
         fixture.cell(1, 0, -1, destination, FullShape.INSTANCE);
@@ -124,19 +124,19 @@ final class TransitionCostCalculatorTest {
 
     private static final class Fixture {
 
-        private final Map<Cell, LandscapeDefinitionId> terrain =
+        private final Map<Cell, MaterialDefinitionId> terrain =
                 new HashMap<>();
         private final Map<Cell, Shape> geometry =
                 new HashMap<>();
-        private final LandscapeTraversalDefinitions definitions =
-                new LandscapeTraversalDefinitions();
+        private final MaterialTraversalDefinitions definitions =
+                new MaterialTraversalDefinitions();
 
-        LandscapeDefinitionId definition(
+        MaterialDefinitionId definition(
                 int id,
                 long cost) {
 
-            LandscapeDefinitionId definitionId =
-                    LandscapeDefinitionId.of(id);
+            MaterialDefinitionId definitionId =
+                    MaterialDefinitionId.of(id);
             definitions.put(
                     definitionId,
                     SurfaceTraversalCost.of(cost));
@@ -147,7 +147,7 @@ final class TransitionCostCalculatorTest {
                 int x,
                 int y,
                 int z,
-                LandscapeDefinitionId definitionId,
+                MaterialDefinitionId definitionId,
                 Shape shape) {
 
             Cell cell = new Cell(x, y, z);

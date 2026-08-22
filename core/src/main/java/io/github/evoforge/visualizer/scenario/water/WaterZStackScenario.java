@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.water;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
@@ -28,9 +28,9 @@ public final class WaterZStackScenario implements VisualizerScenario {
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z);
-        LandscapeDefinitionId stone =
+        MaterialDefinitionId stone =
                 assembly.landscapeDefinition("scenario:water_z_stone");
-        LandscapeDefinitionId wall =
+        MaterialDefinitionId wall =
                 assembly.landscapeDefinition("scenario:water_z_wall");
 
         // Left: a 2x2 deep pool. Four completely full lower cells plus a finite

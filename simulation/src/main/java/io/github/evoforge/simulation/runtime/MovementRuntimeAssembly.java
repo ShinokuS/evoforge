@@ -38,7 +38,7 @@ final class MovementRuntimeAssembly {
         MovementActionProcessor movementActions = new MovementActionProcessor(
                 world.movementState,
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 world.navigation.lookup(),
                 waterWading,
                 world.occupancy,
@@ -70,7 +70,7 @@ final class MovementRuntimeAssembly {
         Pathfinder pathfinder = new HierarchicalPathfinder(hierarchy, exactPathfinder);
         MovementSystem movement = new MovementSystem(
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 world.navigation.lookup(),
                 definitions.movement,
                 transitionCosts,
@@ -79,7 +79,7 @@ final class MovementRuntimeAssembly {
                 world.movementState,
                 movementScheduler);
         MoveToSystem moveTo = new MoveToSystem(
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 pathfinder,
                 movement,
                 new MoverTraversalQueryConstraintProvider(waterWading));

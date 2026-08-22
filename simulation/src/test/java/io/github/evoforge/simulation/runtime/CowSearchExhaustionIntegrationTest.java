@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import java.util.ArrayList;
@@ -23,7 +23,7 @@ final class CowSearchExhaustionIntegrationTest {
     @Test
     void exhaustedLocalSweepExpandsSearchByMultiCellRelativeLegWithoutInventingTarget() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:search_exploration_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:search_exploration_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:search_exploration_cow");
 
         configureSearchingCow(assembly, cow, 4);
@@ -48,7 +48,7 @@ final class CowSearchExhaustionIntegrationTest {
     @Test
     void foodOutsideInitialVisionIsFoundOnlyAfterPhysicalMultiCellExploration() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:search_discovery_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:search_discovery_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:search_discovery_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:search_discovery_grass");
 
@@ -101,7 +101,7 @@ final class CowSearchExhaustionIntegrationTest {
 
     private static void fillGround(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground,
+            MaterialDefinitionId ground,
             int minX,
             int maxX,
             int minY,
@@ -115,8 +115,8 @@ final class CowSearchExhaustionIntegrationTest {
 
     private static int chebyshevDistanceFromOrigin(SimulationRuntime runtime, ObjectId objectId) {
         return Math.max(
-                Math.abs(runtime.view().transforms().x(objectId)),
-                Math.abs(runtime.view().transforms().y(objectId)));
+                Math.abs(runtime.view().positions().x(objectId)),
+                Math.abs(runtime.view().positions().y(objectId)));
     }
 
     private static void configureSearchingCow(

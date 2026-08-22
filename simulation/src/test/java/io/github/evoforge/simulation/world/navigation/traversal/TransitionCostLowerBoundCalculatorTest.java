@@ -2,21 +2,21 @@ package io.github.evoforge.simulation.world.navigation.traversal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import org.junit.jupiter.api.Test;
-import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.MaterialTraversalDefinitions;
 
 final class TransitionCostLowerBoundCalculatorTest {
 
     @Test
     void derivesNeutralFloorFromTerrainAndShapeBounds() {
-        LandscapeTraversalDefinitions definitions =
-                new LandscapeTraversalDefinitions();
+        MaterialTraversalDefinitions definitions =
+                new MaterialTraversalDefinitions();
         definitions.put(
-                LandscapeDefinitionId.of(0),
+                MaterialDefinitionId.of(0),
                 SurfaceTraversalCost.of(1000));
         definitions.put(
-                LandscapeDefinitionId.of(1),
+                MaterialDefinitionId.of(1),
                 SurfaceTraversalCost.of(1800));
 
         TransitionCostLowerBoundCalculator bounds =
@@ -29,10 +29,10 @@ final class TransitionCostLowerBoundCalculatorTest {
 
     @Test
     void respectsSubNeutralTerrainAndShapeFactorsWithoutOverestimating() {
-        LandscapeTraversalDefinitions definitions =
-                new LandscapeTraversalDefinitions();
+        MaterialTraversalDefinitions definitions =
+                new MaterialTraversalDefinitions();
         definitions.put(
-                LandscapeDefinitionId.of(0),
+                MaterialDefinitionId.of(0),
                 SurfaceTraversalCost.of(750));
 
         TransitionCostLowerBoundCalculator bounds =
@@ -45,10 +45,10 @@ final class TransitionCostLowerBoundCalculatorTest {
 
     @Test
     void remainsPositiveWhenFixedPointProductRoundsBelowOne() {
-        LandscapeTraversalDefinitions definitions =
-                new LandscapeTraversalDefinitions();
+        MaterialTraversalDefinitions definitions =
+                new MaterialTraversalDefinitions();
         definitions.put(
-                LandscapeDefinitionId.of(0),
+                MaterialDefinitionId.of(0),
                 SurfaceTraversalCost.of(1));
 
         TransitionCostLowerBoundCalculator bounds =

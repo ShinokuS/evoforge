@@ -383,7 +383,7 @@ public final class VisualizerHudRenderer {
         }
 
         WorldObject object = view.objects().get(selectedObject);
-        if (object == null || !view.transforms().has(selectedObject)) {
+        if (object == null || !view.positions().has(selectedObject)) {
             rows.add(title("Object unavailable"));
             return rows;
         }
@@ -407,8 +407,8 @@ public final class VisualizerHudRenderer {
             String facing = view.orientations().has(selectedObject)
                     ? view.orientations().facing(selectedObject).toString()
                     : "n/a";
-            rows.add(text("Position", view.transforms().x(selectedObject) + ", "
-                    + view.transforms().y(selectedObject) + ", " + view.transforms().z(selectedObject)));
+            rows.add(text("Position", view.positions().x(selectedObject) + ", "
+                    + view.positions().y(selectedObject) + ", " + view.positions().z(selectedObject)));
             rows.add(text("Facing", facing));
             appendTechnicalAutonomy(rows, selectedObject);
         }

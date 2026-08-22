@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.liquid;
 
 import java.util.Arrays;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 
 /** Material-owned microtopographic free-liquid retention capacities. */
@@ -14,7 +14,7 @@ public final class SurfaceRetentionDefinitions {
     private boolean[] present = new boolean[DEFAULT_CAPACITY];
     private boolean frozen;
 
-    public void put(LandscapeDefinitionId id, int capacity) {
+    public void put(MaterialDefinitionId id, int capacity) {
         if (frozen) {
             throw new IllegalStateException("surface retention definitions are frozen");
         }
@@ -32,7 +32,7 @@ public final class SurfaceRetentionDefinitions {
         present[index] = true;
     }
 
-    public int getOrZero(LandscapeDefinitionId id) {
+    public int getOrZero(MaterialDefinitionId id) {
         if (id == null) return CellVolume.EMPTY;
         int index = id.asInt();
         return index < present.length && present[index]

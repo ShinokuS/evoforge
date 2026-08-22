@@ -17,7 +17,7 @@ import io.github.evoforge.simulation.world.space.occupancy.OccupancyLookup;
  * derived from the Spatial cell index plus immutable occupancy definitions;
  * only {@code RESERVED} state is stored authoritatively by this system.</p>
  */
-public final class OccupancySystem implements OccupancyLookup {
+public final class OccupancySystem implements OccupancyLookup, CellAdmission {
 
     private final ObjectLookup objects;
     private final CellObjectLookup cells;
@@ -80,6 +80,7 @@ public final class OccupancySystem implements OccupancyLookup {
      * Returns the state relevant to placing/moving the candidate object.
      * Non-exclusive objects may coexist with occupants and reservations.
      */
+    @Override
     public OccupancyState admissionState(
             ObjectId candidate,
             int x,

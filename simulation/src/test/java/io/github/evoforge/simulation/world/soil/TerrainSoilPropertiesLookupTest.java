@@ -3,14 +3,14 @@ package io.github.evoforge.simulation.world.soil;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import org.junit.jupiter.api.Test;
 
 final class TerrainSoilPropertiesLookupTest {
 
     @Test
     void samePreparedMaterialKeepsExactPropertiesAcrossCoordinates() {
-        LandscapeDefinitionId id = LandscapeDefinitionId.of(0);
+        MaterialDefinitionId id = MaterialDefinitionId.of(0);
         SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
         SoilProperties prepared = new SoilProperties(120_000, 3_000);
         definitions.put(id, prepared);
@@ -25,8 +25,8 @@ final class TerrainSoilPropertiesLookupTest {
 
     @Test
     void nonSoilTerrainHasNoSoilProperties() {
-        LandscapeDefinitionId soil = LandscapeDefinitionId.of(0);
-        LandscapeDefinitionId rock = LandscapeDefinitionId.of(1);
+        MaterialDefinitionId soil = MaterialDefinitionId.of(0);
+        MaterialDefinitionId rock = MaterialDefinitionId.of(1);
         SoilPropertiesDefinitions definitions = new SoilPropertiesDefinitions();
         definitions.put(soil, new SoilProperties(80_000, 800));
 

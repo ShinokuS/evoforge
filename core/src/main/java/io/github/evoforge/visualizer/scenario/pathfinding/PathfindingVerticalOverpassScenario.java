@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
@@ -22,7 +22,7 @@ public final class PathfindingVerticalOverpassScenario implements VisualizerScen
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_vertical_overpass_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_vertical_overpass_ground");
         assembly.placeTerrain(-1, 0, -1, ground);
         ScenarioTerrain.placeRamp(assembly, ground, 0, 0, 0, RampShape.POSITIVE_X);
         assembly.placeTerrain(1, 0, 0, ground);

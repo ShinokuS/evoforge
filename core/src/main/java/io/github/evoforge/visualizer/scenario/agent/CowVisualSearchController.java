@@ -49,9 +49,9 @@ final class CowVisualSearchController implements ScenarioController {
                 + " | target=" + (targetingGrass ? "grass" : target == null ? "none" : target);
         ScenarioCellMarker[] markers = targetingGrass
                 ? new ScenarioCellMarker[] { new ScenarioCellMarker(
-                        runtime.view().transforms().x(grass),
-                        runtime.view().transforms().y(grass),
-                        runtime.view().transforms().z(grass),
+                        runtime.view().positions().x(grass),
+                        runtime.view().positions().y(grass),
+                        runtime.view().positions().z(grass),
                         ScenarioCellMarkerStyle.GOAL) }
                 : new ScenarioCellMarker[0];
         return new ScenarioDiagnostics(markers, summary);

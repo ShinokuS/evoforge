@@ -360,22 +360,27 @@ io.github.evoforge.simulation
 ├── genesis/                    global startup composition only
 ├── world/
 │   ├── continuum/              neutral large-world addressing/materialization
+│   ├── material/               authored material identity shared by semantic aspects
 │   ├── object/                 object identity/existence semantics
 │   ├── space/
-│   │   ├── position/           position authority/capabilities as justified by audit
-│   │   └── occupancy/          consumer-neutral admission/reservation semantics
+│   │   ├── position/           object position authority + rebuildable cell index
+│   │   ├── orientation/        independent facing/orientation semantics
+│   │   ├── occupancy/          consumer-neutral admission/reservation semantics
+│   │   ├── placement/          generic placement over admission + position mutation
+│   │   └── measurement/        physical space/volume units
 │   ├── geometry/               objective physical geometry
-│   ├── navigation/             consumer-neutral connectivity/traversability/path capability
-│   ├── visibility/             only when independent visibility semantics exist
+│   ├── navigation/             connectivity/traversal/pathfinding capability
 │   ├── geology/
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
-│   └── atmosphere/
+│   ├── atmosphere/
+│   ├── sky/                    derived sky-exposure/surface capability
+│   └── interaction/            interaction-access semantics
 ├── mechanics/
 │   ├── movement/               movement-specific workflow only
-│   ├── <drop/build/etc>/       only when real mechanics exist
-│   └── <cross-concept law>/
+│   ├── hydrology/              cross-concept environmental water workflows
+│   └── terrainmutation/        coordinated Terrain + Geometry + Traversal invalidation
 ├── agents/
 ├── persistence/                only when real persistent-state responsibilities exist
 └── diagnostics/                observer-only diagnostics when shared scope is real
@@ -624,7 +629,7 @@ CI must progressively enforce:
 
 - accepted Gradle topology only;
 - simulation cannot depend on presentation/libGDX;
-- no semantic dependency cycles;
+- no semantic dependency cycles (ArchUnit checks top-level `world/*` slices from production bytecode);
 - no foreign `internal` imports;
 - Kernel independence from domains;
 - reusable semantic modules do not depend on mechanics/agents/presentation consumers;

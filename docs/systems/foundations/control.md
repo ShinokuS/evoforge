@@ -131,7 +131,7 @@ world.*                  -X-> simulation.control.*
 Concrete use-case handlers may depend on the narrow domain API they adapt:
 
 ```text
-terrain handler -> LandscapeMutations
+terrain handler -> TerrainMutations
 move handler    -> MovementSystem
 MoveTo handler  -> MoveToSystem
 ```

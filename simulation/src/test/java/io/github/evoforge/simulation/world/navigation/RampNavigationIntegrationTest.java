@@ -7,14 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.simulation.world.geometry.TransitionMask;
 
 final class RampNavigationIntegrationTest {
-    private static final LandscapeDefinitionId TERRAIN = LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId TERRAIN = MaterialDefinitionId.of(0);
 
     @Test
     void positiveYRampConnectsLowerAndUpperLevels() {
@@ -122,7 +122,7 @@ final class RampNavigationIntegrationTest {
     private static final class TestTerrainLookup implements TerrainLookup {
         private final Set<Cell> terrain = new HashSet<>();
         void add(int x, int y, int z) { terrain.add(new Cell(x, y, z)); }
-        @Override public LandscapeDefinitionId find(int x, int y, int z) {
+        @Override public MaterialDefinitionId find(int x, int y, int z) {
             return terrain.contains(new Cell(x, y, z)) ? TERRAIN : null;
         }
     }

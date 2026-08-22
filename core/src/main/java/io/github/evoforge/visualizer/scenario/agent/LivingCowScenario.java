@@ -5,7 +5,7 @@ import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -72,9 +72,9 @@ public final class LivingCowScenario implements VisualizerScenario {
 
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(MIN_X, MAX_X, MIN_Y, MAX_Y, -2, 3);
-        LandscapeDefinitionId meadow = assembly.landscapeDefinition("scenario:living_meadow");
-        LandscapeDefinitionId basin = assembly.landscapeDefinition("scenario:living_puddle_basin");
-        LandscapeDefinitionId lakeFloor = assembly.landscapeDefinition("scenario:living_lake_floor");
+        MaterialDefinitionId meadow = assembly.landscapeDefinition("scenario:living_meadow");
+        MaterialDefinitionId basin = assembly.landscapeDefinition("scenario:living_puddle_basin");
+        MaterialDefinitionId lakeFloor = assembly.landscapeDefinition("scenario:living_lake_floor");
         ObjectDefinitionId cow = assembly.objectDefinition("scenario:living_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("scenario:living_grass");
         ObjectDefinitionId clover = assembly.objectDefinition("scenario:living_clover");
