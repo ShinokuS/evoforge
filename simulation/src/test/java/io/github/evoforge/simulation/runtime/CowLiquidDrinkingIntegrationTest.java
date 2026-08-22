@@ -4,10 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.agent.need.NeedId;
+import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.mechanics.interaction.InteractionReachProfiles;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
+import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;

@@ -1,10 +1,11 @@
 package io.github.evoforge.simulation.world.object.placement;
 
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
+import io.github.evoforge.simulation.world.space.placement.ObjectPlacementResult;
 
 /**
  * Semantic object-placement boundary coordinating exclusive occupancy with

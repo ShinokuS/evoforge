@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 import org.junit.jupiter.api.Test;
 
 final class LandscapeSliceResolverTest {

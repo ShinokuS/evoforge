@@ -1,0 +1,67 @@
+package io.github.evoforge.simulation.kernel.scheduling;
+
+import io.github.evoforge.simulation.kernel.time.SimulationInstant;
+
+final class ScheduledTask {
+
+    private final TaskHandle handle;
+    private final long when;
+    private final HandlerId handlerId;
+    private final long processId;
+    private final SimulationInstant scheduleOrder;
+
+    ScheduledTask(
+            TaskHandle handle,
+            long when,
+            HandlerId handlerId,
+            long processId) {
+        this(handle, when, handlerId, processId, SimulationInstant.fromTicks(handle == null ? 0L : handle.asLong()));
+    }
+
+    ScheduledTask(
+            TaskHandle handle,
+            long when,
+            HandlerId handlerId,
+            long processId,
+            SimulationInstant scheduleOrder) {
+
+        if (handle == null) {
+            throw new IllegalArgumentException("handle must not be null");
+        }
+        if (when < 0) {
+            throw new IllegalArgumentException("when must be >= 0");
+        }
+        if (handlerId == null) {
+            throw new IllegalArgumentException("handlerId must not be null");
+        }
+        if (scheduleOrder == null) {
+            throw new IllegalArgumentException("scheduleOrder must not be null");
+        }
+
+        this.handle = handle;
+        this.when = when;
+        this.handlerId = handlerId;
+        this.processId = processId;
+        this.scheduleOrder = scheduleOrder;
+    }
+
+    TaskHandle handle() {
+        return handle;
+    }
+
+    long when() {
+        return when;
+    }
+
+    HandlerId handlerId() {
+        return handlerId;
+    }
+
+    long processId() {
+        return processId;
+    }
+
+    SimulationInstant scheduleOrder() {
+        return scheduleOrder;
+    }
+}

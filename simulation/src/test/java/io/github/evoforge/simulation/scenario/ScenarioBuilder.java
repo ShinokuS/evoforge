@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.scenario;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.traversal.SurfaceTraversalCost;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.navigation.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 

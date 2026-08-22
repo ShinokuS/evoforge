@@ -8,10 +8,10 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionPorts;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 final class DirectedNavigationContractTest {
 

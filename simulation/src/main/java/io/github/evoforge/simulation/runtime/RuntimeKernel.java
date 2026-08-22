@@ -1,9 +1,9 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.time.HandlerRegistry;
-import io.github.evoforge.simulation.time.Scheduler;
-import io.github.evoforge.simulation.time.SimulationClock;
-import io.github.evoforge.simulation.time.SimulationStepper;
+import io.github.evoforge.simulation.kernel.scheduling.HandlerRegistry;
+import io.github.evoforge.simulation.kernel.scheduling.Scheduler;
+import io.github.evoforge.simulation.kernel.time.SimulationClock;
+import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
 
 /** Shared deterministic scheduler/clock kernel used while assembling one runtime. */
 final class RuntimeKernel {

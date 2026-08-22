@@ -1,6 +1,6 @@
 package io.github.evoforge.visualizer.presentation.route;
 
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 
 /** Immutable presentation snapshot of one ordered XYZ route, including its source. */
 public final class RoutePresentation {

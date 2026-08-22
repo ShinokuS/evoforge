@@ -1,12 +1,12 @@
 package io.github.evoforge.simulation.world.navigation;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionComposition;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionPorts;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.SurfaceBoundaryContinuity;
+import io.github.evoforge.simulation.world.geometry.TransitionComposition;
+import io.github.evoforge.simulation.world.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 public final class NavigationSystem {
 

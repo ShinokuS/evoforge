@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.presentation;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.visualizer.visual.ProceduralLandscapePack;
 import io.github.evoforge.visualizer.visual.ProceduralSliceArt;
 

@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
 import io.github.evoforge.visualizer.presentation.route.RoutePresentation;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;

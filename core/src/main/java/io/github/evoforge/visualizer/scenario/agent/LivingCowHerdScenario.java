@@ -2,12 +2,12 @@ package io.github.evoforge.visualizer.scenario.agent;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.agent.CapabilityId;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
-import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
+import io.github.evoforge.simulation.agents.CapabilityId;
+import io.github.evoforge.simulation.agents.need.NeedId;
+import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.mechanics.interaction.InteractionReachProfiles;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
+import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentation;

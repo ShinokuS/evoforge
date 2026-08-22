@@ -2,12 +2,12 @@ package io.github.evoforge.simulation.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.pathfinding.PathQuery;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
-import io.github.evoforge.simulation.world.pathfinding.PathSearch;
-import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 import org.junit.jupiter.api.Test;
 
 final class SimulationPathfindingIntegrationTest {

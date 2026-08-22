@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.occupancy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
 import org.junit.jupiter.api.Test;
 
 final class OccupancyContentionScenarioTest {

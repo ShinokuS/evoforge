@@ -3,11 +3,11 @@ package io.github.evoforge.simulation.scenario;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.movement.MoveStepResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;

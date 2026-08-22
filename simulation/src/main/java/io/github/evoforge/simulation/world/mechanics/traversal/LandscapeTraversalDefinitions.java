@@ -3,6 +3,7 @@ package io.github.evoforge.simulation.world.mechanics.traversal;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 
 import java.util.Arrays;
+import io.github.evoforge.simulation.world.navigation.traversal.SurfaceTraversalCost;
 
 public final class LandscapeTraversalDefinitions {
 

@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.presentation.route;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.visualizer.VisualizerState;
 
 /** Presentation adapter for the active MoveTo route of the currently selected object. */

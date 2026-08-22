@@ -8,6 +8,7 @@ import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 
 import java.math.BigDecimal;
+import io.github.evoforge.simulation.world.navigation.traversal.SurfaceTraversalCost;
 
 public final class LandscapeTraversalDefinitionCompiler
         implements DefinitionAspectCompiler<LandscapeDefinitionId> {

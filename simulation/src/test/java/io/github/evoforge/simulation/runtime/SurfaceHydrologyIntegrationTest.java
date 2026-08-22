@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 
 final class SurfaceHydrologyIntegrationTest {
 

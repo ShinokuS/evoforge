@@ -6,8 +6,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import org.junit.jupiter.api.Test;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 final class GeometryTraversalLowerBoundTest {
 

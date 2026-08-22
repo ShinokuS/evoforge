@@ -1,15 +1,15 @@
 package io.github.evoforge.visualizer.scenario.pathfinding;
 
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
-import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
-import io.github.evoforge.simulation.result.OperationResults;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.kernel.operation.OperationResults;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.pathfinding.PathQuery;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
-import io.github.evoforge.simulation.world.pathfinding.PathSearch;
-import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
 import io.github.evoforge.visualizer.scenario.ScenarioController;

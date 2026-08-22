@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.movement;
 
-import io.github.evoforge.simulation.control.movement.MoveToCommand;
-import io.github.evoforge.simulation.control.movement.MoveToResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.object.ObjectId;
 

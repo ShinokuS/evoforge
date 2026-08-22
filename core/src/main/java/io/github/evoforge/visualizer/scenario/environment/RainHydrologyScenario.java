@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.environment;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
+import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.visualizer.presentation.object.ObjectPresentationBindings;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentation;

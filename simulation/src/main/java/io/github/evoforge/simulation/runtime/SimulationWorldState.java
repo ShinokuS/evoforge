@@ -1,23 +1,23 @@
 package io.github.evoforge.simulation.runtime;
 
 import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidSystem;
-import io.github.evoforge.simulation.world.landscape.liquid.storage.SparseLiquidStorage;
-import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidSystem;
-import io.github.evoforge.simulation.world.landscape.soil.TerrainSoilPropertiesLookup;
-import io.github.evoforge.simulation.world.landscape.soil.storage.SparseSoilLiquidStorage;
-import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.WorldGeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementStateStore;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancySystem;
+import io.github.evoforge.simulation.world.liquid.LiquidSystem;
+import io.github.evoforge.simulation.world.liquid.storage.SparseLiquidStorage;
+import io.github.evoforge.simulation.world.soil.SoilLiquidSystem;
+import io.github.evoforge.simulation.world.soil.TerrainSoilPropertiesLookup;
+import io.github.evoforge.simulation.world.soil.storage.SparseSoilLiquidStorage;
+import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
+import io.github.evoforge.simulation.world.geometry.WorldGeometryLookup;
+import io.github.evoforge.simulation.mechanics.movement.MovementStateStore;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSystem;
 import io.github.evoforge.simulation.world.spatial.SpatialSystem;
 import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
-import io.github.evoforge.simulation.world.spatial.orientation.OrientationSystem;
+import io.github.evoforge.simulation.world.space.orientation.OrientationSystem;
 
 /** Authoritative mutable world stores and base systems that exist before runtime scheduling starts. */
 final class SimulationWorldState {

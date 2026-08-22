@@ -1,8 +1,8 @@
 package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.Shape;
 
 /** Presentation binding for one exact simulation Shape type. */
 public interface ShapePresentation<S extends Shape> {

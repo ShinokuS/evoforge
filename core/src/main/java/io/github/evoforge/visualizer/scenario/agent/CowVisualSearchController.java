@@ -1,10 +1,10 @@
 package io.github.evoforge.visualizer.scenario.agent;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
-import io.github.evoforge.simulation.world.agent.search.AgentSearchTrace;
+import io.github.evoforge.simulation.agents.need.NeedId;
+import io.github.evoforge.simulation.agents.search.AgentSearchTrace;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;
 import io.github.evoforge.visualizer.scenario.ScenarioController;

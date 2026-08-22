@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.geometry;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioTerrain;
 import io.github.evoforge.visualizer.scenario.ScenarioView;

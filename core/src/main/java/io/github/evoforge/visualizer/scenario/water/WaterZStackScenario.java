@@ -3,7 +3,7 @@ package io.github.evoforge.visualizer.scenario.water;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
+import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import io.github.evoforge.visualizer.scenario.ScenarioView;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;

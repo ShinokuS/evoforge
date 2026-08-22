@@ -2,8 +2,8 @@ package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Disposable;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import java.util.HashMap;
 import java.util.Map;
 

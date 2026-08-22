@@ -1,26 +1,26 @@
 package io.github.evoforge.simulation.runtime;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.agent.AgentDefinitions;
-import io.github.evoforge.simulation.world.agent.affordance.NeedSatisfactionDefinitions;
-import io.github.evoforge.simulation.world.agent.affordance.liquid.LiquidDrinkDefinitions;
-import io.github.evoforge.simulation.world.agent.knowledge.need.NeedSolutionKnowledgeDefinitions;
-import io.github.evoforge.simulation.world.agent.need.NeedDefinitions;
-import io.github.evoforge.simulation.world.agent.need.motivation.NeedMotivationDefinitions;
-import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionDefinitions;
-import io.github.evoforge.simulation.world.agent.perception.vision.VisionDefinitions;
+import io.github.evoforge.simulation.agents.AgentDefinitions;
+import io.github.evoforge.simulation.agents.affordance.NeedSatisfactionDefinitions;
+import io.github.evoforge.simulation.agents.affordance.liquid.LiquidDrinkDefinitions;
+import io.github.evoforge.simulation.agents.knowledge.need.NeedSolutionKnowledgeDefinitions;
+import io.github.evoforge.simulation.agents.need.NeedDefinitions;
+import io.github.evoforge.simulation.agents.need.motivation.NeedMotivationDefinitions;
+import io.github.evoforge.simulation.agents.need.progression.NeedProgressionDefinitions;
+import io.github.evoforge.simulation.agents.perception.vision.VisionDefinitions;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportDefinitions;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidTransportProperties;
-import io.github.evoforge.simulation.world.landscape.liquid.SurfaceRetentionDefinitions;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesDefinitions;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
-import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockDefinitions;
-import io.github.evoforge.simulation.world.mechanics.growth.GrowthDefinitions;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementDefinitions;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyDefinitions;
+import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
+import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
+import io.github.evoforge.simulation.world.liquid.SurfaceRetentionDefinitions;
+import io.github.evoforge.simulation.world.soil.SoilPropertiesDefinitions;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
+import io.github.evoforge.simulation.world.object.stock.ConsumableStockDefinitions;
+import io.github.evoforge.simulation.world.object.stock.growth.GrowthDefinitions;
+import io.github.evoforge.simulation.mechanics.movement.MovementDefinitions;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyDefinitions;
 import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
-import io.github.evoforge.simulation.world.mechanics.traversal.water.WaterWadingDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.water.WaterWadingDefinitions;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 /** Mutable authored/runtime definition set owned by one pre-start simulation assembly. */

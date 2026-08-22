@@ -1,8 +1,8 @@
 package io.github.evoforge.visualizer.presentation;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 
 /** Procedural presentation binding for cardinal ramps. */
 final class RampShapePresentation

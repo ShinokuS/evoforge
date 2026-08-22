@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.movement.MoveStepResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;

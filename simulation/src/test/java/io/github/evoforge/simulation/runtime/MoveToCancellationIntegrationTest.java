@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.control.movement.CancelMoveToCommand;
-import io.github.evoforge.simulation.control.movement.CancelMoveToResult;
-import io.github.evoforge.simulation.control.movement.MoveToCommand;
-import io.github.evoforge.simulation.control.movement.MoveToResult;
+import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;

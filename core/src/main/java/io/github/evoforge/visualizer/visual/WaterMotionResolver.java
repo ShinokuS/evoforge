@@ -1,8 +1,8 @@
 package io.github.evoforge.visualizer.visual;
 
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowSample;
-import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterFlowLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterFlowSample;
+import io.github.evoforge.simulation.world.liquid.water.WaterLookup;
 
 /**
  * Maps objective latest-step Water transfers to presentation motion.

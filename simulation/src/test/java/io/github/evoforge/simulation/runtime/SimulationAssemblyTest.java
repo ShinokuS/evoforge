@@ -4,11 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
-import io.github.evoforge.simulation.control.terrain.ReplaceTerrainResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
+import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyState;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;

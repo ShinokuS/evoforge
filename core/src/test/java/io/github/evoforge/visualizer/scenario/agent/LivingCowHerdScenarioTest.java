@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.agent.decision.AgentIntentPhase;
-import io.github.evoforge.simulation.world.agent.decision.AgentIntentTrace;
+import io.github.evoforge.simulation.agents.decision.AgentIntentPhase;
+import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.visualizer.presentation.weather.WeatherPresentationKind;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;

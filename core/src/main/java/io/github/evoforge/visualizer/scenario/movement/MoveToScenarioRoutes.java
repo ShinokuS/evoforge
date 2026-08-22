@@ -2,9 +2,9 @@ package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.pathfinding.PathQuery;
-import io.github.evoforge.simulation.world.pathfinding.PathSearch;
-import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 
 final class MoveToScenarioRoutes {
     private MoveToScenarioRoutes() { }

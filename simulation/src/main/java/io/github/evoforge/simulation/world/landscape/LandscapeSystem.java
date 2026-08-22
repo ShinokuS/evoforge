@@ -2,22 +2,22 @@ package io.github.evoforge.simulation.world.landscape;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainPlacementResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainRemovalResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainReplacementResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainStorage;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.terrain.TerrainExtentLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainPlacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainRemovalResult;
+import io.github.evoforge.simulation.world.terrain.TerrainReplacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainRevisionLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainStorage;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
-import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeLookup;
-import io.github.evoforge.simulation.world.mechanics.traversal.TraversalChangeTracker;
-import io.github.evoforge.simulation.world.mechanics.traversal.TraversalRevisionLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeTracker;
+import io.github.evoforge.simulation.world.navigation.traversal.TraversalRevisionLookup;
 
 public final class LandscapeSystem implements LandscapeMutations {
 

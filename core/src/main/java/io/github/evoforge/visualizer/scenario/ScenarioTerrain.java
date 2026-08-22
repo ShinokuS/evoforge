@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 
 /** Small repeated terrain helpers shared by visualizer-only scenario domains. */
 public final class ScenarioTerrain {

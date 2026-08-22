@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.agent.CapabilityId;
-import io.github.evoforge.simulation.world.agent.decision.AgentIntentPhase;
-import io.github.evoforge.simulation.world.agent.decision.AgentIntentTrace;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
+import io.github.evoforge.simulation.agents.CapabilityId;
+import io.github.evoforge.simulation.agents.decision.AgentIntentPhase;
+import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
+import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;

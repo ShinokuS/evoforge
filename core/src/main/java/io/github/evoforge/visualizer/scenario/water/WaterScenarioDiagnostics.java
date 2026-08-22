@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.water;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.water.WaterSystem;
+import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioController;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;
