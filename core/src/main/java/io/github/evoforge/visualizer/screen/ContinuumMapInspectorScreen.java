@@ -17,6 +17,7 @@ import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTile;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
+import java.nio.ByteBuffer;
 
 /** Stage 4 world-oriented pan/zoom proof over a deterministic synthetic Continuum field. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
@@ -26,6 +27,9 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color TEXT = new Color(0.94f, 0.96f, 0.97f, 1f);
     private static final Color MUTED = new Color(0.66f, 0.71f, 0.74f, 1f);
     private static final int MAX_GPU_TEXTURES = 192;
+    private static final byte[] PALETTE_R = palette(0.08f, 0.62f);
+    private static final byte[] PALETTE_G = palette(0.11f, 0.70f);
+    private static final byte[] PALETTE_B = palette(0.16f, 0.76f);
 
     private final Runnable returnToMenu;
     private final ContinuumMapInspectorModel model;
@@ -161,36 +165,59 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
             font.draw(batch,
                     "CPU tiles " + metrics.residentTiles() + "/" + metrics.maxResidentTiles()
                             + "   GPU textures " + textures.size() + "/" + textures.maxEntries()
-                            + "   requested " + frame.requestedWithPrefetch()
-                            + "   pending " + metrics.pendingJobs()
+                            + "   visible queue " + metrics.visiblePendingJobs()
+                            + "   prefetch queue " + metrics.prefetchPendingJobs()
                             + "   running " + metrics.runningJobs(),
                     22f,
                     height - 74f);
             font.setColor(FALLBACK_BORDER);
-            font.draw(batch, "orange border = coarse parent temporarily filling a not-yet-ready detailed tile", 22f, height - 98f);
+            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 98f);
             font.setColor(FINE_BORDER);
-            font.draw(batch, "green border = requested detail is ready", 22f, height - 120f);
+            font.draw(batch, "green = requested detail is ready", 22f, height - 120f);
         }
         batch.end();
     }
 
+    /**
+     * Converts the tiny scalar tile to RGBA with direct buffer writes.
+     *
+     * <p>The old implementation performed setColor + drawPixel for every pixel on the render
+     * thread. A precomputed 256-entry palette and direct byte writes remove that avoidable work
+     * before the unavoidable GPU upload.</p>
+     */
     private Texture createTexture(ContinuumMapTile tile) {
         int side = tile.sampleSide();
+        byte[] luminance = tile.copyLuminance();
         Pixmap pixmap = new Pixmap(side, side, Pixmap.Format.RGBA8888);
-        for (int y = 0; y < side; y++) {
+        ByteBuffer pixels = pixmap.getPixels();
+        int rowBytes = side * 4;
+
+        for (int sourceY = 0; sourceY < side; sourceY++) {
+            int sourceRow = sourceY * side;
+            int destinationRow = (side - 1 - sourceY) * rowBytes;
             for (int x = 0; x < side; x++) {
-                float value = tile.luminanceUnsigned(x, y) / 255f;
-                float r = 0.08f + value * 0.62f;
-                float g = 0.11f + value * 0.70f;
-                float b = 0.16f + value * 0.76f;
-                pixmap.setColor(r, g, b, 1f);
-                pixmap.drawPixel(x, side - 1 - y);
+                int value = Byte.toUnsignedInt(luminance[sourceRow + x]);
+                int pixel = destinationRow + x * 4;
+                pixels.put(pixel, PALETTE_R[value]);
+                pixels.put(pixel + 1, PALETTE_G[value]);
+                pixels.put(pixel + 2, PALETTE_B[value]);
+                pixels.put(pixel + 3, (byte) 0xFF);
             }
         }
+
         Texture texture = new Texture(pixmap);
         pixmap.dispose();
         texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         return texture;
+    }
+
+    private static byte[] palette(float base, float scale) {
+        byte[] palette = new byte[256];
+        for (int i = 0; i < palette.length; i++) {
+            float value = base + (i / 255f) * scale;
+            palette[i] = (byte) Math.round(Math.max(0f, Math.min(1f, value)) * 255f);
+        }
+        return palette;
     }
 
     private final class MapInput extends InputAdapter {
