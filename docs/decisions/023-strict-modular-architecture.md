@@ -64,6 +64,38 @@ Where substitution is an architectural requirement, tests exercise the seam with
 
 If a new feature can only be added by broadening an already-confused owner, introducing concrete-type branching or passing an increasingly universal context object, identify the smallest missing boundary before adding scope.
 
+### 11. World, Generation and Simulation have one-way ownership boundaries
+
+The long-term dependency direction is:
+
+```text
+foundation
+    ↑
+   world
+  ↑    ↑
+generation  simulation
+             ↑
+            core
+```
+
+The semantic responsibilities are stricter than the package names:
+
+- **World** owns authoritative state, spatial/materialization access, revisions and persistence-facing state lifecycle.
+- **Generation** produces reproducible initial state or regeneration inputs for World. It does not own runtime physics.
+- **Simulation** owns rules, physics, scheduling, AI, solvers and policies that consume World through narrow read/mutation contracts.
+- **Presentation** observes World/Simulation and never defines authoritative truth.
+
+Forbidden dependency directions:
+
+- `world -> simulation`
+- `world -> core/lwjgl3`
+- `generation -> simulation`
+- `simulation -> generation`
+
+A simulation algorithm must be replaceable without changing World ownership. A generation algorithm must be replaceable without changing simulation mechanics. World must not know which solver, pathfinder, AI policy or renderer consumes its state.
+
+The first compile-time firewall is the standalone Gradle `:world` module. Its build rejects project dependencies on `:simulation`, `:core` and `:lwjgl3`. Further extraction must preserve this direction rather than reintroduce indirect service-locator coupling.
+
 ## Why
 
 This structure keeps failures local, makes algorithms understandable in isolation and lets future models change without reopening unrelated systems. It also makes repository context recoverable from code/package structure rather than conversation history.
@@ -76,6 +108,7 @@ ADR-023 works together with ADR-022: this ADR limits architectural shape; ADR-02
 - Composition roots may have more explicit dependencies.
 - Package/file moves are justified when ownership is hidden.
 - Architecture/substitution tests are expected at important seams.
+- Gradle module boundaries are used as compile-time dependency firewalls where ownership is fundamental.
 - Universal frameworks require evidence from multiple real consumers.
 - Refactors that preserve behavior are separated from semantic changes.
 
@@ -83,10 +116,12 @@ ADR-023 works together with ADR-022: this ADR limits architectural shape; ADR-02
 
 Current examples include:
 
-- Continuum model, field and materialization responsibilities separated under `world.continuum`;
-- deterministic coordinate-addressed sampling isolated from bounded materialization;
-- runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil holding separate authoritative facts behind narrow capabilities;
-- presentation consuming read/command boundaries instead of mutable domain systems.
+- Continuum production code, correctness tests and Continuum-specific scale profiles live in the independent `:world` module;
+- `:simulation` consumes `:world`, while `:world` has a compile-time guard against depending on simulation or presentation modules;
+- Continuum model, field and materialization responsibilities remain separated under `world.continuum`;
+- deterministic coordinate-addressed sampling remains isolated from bounded materialization;
+- runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil still live in `:simulation` and are the next ownership-audit area; moving them must separate authoritative state from solver/policy concerns rather than moving mixed packages wholesale;
+- presentation consumes read/command boundaries instead of mutable domain systems.
 
 Future Continuum stages must add new semantic layers behind similarly narrow contracts rather than rebuilding one monolithic generator.
 

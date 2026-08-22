@@ -1,0 +1,52 @@
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+eclipse.project.name = appName + '-world'
+
+// Compile-time firewall: world is authoritative state/read infrastructure and must never depend
+// on simulation mechanics or presentation. :simulation and :core are allowed to depend on :world,
+// never the reverse.
+def forbiddenWorldProjectDependencies = [':simulation', ':core', ':lwjgl3'] as Set
+configurations.configureEach {
+    dependencies.withType(ProjectDependency).configureEach { dependency ->
+        if (forbiddenWorldProjectDependencies.contains(dependency.dependencyProject.path)) {
+            throw new GradleException(
+                    "world module must not depend on ${dependency.dependencyProject.path}; "
+                            + "World owns state/access, while simulation/presentation are consumers")
+        }
+    }
+}
+
+dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform {
+        excludeTags 'scale-profile'
+    }
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+    }
+}
+
+tasks.register('scaleProfile', Test) {
+    description = 'Runs Continuum world scale and responsiveness profiles.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'scale-profile'
+    }
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+        showStandardStreams = true
+    }
+
+    outputs.upToDateWhen { false }
+}
