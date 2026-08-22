@@ -22,20 +22,30 @@ except RuntimeError as exc:
         if path.exists() and not any(path.rglob("*.java")):
             shutil.rmtree(path)
 
-# The original migration intentionally renames PositionSystem's internal state,
-# but its first implementation over-matched ordinary consumer fields named
-# `transforms`. Restore those consumer references while keeping PositionSystem
-# itself on the precise `positions` terminology.
 position_system = root / "simulation/src/main/java/io/github/evoforge/simulation/world/space/position/PositionSystem.java"
-for path in (root / "simulation").rglob("*.java"):
-    if path == position_system:
-        continue
-    text = path.read_text(encoding="utf-8")
-    fixed = text
-    for member in ("x", "y", "z", "add", "move", "remove"):
-        fixed = fixed.replace(f"positions.{member}(", f"transforms.{member}(")
-    if fixed != text:
-        path.write_text(fixed, encoding="utf-8")
+simulation_view = root / "simulation/src/main/java/io/github/evoforge/simulation/runtime/SimulationView.java"
+
+# Position is the semantic concept. Keep the public runtime view aligned with
+# that terminology instead of preserving the old transform vocabulary.
+view_text = simulation_view.read_text(encoding="utf-8")
+view_text = view_text.replace("PositionLookup transforms,", "PositionLookup positions,")
+view_text = view_text.replace("transforms == null", "positions == null")
+simulation_view.write_text(view_text, encoding="utf-8")
+
+# The first mechanical pass renamed member calls globally. Ordinary consumers
+# may still intentionally use a local/field variable named `transforms`; keep
+# those references internally consistent without undoing view.positions().
+for source_root in [root / "simulation", root / "core"]:
+    for path in source_root.rglob("*.java"):
+        if path == position_system:
+            continue
+        text = path.read_text(encoding="utf-8")
+        fixed = text
+        if "PositionLookup transforms" in fixed:
+            for member in ("x", "y", "z", "has"):
+                fixed = fixed.replace(f"positions.{member}(", f"transforms.{member}(")
+        if fixed != text:
+            path.write_text(fixed, encoding="utf-8")
 
 for relative in [
     "simulation/src/main/java/io/github/evoforge/simulation/world/spatial",
