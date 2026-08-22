@@ -3,15 +3,15 @@
 eclipse.project.name = appName + '-world'
 
 // Compile-time firewall: world is authoritative state/read infrastructure and must never depend
-// on simulation mechanics or presentation. :simulation and :core are allowed to depend on :world,
-// never the reverse.
-def forbiddenWorldProjectDependencies = [':simulation', ':core', ':lwjgl3'] as Set
+// on generation, simulation mechanics or presentation. Foundation may be consumed by World;
+// Generation/Simulation/Presentation are consumers of World, never the reverse.
+def forbiddenWorldProjectDependencies = [':generation', ':simulation', ':core', ':lwjgl3'] as Set
 configurations.configureEach {
     dependencies.withType(ProjectDependency).configureEach { dependency ->
-        if (forbiddenWorldProjectDependencies.contains(dependency.dependencyProject.path)) {
+        if (forbiddenWorldProjectDependencies.contains(dependency.path)) {
             throw new GradleException(
-                    "world module must not depend on ${dependency.dependencyProject.path}; "
-                            + "World owns state/access, while simulation/presentation are consumers")
+                    "world module must not depend on ${dependency.path}; "
+                            + "World owns state/access, while generation/simulation/presentation are consumers")
         }
     }
 }

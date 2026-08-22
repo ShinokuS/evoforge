@@ -7,9 +7,9 @@ eclipse.project.name = appName + '-foundation'
 def forbiddenFoundationProjectDependencies = [':world', ':generation', ':simulation', ':core', ':lwjgl3'] as Set
 configurations.configureEach {
     dependencies.withType(ProjectDependency).configureEach { dependency ->
-        if (forbiddenFoundationProjectDependencies.contains(dependency.dependencyProject.path)) {
+        if (forbiddenFoundationProjectDependencies.contains(dependency.path)) {
             throw new GradleException(
-                    "foundation module must not depend on ${dependency.dependencyProject.path}; "
+                    "foundation module must not depend on ${dependency.path}; "
                             + "foundation is the dependency root")
         }
     }
