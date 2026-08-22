@@ -36,26 +36,23 @@ docs/         canonical rules, systems, decisions, guides and history
 
 Only `simulation`, `core` and `lwjgl3` are code/Gradle modules under the current architecture.
 
-## Architecture reset is the current blocking work
+## Architecture reset accepted
 
-Draft PR #132 is rebuilding the codebase around [ADR-025: Owner-first modular simulation architecture](decisions/025-owner-first-modular-simulation.md).
+PR #132 establishes [ADR-026: Semantic capability architecture](decisions/026-semantic-capability-architecture.md) as the authoritative repository architecture. The rejected horizontal `foundation` / `world` / `generation` split and the superseded exclusive owner-first taxonomy are historical only.
 
-The previous horizontal Gradle split into `foundation`, `world`, `generation` and `simulation` has been rejected because it divided one semantic domain across technical stages. ADR-023 is preserved as a superseded historical decision.
+Current laws:
 
-Current target laws:
-
-- one authoritative owner per mutable fact;
-- semantic owner/axis of change is the primary package boundary;
-- owner-local Genesis, storage, physics and runtime implementation stay with that owner;
-- cross-owner laws are explicit Mechanics and do not duplicate owner state;
+- one authoritative source per mutable fact;
+- the primary unit is an independent semantic concept, not a technical layer or first consumer;
+- reusable capabilities live with the concept they express and never inside Movement/Agent/another consumer merely because that consumer appeared first;
+- mechanics/workflows coordinate independent semantic capabilities and own only workflow-specific process/policy state;
+- authority, capability, algorithm, projection, process and Genesis are orthogonal roles within/around semantic modules;
 - Kernel is domain-neutral execution infrastructure;
-- Projections are rebuildable and never a second truth;
-- Composition chooses/wires implementations but owns no domain policy;
-- public semantic surfaces are narrow; foreign `internal` access is forbidden;
-- dependencies are explicit and acyclic;
-- architecture, determinism, testing, performance and documentation rules must become executable/CI-checked where practical.
+- public semantic surfaces are narrow, consumer-neutral and acyclic; foreign `internal` access is forbidden;
+- mechanically decidable architecture laws, determinism, coverage and representative scale gates are enforced by tests/CI;
+- package placement must pass the reuse test in root `AGENTS.md`.
 
-No new Continuum/world-generation feature stage begins until this reset is accepted.
+The architecture reset is no longer a feature-development blocker after PR #132 is merged. The next world-generation checkpoint is Stage 5 — Macro Ocean + Geophysical Skeleton.
 
 ## Global simulation laws
 
@@ -76,7 +73,7 @@ These must survive every stage:
 
 ## Current architecture map
 
-The exact package tree is being migrated, but the canonical semantic map is:
+The canonical semantic map is:
 
 ```text
 simulation
@@ -108,7 +105,7 @@ Accepted work before the architecture reset includes deterministic addressable s
 
 Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
 
-The next substantive Continuum/world-generation stage is intentionally blocked until PR #132 finishes and the new package/dependency/testing/documentation laws are green.
+Stages 0–4 are complete. After the architecture reset merges, the next substantive Continuum/world-generation checkpoint is Stage 5 — Macro Ocean + Geophysical Skeleton; Stage 5 has not started yet.
 
 ## Definitions policy
 
@@ -145,10 +142,10 @@ AGENTS.md
 docs/project-context.md
 docs/architecture.md
 docs/roadmap.md
-docs/decisions/025-owner-first-modular-simulation.md
+docs/decisions/026-semantic-capability-architecture.md
 relevant docs/systems/** page
 ```
 
-Then inspect the current owner package and its tests. During architecture PR #132, inspect the PR branch rather than assuming `develop` package paths are already final.
+Then inspect the current semantic module, its public capabilities, dependencies and tests.
 
 If current normative docs conflict with executable code/tests, reconcile the contradiction in the same change. Do not use chat history as the missing source of truth.

@@ -25,11 +25,13 @@ Do not begin from chat memory, an old branch or a historical Journal entry.
 Write down:
 
 ```text
-Owner: <semantic owner>
-Type: OWNER | MECHANIC | KERNEL | PROJECTION | COMPOSITION
+Semantic concept: <independent concept being changed>
+Roles: <AUTHORITY / CAPABILITY / ALGORITHM / PROJECTION / PROCESS / GENESIS / WORKFLOW / KERNEL / COMPOSITION as applicable>
+Consumers: <current consumers; none if lower-level>
 Facts changed: <authoritative facts or none>
-Public contracts touched: <exact capabilities>
-Dependencies: <public contracts only>
+Public capabilities touched: <consumer-neutral contracts>
+Dependencies: <public semantic contracts only>
+Reuse test: <could another plausible consumer reuse this without moving it?>
 Invariants: <what must remain true>
 Scale/performance risk: <expected workload/memory behavior>
 Evidence: <tests/profile/manual acceptance>
@@ -40,17 +42,21 @@ If these cannot be answered, implementation has started too early.
 
 ### Placement decision
 
+Start with the semantic concept, then assign roles inside/around it:
+
 ```text
-owns mutable fact?                     -> semantic owner
-behavior mutates one owner?            -> owner-local implementation
-coordinates independent owners?        -> mechanics/<law>
-domain-neutral execution?              -> kernel/<responsibility>
-rebuildable derived representation?    -> projection area beside its semantic owner/consumer
-wiring only?                            -> composition
-otherwise                              -> resolve responsibility first
+meaning exists without current consumer?  -> independent semantic module/capability
+consumer-neutral mutable fact?             -> authority inside that semantic module
+replaceable rule for that concept?         -> algorithm/policy beside the concept
+rebuildable derived representation?        -> projection beside the concept
+causal process intrinsic to one concept?   -> process inside that concept
+coordinates independent concepts?          -> mechanic/workflow
+domain-neutral execution?                  -> kernel
+wiring/lifecycle selection only?           -> composition
+otherwise                                  -> resolve responsibility first
 ```
 
-Never place code by analogy to an old confused package.
+Never put Occupancy/Navigation/Geometry/Visibility/placement or another independently meaningful capability under Movement, Agent, Build, Drop or whichever feature first needs it. If a plausible second consumer would force extraction, the placement is wrong now.
 
 ## 3. Branch model
 
@@ -136,7 +142,7 @@ One file contains one primary top-level responsibility and matches its primary t
 
 ## 6. Dependency design
 
-Before adding an import across semantic blocks, ask whether the consumer needs the concrete type or only a narrower semantic capability.
+Before adding an import across semantic modules, ask whether the consumer needs the concrete type or only a narrower semantic capability, and verify that the dependency points from consumer to the more reusable concept rather than back toward the consumer.
 
 Allowed:
 
@@ -250,7 +256,7 @@ See [Documentation Guide](documentation.md).
 
 Before leaving Draft state:
 
-- final diff still matches declared owner/block type;
+- final diff still matches the declared independent semantic concept and applicable orthogonal roles;
 - no duplicate authority/cycle/foreign-internal dependency exists;
 - naming/package placement is discoverable;
 - replacement seams do not leak concrete implementations;
@@ -291,4 +297,4 @@ Stop adding feature scope when you encounter:
 
 Repair the smallest architectural cause first.
 
-See [ADR-022: Green checkpoint development](../decisions/022-green-checkpoint-development.md) and [ADR-025: Owner-first modular simulation architecture](../decisions/025-owner-first-modular-simulation.md).
+See [ADR-022: Green checkpoint development](../decisions/022-green-checkpoint-development.md) and [ADR-026: Semantic capability architecture](../decisions/026-semantic-capability-architecture.md).

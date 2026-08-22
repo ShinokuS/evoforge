@@ -2,39 +2,25 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current blocking milestone — owner-first architecture reset
+## Current checkpoint — semantic capability architecture accepted
 
-Draft PR #132 is the only active prerequisite for further substantive Continuum/world-generation work.
+PR #132 completes the repository-wide architecture reset defined by ADR-026. The repository now uses one authoritative `:simulation` Gradle module decomposed by independent semantic concepts and consumer-neutral capabilities.
 
-Goal:
+Accepted reset guarantees:
 
-```text
-old mixed/horizontal boundaries
-        ↓
-one authoritative :simulation module
-        ↓
-semantic OWNER / MECHANIC / KERNEL / PROJECTION / COMPOSITION blocks
-        ↓
-acyclic public-contract dependencies
-        ↓
-architecture + correctness + scale/performance + documentation gates
-```
+- `:simulation`, `:core` and `:lwjgl3` are the only code/Gradle modules;
+- reusable capabilities such as Occupancy, Navigation, Pathfinding and Geometry are independent semantic units rather than Movement/Agent internals;
+- mechanics contain workflow-specific orchestration only;
+- lower-level world semantics do not depend on mechanics or agents;
+- legacy `world/mechanics` and forbidden generic technical roots are mechanically rejected;
+- the mandatory reuse test for new concepts lives in root `AGENTS.md`;
+- architecture fitness tests, deterministic tests, measured JaCoCo coverage floors and representative scale profiles are CI gates;
+- canonical documentation points at ADR-026 and the final package ownership;
+- temporary migration/refactor workflows are removed before merge.
 
-The reset is not complete until all of these are true:
+## Next allowed world-generation work
 
-- `:simulation`, `:core`, `:lwjgl3` are the only code/Gradle modules;
-- existing production code is reclassified into clear semantic owners/mechanics/kernel/projections/composition;
-- old umbrella/technical buckets and duplicate authorities are removed;
-- package cycles and foreign-internal dependencies are repaired;
-- repository naming/file-placement laws are documented and mechanically enforced where practical;
-- architecture fitness tests are green;
-- deterministic/headless integration tests remain green;
-- representative scale/performance profiles remain green;
-- canonical documentation/system pointers match final package ownership;
-- temporary refactor workflows/diagnostics are removed;
-- PR #132 receives explicit manual architecture acceptance before leaving Draft state.
-
-No new world-generation feature stage starts before this gate.
+Canonical Continuum Stages 0–4 are complete. The next stage is **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 has not started. Its work begins only after PR #132 is merged into `develop`, using the semantic-capability laws as a hard boundary.
 
 ## Accepted Continuum foundation before reset
 
@@ -91,4 +77,4 @@ explicit acceptance
 
 A stage is not complete if its semantics, ownership, algorithms or current status still require chat history to reconstruct.
 
-See [Project Context](project-context.md), [Architecture](architecture.md), [ADR-025](decisions/025-owner-first-modular-simulation.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
+See [Project Context](project-context.md), [Architecture](architecture.md), [ADR-026](decisions/026-semantic-capability-architecture.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
