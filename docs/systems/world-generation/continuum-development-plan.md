@@ -25,7 +25,7 @@ This is the canonical executable roadmap for EvoForge Continuum/world generation
 
 A stage is complete only after applicable correctness, property, determinism, order-independence, seam, replaceability, performance, scale, visual-inspection and documentation gates pass.
 
-Tests and performance evidence are part of implementation, not later cleanup. Spatial output must be understandable in the Inspector where useful.
+Tests and performance evidence are part of implementation, not later cleanup. Spatial or temporal behavior must be understandable in the Inspector where useful.
 
 ## Canonical Stage 0–20 sequence
 
@@ -56,9 +56,9 @@ Tests and performance evidence are part of implementation, not later cleanup. Sp
 ## Current status
 
 - **Stage 0 — complete.** Legacy dense worldgen is retired and the Continuum foundation exists.
-- **Stage 1 — CURRENT.** Complete it before Stage 2.
-- **Stage 2 — not started.**
-- **Stage 3 — multi-resolution support already exists from earlier work.** It remains useful, but does not permit skipping unfinished Stage 1 or Stage 2.
+- **Stage 1 — complete and manually accepted.** Local overlapping reads share expensive regional work; PR #122.
+- **Stage 2 — CURRENT.** Infinite-Time Foundation is implemented in draft PR #123 and awaits automated/manual acceptance.
+- **Stage 3 — multi-resolution support already exists from earlier work.** It remains useful, but Stage 2 must still be accepted before proceeding.
 - **Stage 4+ — not started.**
 
 ---
@@ -71,74 +71,86 @@ A consumer receives only the local data it needs, while overlapping consumers re
 
 In plain language: if ten objects need almost the same place, the world reads/calculates that common place once and then gives each object only its own requested slice.
 
+## Accepted result
+
+- local bounded requests;
+- shared technical region work;
+- batching and deduplication;
+- concurrent single-flight materialization;
+- revision/invalidation;
+- consumer-local immutable views;
+- bounded shared cache;
+- 1 / 10 / 100 consumer performance proof;
+- understandable F2 visualization.
+
+**Status:** complete.
+
+---
+
+# Stage 2 — Infinite-Time Foundation
+
+## Goal
+
+The world must not become more expensive merely because it is older.
+
+In plain language: if nothing meaningful happened for a million years, the engine must not replay a million years of tiny ticks just to discover that fact. It stores the current state and the future work that still matters.
+
 ## Build
 
-Introduce only the concrete concepts needed for this proof:
+- exact long-horizon time representation that does not rely on floating point or one lifetime-limited tick counter;
+- sleeping-process wake scheduling;
+- one current wake obligation per sleeping process;
+- explicit reason for waking;
+- elapsed-time transition contract so a process can fast-forward from its last evaluated time to the new time;
+- scheduler cleanup so cancelled/completed work is physically removed rather than retained as hidden history;
+- safe reuse of scheduler handle slots;
+- in-memory checkpoint + bounded recent-delta compaction primitive.
 
-- spatial region keys;
-- local query requests;
-- read-only regional results;
-- bounded regional cache;
-- request batching;
-- deduplication;
-- single-flight in-progress computation;
-- revision/invalidation;
-- consumer-local views.
-
-Do **not** create a global `WorldFact` object or a universal query framework for every future subsystem.
+The existing ordinary runtime clock remains compatible. Stage 2 adds the long-horizon foundation rather than forcing unrelated runtime systems through a risky migration in one PR.
 
 ## Required proof
 
-Run the same workload with:
-
-- 1 consumer;
-- 10 consumers with strongly overlapping requests;
-- 100 consumers with strongly overlapping requests;
-- consumers in unrelated areas.
-
-Expensive regional work must track **unique required regions**, not consumer count.
-
-## Tests
-
-- same region requested N times -> one computation;
-- overlap reuses shared backing data;
-- a consumer cannot read outside its requested area;
-- stale revision is never accepted as current;
-- eviction + reload returns the correct result;
-- request order cannot change values;
-- the implementation can be substituted behind its real seam.
+- a time value can advance far beyond one signed-long timeline without floating-point drift;
+- 100,000 reschedules of one sleeping process retain one wake entry;
+- 100,000 schedule/cancel operations retain zero future queue entries and reuse bounded handle slots;
+- a huge time jump invokes one elapsed-time transition per due process, not one call per skipped tick;
+- one million state changes compact into the current state plus a bounded recent tail;
+- equivalent current working sets at a young and astronomically old world age retain the same structural memory counts.
 
 ## Performance
 
-Measure at least:
+The scale profile compares equivalent young and ancient states and records:
 
-- requests;
-- unique regional computations;
-- reused requests / duplicate work prevented;
-- cache hits/misses;
-- resident pages/payload;
-- latency;
-- heap/allocation diagnostics where reliable.
+- sleeping processes;
+- physical wake queue entries;
+- generic scheduler pending/physical entries;
+- reusable handle slots;
+- retained delta tail;
+- fast-forward calls;
+- elapsed time.
 
-Use a large logical domain so the proof cannot accidentally rely on full-world allocation.
+World age alone must not increase those structural counts.
 
 ## Visual acceptance
 
-The Inspector must explain the mechanism without requiring knowledge of internal class names. It should clearly distinguish:
+`F2` must explain three things without requiring knowledge of class names:
 
-- **consumer request** — the area one object/system asks for;
-- **shared region** — the common technical region calculated once;
-- **reused work** — requests served from an already calculated region;
-- **local result** — only the data returned to that consumer.
+1. **World age** — young and ancient presets keep the same current working set.
+2. **Sleeping work** — a huge jump handles only processes whose wake condition became due; it does not replay every skipped tick.
+3. **History kept** — a million changes compact into current state + bounded recent history.
 
-A simple 1 / 10 / 100-consumer demonstration should make the benefit visible.
+The screen also shows that repeated cancelled scheduler tasks leave zero queued history.
+
+## Boundary
+
+Stage 2 is not the final persistence system. Disk persistence, save/load compaction and full-world long-time stress remain Stage 17. Stage 2 establishes the temporal primitives required to make those later systems possible.
 
 ## Done when
 
-A huge logical world serves many overlapping local requests with bounded memory and without duplicated expensive regional work, and the behavior is understandable in the Inspector.
+Automated tests, Docs Site and Continuum Scale Profile are green, the F2 explanation is understandable, and the user manually accepts Stage 2.
 
 ---
 
 ## Stage discipline
 
-After Stage 1 passes automated gates and manual inspection, stop. Stage 2 starts only after explicit user acceptance.
+After Stage 2 passes automated gates and manual inspection, stop. Do not start Stage 4 or geography. Stage 3 already exists from earlier work and is only considered satisfied in sequence after Stage 2 acceptance.
