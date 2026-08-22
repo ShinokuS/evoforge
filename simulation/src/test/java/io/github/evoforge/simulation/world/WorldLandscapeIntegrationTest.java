@@ -3,19 +3,17 @@ package io.github.evoforge.simulation.world;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionBootstrap;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
-import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 final class WorldLandscapeIntegrationTest {
 
@@ -23,13 +21,10 @@ final class WorldLandscapeIntegrationTest {
     Path directory;
 
     @Test
-    void loadsLandscapeAndExposesPlacedTerrainThroughWorld()
+    void loadsLandscapeAndExposesPlacedTerrainThroughLookup()
             throws IOException {
 
-        Path landscapeDirectory =
-                Files.createDirectory(
-                        directory.resolve("landscape"));
-
+        Path landscapeDirectory = Files.createDirectory(directory.resolve("landscape"));
         Files.writeString(
                 landscapeDirectory.resolve("granite.json"),
                 """
@@ -40,41 +35,17 @@ final class WorldLandscapeIntegrationTest {
                         """,
                 UTF_8);
 
-        LandscapeDefinitionBootstrap landscapeBootstrap =
-                new LandscapeDefinitionBootstrap();
+        LandscapeDefinitionBootstrap landscapeBootstrap = new LandscapeDefinitionBootstrap();
+        DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions = landscapeBootstrap.load(landscapeDirectory);
+        LandscapeDefinitionId granite = landscapeDefinitions.resolve("core:granite");
 
-        DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions =
-                landscapeBootstrap.load(landscapeDirectory);
+        TerrainSystem terrainSystem = new TerrainSystem(
+                new SparseTerrainStorage(),
+                landscapeDefinitions);
+        TerrainLookup terrain = terrainSystem.lookup();
 
-        LandscapeDefinitionId granite =
-                landscapeDefinitions.resolve("core:granite");
+        terrainSystem.place(10, 20, 30, granite);
 
-        TerrainSystem terrainSystem =
-                new TerrainSystem(
-                        new SparseTerrainStorage(),
-                        landscapeDefinitions);
-
-        DefinitionRegistry<ObjectDefinitionId> objectDefinitions =
-                new DefinitionRegistry<>(
-                        ObjectDefinitionId::of,
-                        ObjectDefinitionId::asInt);
-
-        World world =
-                new World(
-                        objectDefinitions,
-                        terrainSystem.lookup());
-
-        terrainSystem.place(
-                10,
-                20,
-                30,
-                granite);
-
-        assertEquals(
-                granite,
-                world.terrain().find(
-                        10,
-                        20,
-                        30));
+        assertEquals(granite, terrain.find(10, 20, 30));
     }
 }
