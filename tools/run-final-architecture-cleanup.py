@@ -22,12 +22,27 @@ except RuntimeError as exc:
         if path.exists() and not any(path.rglob("*.java")):
             shutil.rmtree(path)
 
-    for relative in [
-        "simulation/src/main/java/io/github/evoforge/simulation/world/spatial",
-        "simulation/src/main/java/io/github/evoforge/simulation/world/landscape",
-        "simulation/src/main/java/io/github/evoforge/simulation/world/surface",
-        "simulation/src/main/java/io/github/evoforge/simulation/world/object/placement",
-    ]:
-        path = root / relative
-        if path.exists() and any(path.rglob("*.java")):
-            raise RuntimeError(f"retired architecture Java sources remain: {relative}")
+# The original migration intentionally renames PositionSystem's internal state,
+# but its first implementation over-matched ordinary consumer fields named
+# `transforms`. Restore those consumer references while keeping PositionSystem
+# itself on the precise `positions` terminology.
+position_system = root / "simulation/src/main/java/io/github/evoforge/simulation/world/space/position/PositionSystem.java"
+for path in (root / "simulation").rglob("*.java"):
+    if path == position_system:
+        continue
+    text = path.read_text(encoding="utf-8")
+    fixed = text
+    for member in ("x", "y", "z", "add", "move", "remove"):
+        fixed = fixed.replace(f"positions.{member}(", f"transforms.{member}(")
+    if fixed != text:
+        path.write_text(fixed, encoding="utf-8")
+
+for relative in [
+    "simulation/src/main/java/io/github/evoforge/simulation/world/spatial",
+    "simulation/src/main/java/io/github/evoforge/simulation/world/landscape",
+    "simulation/src/main/java/io/github/evoforge/simulation/world/surface",
+    "simulation/src/main/java/io/github/evoforge/simulation/world/object/placement",
+]:
+    path = root / relative
+    if path.exists() and any(path.rglob("*.java")):
+        raise RuntimeError(f"retired architecture Java sources remain: {relative}")
