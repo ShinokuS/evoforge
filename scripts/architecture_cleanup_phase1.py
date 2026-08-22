@@ -138,6 +138,12 @@ def write_build_files() -> None:
     text = text.replace("Generation/Simulation/Presentation", "Generator/Physics/Presentation")
     text = text.replace("generation/simulation/presentation", "generator/physics/presentation")
     text = text.replace("Foundation may be consumed by World;\n// ", "")
+    if 'com.google.code.gson:gson' not in text:
+        text = text.replace(
+            "dependencies {\n",
+            "dependencies {\n    implementation \"com.google.code.gson:gson:$gsonVersion\"\n",
+            1,
+        )
     world_build.write_text(text, encoding="utf-8")
 
     core_build = ROOT / "core" / "build.gradle"
@@ -179,7 +185,7 @@ def main() -> None:
     for module in ("world", "generator", "physics", "core", "lwjgl3"):
         relocate_java_sources(module)
 
-    # Reunite the generic definition infrastructure. A separate one-file foundation module
+    # Reunite generic definition infrastructure. A separate one-file foundation module
     # adds no useful responsibility boundary here.
     move_definition_package("physics", "src/main/java")
     move_definition_package("physics", "src/test/java")
