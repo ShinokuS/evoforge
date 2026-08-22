@@ -66,7 +66,7 @@ If a new feature can only be added by broadening an already-confused owner, intr
 
 ### 11. World, Generation and Simulation have one-way ownership boundaries
 
-The long-term dependency direction is:
+The dependency direction is:
 
 ```text
 foundation
@@ -82,21 +82,22 @@ The semantic responsibilities are stricter than the package names:
 
 - **Foundation** owns neutral value types and contracts that have no knowledge of World, Generation, Simulation or Presentation.
 - **World** owns authoritative state, spatial/materialization access, revisions and persistence-facing state lifecycle.
-- **Generation** produces reproducible initial state or regeneration inputs for World. It does not own runtime physics.
+- **Generation** owns reproducible initial-world inputs and algorithms that produce/refine World state. It does not own runtime physics.
 - **Simulation** owns rules, physics, scheduling, AI, solvers and policies that consume World through narrow read/mutation contracts.
 - **Presentation** observes World/Simulation and never defines authoritative truth.
 
 Forbidden dependency directions:
 
 - `foundation -> world/generation/simulation/core/lwjgl3`
-- `world -> simulation`
-- `world -> core/lwjgl3`
-- `generation -> simulation`
+- `world -> generation/simulation/core/lwjgl3`
+- `generation -> simulation/core/lwjgl3`
 - `simulation -> generation`
 
-A simulation algorithm must be replaceable without changing World ownership. A generation algorithm must be replaceable without changing simulation mechanics. World must not know which solver, pathfinder, AI policy or renderer consumes its state.
+A simulation algorithm must be replaceable without changing World ownership. A generation algorithm must be replaceable without changing simulation mechanics. World must not know which generator, solver, pathfinder, AI policy or renderer consumes its contracts.
 
-The compile-time firewall starts with standalone Gradle `:foundation` and `:world` modules. `:foundation` rejects project dependencies on higher layers. `:world` rejects project dependencies on simulation or presentation modules. During behavior-preserving extraction, Java package names may temporarily lag physical module ownership; the dependency graph is authoritative and package cleanup is performed separately rather than mixed with semantic changes.
+The compile-time firewall uses standalone Gradle `:foundation`, `:world` and `:generation` modules. `:foundation` is the dependency root. `:world` cannot depend on Generation, Simulation or Presentation. `:generation` is allow-listed to depend only on Foundation and World. `:simulation` deliberately has no dependency on Generation. During behavior-preserving extraction, Java package names may temporarily lag physical module ownership; package cleanup is performed separately rather than mixed with semantic changes.
+
+Genesis describes the logical world, not an active simulation box. The generation `WorldSpec` therefore uses the long-addressed `ContinuumWorldDomain`; the old finite `WorldBounds(int XYZ)` remains a simulation-side concept and must not be reintroduced into Genesis.
 
 ## Why
 
@@ -118,13 +119,13 @@ ADR-023 works together with ADR-022: this ADR limits architectural shape; ADR-02
 
 Current examples include:
 
-- `:foundation` is the dependency root; the neutral authored `NormalizedValue` is its first extracted value type and the module has a compile-time guard against depending on higher layers;
-- `:simulation` consumes `:foundation` and `:world`;
-- Continuum production code, correctness tests and Continuum-specific scale profiles live in the independent `:world` module;
-- `:world` has a compile-time guard against depending on simulation or presentation modules;
-- Continuum model, field and materialization responsibilities remain separated under `world.continuum`;
-- deterministic coordinate-addressed sampling remains isolated from bounded materialization;
-- runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil still live in `:simulation` and are the next ownership-audit area; moving them must separate authoritative state from solver/policy concerns rather than moving mixed packages wholesale;
+- `:foundation` is the dependency root; neutral authored `NormalizedValue` lives there and the module rejects higher-layer project dependencies;
+- Continuum state/read infrastructure, correctness tests and Continuum-specific scale profiles live in independent `:world`;
+- `:world` rejects dependencies on `:generation`, `:simulation` and presentation modules;
+- `:generation` owns `WorldGenesis`, `WorldSpec`, `WorldGenerationIntent` and `MountainIntent`, and may depend only on `:foundation` and `:world`;
+- Generation `WorldSpec` now describes `ContinuumWorldDomain` rather than the finite simulation-only `WorldBounds`;
+- `:simulation` consumes `:foundation` and `:world` and has no project dependency on `:generation`; the full Gradle suite compiles with Genesis removed from Simulation;
+- runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil still live in `:simulation` and remain the next ownership-audit area; moving them must separate authoritative state from solver/policy concerns rather than moving mixed packages wholesale;
 - presentation consumes read/command boundaries instead of mutable domain systems.
 
 Future Continuum stages must add new semantic layers behind similarly narrow contracts rather than rebuilding one monolithic generator.
