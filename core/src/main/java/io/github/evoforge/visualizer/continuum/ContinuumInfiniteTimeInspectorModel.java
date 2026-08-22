@@ -17,7 +17,7 @@ public final class ContinuumInfiniteTimeInspectorModel {
     public static final int PROCESS_COUNT = 6;
     public static final int HISTORY_TAIL_LIMIT = 64;
 
-    private final LongHorizonClock clock = new LongHorizonClock();
+    private LongHorizonClock clock = new LongHorizonClock();
     private final SleepingProcessScheduler sleeping = new SleepingProcessScheduler();
     private CompactingStateBuffer<Long, Long> stateHistory = new CompactingStateBuffer<>(0L, Long::sum, HISTORY_TAIL_LIMIT);
     private final ArrayList<ProcessRow> rows = new ArrayList<>();
@@ -42,7 +42,6 @@ public final class ContinuumInfiniteTimeInspectorModel {
     }
 
     public void jumpHugeInterval() {
-        SimulationInstant from = clock.now();
         clock.advanceBy(HUGE_JUMP_TICKS);
         List<ScheduledWake> due = sleeping.drainDue(clock.now());
         lastJumpTicks = HUGE_JUMP_TICKS;
@@ -112,10 +111,8 @@ public final class ContinuumInfiniteTimeInspectorModel {
     }
 
     private void rebuildAt(SimulationInstant age) {
-        clock.jumpTo(age.compareTo(clock.now()) >= 0 ? age : clock.now());
-        // LongHorizonClock is forward-only. Recreate semantics by using an age-relative scheduler and rows;
-        // the visual preset never claims to rewind authoritative simulation.
         clearSleepingScheduler();
+        clock = new LongHorizonClock(age);
         rows.clear();
         lastJumpTicks = 0L;
         lastWakeOperations = 0;
@@ -123,11 +120,10 @@ public final class ContinuumInfiniteTimeInspectorModel {
         syntheticState = 0L;
         stateHistory = new CompactingStateBuffer<>(0L, Long::sum, HISTORY_TAIL_LIMIT);
 
-        SimulationInstant base = clock.now();
         for (int i = 0; i < PROCESS_COUNT; i++) {
             long processId = i + 1L;
-            SimulationInstant wakeAt = base.plusTicks(100L + i * 100L);
-            sleeping.sleepUntil(processId, base, wakeAt, WakeReason.scheduled());
+            SimulationInstant wakeAt = age.plusTicks(100L + i * 100L);
+            sleeping.sleepUntil(processId, age, wakeAt, WakeReason.scheduled());
             rows.add(new ProcessRow(processId, wakeAt, true));
         }
         runGenericSchedulerChurnProof();
