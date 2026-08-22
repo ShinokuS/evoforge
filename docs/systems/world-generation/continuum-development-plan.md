@@ -64,7 +64,7 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 - **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
 - **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
 - **Stage 4 — complete and manually accepted.** Map / Zoom Performance Proof; PR #125 merged. Revalidated during the architecture reset.
-- **Stage 5 — NEXT, not started.** Macro Ocean + Geophysical Skeleton begins after final architecture cleanup PR #133 merges.
+- **Stage 5 — NEXT, not started.** Macro Ocean + Geophysical Skeleton is now allowed to begin; final architecture cleanup PR #133 is merged.
 - **Stage 6+ — not started.**
 
 ---
@@ -220,4 +220,4 @@ Gradle tests, Docs Site and Continuum Scale Profile are green on the exact PR he
 
 ## Stage discipline
 
-Stage 4 is accepted. Final architecture cleanup PR #133 is the only remaining prerequisite before **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 remains not started until that PR merges; immediately afterward it is the next canonical implementation checkpoint.
+Stage 4 is accepted and final architecture cleanup PR #133 is merged. **Stage 5 — Macro Ocean + Geophysical Skeleton** is now the next canonical implementation checkpoint and has not started yet.

@@ -52,7 +52,7 @@ Current laws:
 - mechanically decidable architecture laws, determinism, coverage and representative scale gates are enforced by tests/CI;
 - package placement must pass the reuse test in root `AGENTS.md`.
 
-PR #133 completes the final post-reset semantic cleanup: ArchUnit now enforces production bytecode dependency direction and top-level world-module cycle freedom; the ambiguous `world/spatial`, umbrella `world/landscape`, generic `world/surface`, and consumer-owned `world/object/placement` boundaries are retired. Stage 5 remains blocked only until PR #133 merges.
+PR #133 completed the final post-reset semantic cleanup: ArchUnit enforces production bytecode dependency direction and top-level world-module cycle freedom; the ambiguous `world/spatial`, umbrella `world/landscape`, generic `world/surface`, and consumer-owned `world/object/placement` boundaries are retired. The architecture gate is complete.
 
 ## Global simulation laws
 
@@ -109,7 +109,7 @@ Accepted work before the architecture reset includes deterministic addressable s
 
 Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
 
-Stages 0–4 are complete. Stage 5 — Macro Ocean + Geophysical Skeleton has not started. It is the next substantive world-generation checkpoint immediately after final architecture cleanup PR #133 merges.
+Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is NEXT and has not started.** The architecture gate is complete, so Stage 5 is now the allowed substantive world-generation checkpoint.
 
 ## Definitions policy
 
