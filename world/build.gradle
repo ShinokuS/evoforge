@@ -8,9 +8,9 @@ eclipse.project.name = appName + '-world'
 def forbiddenWorldProjectDependencies = [':generation', ':simulation', ':core', ':lwjgl3'] as Set
 configurations.configureEach {
     dependencies.withType(ProjectDependency).configureEach { dependency ->
-        if (forbiddenWorldProjectDependencies.contains(dependency.dependencyProject.path)) {
+        if (forbiddenWorldProjectDependencies.contains(dependency.path)) {
             throw new GradleException(
-                    "world module must not depend on ${dependency.dependencyProject.path}; "
+                    "world module must not depend on ${dependency.path}; "
                             + "World owns state/access, while generation/simulation/presentation are consumers")
         }
     }
