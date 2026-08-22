@@ -5,6 +5,7 @@ public record ContinuumPageCacheMetrics(
         long hits,
         long misses,
         long loads,
+        long sharedWaits,
         long evictions,
         int residentPages,
         long residentPayloadBytes,
