@@ -9,14 +9,11 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 
-/**
- * Deterministic scheduler whose retained storage follows pending work rather than processed history.
- */
+/** Deterministic scheduler whose retained storage follows pending work rather than processed history. */
 public final class Scheduler {
 
     private static final Comparator<ScheduledTask> ORDER = Comparator.comparingLong(ScheduledTask::when)
-            .thenComparingLong(task -> task.handle().asLong())
-            .thenComparingLong(task -> task.handle().generation());
+            .thenComparing(ScheduledTask::scheduleOrder);
 
     private final HandlerRegistry handlers;
     private final NavigableSet<ScheduledTask> queue = new TreeSet<>(ORDER);
@@ -27,6 +24,7 @@ public final class Scheduler {
     private final ArrayDeque<Long> freeHandleSlots = new ArrayDeque<>();
     private final Map<Long, Long> slotGenerations = new HashMap<>();
     private long nextHandleSlot;
+    private SimulationInstant nextScheduleOrder = SimulationInstant.ZERO;
     private boolean dispatching;
 
     public Scheduler(HandlerRegistry handlers) {
@@ -48,7 +46,9 @@ public final class Scheduler {
         }
 
         TaskHandle handle = allocateHandle();
-        ScheduledTask task = new ScheduledTask(handle, when, handlerId, processId);
+        SimulationInstant scheduleOrder = nextScheduleOrder;
+        nextScheduleOrder = nextScheduleOrder.plusTicks(1L);
+        ScheduledTask task = new ScheduledTask(handle, when, handlerId, processId, scheduleOrder);
         queue.add(task);
         activeTasks.put(handle, task);
         return handle;
@@ -149,7 +149,6 @@ public final class Scheduler {
             long slot = freeHandleSlots.removeFirst();
             long generation = slotGenerations.get(slot);
             if (generation == Long.MAX_VALUE) {
-                // Retire this extremely old slot rather than allowing an ABA collision.
                 slotGenerations.remove(slot);
                 return allocateFreshHandle();
             }
