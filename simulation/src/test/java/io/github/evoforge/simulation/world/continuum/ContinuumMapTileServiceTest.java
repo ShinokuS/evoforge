@@ -72,7 +72,9 @@ final class ContinuumMapTileServiceTest {
         executor.runNext();
 
         assertEquals(visible, generated.get(2), "visible work must run immediately after the already-running job");
-        assertEquals(1, service.metrics().prefetchPendingJobs());
+        assertEquals(0, service.metrics().prefetchPendingJobs());
+        assertEquals(1, service.metrics().runningJobs(), "queued prefetch is submitted only after visible work");
+        assertEquals(1, executor.size());
     }
 
     @Test
