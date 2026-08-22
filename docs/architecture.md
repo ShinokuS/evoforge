@@ -1,328 +1,691 @@
-# Architecture
+# EvoForge Architecture
 
-Architecture is the small set of rules that every EvoForge system must obey. It does **not** describe every mechanic. Think of it as the constitution of the simulation: individual System pages explain the laws of Water, movement, agents, world generation and so on; this page explains the boundaries that keep those laws from contradicting each other.
+Architecture is the constitution of EvoForge. It defines where truth lives, how concepts depend on one another, how reusable capabilities are exposed, how workflows compose them, and which structural mistakes CI must reject.
 
-If you do not write software, the most important idea is simple: **the simulated world must have one consistent truth, and looking at the world must never change that truth.**
+The short version is:
 
-## What EvoForge is
+> EvoForge is one authoritative `simulation` module built from independent semantic modules. Each semantic module represents a concept that can evolve independently and exposes consumer-neutral capabilities. Mechanics/workflows consume those capabilities; they do not own them merely because they use them first.
 
-EvoForge is a deterministic emergent simulation built from specialized state owners, immutable definition data, explicit scheduled processes, discrete three-dimensional coordinates and narrow contracts between systems.
+See ADR-026 for the decision that supersedes the earlier rigid owner/mechanic taxonomy.
 
-It is deliberately **not**:
+## Start here before any repository change
 
-- one giant mutable `WorldCell` object that stores every possible property;
-- a universal ECS whose abstractions are chosen before real mechanics need them;
-- a simulation where every object must update once per rendering frame;
-- a renderer that secretly decides what is physically present;
-- a framework that predicts every future mechanic in advance.
+```text
+AGENTS.md
+   ↓
+project-context.md
+   ↓
+architecture.md
+   ↓
+relevant systems/* + ADRs
+   ↓
+actual semantic module + tests + dependency graph
+   ↓
+only then: design/edit code
+```
 
-The design favors small explicit owners and replaceable algorithms because those are easier to reason about, test and evolve.
+The repository must remain understandable without chat history.
 
 ## Repository boundary
 
 ```text
-simulation/   authoritative pure-Java simulation + world generation
-core/         libGDX presentation, debug scenarios and developer tools
+simulation/   all authoritative simulation, Genesis, world concepts, capabilities, mechanics and agents
+core/         libGDX presentation, observer/debug UI and presentation adapters
 lwjgl3/       desktop launcher
-assets/       authored definitions and presentation data
-docs/         explanations, decisions, guides and historical journal
+assets/       authored definitions and presentation resources
+docs/         canonical explanation, rationale and history
 ```
 
-`simulation` may be run and tested without libGDX. Presentation code may read the simulation through explicit capabilities, but presentation never owns authoritative simulation state.
+Only `simulation`, `core` and `lwjgl3` are code/Gradle modules unless a future accepted ADR establishes a genuinely independent artifact.
 
-## A mental model: facts have owners
+`simulation` is pure Java and must be runnable/testable without presentation state.
 
-Imagine a Cow standing in Water. Several facts are involved:
+## Why semantic modules are the primary unit
+
+Technical stages are unstable repository boundaries:
 
 ```text
-"this Cow exists"                 ObjectRepository
-"the Cow is at x,y,z"             Spatial
-"that destination is reserved"    Occupancy
-"the terrain has this shape"      Geometry / Landscape
-"this much free Water is here"    LiquidSystem / Water facade
-"this much Water is in Soil"      SoilLiquidSystem
+generation/liquid
+physics/liquid
+storage/liquid
+runtime/liquid
 ```
 
-They all describe one world, but each fact has one owner. A system that needs a fact asks for a narrow read capability instead of reaching into another owner's mutable internals.
+They scatter one concept across several places.
 
-This prevents two systems from silently disagreeing about the same truth.
-
-## Global laws
-
-### 1. One authoritative owner per mutable fact
-
-Every mutable authoritative property has exactly one owner. Derived caches and presentation views may duplicate information for speed or convenience, but they must be rebuildable from the authoritative source and may not become a second truth.
-
-### 2. Identity is narrow
-
-`ObjectRepository` answers whether an object exists and owns its identity. Movement, needs, orientation, stock, growth and other mechanics do not accumulate inside the identity repository.
-
-### 3. Definitions and runtime state are different things
-
-Definitions describe immutable authored meaning: what kind of object/material/agent something is. Runtime systems own changing state: where it is, how hungry it is, how much Water is present, and so on.
-
-A definition is not a mutable game object.
-
-### 4. Read through capabilities; mutate through explicit owners
-
-Systems depend on the smallest read contract they need. Cross-owner mutation uses an explicit semantic mutation capability owned by the domain being changed.
-
-This makes dependencies visible and testable.
-
-### 5. Expected rejection is data; broken invariants are exceptions
-
-A normal domain failure such as “destination occupied” or “not enough stock” should be returned as a structured result. Programming errors, invalid configuration and impossible invariant violations should fail loudly as exceptions.
-
-### 6. Simulation-thread authority
-
-Authoritative mutation currently happens on the simulation thread. Concurrency may be added later only with an explicit ownership redesign; background work must not silently mutate live world truth.
-
-### 7. Strict modular boundaries and replaceability
-
-Every non-trivial subsystem is decomposed into small cohesive blocks with one explainable responsibility, explicit typed inputs/outputs and one-way dependencies.
-
-Independently meaningful algorithms, calibrators, planners, selectors, runtime processes and policies are replaceable through composition. Generic orchestration depends on their contracts rather than concrete implementation classes. A compatible implementation should be replaceable without editing unrelated downstream consumers.
-
-Package and file structure is part of the architecture. Names/directories must reveal ownership instead of hiding unrelated responsibilities inside generic dumping grounds or giant all-purpose stages.
-
-This does **not** mean every private helper becomes an interface. EvoForge requires strong abstraction at real semantic boundaries and simple concrete implementation inside those boundaries.
-
-See [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md).
-
-## Time and execution
-
-### Simulation time is not rendering time
-
-The simulation advances in discrete ticks. Rendering can run faster or slower without changing authoritative time.
-
-The Scheduler and process infrastructure answer **when** work executes. Domain systems answer **what that work means**.
-
-### The scheduler is infrastructure, not a domain owner
-
-A movement process, growth process or liquid process may sleep until useful work is due. The scheduler does not own movement, growth or Water semantics; it only orders activation.
-
-### External commands are intent, not internal RPC
-
-The Control layer accepts external intent and reports results. Continuing internal actions are owned by their mechanic and scheduled through process infrastructure rather than repeatedly calling Control as an internal message bus.
-
-### Sleeping and analytical progression are allowed
-
-Observer-independent simulation does not mean every entity performs work every tick. A predictable action may sleep or advance analytically if it preserves the same authoritative result required by the mechanic.
-
-Optimization may reduce work; it may not replace the rules with cheaper rules merely because nobody is watching.
-
-## Space and containment
-
-### Public coordinates
-
-Authoritative locations use integer addresses:
+Feature chronology is also an unstable boundary:
 
 ```text
-(x, y, z)
+movement/occupancy
+movement/navigation
+movement/pathfinding
 ```
 
-The coordinates are addresses in one continuous world. Sharing coordinates does not imply that one universal cell object owns every fact at that address.
+because a later feature may need Occupancy, Navigation or Pathfinding without being Movement.
 
-### Optional finite bounds
+The stable question is:
 
-A runtime may configure inclusive `WorldBounds`. Outside a configured box, shared `WorldGeometryLookup` presents physically closed geometry (`FullShape`). This creates one common containment rule for Water, Navigation, Movement and other structural consumers.
+> What independent concept does this code represent?
 
-Without configured bounds, the older unbounded addressing semantics remain available.
+A semantic module groups decisions that change for the same conceptual reason and hides its implementation behind a small public surface.
 
-Loaded/unloaded streaming state is a separate future problem. `outside bounds` must not be confused with `not currently loaded`.
+Examples:
 
-## Structural traversal chain
+```text
+world/object
+world/space
+world/space/occupancy
+world/geometry
+world/navigation
+world/visibility
+world/terrain
+world/liquid
+world/soil
+world/atmosphere
+agents
+```
 
-Traversal responsibilities are intentionally layered:
+The exact tree grows only with real code.
+
+## The consumer-independence test
+
+Let `C` be a concept/capability and `U` a current consumer.
+
+If `C` can be defined and tested without mentioning `U`, then `C` must not live under `U`.
+
+```text
+U -> C
+```
+
+not:
+
+```text
+U/internal/C
+```
+
+### Reference examples
+
+Occupancy means whether a location is available/admissible/reserved. That meaning exists without Movement.
+
+Therefore:
+
+```text
+Movement -> Occupancy
+Drop     -> Occupancy
+Spawn    -> Occupancy
+Build    -> Occupancy
+```
+
+and never:
+
+```text
+Drop -> Movement/Occupancy
+```
+
+Navigation means world connectivity/traversability. MoveTo may consume it, but Navigation does not belong to MoveTo.
+
+Pathfinding is an algorithm/capability that answers path queries over Navigation/traversal facts. Agents, Movement, logistics or future systems may use it directly.
+
+Objective Geometry describes physical shape independent of whether a mover, liquid, ray or construction mechanic interprets that shape.
+
+## Architectural roles are orthogonal
+
+The repository no longer requires a block to be exactly one mutually-exclusive architectural type.
+
+A semantic module may contain several roles when they all express one concept:
+
+```text
+AUTHORITY   authoritative mutable facts
+CAPABILITY  consumer-neutral operation/query
+ALGORITHM   replaceable policy/solver
+PROJECTION  rebuildable derived cache/index/view
+PROCESS     runtime lifecycle intrinsic to the concept
+GENESIS     initialization intrinsic to the concept
+```
+
+Global roles exist outside semantic concepts:
+
+```text
+KERNEL       domain-neutral execution/time/scheduling
+COMPOSITION  wiring and lifecycle selection
+WORKFLOW     mechanic/use case coordinating semantic capabilities
+```
+
+The role does not determine the package. The semantic concept does.
+
+## One authority per mutable fact
+
+For every mutable fact `F`:
+
+```text
+|authority(F)| = 1
+```
+
+A semantic capability may derive information from another authority without copying it as truth.
+
+Example:
+
+```text
+Object Position authority
+        ↓
+Cell Spatial Index      rebuildable projection
+        ↓
+Occupancy View          derived present occupancy
+
+Occupancy Reservation authority
+        ↑
+Occupancy capability
+```
+
+This is valid because object position and reservation claim are different facts.
+
+Invalid:
+
+```text
+PositionState.position
+OccupancyState.position
+MovementState.position
+RendererState.position
+```
+
+all pretending to be authoritative.
+
+## Authorities, capabilities and projections inside one concept
+
+A semantic module can be deep rather than artificially fragmented.
+
+Example shape:
+
+```text
+world/space/occupancy/
+    OccupancyView.java
+    CellAdmission.java
+    CellReservation.java
+    internal/
+        ReservationState.java
+        OccupancyResolver.java
+        OccupancyIndex.java
+```
+
+Consumers know the public semantics. They do not know whether occupancy is computed from an index, sparse map, packed bitset, ECS query or another representation.
+
+## Mechanics/workflows
+
+A mechanic is a causal process that coordinates independent semantic capabilities.
+
+Example:
+
+```text
+Movement
+   ├── Position mutation
+   ├── Occupancy/admission
+   ├── Navigation/traversal
+   ├── Geometry
+   └── Time/Scheduling
+```
+
+Movement owns movement-specific state only, for example an active movement order, timing carry or current transition process when those facts are genuinely Movement facts.
+
+It does not own:
+
+```text
+object position
+occupancy semantics
+navigation graph semantics
+objective geometry
+scheduler state
+```
+
+A future Drop mechanic can therefore be:
+
+```text
+Drop
+   ├── Object placement
+   └── Occupancy/admission
+```
+
+without any dependency on Movement.
+
+This is the core reuse guarantee.
+
+## Dependency direction follows semantic stability
+
+More fundamental/reusable concepts must not depend on higher-level consumers.
+
+Conceptually:
+
+```text
+             presentation adapters
+                    ↑
+                 agents
+                    ↑
+          mechanics / workflows
+                    ↑
+      reusable semantic capabilities
+                    ↑
+        fundamental world concepts
+                    ↑
+        kernel + neutral primitives
+```
+
+This diagram defines dependency tendency, not a mandatory package-layer tree.
+
+Packages stay semantic.
+
+### Cycles
+
+A cycle such as:
+
+```text
+A -> B -> A
+```
+
+is evidence of one of these:
+
+1. a smaller reusable capability/contract is missing;
+2. A and B are not actually independent concepts;
+3. a workflow has been embedded into a lower-level module;
+4. one module is reading implementation detail instead of a public semantic contract.
+
+Do not hide the cycle behind an event bus, service locator or universal context.
+
+## Public capability design
+
+Public contracts use consumer-neutral names.
+
+Good:
+
+```text
+PositionView
+ObjectPlacement
+OccupancyView
+CellAdmission
+CellReservation
+GeometryView
+NavigationView
+PathQuery
+VisibilityQuery
+LiquidView
+LiquidTransfer
+```
+
+Suspicious when intended for reuse:
+
+```text
+MovementOccupancy
+AgentPathService
+DropPlacementHelper
+BuildGeometryManager
+```
+
+A public name that contains one consumer is allowed only if the semantics truly belong only to that consumer.
+
+## Package form
+
+A semantic module normally exposes a small root surface and hides implementation:
+
+```text
+<semantic concept>/
+    <public contracts and stable semantic types>
+    internal/
+        <private implementation roles>
+```
+
+Do not create empty directory taxonomies in advance.
+
+Do not introduce root technical buckets such as:
+
+```text
+capabilities/
+services/
+shared/
+common/
+utils/
+helpers/
+```
+
+Consumer-neutral capability orientation is **not** a global `capabilities` layer.
+
+## Target simulation map
+
+The final map is intentionally conceptual, not a requirement to create empty packages:
+
+```text
+io.github.evoforge.simulation
+├── kernel/
+│   ├── time/
+│   ├── scheduling/
+│   └── command/
+├── definition/                 neutral authored-definition infrastructure only
+├── genesis/                    global startup composition only
+├── world/
+│   ├── continuum/              neutral large-world addressing/materialization
+│   ├── object/                 object identity/existence semantics
+│   ├── space/
+│   │   ├── position/           position authority/capabilities as justified by audit
+│   │   └── occupancy/          consumer-neutral admission/reservation semantics
+│   ├── geometry/               objective physical geometry
+│   ├── navigation/             consumer-neutral connectivity/traversability/path capability
+│   ├── visibility/             only when independent visibility semantics exist
+│   ├── geology/
+│   ├── terrain/
+│   ├── liquid/
+│   ├── soil/
+│   └── atmosphere/
+├── mechanics/
+│   ├── movement/               movement-specific workflow only
+│   ├── <drop/build/etc>/       only when real mechanics exist
+│   └── <cross-concept law>/
+├── agents/
+├── persistence/                only when real persistent-state responsibilities exist
+└── diagnostics/                observer-only diagnostics when shared scope is real
+```
+
+`position`, `occupancy`, `navigation` etc. are shown to clarify the rule; final package boundaries are accepted only after code/dependency audit.
+
+## Genesis
+
+Genesis is lifecycle, not a second semantic owner.
+
+```text
+world-level intent
+      ↓
+global Genesis orchestration
+      ↓
+semantic-module-local initialization
+      ↓
+authoritative facts
+================ runtime boundary
+normal authority/processes
+```
+
+Do not create global `generation/<domain>` trees.
+
+## Physics
+
+Physics is not automatically a repository layer.
+
+```text
+Liquid-specific law       -> Liquid semantic module
+Atmosphere-specific law   -> Atmosphere semantic module
+cross-concept physical law -> named mechanic/workflow
+consumer-neutral geometric law -> Geometry
+consumer-neutral spatial admission -> Occupancy/Space
+```
+
+This prevents both technical-layer scattering and first-consumer capture.
+
+## Navigation and Pathfinding
+
+Navigation/Pathfinding are explicitly **not** Movement internals merely because Movement currently uses them.
+
+Navigation owns reusable world-connectivity/traversability semantics.
+
+Pathfinding is a consumer-neutral query/algorithm behind navigation/path contracts.
+
+Conceptually:
+
+```text
+PathQuery
+   ↑
+AStarPathfinder
+future hierarchical solver
+
+Consumers:
+Movement -> PathQuery
+Agent planning -> PathQuery
+future logistics -> PathQuery
+```
+
+Consumers do not depend on each other.
+
+## Geometry and traversal
+
+Objective Geometry must remain consumer-neutral.
 
 ```text
 Geometry
-  “what physical shape occupies the cells?”
-      ↓
-Navigation
-  “does a directed structural edge exist?”
-      ↓
-TransitionCost
-  “what is the actor-independent intrinsic cost of that edge?”
-      ↓
-Occupancy
-  “is the relevant space dynamically available/reserved?”
-      ↓
-Movement
-  “can this actor start and complete this concrete transition?”
+   ├── used by Liquid flow
+   ├── used by Navigation
+   ├── used by Visibility
+   ├── used by placement/collision
+   └── used by presentation projection
 ```
 
-Pathfinding reads these facts to propose a route. It does not invent another topology or another cost system.
+Traversal rules that are actor/profile-specific must not contaminate objective geometry.
 
-Dynamic actor constraints such as Water wading may filter route advice and are always revalidated by authoritative Movement when the move actually starts/commits.
+If reusable traversal semantics emerge independently of Movement, they belong to an independent semantic capability rather than Movement internals.
 
-### Position remains authoritative during timed movement
+## Object, position and occupancy
 
-An in-progress move does not create a second “halfway” authoritative coordinate. Presentation may interpolate visually, but the simulation keeps one discrete authoritative position and commits the transition according to Movement semantics.
-
-## Presentation and observation
-
-### Presentation never defines truth
-
-Camera visibility, cutaway rules, sprite choice, interpolation and debug overlays are presentation. They may explain simulation truth but never determine it.
-
-### The simulation is observer-independent
-
-Camera distance, player proximity, whether a cell is rendered, or whether a region is currently inspected must not select different authoritative behavior rules.
-
-This is stronger than “the renderer does not mutate state”: it also forbids silently using a lower-fidelity simulation model merely because a region is off-screen.
-
-## Extensibility
-
-### Public semantics must survive representation changes
-
-A storage structure, cache or algorithm may be replaced behind its contract without changing the public meaning of the system.
-
-### Generic consumers do not branch on concrete implementation/content types
-
-Avoid extension chains such as:
-
-```java
-if (value instanceof ConcreteA) { ... }
-else if (value instanceof ConcreteB) { ... }
-```
-
-or content switches such as:
+These are distinct concepts:
 
 ```text
-if mountain -> granite
-if river -> sand
+Object     existence/identity/type
+Position   where an object is
+Occupancy  whether a spatial location is occupied/admissible/reserved
 ```
 
-when the concrete type/key is merely selecting replaceable behavior.
+Occupancy may derive actual occupancy from Position + object definitions while owning independent reservations.
 
-Concrete knowledge belongs in a specialized typed adapter/binding and in the composition root that registers it. Generic orchestration depends on narrow abstractions.
+A placement operation should compose Position and Occupancy through public contracts so every consumer shares one admission rule.
 
-### Composition before central switches
+This is the reference pattern for future reuse decisions.
 
-When a new implementation fits an existing semantic contract, add it behind that contract. Generic consumers should not need a new special case just to recognize a concrete class.
+## Agents
 
-If a real new consumer proves the contract insufficient, revise the smallest owning contract rather than adding an escape hatch.
+Agent cognition is a semantic concept separate from physical Object/Space capabilities.
 
-### Orchestrators compose; domain blocks own policy
-
-A composition root may choose implementations and order true dependencies. It should not also become the home for domain mathematics, calibration rules, feature-specific thresholds or mutable domain state.
-
-When semantic meaning, calibration, versioned model policy and execution are independently meaningful, keep them distinct:
+An Agent may consume:
 
 ```text
-semantic meaning
-      ↓
-calibration + model policy
-      ↓
-replaceable algorithm/process
-      ↓
-typed fact / authoritative mutation
+Visibility
+Navigation/PathQuery
+Movement commands
+Object queries
+Liquid/food opportunities
 ```
 
-Shared policy has one owner instead of being copied into several implementations.
+Those capabilities must not depend on Agent merely because Agent currently uses them.
 
-### Package and file structure mirrors ownership
+## Kernel
 
-The package tree should make it possible to locate the owner of a fact or algorithm without reconstructing historical implementation context.
+Kernel contains domain-neutral machinery only.
 
-Prefer domain/ownership-oriented packages and focused file names. Avoid accumulating unrelated responsibilities in generic `util`, `common`, `service`, `manager` or giant stage classes merely because those locations are convenient.
-
-If a package cannot be explained by one coherent domain responsibility, treat that as architectural debt.
-
-### Abstraction belongs at real seams
-
-Do not confuse replaceability with maximum indirection. A few strong interfaces at independently meaningful boundaries are preferred over many speculative strategy/factory layers around private helpers.
-
-Internal mathematics/data structures stay simple and concrete until another real consumer proves a stable reusable concept.
-
-### Do not build universal abstractions without consumers
-
-A possible future common concept is not enough reason to create a framework. Build the smallest correct boundary for the current real mechanic and extract shared structure only when multiple real consumers prove it exists.
-
-## World-generation architecture
-
-World generation creates the **initial facts of the world**. Runtime Simulation owns what happens after handoff.
-
-Generation stages are replaceable behind typed semantic seams. Orchestration depends on generated facts and layer-specific contracts rather than concrete algorithms or a universal mutable generation context.
-
-The canonical authoring path is:
+Examples:
 
 ```text
-human semantic intent / definitions
-            ↓
-validation / semantic compilation
-            ↓
-world-specific domain calibration
-            ↓
-versioned algorithm recipe where needed
-            ↓
-replaceable spatial algorithm
-            ↓
-immutable typed generated facts
-            ↓
-preparation / materialization / bootstrap
-            ↓
-ordinary authoritative runtime
+clock/time
+scheduling
+command dispatch
 ```
 
-Generated-world bootstrap is composition, not a second simulation. It may translate immutable generated facts into setup calls, but it must not continue owning Terrain, Water or Soil after runtime starts.
+Kernel never learns Terrain, Liquid, Occupancy, Agent or Movement semantics.
 
-Intentional changes to deterministic generated facts require explicit generation-version compatibility handling.
+## Composition
 
-See [World Generation](systems/world-generation/overview.md).
+Composition may know many public contracts but owns no domain policy.
+
+```text
+many semantic modules -> Composition -> running Simulation
+```
+
+No physical formulas, actor decisions or feature-specific rules belong there.
+
+## Definitions
+
+Root `definition` contains only genuinely neutral authored-definition infrastructure.
+
+Domain-specific definitions stay with their semantic concept.
+
+Do not turn runtime algorithm knobs into content definitions merely for configurability.
 
 ## Determinism
 
-For a fixed authoritative input set and compatible algorithm/revision, the result must be replayable. Random-looking generation uses deterministic addressable samples rather than depending on incidental call order.
-
-Determinism is an architectural feature because it enables exact tests, regression comparison, seed reproduction and reliable debugging.
-
-It is not a claim that all future gameplay must be predictable to the player; it is a claim that the engine can reproduce the same authoritative computation from the same inputs.
-
-## Performance
-
-Optimization follows evidence:
+For fixed authoritative inputs and compatible model revision:
 
 ```text
-instrument
-   ↓
-reproduce representative workload
-   ↓
-identify actual hot path
-   ↓
-optimize behind the same semantic contract
-   ↓
-verify behavior + performance
+Result = f(authoritative inputs, revision)
 ```
 
-Once a path is known to be hot, avoid unnecessary scans, allocations, boxing and temporary collections. But do not introduce chunks, packed coordinates, concurrency or alternate distant-world rules without a measured need and a semantic design.
+Result must not depend on:
 
-## Testing and observability
+- render frame cadence;
+- camera/observer position;
+- hash iteration order;
+- request order where non-semantic;
+- cache eviction/reload;
+- whether a region is visible.
 
-Fundamental mechanics require headless deterministic tests. Important architectural boundaries that can be expressed structurally should also be executable tests so violations fail immediately.
+## Simulation-thread authority
 
-Where replaceability is part of the architecture, composition/substitution tests should prove that orchestration accepts a small alternate implementation without concrete-class knowledge.
+Authoritative mutation currently occurs on the simulation thread.
 
-Diagnostics are part of system design: important state transitions should be inspectable without teaching the visualizer to own simulation truth.
+Background work may prepare immutable/rebuildable results but may not silently mutate live world truth.
 
-Visual aesthetics are different. Unit tests should protect deterministic geometry/selection/invariants, while final visual quality is manually accepted when necessary.
+A future concurrency model requires an explicit ADR defining deterministic commit/ownership semantics.
 
-## Documentation ownership
+## Continuum
 
-Documentation follows the same ownership principle as code:
+Continuum owns neutral large-world addressing/materialization/query/cache mechanics.
 
-- [Project Context](project-context.md) — concise current baseline and recovery path;
-- this file — only global cross-system rules;
-- `systems/<group>/...` — current behavior/algorithms of a subsystem;
-- `roadmap.md` — milestone status and intentionally deferred scope;
-- `decisions/` — durable rationale for accepted architectural choices;
-- `guides/` — practical contributor workflows;
-- `journal/` — historical, exploratory, audit and acceptance context;
-- `references.md` — reusable external model/algorithm sources.
+It does not own semantic Terrain/Liquid/Geology truth.
 
-Implementation-only refactors normally do not require semantic documentation changes. A semantic change must update the owning System page in the same PR; a global architectural change also updates this page and normally receives an ADR when the reason should survive.
+Pages/tiles/chunks are representation, not natural geography.
 
-The mandatory implementation process is defined by [ADR-022: Green checkpoint development](decisions/022-green-checkpoint-development.md); the mandatory architectural shape is defined by [ADR-023: Strict modular architecture and replaceable boundaries](decisions/023-strict-modular-architecture.md). Both apply to future production work.
+## Performance architecture
 
-See the [Documentation Guide](guides/documentation.md).
+Performance optimization stays behind semantic capabilities.
+
+```text
+semantic invariant
+      ↓
+representative workload
+      ↓
+measurement
+      ↓
+hidden representation/algorithm optimization
+      ↓
+same public capability + same semantics
+      ↓
+regression evidence
+```
+
+Rules:
+
+- avoid whole-world scans when work can be local/active-set based;
+- avoid mandatory per-object/per-cell work every tick when deterministic sleeping/analytical behavior is equivalent;
+- avoid avoidable allocation/boxing on proven hot paths;
+- explicitly bound caches in an effectively unbounded world;
+- measure memory/work count as well as latency;
+- use sparse/packed/ECS/data-oriented/paged representations internally when measurement justifies them;
+- never expose one consumer's optimized representation as the semantic interface of a reusable capability.
+
+## Replaceability
+
+Replaceability has three useful levels.
+
+### Algorithm
+
+```text
+PathQuery <- AStarPathfinder / future solver
+```
+
+### Semantic-module implementation
+
+Occupancy storage/index/reservation implementation may change without changing Movement/Drop/Build consumers.
+
+### Consumer/workflow
+
+A mechanic can be removed/replaced without taking reusable capabilities with it.
+
+This third level is the important addition from ADR-026.
+
+## Testing architecture
+
+```text
+pure rule/algorithm           -> unit/property test
+authority/state lifecycle     -> semantic-module invariant test
+reusable capability           -> consumer-independent contract test
+replaceable seam              -> substitution test
+mechanic/workflow             -> focused integration over public capabilities
+deterministic process         -> replay/order test
+physical transfer             -> conservation/bounds test
+large/hot path                -> scale/performance profile
+structural law                -> architecture fitness test
+visual/aesthetic property     -> manual visual acceptance where necessary
+```
+
+A capability that can only be tested through its first consumer is a design warning.
+
+## Architecture fitness checks
+
+CI must progressively enforce:
+
+- accepted Gradle topology only;
+- simulation cannot depend on presentation/libGDX;
+- no semantic dependency cycles;
+- no foreign `internal` imports;
+- Kernel independence from domains;
+- reusable semantic modules do not depend on mechanics/agents/presentation consumers;
+- mechanics do not hide general-purpose capabilities under feature internals;
+- Continuum independence from concrete natural domains;
+- no generic root dumping-ground packages;
+- deterministic/scale gates stay green.
+
+A critical mechanically-checkable rule should not exist only as prose.
+
+## Change-amplification and reuse tests
+
+Before accepting a boundary ask:
+
+1. If the concept changes, are edits localized to that concept plus explicit consumers?
+2. If the current consumer disappears, does the concept still have a coherent home?
+3. If a second plausible consumer appears, can it use the existing public capability without moving code?
+4. Can the implementation be optimized/replaced without consumers learning storage/algorithm details?
+
+A “no” answer is architectural debt now, not something to postpone until the second feature arrives.
+
+## Stop conditions
+
+Stop and redesign when any of these appears:
+
+- two authorities for one mutable fact;
+- reusable concept under its first consumer;
+- new consumer would force extraction/movement of old shared code;
+- mechanic becomes a warehouse for Occupancy/Navigation/Visibility/etc.;
+- lower-level capability depends on higher-level workflow;
+- semantic dependency cycle;
+- foreign internal import;
+- universal service/context bag;
+- central concrete-type switch grows with every feature;
+- generic `shared/common/services/capabilities` bucket;
+- global generation/physics/storage domain split;
+- cache/projection becomes authoritative;
+- observer/camera changes simulation truth;
+- one conceptual change causes unrelated package surgery.
+
+## Architectural sources
+
+Primary/conceptual influences:
+
+- David Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*: https://doi.org/10.1145/361598.361623
+- Simon Brown, modular monolith/package-by-component: https://simonbrown.je/modular-monolith/
+- Martin Fowler, Bounded Context: https://martinfowler.com/bliki/BoundedContext.html
+- Alistair Cockburn, Hexagonal Architecture: https://alistair.cockburn.us/hexagonal-architecture/
+- John Ousterhout, software complexity/deep modules: https://web.stanford.edu/~ouster/cgi-bin/cs190-winter18/lecture.php?topic=complexity
+- ArchUnit executable architecture constraints: https://www.archunit.org/userguide/html/000_Index.html
+
+These are influences; EvoForge does not claim to implement any one framework wholesale.
+
+## Current architecture authority
+
+Read in this order:
+
+1. root `AGENTS.md`;
+2. this file;
+3. ADR-026;
+4. relevant system docs;
+5. actual current code/tests.
+
+ADR-025 is partially superseded. ADR-023 is historical.

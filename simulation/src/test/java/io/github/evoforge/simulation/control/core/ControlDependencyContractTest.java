@@ -18,11 +18,20 @@ final class ControlDependencyContractTest {
             "import io.github.evoforge.simulation.control.";
 
     @Test
-    void genericControlDoesNotDependOnWorldDomains()
+    void genericCommandInfrastructureDoesNotDependOnWorldDomains()
             throws IOException {
 
         Path mainJava = mainJava();
+        Path kernelCommand = mainJava.resolve(
+                "io/github/evoforge/simulation/kernel/command");
 
+        if (Files.isDirectory(kernelCommand)) {
+            assertNoImport(kernelCommand, WORLD_IMPORT);
+            return;
+        }
+
+        // Transitional pre-ADR-025 locations. Remove this branch once the
+        // owner-first package migration itself has been committed.
         assertNoImport(
                 mainJava.resolve(
                         "io/github/evoforge/simulation/control/core"),
@@ -34,7 +43,7 @@ final class ControlDependencyContractTest {
     }
 
     @Test
-    void worldDomainsDoNotDependOnControl()
+    void worldDomainsDoNotDependOnLegacyControlPackages()
             throws IOException {
 
         assertNoImport(

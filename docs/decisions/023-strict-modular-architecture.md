@@ -1,8 +1,10 @@
 # ADR-023: Strict modular architecture and replaceable boundaries
 
-- Status: Accepted
+- Status: Superseded by [ADR-025](025-owner-first-modular-simulation.md)
 - Scope: Repository-wide architecture, module structure and algorithm/process extensibility
 - Decision: EvoForge is composed from small cohesive ownership blocks with explicit one-way dependencies and narrow typed seams. Independently meaningful algorithms, processes and policies are replaceable through composition; package/file structure mirrors those responsibilities. Abstraction is mandatory at real semantic boundaries and deliberately avoided for private implementation detail that has no independent consumer.
+
+> **Historical note:** the cohesion, narrow-contract, replaceability and anti-speculative-abstraction principles below remain important and were incorporated into ADR-025. The specific `foundation -> world -> generation/simulation` Gradle-module topology in section 11 is no longer canonical because it horizontally split one semantic domain across technical stages. It is preserved here as historical rationale rather than silently rewritten.
 
 ## Context
 
@@ -64,9 +66,11 @@ Where substitution is an architectural requirement, tests exercise the seam with
 
 If a new feature can only be added by broadening an already-confused owner, introducing concrete-type branching or passing an increasingly universal context object, identify the smallest missing boundary before adding scope.
 
-### 11. World, Generation and Simulation have one-way ownership boundaries
+### 11. Historical World, Generation and Simulation module boundary
 
-The dependency direction is:
+> **Superseded.** This section records the architecture that ADR-025 replaces.
+
+The dependency direction chosen at the time was:
 
 ```text
 foundation
@@ -78,63 +82,49 @@ generation  simulation
             core
 ```
 
-The semantic responsibilities are stricter than the package names:
+The semantic responsibilities were defined as:
 
-- **Foundation** owns neutral value types and contracts that have no knowledge of World, Generation, Simulation or Presentation.
-- **World** owns authoritative state, spatial/materialization access, revisions and persistence-facing state lifecycle.
-- **Generation** owns reproducible initial-world inputs and algorithms that produce/refine World state. It does not own runtime physics.
-- **Simulation** owns rules, physics, scheduling, AI, solvers and policies that consume World through narrow read/mutation contracts.
-- **Presentation** observes World/Simulation and never defines authoritative truth.
+- **Foundation** owned neutral value types and contracts that had no knowledge of World, Generation, Simulation or Presentation.
+- **World** owned authoritative state, spatial/materialization access, revisions and persistence-facing state lifecycle.
+- **Generation** owned reproducible initial-world inputs and algorithms that produced/refined World state. It did not own runtime physics.
+- **Simulation** owned rules, physics, scheduling, AI, solvers and policies that consumed World through narrow read/mutation contracts.
+- **Presentation** observed World/Simulation and never defined authoritative truth.
 
-Forbidden dependency directions:
+The implementation used standalone Gradle `:foundation`, `:world` and `:generation` modules as compile-time firewalls.
 
-- `foundation -> world/generation/simulation/core/lwjgl3`
-- `world -> generation/simulation/core/lwjgl3`
-- `generation -> simulation/core/lwjgl3`
-- `simulation -> generation`
-
-A simulation algorithm must be replaceable without changing World ownership. A generation algorithm must be replaceable without changing simulation mechanics. World must not know which generator, solver, pathfinder, AI policy or renderer consumes its contracts.
-
-The compile-time firewall uses standalone Gradle `:foundation`, `:world` and `:generation` modules. `:foundation` is the dependency root. `:world` cannot depend on Generation, Simulation or Presentation. `:generation` is allow-listed to depend only on Foundation and World. `:simulation` deliberately has no dependency on Generation. During behavior-preserving extraction, Java package names may temporarily lag physical module ownership; package cleanup is performed separately rather than mixed with semantic changes.
-
-Genesis describes the logical world, not an active simulation box. The generation `WorldSpec` therefore uses the long-addressed `ContinuumWorldDomain`; the old finite `WorldBounds(int XYZ)` remains a simulation-side concept and must not be reintroduced into Genesis.
+That topology was later rejected because the same semantic owner naturally needs state, Genesis, storage and owner-local physics. Splitting those responsibilities by technical stage increases change amplification and risks parallel ownership. ADR-025 keeps the semantic principles while replacing the physical topology with owner-first package modules inside one `:simulation` Gradle module.
 
 ## Why
 
-This structure keeps failures local, makes algorithms understandable in isolation and lets future models change without reopening unrelated systems. It also makes repository context recoverable from code/package structure rather than conversation history.
+The original decision correctly recognized the need for local failures, explicit contracts, replaceable algorithms and recoverable package structure. Those motivations remain valid.
 
-ADR-023 works together with ADR-022: this ADR limits architectural shape; ADR-022 limits development step size.
+The coarse Gradle-module boundary did not survive deeper analysis of the future axis of change. It made technical phase more important than semantic ownership. ADR-025 is therefore the current authority for repository/package topology.
 
 ## Consequences
 
-- Important seams use narrow interfaces/contracts.
-- Composition roots may have more explicit dependencies.
-- Package/file moves are justified when ownership is hidden.
-- Architecture/substitution tests are expected at important seams.
-- Gradle module boundaries are used as compile-time dependency firewalls where ownership is fundamental.
-- Universal frameworks require evidence from multiple real consumers.
-- Refactors that preserve behavior are separated from semantic changes.
+Historical consequences of this ADR included:
 
-## Current implementation
+- important seams used narrow interfaces/contracts;
+- composition roots acquired more explicit dependencies;
+- package/file moves were justified when ownership was hidden;
+- architecture/substitution tests were expected at important seams;
+- Gradle module boundaries were temporarily used as compile-time dependency firewalls;
+- universal frameworks required evidence from multiple real consumers;
+- refactors preserving behavior were separated from semantic changes.
 
-Current examples include:
+Current consequences are defined by ADR-025. In particular, domain architecture enforcement moves from coarse Gradle projects to semantic package visibility + executable architecture tests inside `:simulation`.
 
-- `:foundation` is the dependency root; neutral authored `NormalizedValue` lives there and the module rejects higher-layer project dependencies;
-- Continuum state/read infrastructure, correctness tests and Continuum-specific scale profiles live in independent `:world`;
-- `:world` rejects dependencies on `:generation`, `:simulation` and presentation modules;
-- `:generation` owns `WorldGenesis`, `WorldSpec`, `WorldGenerationIntent` and `MountainIntent`, and may depend only on `:foundation` and `:world`;
-- Generation `WorldSpec` now describes `ContinuumWorldDomain` rather than the finite simulation-only `WorldBounds`;
-- `:simulation` consumes `:foundation` and `:world` and has no project dependency on `:generation`; the full Gradle suite compiles with Genesis removed from Simulation;
-- runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil still live in `:simulation` and remain the next ownership-audit area; moving them must separate authoritative state from solver/policy concerns rather than moving mixed packages wholesale;
-- presentation consumes read/command boundaries instead of mutable domain systems.
+## Historical implementation
 
-Future Continuum stages must add new semantic layers behind similarly narrow contracts rather than rebuilding one monolithic generator.
+This ADR was implemented by extracting `NormalizedValue` to `:foundation`, Continuum to `:world`, and Genesis contracts to `:generation`. `:simulation` consumed Foundation/World while runtime Landscape/Spatial/Occupancy/Liquid/Soil code remained in Simulation.
+
+The owner-first architecture reset intentionally folds those modules back into `:simulation` before reorganizing by semantic owner. This historical section remains to explain why those earlier commits existed.
 
 ## Related documentation
 
+- [ADR-025: Owner-first modular simulation architecture](025-owner-first-modular-simulation.md) — current authority
 - [Architecture](../architecture.md)
 - [Development Workflow](../guides/development-workflow.md)
 - [Green checkpoint development](022-green-checkpoint-development.md)
 - [Continuum large-world architecture](024-continuum-large-world-architecture.md)
-- [Continuum Development Plan](../systems/world-generation/continuum-development-plan.md)
 - [Project Context](../project-context.md)

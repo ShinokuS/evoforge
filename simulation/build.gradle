@@ -3,8 +3,6 @@
 eclipse.project.name = appName + '-simulation'
 
 dependencies {
-    implementation project(':foundation')
-    implementation project(':world')
     implementation "com.google.code.gson:gson:$gsonVersion"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
@@ -25,7 +23,7 @@ test {
 }
 
 tasks.register('scaleProfile', Test) {
-    description = 'Runs the representative living-world scale profile.'
+    description = 'Runs all representative simulation and Continuum scale/performance profiles.'
     group = 'verification'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath

@@ -1,71 +1,138 @@
 # Contributing to EvoForge
 
-EvoForge keeps `main` as an accepted milestone baseline and integrates the next milestone on `develop`.
+`AGENTS.md` is the mandatory repository entry point for **every** human or AI-assisted change. Read it first.
 
-Before changing simulation semantics, read [`docs/architecture.md`](docs/architecture.md) and the relevant page under [`docs/systems/`](docs/systems/). Durable architecture/process choices belong in [`docs/decisions/`](docs/decisions/); exploratory history belongs in [`docs/notes/`](docs/notes/).
+Then read, in order:
+
+1. [`docs/project-context.md`](docs/project-context.md);
+2. [`docs/architecture.md`](docs/architecture.md);
+3. the relevant current page under [`docs/systems/`](docs/systems/);
+4. relevant accepted ADRs under [`docs/decisions/`](docs/decisions/);
+5. the actual owner package, public contracts, tests and current dependencies.
+
+Chat history, historical Journal entries and old branches are not current architecture.
+
+## Before coding: required change declaration
+
+A non-trivial change is not ready to implement until the contributor can state:
+
+```text
+semantic owner
+architectural block type: OWNER | MECHANIC | KERNEL | PROJECTION | COMPOSITION
+authoritative facts changed
+public contracts touched
+allowed dependencies
+invariants that must remain true
+expected scale / performance risk
+focused verification evidence
+normative documentation that must change
+```
+
+If the owner/type is unclear, resolve architecture before creating files.
 
 ## Branches
 
-- normal production work: branch `feature/<focused-name>` from the latest `develop` and open a PR back to `develop`;
-- uncertain/disposable research: use `experiment/<focused-name>` from `develop`;
-- urgent stable-baseline repair: use `hotfix/<focused-name>` from `main`, then bring the accepted fix back into `develop`;
-- `develop -> main` is reserved for an accepted milestone.
+- normal production work: `feature/<focused-name>` from current `develop` -> PR to `develop`;
+- uncertain/disposable research: `experiment/<focused-name>`;
+- urgent accepted-baseline repair: `hotfix/<focused-name>` from `main`, then reconcile into `develop`;
+- `develop -> main` only for an accepted milestone.
 
 Do not routinely push directly to `main` or `develop`.
 
-## Mandatory small-step development loop
+## Mandatory architecture gate
 
-Every production change proceeds through green, reviewable checkpoints:
+Every production change must preserve ADR-025 and `docs/architecture.md`:
 
-1. state one semantic/architectural contract and how it will be verified;
-2. change the smallest independently meaningful component that advances that contract;
-3. add or update the focused test, diagnostic or other acceptance evidence for that component;
-4. run the narrowest relevant checks immediately;
-5. commit only when that checkpoint is understood and green;
-6. only then begin the next semantic block.
+- one authoritative owner per mutable fact;
+- semantic ownership is the primary package axis;
+- owner-local Genesis/physics/storage/runtime stay with the owner;
+- cross-owner laws are explicit Mechanics and do not duplicate participant truth;
+- Kernel is domain-neutral;
+- Projections are rebuildable and never second truth;
+- Composition wires blocks and owns no domain policy;
+- dependencies use narrow typed public contracts and remain acyclic;
+- no foreign `internal` imports;
+- no service locators/universal contexts/global causal event bus;
+- no generic dumping-ground packages;
+- no new Gradle module merely to organize a simulation domain;
+- replace independently meaningful algorithms without proliferating speculative interfaces.
 
-Do **not** stack a new hypothesis on an unexplained red head. If a checkpoint fails, stop adding scope, localize the failure and fix or revert that checkpoint first. Diagnostic instrumentation or risky experiments belong on a disposable branch when they would pollute the production history; only the confirmed production fix is transferred back.
+If a feature requires breaking these rules, stop and make the architectural change explicit through an ADR instead of smuggling it into implementation.
 
-A test is changed because the intended contract changed, never merely because the implementation fails it. Visual/performance acceptance complements automated invariants; it does not replace them.
+## Mandatory green-checkpoint loop
 
-See [ADR-022](docs/decisions/022-green-checkpoint-development.md) and the detailed [Development Workflow](docs/guides/development-workflow.md).
+```text
+read current rules/state
+        ↓
+define one contract/invariant
+        ↓
+smallest coherent implementation
+        ↓
+nearest focused tests
+        ↓
+architecture checks
+        ↓
+affected integration/scale checks
+        ↓
+reconcile docs
+        ↓
+green coherent commit
+```
 
-## Mandatory architecture discipline
+Do not stack new scope on unexplained red CI. Do not weaken evidence merely because an implementation fails it.
 
-Every non-trivial production change must also preserve EvoForge's strict modular architecture:
+A refactor claiming behavior preservation should separate mechanical package/type moves from semantic behavior changes whenever practical.
 
-1. identify the authoritative owner of the new fact/behavior before coding;
-2. keep each class/process/package focused on one explainable responsibility;
-3. depend across blocks on narrow typed contracts rather than concrete implementation classes or generic mutable contexts;
-4. expose an explicit replaceable seam when an algorithm, calibrator, process or strategy can vary independently;
-5. keep composition/orchestration separate from domain policy and algorithm mathematics;
-6. keep semantic meaning, calibration, versioned model policy and execution separate when they are independently meaningful concerns;
-7. make package and file structure communicate domain ownership clearly instead of accumulating unrelated code in generic `util`, `manager`, `service`, `common` or giant stage classes;
-8. verify important replaceability boundaries with substitution/composition tests;
-9. abstract real semantic boundaries strongly, but keep private implementation detail simple and concrete until another real consumer proves a common abstraction;
-10. if adding a feature requires widening a confused owner or branching generic code on a replaceable concrete type, stop and repair the boundary before adding more behavior.
+## Naming/file placement gate
 
-A compatible implementation should be replaceable without editing unrelated downstream consumers. Clear code organization is part of correctness because future development must be able to locate, reason about, replace and test one block without reconstructing historical context.
+A new file must have a semantic home before it exists. Use the decision table in `AGENTS.md`.
 
-See [ADR-023](docs/decisions/023-strict-modular-architecture.md), [Architecture](docs/architecture.md) and the detailed [Development Workflow](docs/guides/development-workflow.md).
+Forbidden vague dumping-ground names include `util`, `common`, `misc`, `helpers`, `shared`, `framework`, generic `Manager`, generic `Service` and universal `Context` bags.
 
-## Before a feature PR is merged
+Public names describe stable semantics; implementation names describe precise algorithms/representations. File names match their primary type/responsibility.
 
-- keep the change focused on one coherent slice and the commit sequence readable as independent checkpoints;
-- review package/file placement and verify each changed block has one clear owner/responsibility;
-- verify replaceable algorithms/processes are consumed through contracts rather than concrete-class knowledge;
-- add/update headless tests for semantic changes and architecture/composition tests where replaceability is part of the contract;
-- run `./gradlew test --rerun-tasks --console=plain` for cross-module work;
-- update normative documentation when semantics or developer operation changed;
-- run `npm run docs:build` when documentation/site configuration changed;
-- perform manual visual/performance acceptance where automated tests cannot establish the result;
-- remove temporary diagnostics, dead code and superseded experimental paths;
-- do not merge with unexplained failing checks or TODOs hiding known correctness defects.
+## Testing and performance gate
 
-Feature PRs are normally squash-merged to `develop`. Experiments do not have to be merged.
+Use the nearest appropriate evidence:
 
-## Milestones
+- pure algorithm/value rule -> unit/property-style test;
+- owner lifecycle/state -> owner/component test;
+- replaceable seam -> substitution test;
+- cross-owner behavior -> focused integration test;
+- deterministic process -> replay/order test;
+- physical flow -> conservation/bounds tests;
+- architectural law -> executable architecture test;
+- hot/unbounded-looking path -> representative scale/performance profile;
+- aesthetic property -> manual visual acceptance only when automation cannot establish it.
 
-A milestone PR from `develop` to `main` requires green CI, reconciled normative documentation and the required manual/performance acceptance. The preferred merge is an explicit merge commit so `develop` remains an ancestor of the accepted `main` milestone. Tag the resulting `main` commit with an immutable semantic pre-release/release version.
+Optimization is evidence-driven and must preserve the same semantic contracts. Performance-sensitive designs consider work count, allocation and memory bounds as well as elapsed time.
 
-The detailed policy is canonical in [`docs/guides/development-workflow.md`](docs/guides/development-workflow.md).
+See [`docs/guides/testing.md`](docs/guides/testing.md).
+
+## Documentation gate
+
+Normative docs are part of the implementation contract.
+
+When semantics, architecture, developer operation, formulas, dependencies, performance model or limitations change, update the owning normative page in the same PR.
+
+System docs must explain the actual implemented model, including formulas/units/order/invariants/interactions/performance/limitations/code/tests/sources where relevant. Do not cite a paper as decoration or imply fidelity not present in code.
+
+Historical Journal records are not rewritten into current truth.
+
+See [`docs/guides/documentation.md`](docs/guides/documentation.md).
+
+## Before merge to `develop`
+
+- owner/block classification still matches the final diff;
+- package/file names reveal responsibility;
+- no new cycle/internal leak/duplicate authority exists;
+- focused tests are green;
+- full `./gradlew test --rerun-tasks --console=plain` is green for cross-system work;
+- required scale/performance profiles are green;
+- `npm run docs:build` is green when docs/site changed;
+- temporary migration/probe/debug code is removed;
+- normative docs and source pointers match the final code;
+- manual visual/performance acceptance is recorded when required;
+- PR remains Draft while any required architecture/test/docs checkpoint is incomplete.
+
+Feature PRs are normally squash-merged to `develop`. Milestone `develop -> main` uses the accepted milestone policy in the [Development Workflow](docs/guides/development-workflow.md).

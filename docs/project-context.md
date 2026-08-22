@@ -1,6 +1,8 @@
 # Project Context
 
-This page is the fastest way to reconstruct **what EvoForge is, what is already true in code, what must not be broken, and what should happen next**. It is intended to be sufficient after a long break or in a new AI-assisted development session.
+This page is the fastest current-state recovery path for EvoForge. It answers: **what the project is, what architecture is authoritative, what is currently being changed, and what work is blocked until that change is accepted**.
+
+Repository-root `AGENTS.md` is mandatory reading before this page for any code/documentation action.
 
 ## EvoForge in one minute
 
@@ -9,109 +11,144 @@ EvoForge is a deterministic simulation of a persistent three-dimensional world. 
 ```text
 authored semantic meaning
         ↓
-deterministic domain logic / Genesis
+deterministic owner-local Genesis
         ↓
-authoritative runtime owners
+authoritative semantic owners
+        ↓
+explicit cross-owner mechanics
         ↓
 observable world state
         ↓
-visualizer and diagnostics
+visualizer / diagnostics
 ```
 
-The renderer is an observer. It never decides what is physically true.
+The renderer is an observer. Camera/render state never decides what is physically true.
 
 ## Repository map
 
 ```text
-simulation/   pure-Java authoritative simulation and Continuum world-generation code
-core/         libGDX visualizer, scenarios and presentation adapters
+simulation/   all authoritative simulation, Genesis, world state, physics, mechanics and agents
+core/         libGDX visualizer, debug scenarios and presentation adapters
 lwjgl3/       desktop launcher
 assets/       authored definitions and presentation data
-docs/         canonical explanations, decisions, guides and journal
+docs/         canonical rules, systems, decisions, guides and history
 ```
 
-`simulation` must not depend on libGDX/presentation code.
+Only `simulation`, `core` and `lwjgl3` are code/Gradle modules under the current architecture.
 
-## Global rules that must survive every stage
+## Architecture reset is the current blocking work
+
+Draft PR #132 is rebuilding the codebase around [ADR-025: Owner-first modular simulation architecture](decisions/025-owner-first-modular-simulation.md).
+
+The previous horizontal Gradle split into `foundation`, `world`, `generation` and `simulation` has been rejected because it divided one semantic domain across technical stages. ADR-023 is preserved as a superseded historical decision.
+
+Current target laws:
 
 - one authoritative owner per mutable fact;
-- narrow typed read/mutation capabilities between owners;
-- observer/camera independence;
-- deterministic replay from authoritative inputs;
-- semantic Definitions are immutable authored meaning, not mutable objects;
-- technical pages/chunks/caches are representation, never natural geography or a second truth;
-- abstraction at real semantic seams, simple concrete code inside a seam;
-- no universal framework without multiple real consumers;
-- package/file structure mirrors ownership;
-- generation creates initial facts and then hands them to ordinary runtime owners.
+- semantic owner/axis of change is the primary package boundary;
+- owner-local Genesis, storage, physics and runtime implementation stay with that owner;
+- cross-owner laws are explicit Mechanics and do not duplicate owner state;
+- Kernel is domain-neutral execution infrastructure;
+- Projections are rebuildable and never a second truth;
+- Composition chooses/wires implementations but owns no domain policy;
+- public semantic surfaces are narrow; foreign `internal` access is forbidden;
+- dependencies are explicit and acyclic;
+- architecture, determinism, testing, performance and documentation rules must become executable/CI-checked where practical.
 
-## World-generation reset
+No new Continuum/world-generation feature stage begins until this reset is accepted.
 
-The previous V12–V15 dense generator has been intentionally retired, not preserved as a legacy alternative. Its World Atlas, bootstrap/preparation pipeline, terrain/mountain/lake/bathymetry generation implementations, generated climate/weather forcing and coupled stale tests were removed.
+## Global simulation laws
 
-Do not reconstruct new work from the old normative V12–V15 pages or class names. Historical material in the Development Journal is context only.
+These must survive every stage:
 
-The current world-generation architecture is **Continuum**.
+1. **one authoritative owner per mutable fact**;
+2. **narrow typed read/mutation capabilities across owners**;
+3. **observer/camera independence**;
+4. **deterministic replay from authoritative inputs + compatible revision**;
+5. **Definitions are immutable authored meaning, not runtime objects**;
+6. **pages/chunks/caches/indexes are representation/projection, never natural truth**;
+7. **abstraction at real semantic seams, simple concrete internals elsewhere**;
+8. **no universal framework/context/service locator without an explicit future architecture decision**;
+9. **package/file structure mirrors semantic ownership**;
+10. **Genesis creates initial facts and hands them to ordinary owners**;
+11. **performance optimization preserves semantics and is backed by representative evidence**;
+12. **normative documentation changes with the contract it describes**.
 
-## What exists now
+## Current architecture map
 
-The executable Continuum foundation is deliberately small:
+The exact package tree is being migrated, but the canonical semantic map is:
 
 ```text
-ContinuumWorldDomain
-    logical large-world coordinates
-
-addressable deterministic sampling
-    same authoritative coordinate → same value
-    independent of request order
-
-ContinuumMaterializer
-    materializes only a requested bounded window
-
-ContinuumFoundationTest
-    protects determinism, large coordinates and overlap equality
+simulation
+├── kernel/            time, scheduling and other neutral execution services
+├── definition/        neutral authored-definition infrastructure only
+├── genesis/           global initial-world composition only
+├── world/             objective semantic owners
+│   ├── continuum/
+│   ├── space/
+│   ├── geometry/
+│   ├── geology/
+│   ├── terrain/
+│   ├── liquid/
+│   ├── soil/
+│   ├── atmosphere/
+│   └── object/
+├── mechanics/         true cross-owner laws such as Movement
+├── agents/            autonomous cognition/needs/perception/decision
+└── composition/       only if/where a real composition area is justified
 ```
 
-This foundation proves the direction but does not yet constitute the full Phase 0 large-world proof.
+Do not create empty packages merely to match this diagram. A package exists only when a real owner/responsibility exists.
 
-## Immediate next work
+## Continuum status
 
-Continue with **Phase 0 — Foundation harness** in [Continuum World Development Plan](systems/world-generation/continuum-development-plan.md).
+The dense V12–V15 world-generation line remains retired. Continuum remains the canonical large-world foundation.
 
-The next PR should add:
+Accepted work before the architecture reset includes deterministic addressable sampling, bounded page/cache work, scale/performance instrumentation and multi-resolution/local query/map work recorded in the Continuum system pages and development history.
 
-1. bounded page/window addressing and a cache with an explicit capacity/byte budget;
-2. cache hit/miss/load/eviction/resident metrics;
-3. deterministic eviction + reload tests;
-4. 10k, 100k and 1M logical-domain scale proofs showing memory is tied to active pages, not world area;
-5. a Continuum preview supporting pan/zoom without whole-world materialization;
-6. visible page/cache/request diagnostics.
+Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
 
-Do not begin real continents, terrain, rivers or lakes until this scaling proof is accepted.
+The next substantive Continuum/world-generation stage is intentionally blocked until PR #132 finishes and the new package/dependency/testing/documentation laws are green.
 
 ## Definitions policy
 
-Keep the useful concept of authored semantic Definitions, but do not preserve dead worldgen JSON merely because it once existed.
+Definitions describe immutable authored semantic meaning. Root definition infrastructure is neutral; domain-specific definition types/compilers belong with the owner/mechanic that consumes them.
 
-A world-generation definition is introduced only when a current semantic owner consumes it. Human-facing controls use normalized meaning, normally `0..1` or `-1..1`. Algorithm tuning constants, thresholds and physical solver coefficients live with the implementation unless they are genuinely part of content meaning.
+Human-facing semantic controls normally use normalized meaning (`0..1` or `-1..1`) where appropriate. Solver coefficients/thresholds/tuning constants remain implementation/model policy unless they are genuinely authored semantic content.
+
+## Performance policy
+
+For an unbounded/persistent world, performance is architectural:
+
+```text
+representative workload
+      ↓
+measure work/memory/latency
+      ↓
+identify hot path
+      ↓
+optimize hidden implementation
+      ↓
+prove same semantic result
+      ↓
+retain regression profile when material
+```
+
+Camera distance or visibility may not select cheaper authoritative rules. Sparse/data-oriented/ECS/packed/page representations are internal techniques, not semantic architecture.
 
 ## Fast recovery path
 
 Read in this order:
 
 ```text
+AGENTS.md
 docs/project-context.md
 docs/architecture.md
 docs/roadmap.md
-docs/systems/world-generation/overview.md
-docs/systems/world-generation/continuum-development-plan.md
+docs/decisions/025-owner-first-modular-simulation.md
+relevant docs/systems/** page
 ```
 
-Then inspect:
+Then inspect the current owner package and its tests. During architecture PR #132, inspect the PR branch rather than assuming `develop` package paths are already final.
 
-```text
-simulation/src/main/java/io/github/evoforge/simulation/world/continuum/
-simulation/src/test/java/io/github/evoforge/simulation/world/continuum/
-```
-
-If later documentation conflicts with these files and executable tests, reconcile the docs in the same change rather than relying on old chat history.
+If current normative docs conflict with executable code/tests, reconcile the contradiction in the same change. Do not use chat history as the missing source of truth.
