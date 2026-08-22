@@ -12,8 +12,8 @@ import java.util.concurrent.Executors;
 public final class ContinuumMapInspectorModel implements AutoCloseable {
     public static final long LOGICAL_SIDE = 1_000_000L;
     public static final int TILE_SAMPLE_SIDE = 128;
-    public static final int MAX_CPU_TILES = 256;
-    public static final int MAX_OUTSTANDING_JOBS = 96;
+    public static final int MAX_CPU_TILES = 384;
+    public static final int MAX_OUTSTANDING_JOBS = 192;
     public static final int WORKERS = 4;
     public static final int PREFETCH_RING = 1;
 
