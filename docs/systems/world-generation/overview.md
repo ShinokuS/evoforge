@@ -10,7 +10,7 @@ The canonical implementation sequence is fixed in [Continuum World Development P
 - Stage 1 — complete and manually accepted.
 - Stage 2 — complete and manually accepted.
 - Stage 3 — complete and manually accepted; revalidated after Stage 1/2 integration.
-- Stage 4 — **next: Map / Zoom Performance Proof**.
+- Stage 4 — **current: Map / Zoom Performance Proof**.
 - Stage 5+ — not started.
 
 ## Proven foundation
@@ -23,9 +23,15 @@ The repository now has:
 - local queries with shared regional work;
 - long-horizon time, sleeping-process scheduling and bounded history compaction primitives;
 - nested multi-resolution sampling from the same logical world;
-- automated large-world, multi-resolution and time-longevity scale profiles.
+- bounded map tiles and async map jobs;
+- parent fallback while finer map detail is pending;
+- viewport-driven map LOD and prefetch;
+- bounded CPU and presentation caches;
+- automated large-world, multi-resolution, time-longevity and map pan/zoom scale profiles.
 
-Stage 3 still passes after Stage 1/2 integration: direct L0/L5/L10 coarse queries keep the same bounded sample count and payload while covering progressively larger world areas.
+Stage 4 intentionally uses a synthetic scalar field. It proves browsing architecture, not geography.
+
+The current map scale profile runs the same 1600×900 stress movement on logical worlds with sides 1,000,000, 100,000,000 and 1,000,000,000. The resident map working set remains small and viewport-bounded instead of scaling with total world area.
 
 ## Architectural laws
 
@@ -44,10 +50,18 @@ Stage 3 still passes after Stage 1/2 integration: direct L0/L5/L10 coarse querie
 13. Cross-domain mutation uses explicit coupling/transfer.
 14. No whole-generator V16/V17/V18 lineage.
 
-## Visualizer rule
+## Current visualizer
 
-`F2` is a world-oriented spatial inspector, not a dashboard collection.
+`F2` opens the Stage 4 world-oriented map proof.
 
-When real landscape appears, the inspector must grow into a useful world-view tool with **2D map and 3D terrain modes**, pan/zoom/navigation, clear settings and switchable diagnostic layers. Presentation controls never change world truth or simulation fidelity.
+- drag with the left mouse button to move;
+- use the mouse wheel to zoom around the cursor;
+- press `Home` to fit the whole logical world;
+- press `G` to show/hide technical tile diagnostics;
+- press `Esc` to return.
 
-See [Continuum Development Plan](continuum-development-plan.md).
+The map should keep showing a valid coarse parent while finer detail is still loading, so there are no blank holes.
+
+When real landscape appears, the inspector must continue growing into a useful world-view tool with **2D map and 3D terrain modes**, pan/zoom/navigation, clear settings and switchable diagnostic layers. Presentation controls never change world truth or simulation fidelity.
+
+See [Stage 4 — Map / Zoom Performance Proof](stage4-map-zoom.md) and [Continuum Development Plan](continuum-development-plan.md).
