@@ -2,8 +2,8 @@
 eclipse.project.name = appName + '-core'
 
 dependencies {
+  // Presentation observes/controls the simulation only through :simulation public contracts.
   implementation project(':simulation')
-  implementation project(':world')
   implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
