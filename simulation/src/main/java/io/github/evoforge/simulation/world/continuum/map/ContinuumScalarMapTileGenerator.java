@@ -59,17 +59,33 @@ public final class ContinuumScalarMapTileGenerator implements ContinuumMapTileGe
         long span = tileWorldSpan(key.level());
         long originX = Math.multiplyExact(key.tileX(), span);
         long originY = Math.multiplyExact(key.tileY(), span);
+        long maxX = domain.width() - 1L;
+        long maxY = domain.height() - 1L;
         byte[] pixels = new byte[Math.multiplyExact(sampleSide, sampleSide)];
 
+        int pixelIndex = 0;
+        long worldY = originY;
         for (int y = 0; y < sampleSide; y++) {
-            long worldY = Math.min(domain.height() - 1L, Math.addExact(originY, Math.multiplyExact((long) y, step)));
+            long worldX = originX;
             for (int x = 0; x < sampleSide; x++) {
-                long worldX = Math.min(domain.width() - 1L, Math.addExact(originX, Math.multiplyExact((long) x, step)));
-                double value = clamp01(field.sample(worldX, worldY));
-                pixels[y * sampleSide + x] = (byte) Math.round(value * 255d);
+                pixels[pixelIndex++] = quantize(field.sample(worldX, worldY));
+                worldX = nextCoordinate(worldX, step, maxX);
             }
+            worldY = nextCoordinate(worldY, step, maxY);
         }
-        return new ContinuumMapTile(key, sampleSide, pixels);
+        return ContinuumMapTile.fromOwnedLuminance(key, sampleSide, pixels);
+    }
+
+    private static long nextCoordinate(long current, long step, long maximum) {
+        if (current >= maximum) return maximum;
+        long remaining = maximum - current;
+        return remaining <= step ? maximum : current + step;
+    }
+
+    private static byte quantize(double value) {
+        if (Double.isNaN(value) || value <= 0d) return 0;
+        if (value >= 1d) return (byte) 0xFF;
+        return (byte) (int) (value * 255d + 0.5d);
     }
 
     private static int computeMaxLevel(ContinuumWorldDomain domain, int sampleSide) {
@@ -86,10 +102,5 @@ public final class ContinuumScalarMapTileGenerator implements ContinuumMapTileGe
 
     private static long ceilDiv(long value, long divisor) {
         return 1L + (value - 1L) / divisor;
-    }
-
-    private static double clamp01(double value) {
-        if (Double.isNaN(value)) return 0d;
-        return Math.max(0d, Math.min(1d, value));
     }
 }
