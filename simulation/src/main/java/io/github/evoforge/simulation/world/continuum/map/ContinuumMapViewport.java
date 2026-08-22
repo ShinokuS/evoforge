@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.continuum.map;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -10,11 +11,17 @@ import java.util.Set;
  * Pure viewport planner for Stage 4.
  *
  * <p>The camera chooses only which derived representation to request. It never changes world truth.
+ * Visible tiles are requested before speculative work; nearby space and adjacent zoom levels are
+ * warmed opportunistically so normal pan/zoom usually arrives at already-ready data.</p>
  */
 public final class ContinuumMapViewport {
     private static final double TARGET_TILE_PIXELS = 192d;
+    private static final double LOD_KEEP_MIN_TILE_PIXELS = 132d;
+    private static final double LOD_KEEP_MAX_TILE_PIXELS = 288d;
     private static final double MIN_PIXELS_PER_WORLD_UNIT = 1e-9d;
     private static final double MAX_PIXELS_PER_WORLD_UNIT = 32d;
+    private static final int MAX_FINER_PREFETCH_TILES = 48;
+    private static final int MAX_COARSER_PREFETCH_TILES = 24;
 
     private final long worldWidth;
     private final long worldHeight;
@@ -27,6 +34,7 @@ public final class ContinuumMapViewport {
     private double pixelsPerWorldUnit;
     private int viewportWidthPixels;
     private int viewportHeightPixels;
+    private int selectedLevel;
     private long sourceRevision;
 
     public ContinuumMapViewport(
@@ -58,6 +66,7 @@ public final class ContinuumMapViewport {
         if (widthPixels <= 0 || heightPixels <= 0) return;
         viewportWidthPixels = widthPixels;
         viewportHeightPixels = heightPixels;
+        updateSelectedLevel();
     }
 
     public void setSourceRevision(long revision) {
@@ -81,10 +90,7 @@ public final class ContinuumMapViewport {
     }
 
     public int desiredLevel() {
-        double baseTilePixels = tileSampleSide * pixelsPerWorldUnit;
-        if (baseTilePixels <= 0d) return maxLevel;
-        double level = Math.log(TARGET_TILE_PIXELS / baseTilePixels) / Math.log(2d);
-        return clamp((int) Math.round(level), 0, maxLevel);
+        return selectedLevel;
     }
 
     public long tileWorldSpan(int level) {
@@ -98,6 +104,7 @@ public final class ContinuumMapViewport {
         pixelsPerWorldUnit = clamp(Math.min(fitX, fitY) * 0.94d, MIN_PIXELS_PER_WORLD_UNIT, MAX_PIXELS_PER_WORLD_UNIT);
         centerX = (worldWidth - 1d) * 0.5d;
         centerY = (worldHeight - 1d) * 0.5d;
+        selectedLevel = idealLevel();
     }
 
     /** Moves the camera by a screen-space drag delta. */
@@ -116,6 +123,7 @@ public final class ContinuumMapViewport {
         centerX = anchorWorldX - (screenX - viewportWidthPixels * 0.5d) / pixelsPerWorldUnit;
         centerY = anchorWorldY - (viewportHeightPixels * 0.5d - screenY) / pixelsPerWorldUnit;
         clampCenter();
+        updateSelectedLevel();
     }
 
     public double worldXAtScreen(double screenX) {
@@ -143,38 +151,72 @@ public final class ContinuumMapViewport {
         TileRange visible = visibleRange(span, 0);
         TileRange prefetched = visibleRange(span, prefetchRing);
 
-        Set<ContinuumMapTileKey> requested = new LinkedHashSet<>();
-        for (long tileY = prefetched.minY(); tileY <= prefetched.maxY(); tileY++) {
-            for (long tileX = prefetched.minX(); tileX <= prefetched.maxX(); tileX++) {
-                ContinuumMapTileKey key = new ContinuumMapTileKey(level, tileX, tileY, sourceRevision);
-                requested.add(key);
-                service.request(key);
-            }
-        }
+        List<ContinuumMapTileKey> visibleKeys = orderedKeys(visible, level, Integer.MAX_VALUE);
+        LinkedHashSet<ContinuumMapTileKey> speculative = new LinkedHashSet<>();
 
-        List<DisplayTile> display = new ArrayList<>();
+        if (level > 0) {
+            speculative.addAll(orderedKeys(
+                    visibleRange(tileWorldSpan(level - 1), 0),
+                    level - 1,
+                    MAX_FINER_PREFETCH_TILES));
+        }
+        if (level < maxLevel) {
+            speculative.addAll(orderedKeys(
+                    visibleRange(tileWorldSpan(level + 1), 0),
+                    level + 1,
+                    MAX_COARSER_PREFETCH_TILES));
+        }
+        speculative.addAll(orderedKeys(prefetched, level, Integer.MAX_VALUE));
+        speculative.removeAll(visibleKeys);
+
+        LinkedHashSet<ContinuumMapTileKey> demanded = new LinkedHashSet<>(visibleKeys);
+        demanded.addAll(speculative);
+        service.retainPendingDemand(demanded);
+
+        for (ContinuumMapTileKey key : visibleKeys) service.requestVisible(key);
+        for (ContinuumMapTileKey key : speculative) service.requestPrefetch(key);
+
+        List<DisplayTile> display = new ArrayList<>(visibleKeys.size());
         int fallbackCount = 0;
         int exactReadyCount = 0;
-        for (long tileY = visible.minY(); tileY <= visible.maxY(); tileY++) {
-            for (long tileX = visible.minX(); tileX <= visible.maxX(); tileX++) {
-                ContinuumMapTileKey target = new ContinuumMapTileKey(level, tileX, tileY, sourceRevision);
-                Optional<ContinuumMapTile> available = service.bestAvailable(target);
-                if (available.isEmpty()) continue;
-                ContinuumMapTile source = available.get();
-                int fallbackDepth = source.key().level() - target.level();
-                if (fallbackDepth == 0) exactReadyCount++;
-                else fallbackCount++;
-                display.add(new DisplayTile(target, source, fallbackDepth));
-            }
+        for (ContinuumMapTileKey target : visibleKeys) {
+            Optional<ContinuumMapTile> available = service.bestAvailable(target);
+            if (available.isEmpty()) continue;
+            ContinuumMapTile source = available.get();
+            int fallbackDepth = source.key().level() - target.level();
+            if (fallbackDepth == 0) exactReadyCount++;
+            else fallbackCount++;
+            display.add(new DisplayTile(target, source, fallbackDepth));
         }
 
         return new Frame(
                 level,
                 List.copyOf(display),
-                visible.count(),
-                requested.size(),
+                visibleKeys.size(),
+                demanded.size(),
                 exactReadyCount,
                 fallbackCount);
+    }
+
+    private List<ContinuumMapTileKey> orderedKeys(TileRange range, int level, int limit) {
+        List<ContinuumMapTileKey> keys = new ArrayList<>(range.count());
+        for (long tileY = range.minY(); tileY <= range.maxY(); tileY++) {
+            for (long tileX = range.minX(); tileX <= range.maxX(); tileX++) {
+                keys.add(new ContinuumMapTileKey(level, tileX, tileY, sourceRevision));
+            }
+        }
+
+        long span = tileWorldSpan(level);
+        double centerTileX = centerX / span;
+        double centerTileY = centerY / span;
+        keys.sort(Comparator.comparingDouble(key -> {
+            double dx = key.tileX() + 0.5d - centerTileX;
+            double dy = key.tileY() + 0.5d - centerTileY;
+            return dx * dx + dy * dy;
+        }));
+
+        if (keys.size() <= limit) return keys;
+        return new ArrayList<>(keys.subList(0, limit));
     }
 
     private TileRange visibleRange(long span, int ring) {
@@ -192,6 +234,27 @@ public final class ContinuumMapViewport {
         long minY = clamp((long) Math.floor(bottom / span) - ring, 0L, maxTileY);
         long maxY = clamp((long) Math.floor(top / span) + ring, 0L, maxTileY);
         return new TileRange(minX, maxX, minY, maxY);
+    }
+
+    private int idealLevel() {
+        double baseTilePixels = tileSampleSide * pixelsPerWorldUnit;
+        if (baseTilePixels <= 0d) return maxLevel;
+        double level = Math.log(TARGET_TILE_PIXELS / baseTilePixels) / Math.log(2d);
+        return clamp((int) Math.round(level), 0, maxLevel);
+    }
+
+    private void updateSelectedLevel() {
+        selectedLevel = clamp(selectedLevel, 0, maxLevel);
+        while (selectedLevel < maxLevel && tilePixels(selectedLevel) < LOD_KEEP_MIN_TILE_PIXELS) {
+            selectedLevel++;
+        }
+        while (selectedLevel > 0 && tilePixels(selectedLevel) > LOD_KEEP_MAX_TILE_PIXELS) {
+            selectedLevel--;
+        }
+    }
+
+    private double tilePixels(int level) {
+        return Math.scalb(tileSampleSide * pixelsPerWorldUnit, level);
     }
 
     private void clampCenter() {
