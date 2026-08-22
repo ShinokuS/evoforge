@@ -4,14 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.evoforge.simulation.definition.NormalizedValue;
-import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import org.junit.jupiter.api.Test;
 
 final class WorldGenesisTest {
 
     @Test
-    void genesisContainsOnlyStructuralInputsSeedAndHumanAuthoredDefinition() {
-        WorldSpec spec = new WorldSpec(new WorldBounds(-20, 30, -10, 40, -5, 12));
+    void genesisUsesContinuumDomainSeedAndHumanAuthoredDefinition() {
+        WorldSpec spec = new WorldSpec(new ContinuumWorldDomain(1_000_000L, 1_000_000L));
         WorldGenerationIntent intent = definition();
 
         WorldGenesis genesis = new WorldGenesis(spec, Long.MIN_VALUE, intent);
@@ -23,7 +23,7 @@ final class WorldGenesisTest {
 
     @Test
     void genesisRejectsMissingRequiredInputs() {
-        WorldSpec spec = new WorldSpec(new WorldBounds(0, 0, 0, 0, 0, 0));
+        WorldSpec spec = new WorldSpec(new ContinuumWorldDomain(1L, 1L));
         WorldGenerationIntent intent = definition();
 
         assertThrows(IllegalArgumentException.class, () -> new WorldSpec(null));
