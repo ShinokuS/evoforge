@@ -4,49 +4,37 @@
 
 The Visualizer is an observer. It may display simulation or Continuum diagnostics, but it never decides what is physically true.
 
-## Current F2 screen — Stage 1
+## Current F2 screen — Stage 2
 
-`F2` currently opens the **Stage 1 shared-local-query proof**.
+`F2` currently opens the **Stage 2 infinite-time proof**.
 
-It is intentionally simple:
+The screen is intentionally divided into three plain-language panels:
 
-- **BLUE** — an area requested by one consumer;
-- **GREEN** — a technical region calculated once and reused;
-- **YELLOW** — one consumer's returned local area; nothing outside that area is exposed to that consumer.
+1. **WORLD AGE** — compare a young world with an astronomically old world while keeping the same current sleeping working set.
+2. **SLEEPING WORK** — jump forward a huge interval and show that only due processes are handled, not every skipped tick.
+3. **HISTORY KEPT** — compact one million state changes into the current state plus a bounded recent tail.
 
-The screen shows:
-
-- number of consumers asking now;
-- total region uses without sharing;
-- unique regions actually calculated;
-- repeated region calculations avoided;
-- actual new page loads;
-- current world revision.
+It also shows a scheduler churn proof: 10,000 schedule/cancel operations leave zero queued historical tasks and one reusable handle slot.
 
 Controls:
 
 ```text
-1        one consumer
-2        ten consumers
-3        one hundred consumers
-Arrows   move the example
-R        advance world revision
-Home     center
-+/-      drawing scale only
+1        young world preset
+2        ancient world preset
+3        jump 1,000,000,000,000,000 ticks
+4        compact 1,000,000 changes
 Esc      back
 ```
 
-The expected proof is easy to see: 1, 10 and 100 strongly overlapping consumers still require the same four unique technical regions. More consumers increase local returned data, but do not multiply the expensive shared regional calculation.
-
 ## Important boundary
 
-The shared cache is not world truth. Consumers never receive whole shared pages directly; each receives only its own bounded local view.
+The inspector is a diagnostic consumer of production time/scheduling/compaction contracts. It does not own authoritative world state and does not make simulation decisions.
 
-Camera and drawing scale are presentation only.
+The long-horizon time proof does not mean final persistence is complete. Save/load persistence and the complete long-time world proof remain canonical Stage 17.
 
-## Previous Continuum inspector
+## Previous Continuum inspectors
 
-The earlier page/cache and multi-resolution inspector remains in code because that accepted support work is still useful. During Stage 1, `F2` is deliberately routed to the current Stage 1 proof so manual acceptance always matches the stage being reviewed.
+Earlier accepted Stage 1 local-query and multi-resolution inspector code remains in the repository because those proofs are still useful. During Stage 2, `F2` is deliberately routed to the current Stage 2 proof so manual acceptance always matches the stage being reviewed.
 
 ## Runtime observer boundary
 
@@ -54,6 +42,6 @@ Ordinary runtime visualization continues to read production simulation capabilit
 
 ## Manual acceptance rule
 
-A stage with spatial meaning is not complete only because tests are green. The user must be able to open the current proof and understand what the system is doing without reading internal class names.
+A stage is not complete merely because tests are green. The current proof must make the architectural behavior understandable without requiring knowledge of internal class names.
 
-See [Stage 1 — Local Query + Shared Region Cache](../world-generation/stage1-local-query.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
+See [Stage 2 — Infinite-Time Foundation](../world-generation/stage2-infinite-time.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
