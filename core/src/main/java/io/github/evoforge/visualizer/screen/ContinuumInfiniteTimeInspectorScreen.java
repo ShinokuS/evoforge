@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.utils.Align;
 import io.github.evoforge.visualizer.continuum.ContinuumInfiniteTimeInspectorModel;
 
 /** Plain visual proof that world age does not imply tick replay or retained history. */
@@ -146,9 +147,9 @@ public final class ContinuumInfiniteTimeInspectorScreen extends ScreenAdapter {
         font.draw(batch, "Tick inside era: " + model.now().tickWithinEra(), x, y);
         y -= 42f;
         font.setColor(MUTED);
-        font.draw(batch, "Age is stored as two exact integers.", x, y, width, -1, true);
+        font.draw(batch, "Age is stored as two exact integers.", x, y, width, Align.left, true);
         y -= 54f;
-        font.draw(batch, "Press 1 and 2: age changes enormously, but the same six sleeping processes still need only six wake records.", x, y, width, -1, true);
+        font.draw(batch, "Press 1 and 2: age changes enormously, but the same six sleeping processes still need only six wake records.", x, y, width, Align.left, true);
     }
 
     private void drawSleepPanel(float x, float y, float width) {
@@ -168,7 +169,7 @@ public final class ContinuumInfiniteTimeInspectorScreen extends ScreenAdapter {
         font.draw(batch, "Processes actually handled: " + model.lastWakeOperations(), x, y);
         y -= 34f;
         font.setColor(MUTED);
-        font.draw(batch, "Blue = sleeping. Green = woken. A huge time jump handles due processes once; it does not replay every missing tick.", x, y, width, -1, true);
+        font.draw(batch, "Blue = sleeping. Green = woken. A huge time jump handles due processes once; it does not replay every missing tick.", x, y, width, Align.left, true);
     }
 
     private void drawHistoryPanel(float x, float y, float width) {
@@ -187,12 +188,12 @@ public final class ContinuumInfiniteTimeInspectorScreen extends ScreenAdapter {
         font.draw(batch, "Compactions performed: " + model.compactions(), x, y);
         y -= 34f;
         font.setColor(MUTED);
-        font.draw(batch, "Press 4. One million historical changes become the current state plus a bounded recent tail, not one million permanent records.", x, y, width, -1, true);
+        font.draw(batch, "Press 4. One million historical changes become the current state plus a bounded recent tail, not one million permanent records.", x, y, width, Align.left, true);
         y -= 82f;
         font.setColor(Color.WHITE);
-        font.draw(batch, "10,000 cancelled scheduler tasks -> queue entries: " + model.schedulerChurnQueueEntries(), x, y, width, -1, true);
+        font.draw(batch, "10,000 cancelled scheduler tasks -> queue entries: " + model.schedulerChurnQueueEntries(), x, y, width, Align.left, true);
         y -= 42f;
-        font.draw(batch, "Reusable handle slots kept: " + model.schedulerChurnHandleSlots(), x, y, width, -1, true);
+        font.draw(batch, "Reusable handle slots kept: " + model.schedulerChurnHandleSlots(), x, y, width, Align.left, true);
     }
 
     private final class InspectorInput extends InputAdapter {
