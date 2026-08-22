@@ -62,8 +62,8 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 - **Stage 0 — complete.** Legacy dense worldgen is retired and the Continuum foundation exists.
 - **Stage 1 — complete and manually accepted.** Local overlapping reads share expensive regional work; PR #122.
 - **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
-- **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration by the full Gradle suite and `ContinuumScaleResolutionProfileTest`.
-- **Stage 4 — NEXT.** Map / Zoom Performance Proof.
+- **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
+- **Stage 4 — CURRENT.** Map / Zoom Performance Proof; draft PR #125, awaiting exact-head gates and manual inspection.
 - **Stage 5+ — not started.**
 
 ---
@@ -133,12 +133,90 @@ In plain language: when we look from far away, we ask the world for fewer sample
 - query order and cache eviction/rematerialization do not change results;
 - visual zoom remains presentation-only and does not change world truth;
 - Stage 3 Inspector was manually accepted by the user;
-- after Stage 1 and Stage 2 integration, the full Gradle suite and scale profile still pass, including L0/L5/L10 bounded-work checks.
+- after Stage 1 and Stage 2 integration, the full Gradle suite and scale profile still pass.
 
 **Status:** complete.
 
 ---
 
+# Stage 4 — Map / Zoom Performance Proof
+
+## Goal
+
+Browsing an enormous logical world must cost roughly what the current screen needs, not what the whole world contains.
+
+In plain language: the map loads a small set of tiles around the camera. Moving slightly reuses most of them. Zooming chooses a coarser or finer map representation automatically. If new detail is not ready, an already-ready coarse parent temporarily fills that area instead of showing a blank square.
+
+## Build
+
+- derived map tile keys include resolution, coordinates and source revision;
+- replaceable tile generator over the existing deterministic Continuum field;
+- direct map-tile generation at the requested resolution, never exact-detail generation followed by downsampling;
+- bounded asynchronous CPU tile cache;
+- single-flight generation for identical concurrent requests;
+- bounded outstanding async work during rapid camera movement;
+- parent fallback while finer detail is pending;
+- viewport-driven automatic LOD selection;
+- one small prefetch ring around the visible viewport;
+- stale-revision rejection;
+- bounded render/GPU resource cache;
+- world-oriented `F2` map with mouse drag and wheel zoom;
+- technical tile diagnostics hidden by default and toggleable with `G`.
+
+## Required proof
+
+- identical simultaneous misses perform one tile generation;
+- pending detail still has a valid coarse visual fallback;
+- rapid pan cannot grow ready tiles or pending jobs without bound;
+- changing source revision cannot display an old tile as current;
+- zoom preserves the logical world coordinate under the cursor;
+- zoom-in requests a finer map level;
+- small pan reuses most existing tiles;
+- camera movement never changes source revision/world truth;
+- render resources are LRU-bounded and disposed on eviction.
+
+## Performance
+
+The Stage 4 scale profile runs the same 1600×900 pan/zoom workload on progressively larger logical worlds.
+
+Initial GitHub-runner evidence:
+
+| Logical side | Visible tiles | CPU tiles after stress | CPU payload |
+|---:|---:|---:|---:|
+| 1,000,000 | 16 | 81 | 1,327,104 bytes |
+| 100,000,000 | 36 | 37 | 606,208 bytes |
+| 1,000,000,000 | 16 | 81 | 1,327,104 bytes |
+
+The exact timings are diagnostic only. The hard architectural result is that viewport working set stays bounded instead of scaling with total logical area.
+
+## Visual acceptance
+
+`F2` opens a map-like synthetic Continuum field.
+
+Controls:
+
+```text
+Left mouse drag  pan
+Mouse wheel      zoom around cursor
+Home             fit whole logical world
+G                toggle tile/cache diagnostics
+Esc              back
+```
+
+No blank holes should appear while requested detail is loading. With `G` enabled, green borders mean requested detail is ready; orange borders mean a coarser parent is temporarily filling that tile.
+
+This is still synthetic diagnostic data. Real geography starts at Stage 5.
+
+## Boundary
+
+Stage 4 is presentation/query infrastructure only. It does not add continents, ocean, tectonics, relief, rivers, lakes, climate or simulation LOD. Camera state never becomes authoritative world state.
+
+## Done when
+
+Gradle tests, Docs Site and Continuum Scale Profile are green on the exact PR head, the `F2` map is understandable and smooth enough for manual inspection, and the user accepts Stage 4.
+
+---
+
 ## Stage discipline
 
-The next implementation step is **Stage 4 — Map / Zoom Performance Proof**. Do not start Stage 5 geography until Stage 4 is implemented, tested, performance-profiled, visually understandable, and manually accepted.
+After Stage 4 passes automated gates and manual inspection, stop. Do not start **Stage 5 — Macro Ocean + Geophysical Skeleton** until the user explicitly accepts Stage 4 and asks to continue.
