@@ -80,6 +80,11 @@ public final class ContinuumMapTileService {
         return activeRevision;
     }
 
+    /** Immutable capacity value used by viewport prefetch planning. */
+    public int maxOutstandingJobs() {
+        return maxOutstandingJobs;
+    }
+
     /** Compatibility path: an explicit request is considered visible/high priority. */
     public CompletableFuture<ContinuumMapTile> request(ContinuumMapTileKey key) {
         return requestVisible(key);
