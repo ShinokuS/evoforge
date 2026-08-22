@@ -80,6 +80,7 @@ generation  simulation
 
 The semantic responsibilities are stricter than the package names:
 
+- **Foundation** owns neutral value types and contracts that have no knowledge of World, Generation, Simulation or Presentation.
 - **World** owns authoritative state, spatial/materialization access, revisions and persistence-facing state lifecycle.
 - **Generation** produces reproducible initial state or regeneration inputs for World. It does not own runtime physics.
 - **Simulation** owns rules, physics, scheduling, AI, solvers and policies that consume World through narrow read/mutation contracts.
@@ -87,6 +88,7 @@ The semantic responsibilities are stricter than the package names:
 
 Forbidden dependency directions:
 
+- `foundation -> world/generation/simulation/core/lwjgl3`
 - `world -> simulation`
 - `world -> core/lwjgl3`
 - `generation -> simulation`
@@ -94,7 +96,7 @@ Forbidden dependency directions:
 
 A simulation algorithm must be replaceable without changing World ownership. A generation algorithm must be replaceable without changing simulation mechanics. World must not know which solver, pathfinder, AI policy or renderer consumes its state.
 
-The first compile-time firewall is the standalone Gradle `:world` module. Its build rejects project dependencies on `:simulation`, `:core` and `:lwjgl3`. Further extraction must preserve this direction rather than reintroduce indirect service-locator coupling.
+The compile-time firewall starts with standalone Gradle `:foundation` and `:world` modules. `:foundation` rejects project dependencies on higher layers. `:world` rejects project dependencies on simulation or presentation modules. During behavior-preserving extraction, Java package names may temporarily lag physical module ownership; the dependency graph is authoritative and package cleanup is performed separately rather than mixed with semantic changes.
 
 ## Why
 
@@ -116,8 +118,10 @@ ADR-023 works together with ADR-022: this ADR limits architectural shape; ADR-02
 
 Current examples include:
 
+- `:foundation` is the dependency root; the neutral authored `NormalizedValue` is its first extracted value type and the module has a compile-time guard against depending on higher layers;
+- `:simulation` consumes `:foundation` and `:world`;
 - Continuum production code, correctness tests and Continuum-specific scale profiles live in the independent `:world` module;
-- `:simulation` consumes `:world`, while `:world` has a compile-time guard against depending on simulation or presentation modules;
+- `:world` has a compile-time guard against depending on simulation or presentation modules;
 - Continuum model, field and materialization responsibilities remain separated under `world.continuum`;
 - deterministic coordinate-addressed sampling remains isolated from bounded materialization;
 - runtime owners such as Landscape, Spatial, Occupancy, Liquids and Soil still live in `:simulation` and are the next ownership-audit area; moving them must separate authoritative state from solver/policy concerns rather than moving mixed packages wholesale;
