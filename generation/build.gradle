@@ -7,10 +7,10 @@ eclipse.project.name = appName + '-generation'
 def allowedGenerationProjectDependencies = [':foundation', ':world'] as Set
 configurations.configureEach {
     dependencies.withType(ProjectDependency).configureEach { dependency ->
-        if (!allowedGenerationProjectDependencies.contains(dependency.dependencyProject.path)) {
+        if (!allowedGenerationProjectDependencies.contains(dependency.path)) {
             throw new GradleException(
                     "generation module may depend only on :foundation and :world, not "
-                            + dependency.dependencyProject.path)
+                            + dependency.path)
         }
     }
 }
