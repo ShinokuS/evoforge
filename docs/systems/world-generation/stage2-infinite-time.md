@@ -77,25 +77,13 @@ Automated tests verify:
 
 The `Continuum Scale Profile` also compares equivalent young and astronomically old states. Their structural working-set counts must match.
 
-## F2 manual proof
+## Visualization
 
-Press `F2` in the development visualizer.
+Stage 2 deliberately has **no dedicated visual screen**.
 
-Controls:
+There is no meaningful landscape or spatial process to show yet: this stage is scheduler/time/compaction infrastructure. A dashboard full of numbers would only duplicate test output and make the visualizer harder to understand.
 
-```text
-1  young world preset
-2  astronomically old world preset
-3  jump forward 1,000,000,000,000,000 ticks
-4  compact 1,000,000 historical changes
-Esc  back
-```
-
-The three panels explain:
-
-1. **WORLD AGE** — a huge age value does not add work by itself.
-2. **SLEEPING WORK** — a giant jump handles only due processes.
-3. **HISTORY KEPT** — repeated changes compact into current state + bounded recent history.
+`F2` therefore remains the spatial Continuum Inspector. Time controls will be added later to the actual world view when there is a real mutable world whose evolution can be watched.
 
 ## Not in Stage 2
 
