@@ -65,8 +65,10 @@ Those capabilities are infrastructure. They do not change the canonical Stage 0â
 13. Cross-domain mutation uses explicit coupling/transfer.
 14. No whole-generator V16/V17/V18 lineage.
 
-## Current visual acceptance
+## Visualizer rule
 
-Run the desktop visualizer and press `F2`. The current Stage 2 proof explains world age, sleeping work, huge time jumps and retained history in three panels.
+`F2` is a world-oriented spatial inspector. Stage 2 does not replace it with a scheduler/time dashboard because this stage has no meaningful spatial state to show.
+
+Internal Stage 2 behavior is verified by tests and performance profiles. Time controls will be added to the actual world view later, when a real mutable runtime world exists.
 
 See [Stage 2 â€” Infinite-Time Foundation](stage2-infinite-time.md).
