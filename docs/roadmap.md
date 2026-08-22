@@ -2,9 +2,9 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current checkpoint — semantic capability architecture accepted
+## Current checkpoint — final semantic cleanup before Stage 5
 
-PR #132 completes the repository-wide architecture reset defined by ADR-026. The repository now uses one authoritative `:simulation` Gradle module decomposed by independent semantic concepts and consumer-neutral capabilities.
+PR #132 established the repository-wide ADR-026 architecture. PR #133 is the final cleanup gate before Stage 5: it removes residual ambiguous/umbrella boundaries and adds bytecode-level dependency/cycle enforcement.
 
 Accepted reset guarantees:
 
@@ -12,7 +12,9 @@ Accepted reset guarantees:
 - reusable capabilities such as Occupancy, Navigation, Pathfinding and Geometry are independent semantic units rather than Movement/Agent internals;
 - mechanics contain workflow-specific orchestration only;
 - lower-level world semantics do not depend on mechanics or agents;
-- legacy `world/mechanics` and forbidden generic technical roots are mechanically rejected;
+- legacy `world/mechanics` plus retired `world/spatial`, `world/landscape` and generic `world/surface` roots are mechanically rejected;
+- object Position is the explicit `world/space/position` authority/capability; generic placement is `world/space/placement`; authored material identity is `world/material`; cross-concept terrain mutation is `mechanics/terrainmutation`; sky exposure is `world/sky`;
+- ArchUnit checks production bytecode for world-module cycles and forbidden dependency direction;
 - the mandatory reuse test for new concepts lives in root `AGENTS.md`;
 - architecture fitness tests, deterministic tests, measured JaCoCo coverage floors and representative scale profiles are CI gates;
 - canonical documentation points at ADR-026 and the final package ownership;
@@ -20,7 +22,7 @@ Accepted reset guarantees:
 
 ## Next allowed world-generation work
 
-Canonical Continuum Stages 0–4 are complete. The next stage is **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 has not started. Its work begins only after PR #132 is merged into `develop`, using the semantic-capability laws as a hard boundary.
+Canonical Continuum Stages 0–4 are complete. The next stage is **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 has not started. Its work begins only after final architecture cleanup PR #133 is merged into `develop`, using ADR-026 plus the permanent ArchUnit/source fitness gates as hard boundaries.
 
 ## Accepted Continuum foundation before reset
 

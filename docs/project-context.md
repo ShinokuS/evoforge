@@ -52,7 +52,7 @@ Current laws:
 - mechanically decidable architecture laws, determinism, coverage and representative scale gates are enforced by tests/CI;
 - package placement must pass the reuse test in root `AGENTS.md`.
 
-The architecture reset is no longer a feature-development blocker after PR #132 is merged. The next world-generation checkpoint is Stage 5 — Macro Ocean + Geophysical Skeleton.
+PR #133 completes the final post-reset semantic cleanup: ArchUnit now enforces production bytecode dependency direction and top-level world-module cycle freedom; the ambiguous `world/spatial`, umbrella `world/landscape`, generic `world/surface`, and consumer-owned `world/object/placement` boundaries are retired. Stage 5 remains blocked only until PR #133 merges.
 
 ## Global simulation laws
 
@@ -82,15 +82,19 @@ simulation
 ├── genesis/           global initial-world composition only
 ├── world/             objective semantic owners
 │   ├── continuum/
-│   ├── space/
+│   ├── material/
+│   ├── object/
+│   ├── space/          position, orientation, occupancy, placement, measurement
 │   ├── geometry/
+│   ├── navigation/
 │   ├── geology/
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
 │   ├── atmosphere/
-│   └── object/
-├── mechanics/         true cross-owner laws such as Movement
+│   ├── sky/
+│   └── interaction/
+├── mechanics/         true cross-concept workflows: Movement, Hydrology, TerrainMutation
 ├── agents/            autonomous cognition/needs/perception/decision
 └── composition/       only if/where a real composition area is justified
 ```
@@ -105,7 +109,7 @@ Accepted work before the architecture reset includes deterministic addressable s
 
 Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
 
-Stages 0–4 are complete. After the architecture reset merges, the next substantive Continuum/world-generation checkpoint is Stage 5 — Macro Ocean + Geophysical Skeleton; Stage 5 has not started yet.
+Stages 0–4 are complete. Stage 5 — Macro Ocean + Geophysical Skeleton has not started. It is the next substantive world-generation checkpoint immediately after final architecture cleanup PR #133 merges.
 
 ## Definitions policy
 

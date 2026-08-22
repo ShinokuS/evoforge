@@ -133,7 +133,7 @@ The architecture suite must progressively enforce at least:
 - forbidden generic root packages do not reappear;
 - package ownership rules remain consistent with ADR-026.
 
-ArchUnit is the preferred Java-level enforcement tool when a rule is naturally expressible through classes/packages. Lightweight source/build tests may cover repository topology or conventions ArchUnit cannot see.
+ArchUnit is the active Java-level dependency enforcement tool. It imports production bytecode (excluding test classes), rejects cycles between top-level `world/*` semantic modules, protects Kernel neutrality, and prevents `world` semantics from depending on Mechanics/Agents. Lightweight source/build tests remain complementary for repository topology and naming laws that bytecode cannot see.
 
 Architecture tests complement semantic tests; they do not prove behavior.
 
