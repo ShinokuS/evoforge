@@ -19,10 +19,21 @@ def move_dir(old: str, new: str) -> None:
 
 def rewrite_text_files() -> None:
     replacements = [
+        # Java package/import names. Specific ownership moves must run before the generic rename.
         ("io.github.evoforge.simulation.world.continuum", "io.github.evoforge.world.continuum"),
         ("io.github.evoforge.simulation.world.genesis", "io.github.evoforge.generator"),
         ("io.github.evoforge.simulation.definition", "io.github.evoforge.world.definition"),
         ("io.github.evoforge.simulation", "io.github.evoforge.physics"),
+        # Hard-coded source-tree paths used by architecture contract tests.
+        ("io/github/evoforge/simulation/world/continuum", "io/github/evoforge/world/continuum"),
+        ("io/github/evoforge/simulation/world/genesis", "io/github/evoforge/generator"),
+        ("io/github/evoforge/simulation/definition", "io/github/evoforge/world/definition"),
+        ("io/github/evoforge/simulation", "io/github/evoforge/physics"),
+        ("simulation/src/main/java", "physics/src/main/java"),
+        ("simulation/src/test/java", "physics/src/test/java"),
+        ("generation/src/main/java", "generator/src/main/java"),
+        ("generation/src/test/java", "generator/src/test/java"),
+        ("simulation main Java sources", "physics main Java sources"),
     ]
     suffixes = {".java", ".gradle", ".yml", ".yaml"}
     for path in ROOT.rglob("*"):
