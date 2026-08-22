@@ -27,7 +27,9 @@ A stage is complete only after the **applicable** correctness, property, determi
 
 Tests and performance evidence are part of implementation, not later cleanup.
 
-**Visualization is required only when it genuinely helps inspect world/spatial behavior.** Do not create dashboards or artificial screens merely to satisfy a gate. Internal infrastructure such as scheduling, compaction and cache bookkeeping is proved by tests, profiles and diagnostics. The long-term `F2` Inspector is a world viewer: pan/zoom, spatial layers and later runtime time controls belong there when a real world state exists to show.
+**Visualization is required only when it genuinely helps inspect world/spatial behavior.** Do not create dashboards or artificial screens merely to satisfy a gate. Internal infrastructure such as scheduling, compaction and cache bookkeeping is proved by tests, profiles and diagnostics.
+
+The long-term `F2` Inspector is a real world viewer. Once landscape exists, it must provide a clear **2D map mode and 3D terrain mode**, free pan/zoom/navigation, understandable display settings, and switchable diagnostic layers. It should recover the useful inspection capability of the old visualizer without reintroducing the old world-generation architecture. Later runtime time controls belong on this real world view when mutable world state exists.
 
 ## Canonical Stage 0–20 sequence
 
