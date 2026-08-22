@@ -50,6 +50,29 @@ final class ContinuumMapViewportTest {
     }
 
     @Test
+    void settledViewPrewarmsTheNextFinerZoomLevel() {
+        ContinuumMapTileService service = new ContinuumMapTileService(
+                ContinuumMapViewportTest::tile,
+                Runnable::run,
+                13,
+                256,
+                96,
+                4);
+        ContinuumMapViewport viewport = new ContinuumMapViewport(1_000_000L, 1_000_000L, 128, 13, 1, 1600, 900);
+        ContinuumMapViewport.Frame settled = viewport.requestFrame(service);
+        int originalLevel = settled.desiredLevel();
+
+        int guard = 0;
+        while (viewport.desiredLevel() == originalLevel && guard++ < 12) {
+            viewport.zoomAt(1.22d, 800d, 450d);
+        }
+        assertTrue(viewport.desiredLevel() < originalLevel, "test must cross to the next finer LOD");
+
+        ContinuumMapViewport.Frame afterZoom = viewport.requestFrame(service);
+        assertEquals(0, afterZoom.fallbackCount(), "adjacent LOD prefetch should make a normal next-level zoom immediately detailed");
+    }
+
+    @Test
     void panningByLessThanOneTileReusesMostAlreadyReadyTiles() {
         ContinuumMapTileService service = new ContinuumMapTileService(
                 ContinuumMapViewportTest::tile,
