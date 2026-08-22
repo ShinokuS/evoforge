@@ -7,32 +7,33 @@ The canonical implementation sequence is fixed in [Continuum World Development P
 ## Current position
 
 - Stage 0 — complete.
-- Stage 1 — **current work: Local Query + Shared Region Cache**.
-- Stage 2 — not started.
-- Stage 3 multi-resolution support already exists from earlier work, but it does not permit skipping unfinished canonical stages.
+- Stage 1 — complete and manually accepted.
+- Stage 2 — **current work: Infinite-Time Foundation**.
+- Stage 3 multi-resolution support already exists from earlier work, but does not permit skipping Stage 2 acceptance.
 - Stage 4+ — not started.
 
-## What Stage 1 proves
+## What Stage 2 proves
 
-Consumers do not receive an omniscient world object. Each asks for one bounded local area.
+World age must not itself create work or retained history.
 
-When many consumers need overlapping areas:
+The current proof establishes:
+
+- exact long-horizon integer time (`era + tick`);
+- sleeping processes with one current future wake obligation each;
+- huge time jumps that return only due processes rather than replaying every missing tick;
+- scheduler cleanup and safe handle reuse so cancelled historical work is not retained;
+- bounded in-memory delta compaction (`checkpoint + recent tail`);
+- a scale profile comparing equivalent young and astronomically old working sets.
+
+The important rule is:
 
 ```text
-many local requests
-        ↓
-find unique technical regions
-        ↓
-calculate/load each unique region once
-        ↓
-return only each consumer's requested local slice
+cost now = current work + bounded current state
+not
+cost now = all historical ticks and events
 ```
 
-The expensive shared work scales with unique regions, not with the number of consumers making overlapping requests.
-
-The shared cache remains technical representation only. It is never authoritative world state.
-
-Every query carries a world revision. After the revision changes, old reusable regional representation cannot be returned as current data.
+Final disk persistence, save/load compaction and the full world long-time proof remain Stage 17.
 
 ## Existing large-world foundation
 
@@ -41,8 +42,8 @@ The repository already contains useful support proven by tests and profiles:
 - large `long` logical coordinates without whole-world allocation;
 - deterministic coordinate-addressed sampling;
 - bounded technical pages and explicit page/payload cache budgets;
-- eviction/rematerialization equality;
-- automated 10k / 100k / 1M scale profiling;
+- Stage 1 local queries with shared regional work;
+- automated large-world scale profiling;
 - nested multi-resolution sampling from the same logical world.
 
 Those capabilities are infrastructure. They do not change the canonical Stage 0–20 order.
@@ -66,6 +67,6 @@ Those capabilities are infrastructure. They do not change the canonical Stage 0�
 
 ## Current visual acceptance
 
-Run the desktop visualizer and press `F2`. The current Stage 1 proof shows consumer requests versus unique shared regional calculations in plain language.
+Run the desktop visualizer and press `F2`. The current Stage 2 proof explains world age, sleeping work, huge time jumps and retained history in three panels.
 
-See [Stage 1 — Local Query + Shared Region Cache](stage1-local-query.md).
+See [Stage 2 — Infinite-Time Foundation](stage2-infinite-time.md).
