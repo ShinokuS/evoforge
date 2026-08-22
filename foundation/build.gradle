@@ -1,0 +1,30 @@
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+eclipse.project.name = appName + '-foundation'
+
+// Compile-time firewall: foundation contains only neutral value types/contracts and must not
+// depend on world, generation, simulation or presentation modules.
+def forbiddenFoundationProjectDependencies = [':world', ':generation', ':simulation', ':core', ':lwjgl3'] as Set
+configurations.configureEach {
+    dependencies.withType(ProjectDependency).configureEach { dependency ->
+        if (forbiddenFoundationProjectDependencies.contains(dependency.dependencyProject.path)) {
+            throw new GradleException(
+                    "foundation module must not depend on ${dependency.dependencyProject.path}; "
+                            + "foundation is the dependency root")
+        }
+    }
+}
+
+dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = "full"
+    }
+}
