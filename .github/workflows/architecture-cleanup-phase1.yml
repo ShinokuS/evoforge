@@ -53,3 +53,5 @@ jobs:
           git diff --cached --quiet && { echo "No cleanup changes produced"; exit 1; }
           git commit -m "refactor(architecture): collapse modules into world generator physics"
           git push origin HEAD:agent/architecture-simplification
+
+      # This workflow is temporary and is removed once the repair branch has the validated tree.
