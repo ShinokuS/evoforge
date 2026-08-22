@@ -4,6 +4,7 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumMaterializer
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarField;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumRandom;
+import io.github.evoforge.simulation.world.continuum.model.ContinuumResolution;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.continuum.page.ContinuumPageCacheMetrics;
 import io.github.evoforge.simulation.world.continuum.page.ContinuumPageKey;
@@ -19,10 +20,10 @@ import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
- * Presentation-side state for the Phase 0 Continuum inspector.
+ * Presentation-side state for Continuum page/cache and multi-resolution inspection.
  *
- * <p>Moving the focus changes only which technical pages are requested. It never changes the
- * coordinate-addressed field or Continuum world truth.</p>
+ * <p>Moving the focus or changing sampling resolution changes only requested representation. It never
+ * changes the coordinate-addressed field or Continuum world truth.</p>
  */
 public final class ContinuumInspectorModel {
     public static final long DEFAULT_LOGICAL_SIDE = 1_000_000L;
@@ -32,10 +33,19 @@ public final class ContinuumInspectorModel {
     private static final int REQUEST_RADIUS = 1;
 
     private final long seed;
-    private final ContinuumPageLayout layout;
-    private final ContinuumScalarPageCache cache;
+    private final ContinuumWorldDomain domain;
+    private final ContinuumMaterializer materializer;
+    private final int pageSide;
+    private final int maxResidentPages;
+    private final long maxResidentPayloadBytes;
+    private final int maxResolutionLevel;
 
+    private ContinuumResolution resolution = ContinuumResolution.exact();
+    private ContinuumPageLayout layout;
+    private ContinuumScalarPageCache cache;
     private ContinuumPageKey focus;
+    private long focusWorldX;
+    private long focusWorldY;
     private List<ContinuumPageKey> requestedKeys = List.of();
     private Map<ContinuumPageKey, Double> requestedValues = Map.of();
     private List<ContinuumPageKey> lastEvictedKeys = List.of();
@@ -47,7 +57,7 @@ public final class ContinuumInspectorModel {
     public static ContinuumInspectorModel standard(long seed) {
         ContinuumRandom random = new ContinuumRandom(seed);
         ContinuumScalarField field = (x, y) -> random.sampleUnit(
-                "phase0-inspector",
+                "continuum-inspector",
                 x >>> 6,
                 y >>> 6,
                 0L);
@@ -73,17 +83,16 @@ public final class ContinuumInspectorModel {
         if (field == null) throw new IllegalArgumentException("field must not be null");
 
         this.seed = seed;
-        ContinuumWorldDomain domain = new ContinuumWorldDomain(logicalSide, logicalSide);
-        this.layout = new ContinuumPageLayout(domain, pageSide, pageSide);
-        ContinuumMaterializer materializer = new ContinuumMaterializer(domain, field);
+        this.pageSide = pageSide;
+        this.maxResidentPages = maxResidentPages;
+        this.domain = new ContinuumWorldDomain(logicalSide, logicalSide);
+        this.materializer = new ContinuumMaterializer(domain, field);
         long fullPagePayload = Math.multiplyExact(Math.multiplyExact((long) pageSide, pageSide), Double.BYTES);
-        this.cache = new ContinuumScalarPageCache(
-                layout,
-                materializer,
-                maxResidentPages,
-                Math.multiplyExact(fullPagePayload, (long) maxResidentPages));
-        this.focus = new ContinuumPageKey(layout.pageCountX() / 2L, layout.pageCountY() / 2L);
-        refreshRequestedNeighborhood();
+        this.maxResidentPayloadBytes = Math.multiplyExact(fullPagePayload, (long) maxResidentPages);
+        this.maxResolutionLevel = floorLog2(Math.max(domain.width(), domain.height()));
+        this.focusWorldX = (domain.width() - 1L) / 2L;
+        this.focusWorldY = (domain.height() - 1L) / 2L;
+        rebuildRepresentation();
     }
 
     public long seed() {
@@ -92,6 +101,26 @@ public final class ContinuumInspectorModel {
 
     public ContinuumPageKey focus() {
         return focus;
+    }
+
+    public int resolutionLevel() {
+        return resolution.level();
+    }
+
+    public int maxResolutionLevel() {
+        return maxResolutionLevel;
+    }
+
+    public long sampleStep() {
+        return resolution.step();
+    }
+
+    public long pageWorldSpanX() {
+        return layout.pageWorldSpanX();
+    }
+
+    public long pageWorldSpanY() {
+        return layout.pageWorldSpanY();
     }
 
     public long pageCountX() {
@@ -107,21 +136,19 @@ public final class ContinuumInspectorModel {
     }
 
     public long logicalWidth() {
-        return layout.domain().width();
+        return domain.width();
     }
 
     public long logicalHeight() {
-        return layout.domain().height();
+        return domain.height();
     }
 
     public long focusWorldX() {
-        var window = layout.windowFor(focus);
-        return window.minX() + window.width() / 2L;
+        return focusWorldX;
     }
 
     public long focusWorldY() {
-        var window = layout.windowFor(focus);
-        return window.minY() + window.height() / 2L;
+        return focusWorldY;
     }
 
     public List<ContinuumPageKey> requestedKeys() {
@@ -157,11 +184,46 @@ public final class ContinuumInspectorModel {
         ContinuumPageKey next = new ContinuumPageKey(clampedX, clampedY);
         if (next.equals(focus)) return;
         focus = next;
+        var window = layout.windowFor(focus);
+        focusWorldX = window.xAt(window.width() / 2);
+        focusWorldY = window.yAt(window.height() / 2);
         refreshRequestedNeighborhood();
     }
 
+    public void coarsenResolution() {
+        setResolutionLevel(resolution.level() + 1);
+    }
+
+    public void refineResolution() {
+        setResolutionLevel(resolution.level() - 1);
+    }
+
+    public void setResolutionLevel(int level) {
+        int clamped = (int) clamp(level, 0L, maxResolutionLevel);
+        if (clamped == resolution.level()) return;
+        resolution = new ContinuumResolution(clamped);
+        rebuildRepresentation();
+    }
+
     public void resetCenter() {
-        jumpToPage(layout.pageCountX() / 2L, layout.pageCountY() / 2L);
+        focusWorldX = (domain.width() - 1L) / 2L;
+        focusWorldY = (domain.height() - 1L) / 2L;
+        focus = layout.pageAt(focusWorldX, focusWorldY);
+        refreshRequestedNeighborhood();
+    }
+
+    private void rebuildRepresentation() {
+        layout = new ContinuumPageLayout(domain, pageSide, pageSide, resolution);
+        cache = new ContinuumScalarPageCache(
+                layout,
+                materializer,
+                maxResidentPages,
+                maxResidentPayloadBytes);
+        focus = layout.pageAt(focusWorldX, focusWorldY);
+        requestedKeys = List.of();
+        requestedValues = Map.of();
+        lastEvictedKeys = List.of();
+        refreshRequestedNeighborhood();
     }
 
     private void refreshRequestedNeighborhood() {
@@ -192,6 +254,10 @@ public final class ContinuumInspectorModel {
         requestedKeys = List.copyOf(requested);
         requestedValues = Collections.unmodifiableMap(new LinkedHashMap<>(values));
         lastEvictedKeys = List.copyOf(evicted);
+    }
+
+    private static int floorLog2(long positive) {
+        return 63 - Long.numberOfLeadingZeros(positive);
     }
 
     private static long clamp(long value, long min, long max) {

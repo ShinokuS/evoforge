@@ -18,6 +18,8 @@ final class ContinuumInspectorModelTest {
         assertEquals(9L, model.metrics().loads());
         assertEquals(9L, model.metrics().misses());
         assertEquals(0L, model.metrics().evictions());
+        assertEquals(0, model.resolutionLevel());
+        assertEquals(1L, model.sampleStep());
     }
 
     @Test
@@ -41,6 +43,50 @@ final class ContinuumInspectorModelTest {
 
         model.jumpToPage(originalFocus.pageX(), originalFocus.pageY());
         assertEquals(originalValue, model.requestedValue(originalFocus).orElseThrow());
+    }
+
+    @Test
+    void changingResolutionPreservesLogicalFocusAndKeepsWorkBounded() {
+        ContinuumInspectorModel model = model();
+        long focusX = model.focusWorldX();
+        long focusY = model.focusWorldY();
+
+        model.coarsenResolution();
+        assertEquals(1, model.resolutionLevel());
+        assertEquals(2L, model.sampleStep());
+        assertEquals(focusX, model.focusWorldX());
+        assertEquals(focusY, model.focusWorldY());
+        assertTrue(model.requestedKeys().size() <= 9);
+        assertTrue(model.metrics().residentPages() <= model.metrics().maxResidentPages());
+        assertTrue(model.metrics().residentPayloadBytes() <= model.metrics().maxResidentPayloadBytes());
+
+        model.setResolutionLevel(10);
+        assertEquals(10, model.resolutionLevel());
+        assertEquals(1_024L, model.sampleStep());
+        assertEquals(focusX, model.focusWorldX());
+        assertEquals(focusY, model.focusWorldY());
+        assertTrue(model.pageCountX() < 10L);
+        assertTrue(model.pageCountY() < 10L);
+
+        model.refineResolution();
+        assertEquals(9, model.resolutionLevel());
+    }
+
+    @Test
+    void resolutionControlsClampWithoutCreatingAlternateWorldLocation() {
+        ContinuumInspectorModel model = model();
+        long focusX = model.focusWorldX();
+        long focusY = model.focusWorldY();
+
+        model.setResolutionLevel(Integer.MAX_VALUE);
+        assertEquals(model.maxResolutionLevel(), model.resolutionLevel());
+        assertEquals(focusX, model.focusWorldX());
+        assertEquals(focusY, model.focusWorldY());
+
+        model.setResolutionLevel(Integer.MIN_VALUE);
+        assertEquals(0, model.resolutionLevel());
+        assertEquals(focusX, model.focusWorldX());
+        assertEquals(focusY, model.focusWorldY());
     }
 
     @Test

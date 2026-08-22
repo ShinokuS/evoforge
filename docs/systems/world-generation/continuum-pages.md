@@ -1,162 +1,150 @@
-# Continuum Technical Pages and Cache
+# Continuum Technical Pages, Cache and Multi-Resolution Sampling
 
 ## In plain language
 
-A Continuum world can be enormous without keeping every coordinate in memory. A **page** is only a temporary rectangular batch of samples used for work such as inspection or later local simulation preparation.
+A Continuum world can be enormous without keeping every coordinate in memory. A **page** is only a temporary rectangular batch of samples. A **resolution** says how far apart those samples are in world coordinates.
 
-Pages are not continents, regions, biomes or chunks of world truth. Moving a page boundary must never move a mountain, river or any other generated fact.
+Neither concept is geography. Pages are not continents or regions, and resolution is not simulation fidelity.
 
-## Current checkpoint
-
-Phase 0 has bounded technical page residency, an automated scale profile and a runnable visual page/cache inspector around the scalar proof field:
+## Current architecture
 
 ```text
-large logical Continuum domain
-        ↓
-ContinuumPageLayout
-  global coordinate ↔ technical page key/window
-        ↓
-ContinuumScalarPageCache
-  bounded LRU residency + metrics
+coordinate-addressed scalar truth
         ↓
 ContinuumMaterializer
         ↓
-authoritative coordinate-addressed scalar field
+ContinuumPageLayout(resolution)
+        ↓
+bounded page windows
+        ↓
+ContinuumScalarPageCache
         ↓
 observer-only Continuum Inspector
 ```
 
-Page dimensions are constructor configuration. There is deliberately no project-wide magic page size.
-
-## Page layout
-
-`ContinuumPageLayout` owns only technical addressing:
-
-- configurable page width/height;
-- page count for the current logical domain;
-- global coordinate → `ContinuumPageKey`;
-- page key → bounded `ContinuumSampleWindow`;
-- clipping of only the final world-edge page.
-
-Every page window uses global coordinates and unit sample step in this first cache proof.
-
-## Bounded cache
-
-`ContinuumScalarPageCache` has two explicit independent limits:
+`ContinuumResolution` currently uses a nested power-of-two sampling lattice:
 
 ```text
-maximum resident page count
-maximum resident scalar-payload bytes
+L0 step 1
+L1 step 2
+L2 step 4
+L3 step 8
+...
 ```
 
-If either limit would be exceeded, least-recently-used pages are evicted before the new page becomes resident.
+This is a technical sampling hierarchy, not a statement that future terrain, climate or simulation must use these exact LOD levels.
 
-The byte counter is exact for stored `double` sample payloads. It does **not** claim to measure complete JVM heap overhead.
+## One world, several sampling scales
 
-## Cache is not authority
+A coarse request does **not** generate a second world and does not generate exact detail first and downsample it.
 
-Eviction is semantically invisible:
+For a deterministic coordinate-addressed field, a page at L10 directly asks for 256×256 samples with step 1024. It therefore covers roughly 262k × 262k world units while still materializing only 65,536 scalar values.
+
+Because every coarse sample coordinate lies on the finer lattice, shared coordinates must return exactly the same value at every level.
 
 ```text
-resident page
-   ↓ evict
-no resident representation
-   ↓ request again
-authoritative field rematerializes the same global samples
+coarse coordinate (x,y)
+        ==
+that same exact world coordinate (x,y)
 ```
 
-The cache never owns generated facts. Request order or visibility can change hits/evictions, but not values.
+This nested-grid proof establishes the representation contract needed before real geographic structures exist. Later structural generators may add explicit parent constraints, but they must preserve the same law: refinement adds detail; it does not invent another reality.
 
-## Metrics for diagnostics
+## Resolution-aware page layout
 
-`ContinuumPageCacheMetrics` exposes:
+`ContinuumPageLayout` accepts an optional `ContinuumResolution`. The original constructor remains exact L0.
 
-- hits;
-- misses;
-- loads;
-- evictions;
-- resident pages;
-- resident payload bytes;
-- configured page/byte budgets.
+At resolution `step`:
 
-`residentKeys()` exposes current technical residency from least- to most-recently used.
+- page sample dimensions stay bounded;
+- one page covers `pageSamples × step` world units per axis;
+- page count falls as resolution becomes coarser;
+- edge pages contain only the samples that lie inside the logical domain;
+- payload bytes depend on sample count, not covered world area.
 
-## Automated scale profile
+## Cache remains representation only
 
-`ContinuumScaleProfileTest` runs through the existing `:simulation:scaleProfile` Gradle task and is also executed by the `Continuum Scale Profile` GitHub workflow whenever Continuum code/profile inputs change.
+Each cache instance belongs to one page layout/resolution. Changing resolution in the inspector creates a fresh bounded representation cache while preserving the logical focus coordinate and authoritative field.
 
-The current workload uses a **256×256 test page**, four resident pages, eight cold page requests and 100,000 warm cache lookups. These values define a repeatable benchmark workload only; they are not world laws or final tuning choices.
+Eviction/rematerialization remains semantically invisible at coarse resolutions exactly as at L0.
 
-For logical square worlds of 10k, 100k and 1M cells per side the profile hard-checks:
+## Performance proof
 
-- exactly four resident pages after the fixed workload;
-- exactly the same `2 MiB` scalar payload budget;
-- expected cold misses/loads/evictions;
-- warm lookups cause zero additional materializations;
-- local sample checksums are identical across logical world sizes;
-- generous upper time bounds catch catastrophic regressions.
+`ContinuumScaleResolutionProfileTest` runs in the existing `:simulation:scaleProfile` task.
 
-The report also records setup/cold/warm timing and JVM heap-used snapshots. Heap-used values are **diagnostic only** because GC/JIT make small deltas noisy; they are not presented as exact allocation counts. The hard memory guarantee at this stage is the bounded resident payload and bounded resident page count.
+On a 1,000,000 × 1,000,000 logical domain it materializes the same 256×256 page at L0, L5 and L10 and hard-checks that field work remains exactly 65,536 samples at every level even though covered world area grows dramatically.
 
-## Visual page/cache inspection
-
-The development visualizer now exposes a dedicated Phase 0 inspector from the scenario menu with `F2`.
-
-Its standard visual workload is:
+This proves the important asymptotic rule for Stage 3:
 
 ```text
-logical domain: 1,000,000 × 1,000,000
-technical page: 256 × 256
-requested neighborhood: at most 3 × 3 pages
-cache capacity: 12 pages
+larger viewed world footprint
+!=
+exact-cell work proportional to footprint area
 ```
 
-These are inspector defaults only. The display draws page boundaries without materializing every visible page. Only the requested 3×3 neighborhood calls the production cache/materializer. Previously resident pages may remain visible until normal LRU eviction.
+## Inspector
 
-The overlay shows requested, resident, recently evicted and focused pages plus hit/miss/load/eviction counters and exact scalar-payload residency. Zoom affects drawing scale only; panning changes the bounded requested neighborhood.
+`F2` opens the Continuum inspector.
 
-The shaded field is deliberately a diagnostic scalar, **not geography**. Later generation stages will replace/add overlays as real generated facts become available.
+Controls:
+
+```text
+Arrows / WASD      move one page at current resolution
+Shift + move       move eight pages
+PageDown           coarser sampling level
+PageUp             finer sampling level
++ / - / wheel      presentation zoom only
+Home               logical center
+Esc                scenario menu
+```
+
+The overlay displays:
+
+- current resolution level;
+- world-units-per-sample step;
+- world span of one technical page;
+- page counts at the current level;
+- logical focus coordinate;
+- requested/resident/evicted pages;
+- cache hit/miss/load/eviction and payload metrics.
+
+Changing sampling level preserves the same logical focus coordinate. Presentation zoom remains independent from sampling resolution.
 
 ## Verification
 
-Headless tests and the scale profile prove:
+Headless tests prove:
 
-- configurable page addressing and clipped edge pages;
-- cache hit behavior;
-- LRU eviction;
-- byte-budget eviction independent of page-count budget;
-- exact eviction/rematerialization equality;
-- tiled and untiled requests produce the same global samples;
-- 10k, 100k and 1M logical worlds keep the same resident payload budget for the same active working set;
-- repeated hot-page lookup does not rematerialize;
-- inspector movement requests at most a 3×3 neighborhood, reuses overlap and keeps residency bounded;
-- the scale workload is continuously runnable in CI with explicit timing and heap diagnostics.
+- exact L0 behavior remains backwards compatible;
+- coarse sample coordinates are nested/aligned;
+- coarse and exact materializations agree at shared world coordinates;
+- unrelated query order cannot change coarse results;
+- coarse cache eviction/rematerialization is identical;
+- page payload remains bounded while world span grows;
+- the inspector preserves logical focus while switching levels;
+- all resolution modes keep requested/resident work bounded.
 
 ## Current limitations
 
-- scalar proof pages only;
-- unit sample step in cached pages;
+- scalar proof field only;
+- nested sampling proves representation consistency, not real geographic parent constraints yet;
+- one cache instance represents one resolution at a time;
 - single-threaded cache ownership;
 - no disk persistence;
-- heap-used snapshots are not an allocation profiler;
-- no real geography overlay yet.
+- no geography overlay yet.
 
-These are deliberate Phase 0 boundaries, not geography semantics.
+These are deliberate Stage 3 boundaries.
 
 ## Code and tests
 
 ```text
-simulation/.../world/continuum/page/ContinuumPageKey.java
+simulation/.../world/continuum/model/ContinuumResolution.java
 simulation/.../world/continuum/page/ContinuumPageLayout.java
-simulation/.../world/continuum/page/ContinuumPageCacheMetrics.java
 simulation/.../world/continuum/page/ContinuumScalarPageCache.java
-simulation/.../world/continuum/ContinuumPageCacheTest.java
-simulation/.../profile/ContinuumScaleWorkload.java
-simulation/.../profile/ContinuumScaleProfileTest.java
+simulation/.../world/continuum/ContinuumMultiResolutionTest.java
+simulation/.../profile/ContinuumScaleResolutionProfileTest.java
 core/.../visualizer/continuum/ContinuumInspectorModel.java
 core/.../visualizer/screen/ContinuumInspectorScreen.java
 core/.../visualizer/continuum/ContinuumInspectorModelTest.java
-.github/workflows/continuum-scale-profile.yml
 ```
 
-See [Visualizer](../tooling/visualizer.md), [Continuum Development Plan](continuum-development-plan.md), [World Generation](overview.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).
+See [World Generation](overview.md), [Visualizer](../tooling/visualizer.md), [Continuum Development Plan](continuum-development-plan.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).

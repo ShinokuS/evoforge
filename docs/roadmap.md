@@ -4,63 +4,54 @@ The Roadmap answers two questions: **what is already real in EvoForge, and what 
 
 ## Current position
 
-EvoForge has deliberately retired the previous dense V12–V15 world-generation line. Its atlas/bootstrap/preparation/terrain/materialization/calibration/generated climate-weather generation layers and their stale regression suite are no longer the production baseline.
+The dense V12–V15 world-generation line is retired. Continuum development now advances **strictly one stage at a time** according to the canonical [Continuum World Development Plan](systems/world-generation/continuum-development-plan.md).
 
-The current world-generation baseline is the small **Continuum foundation**:
+Accepted Continuum checkpoints:
 
-- large logical coordinates without whole-world allocation;
-- deterministic addressable sampling;
-- bounded window materialization;
-- equality of shared coordinates across overlapping requests;
-- no dependency on the deleted V-numbered generator.
+- **Stage 0** — clean Continuum baseline and legacy worldgen retirement;
+- **Stage 1** — bounded technical paging/cache;
+- **Stage 2** — automated scale/performance gate plus runnable F2 page/cache inspector.
 
-See [World Generation — Continuum](systems/world-generation/overview.md) and the canonical [Continuum World Development Plan](systems/world-generation/continuum-development-plan.md).
+Current work:
 
-## Immediate next milestone — Continuum Phase 0
+- **Stage 3 — Multi-Resolution Continuum** is implemented in PR #121 and awaits manual acceptance before merge.
 
-Phase 0 is the first executable large-world proof. It must prove the architecture before real geography is reintroduced.
+No Stage 4+ work may begin until Stage 3 has been reviewed and explicitly accepted.
 
-Required scope:
+## Stage 3 scope
 
-- construct 10,000 × 10,000, 100,000 × 100,000 and 1,000,000 × 1,000,000 logical worlds without allocation proportional to area;
-- materialize only bounded requested windows/pages;
-- add an explicit bounded cache with deterministic eviction/rematerialization;
-- expose cache/page counters and resident-memory evidence;
-- prove query order and cache history cannot change generated values;
-- provide a preview capable of pan/zoom over the logical world without full-world generation;
-- display request/page/cache diagnostics in the GUI.
+Stage 3 proves that the same logical world can be read directly at several nested sampling scales:
 
-Acceptance is based on deterministic tests plus measured time/allocation/resident-memory evidence. A large logical address space that merely fits on one developer machine by allocating the whole raster fails this milestone.
+```text
+L0 step 1
+L1 step 2
+L2 step 4
+...
+```
 
-## After Phase 0
+A coarse request keeps bounded sample work and does not generate exact cells first. Shared world coordinates must produce identical authoritative values at every level.
 
-The master plan then advances one independently meaningful concern at a time: compact structural geography, continental/oceanic structure, geological causes, coherent orography, drainage/depression topology, rivers/lakes, continuous terrain reconstruction, exact XYZ materialization, climate and later runtime handoff.
+The F2 inspector exposes sampling resolution separately from presentation zoom (`PageDown/PageUp` versus `+/-/wheel`).
 
-No later phase may silently reintroduce these rejected patterns:
+## Architecture guardrails
 
-- giant full-world authoritative rasters as the default representation;
+No later stage may silently reintroduce:
+
+- giant full-world authoritative rasters;
 - camera-driven simulation fidelity;
-- feature painters that own unrelated geography;
-- V16/V17/V18-style whole-generator lineages;
-- definitions containing arbitrary algorithm tuning constants as if they were semantic content;
-- a universal mutable `WorldCell` or `WorldFact` truth store.
+- independent feature painters for unrelated geography;
+- V16/V17/V18 whole-generator lineages;
+- arbitrary solver constants masquerading as semantic Definitions;
+- universal mutable `WorldCell` / `WorldFact` truth stores.
 
 ## Stable non-worldgen foundations
 
-The repository retains the accepted simulation/runtime work outside the retired generator: deterministic scheduling/time foundations, Definitions, Terrain/Geometry/Navigation, occupancy/movement/pathfinding, autonomous agents, finite Water/Soil mechanics and observer-only diagnostics.
+The repository retains accepted deterministic simulation/runtime work outside the retired generator: scheduling/time foundations, Definitions, Terrain/Geometry/Navigation, occupancy/movement/pathfinding, autonomous agents, finite Water/Soil mechanics and observer-only diagnostics.
 
-World generation must hand initial facts to those ordinary owners rather than remain a second runtime simulation.
+Genesis must eventually hand initial facts to those ordinary owners rather than remain a second runtime simulation.
 
 ## Development rule
 
-Each Continuum phase is a green checkpoint. Applicable stages require:
+Each stage is a green checkpoint. Applicable stages require correctness, determinism/order/seam checks, measured performance and scale evidence, visual diagnostics, documentation, and explicit manual acceptance where meaningful.
 
-- semantic correctness tests;
-- determinism/locality and seam tests;
-- substitution tests at real algorithm boundaries;
-- measured performance/allocation/resident-memory evidence;
-- visual diagnostics as soon as a spatial result is meaningful;
-- explicit manual acceptance for morphology;
-- documentation updated in the same PR.
-
-A phase is not complete if its current semantics still require chat history to reconstruct.
+A stage is not complete if its semantics still require chat history to reconstruct.

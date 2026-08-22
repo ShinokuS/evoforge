@@ -16,7 +16,7 @@ import io.github.evoforge.visualizer.continuum.ContinuumInspectorModel;
 import java.util.HashSet;
 import java.util.Set;
 
-/** Developer-only Phase 0 view of Continuum technical page requests and bounded cache residency. */
+/** Developer-only Continuum page/cache and Stage 3 multi-resolution inspection surface. */
 public final class ContinuumInspectorScreen extends ScreenAdapter {
     private static final Color BACKGROUND = new Color(0.035f, 0.045f, 0.052f, 1f);
     private static final Color GRID = new Color(0.18f, 0.22f, 0.24f, 1f);
@@ -163,26 +163,34 @@ public final class ContinuumInspectorScreen extends ScreenAdapter {
         font.setColor(Color.WHITE);
         float x = 28f;
         float y = height - 28f;
-        font.draw(batch, "CONTINUUM / PHASE 0 TECHNICAL PAGE INSPECTOR", x, y);
+        font.draw(batch, "CONTINUUM / STAGE 3 MULTI-RESOLUTION INSPECTOR", x, y);
 
         font.getData().setScale(0.76f);
         font.setColor(MUTED);
         y -= 30f;
         font.draw(batch,
-                "diagnostic scalar only — NOT geography | camera/zoom affect requests, never world truth",
+                "diagnostic scalar only — nested sampling grids read the SAME coordinate-addressed field",
                 x,
                 y);
         y -= 26f;
         font.draw(batch,
                 "logical=" + model.logicalWidth() + "x" + model.logicalHeight()
-                        + "  page(test/runtime policy)=" + model.pageSide() + "x" + model.pageSide()
-                        + "  pages=" + model.pageCountX() + "x" + model.pageCountY(),
+                        + "  resolution=L" + model.resolutionLevel()
+                        + "  step=" + model.sampleStep() + " world-units/sample"
+                        + "  pageSpan=" + model.pageWorldSpanX() + "x" + model.pageWorldSpanY(),
+                x,
+                y);
+        y -= 22f;
+        font.draw(batch,
+                "pageSamples=" + model.pageSide() + "x" + model.pageSide()
+                        + "  pages@L" + model.resolutionLevel() + "=" + model.pageCountX() + "x" + model.pageCountY()
+                        + "  maxLevel=" + model.maxResolutionLevel(),
                 x,
                 y);
         y -= 22f;
         font.draw(batch,
                 "focusPage=" + model.focus().pageX() + "," + model.focus().pageY()
-                        + "  world~=" + model.focusWorldX() + "," + model.focusWorldY()
+                        + "  focusWorld=" + model.focusWorldX() + "," + model.focusWorldY()
                         + "  seed=" + Long.toUnsignedString(model.seed()),
                 x,
                 y);
@@ -201,13 +209,13 @@ public final class ContinuumInspectorScreen extends ScreenAdapter {
                         + "  misses=" + metrics.misses()
                         + "  loads=" + metrics.loads()
                         + "  evictions=" + metrics.evictions()
-                        + "  zoom=" + Math.round(pagePixels) + " px/page",
+                        + "  presentationZoom=" + Math.round(pagePixels) + " px/page",
                 x,
                 y);
 
         font.setColor(REQUEST_LINE);
         font.draw(batch,
-                "Arrows/WASD move 1 page | Shift+move 8 pages | +/- or wheel zoom | Home center | Esc back",
+                "Arrows/WASD move | Shift+move 8 pages | PageDown coarser | PageUp finer | +/-/wheel visual zoom | Home center | Esc back",
                 x,
                 28f);
         batch.end();
@@ -239,6 +247,8 @@ public final class ContinuumInspectorScreen extends ScreenAdapter {
                 case Input.Keys.RIGHT, Input.Keys.D -> model.moveFocus(step, 0L);
                 case Input.Keys.DOWN, Input.Keys.S -> model.moveFocus(0L, -step);
                 case Input.Keys.UP, Input.Keys.W -> model.moveFocus(0L, step);
+                case Input.Keys.PAGE_DOWN -> model.coarsenResolution();
+                case Input.Keys.PAGE_UP -> model.refineResolution();
                 case Input.Keys.HOME -> model.resetCenter();
                 case Input.Keys.EQUALS -> zoom(1.18f);
                 case Input.Keys.MINUS -> zoom(1f / 1.18f);
