@@ -26,10 +26,12 @@ final class LandscapeMutationBoundaryContractTest {
             Path.of(
                     "io/github/evoforge/simulation/world/landscape/LandscapeSystem.java"),
             Path.of(
-                    "io/github/evoforge/simulation/world/landscape/terrain/TerrainSystem.java"));
+                    "io/github/evoforge/simulation/world/landscape/terrain/TerrainSystem.java"),
+            Path.of(
+                    "io/github/evoforge/simulation/world/terrain/TerrainSystem.java"));
 
     @Test
-    void productionCodeUsesTerrainSystemOnlyBehindLandscapeBoundary()
+    void productionCodeUsesTerrainSystemOnlyBehindCurrentTerrainBoundary()
             throws IOException {
 
         Path mainJava = mainJava();
@@ -52,7 +54,7 @@ final class LandscapeMutationBoundaryContractTest {
                 assertFalse(
                         TERRAIN_SYSTEM_REFERENCE.matcher(source).find(),
                         () -> relative
-                                + " bypasses LandscapeMutations by depending on TerrainSystem");
+                                + " bypasses the current Terrain mutation boundary by depending on TerrainSystem");
             }
         }
     }
