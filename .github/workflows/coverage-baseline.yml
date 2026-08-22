@@ -1,0 +1,70 @@
+name: Coverage Baseline Measurement
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    if: github.head_ref == 'agent/simulation-architecture-reset'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout architecture branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Add temporary JaCoCo reporting configuration
+        shell: bash
+        run: |
+          cat >> simulation/build.gradle <<'EOF'
+
+          apply plugin: 'jacoco'
+
+          jacocoTestReport {
+              dependsOn test
+              reports {
+                  xml.required = true
+                  html.required = false
+                  csv.required = false
+              }
+          }
+          EOF
+
+      - name: Measure simulation coverage
+        run: ./gradlew :simulation:test :simulation:jacocoTestReport --no-daemon --console=plain
+
+      - name: Print measured baseline
+        shell: python
+        run: |
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path('simulation/build/reports/jacoco/test/jacocoTestReport.xml')
+          root = ET.parse(report).getroot()
+          counters = {node.attrib['type']: node.attrib for node in root.findall('counter')}
+          for kind in ('LINE', 'BRANCH', 'INSTRUCTION'):
+              data = counters[kind]
+              missed = int(data['missed'])
+              covered = int(data['covered'])
+              total = missed + covered
+              pct = covered * 100.0 / total if total else 100.0
+              print(f'{kind}: {covered}/{total} = {pct:.2f}%')
