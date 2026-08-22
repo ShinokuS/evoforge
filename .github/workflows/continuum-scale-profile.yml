@@ -3,6 +3,8 @@ name: Continuum Scale Profile
 on:
   pull_request:
     paths:
+      - 'foundation/src/main/java/**'
+      - 'foundation/build.gradle'
       - 'world/src/main/java/**'
       - 'world/src/test/java/**'
       - 'world/build.gradle'
@@ -15,6 +17,8 @@ on:
     branches:
       - develop
     paths:
+      - 'foundation/src/main/java/**'
+      - 'foundation/build.gradle'
       - 'world/src/main/java/**'
       - 'world/src/test/java/**'
       - 'world/build.gradle'
