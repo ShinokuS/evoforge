@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Repair Java imports exposed by semantic-capability package moves.
+"""Repair Java references exposed by semantic-capability package moves.
 
-Two deterministic cases are handled after the audited file migration:
-1. references that used to resolve implicitly because two types shared a package;
-2. explicit project imports whose source type moved but whose import was not covered
-   by the exact migration replacement map.
+The audited migration deliberately performs mechanical file moves and exact FQCN
+rewrites. This deterministic follow-up repairs references that Java/package moves can
+otherwise leave behind:
+1. implicit same-package type references that now require imports;
+2. stale explicit imports when a project type has one unambiguous new location;
+3. source-path literals used by architecture tests to inspect production boundaries.
 
-The repair never guesses between multiple project types with the same simple name.
+The repair never guesses between multiple project types or multiple destination
+packages.
 """
 from __future__ import annotations
 
@@ -42,6 +45,13 @@ def simple_name(fqcn: str) -> str:
     return fqcn.rsplit(".", 1)[1]
 
 
+def module_relative_java_path(path: str) -> str:
+    marker = "/src/"
+    if marker not in path:
+        raise RuntimeError(f"not a module Java path: {path}")
+    return "src/" + path.split(marker, 1)[1]
+
+
 def current_fqcn(path: Path, text: str) -> str | None:
     match = PACKAGE_RE.search(text)
     if match is None:
@@ -51,6 +61,24 @@ def current_fqcn(path: Path, text: str) -> str | None:
 
 def explicit_imports(text: str) -> set[str]:
     return {match.group(2) for match in IMPORT_LINE_RE.finditer(text)}
+
+
+def repair_source_path_literals(
+        text: str,
+        file_path_moves: list[tuple[str, str]],
+        directory_moves: dict[str, str]) -> tuple[str, int]:
+    repaired = 0
+    for old, new in file_path_moves:
+        count = text.count(old)
+        if count:
+            text = text.replace(old, new)
+            repaired += count
+    for old, new in sorted(directory_moves.items(), key=lambda item: len(item[0]), reverse=True):
+        count = text.count(old)
+        if count:
+            text = text.replace(old, new)
+            repaired += count
+    return text, repaired
 
 
 def repair_stale_project_imports(
@@ -104,15 +132,30 @@ def add_imports(text: str, imports: set[str]) -> tuple[str, int]:
 
 
 def main() -> None:
-    pairs = [
-        (fqcn_from_path(old), fqcn_from_path(new))
+    raw_pairs = [
+        (old, new)
         for old, new in load_pairs()
         if old.endswith(".java")
         and new.endswith(".java")
         and "/java/" in old
         and "/java/" in new
     ]
+    pairs = [(fqcn_from_path(old), fqcn_from_path(new)) for old, new in raw_pairs]
     old_by_new = {new: old for old, new in pairs}
+
+    file_path_moves = [
+        (module_relative_java_path(old), module_relative_java_path(new))
+        for old, new in raw_pairs
+        if module_relative_java_path(old) != module_relative_java_path(new)
+    ]
+    destination_dirs_by_source: dict[str, set[str]] = defaultdict(set)
+    for old, new in file_path_moves:
+        destination_dirs_by_source[str(Path(old).parent)].add(str(Path(new).parent))
+    directory_moves = {
+        old: next(iter(destinations))
+        for old, destinations in destination_dirs_by_source.items()
+        if len(destinations) == 1 and old != next(iter(destinations))
+    }
 
     sources: list[tuple[Path, str, str, str]] = []
     peers_by_old_package: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -134,10 +177,15 @@ def main() -> None:
     changed_files = 0
     added_imports = 0
     repaired_imports = 0
+    repaired_paths = 0
 
     for path, original_text, current, old in sources:
+        text, path_repairs = repair_source_path_literals(
+            original_text, file_path_moves, directory_moves)
+        repaired_paths += path_repairs
+
         text, repaired = repair_stale_project_imports(
-            original_text, project_types, project_types_by_simple)
+            text, project_types, project_types_by_simple)
         repaired_imports += repaired
 
         old_package = package_of(old)
@@ -171,9 +219,10 @@ def main() -> None:
             changed_files += 1
 
     print(
-        "semantic-capability import repair: "
+        "semantic-capability reference repair: "
         f"{repaired_imports} stale imports repaired, "
-        f"{added_imports} implicit imports added across {changed_files} files"
+        f"{added_imports} implicit imports added, "
+        f"{repaired_paths} source-path literals repaired across {changed_files} files"
     )
 
 
