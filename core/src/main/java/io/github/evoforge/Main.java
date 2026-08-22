@@ -9,7 +9,7 @@ import com.badlogic.gdx.graphics.GL20;
 import io.github.evoforge.logging.Slf4jApplicationLogger;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
-import io.github.evoforge.visualizer.screen.ContinuumInspectorScreen;
+import io.github.evoforge.visualizer.screen.ContinuumLocalQueryInspectorScreen;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
 import org.slf4j.Logger;
@@ -83,7 +83,7 @@ public final class Main extends Game {
     }
 
     private void showContinuumInspectorNow() {
-        replaceScreen(new ContinuumInspectorScreen(this::requestScenarioMenu));
+        replaceScreen(new ContinuumLocalQueryInspectorScreen(this::requestScenarioMenu));
     }
 
     private void replaceScreen(Screen next) {
