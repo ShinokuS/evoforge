@@ -131,7 +131,7 @@ The architecture suite must progressively enforce at least:
 - Owners do not depend on Agents/Mechanics/Presentation;
 - Continuum does not depend on Terrain/Liquid/Soil/Atmosphere/Agent semantics;
 - forbidden generic root packages do not reappear;
-- package ownership rules remain consistent with ADR-025.
+- package ownership rules remain consistent with ADR-026.
 
 ArchUnit is the preferred Java-level enforcement tool when a rule is naturally expressible through classes/packages. Lightweight source/build tests may cover repository topology or conventions ArchUnit cannot see.
 
@@ -194,17 +194,32 @@ Data-oriented/ECS/packed/sparse/page representations are permitted behind owner 
 
 Coverage is a diagnostic, not a correctness proof.
 
-EvoForge should use line/branch coverage to expose untested production paths, but **does not chase a repository-wide percentage by writing low-value tests**.
+EvoForge uses JaCoCo line/branch coverage to expose untested production paths, but **does not chase a repository-wide percentage by writing low-value tests**.
+
+The architecture-reset baseline measured on the full `:simulation` test suite was:
+
+```text
+line coverage:   85.33% (7809 / 9152)
+branch coverage: 63.84% (3518 / 5511)
+```
+
+CI deliberately enforces slightly lower regression floors:
+
+```text
+line coverage >= 82%
+branch coverage >= 60%
+```
+
+The gap from the measured baseline absorbs small instrumentation/refactor noise while still failing a material loss of executable evidence. Thresholds should be tightened deliberately when coverage improves; they must not be weakened merely to make a PR green.
 
 Rules:
 
 - new/changed semantic branches should normally receive direct evidence;
 - critical owners, deterministic algorithms, failure/rollback paths and public contracts deserve stronger coverage than trivial accessors;
 - coverage must never be increased by excluding difficult production code without an explicit reason;
-- CI coverage thresholds should be introduced from a measured baseline and tightened deliberately rather than picking an arbitrary percentage that encourages shallow tests;
 - uncovered high-risk code is reviewed by semantic risk, not hidden behind a global average.
 
-JaCoCo is the intended JVM coverage mechanism because it integrates directly with Gradle. Coverage reporting/checks are part of the architecture reset once the package migration is stable.
+JaCoCo verification is part of the required `Gradle tests` CI job.
 
 ## 11. Focused visual acceptance
 
@@ -240,10 +255,16 @@ Representative scale profiles live in `:simulation` and are tagged/separated fro
 
 ## 14. Required commands
 
-Normal full verification:
+Normal full verification with the same coverage gate as CI:
 
 ```bash
-./gradlew test --rerun-tasks --console=plain
+./gradlew test :simulation:jacocoTestCoverageVerification --no-daemon --console=plain
+```
+
+Generate an inspectable local coverage report when needed:
+
+```bash
+./gradlew :simulation:jacocoTestReport --no-daemon --console=plain
 ```
 
 Representative simulation/Continuum profiles:

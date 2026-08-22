@@ -1,3 +1,5 @@
+apply plugin: 'jacoco'
+
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 eclipse.project.name = appName + '-simulation'
@@ -19,6 +21,33 @@ test {
     testLogging {
         events "passed", "skipped", "failed"
         exceptionFormat = "full"
+    }
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn test
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.82
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.60
+            }
+        }
     }
 }
 

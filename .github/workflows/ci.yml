@@ -37,5 +37,5 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run tests
-        run: ./gradlew test --no-daemon --console=plain
+      - name: Run tests and enforce simulation coverage
+        run: ./gradlew test :simulation:jacocoTestCoverageVerification --no-daemon --console=plain
