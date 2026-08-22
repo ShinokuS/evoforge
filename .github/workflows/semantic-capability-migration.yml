@@ -33,11 +33,16 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Validate migration script
-        run: python -m py_compile tools/semantic-capability-migration.py
+      - name: Validate migration tooling
+        run: |
+          python -m py_compile tools/semantic-capability-migration.py
+          python -m py_compile tools/semantic-capability-import-repair.py
 
       - name: Apply audited semantic-capability migration
         run: python tools/semantic-capability-migration.py
+
+      - name: Repair imports exposed by package separation
+        run: python tools/semantic-capability-import-repair.py
 
       - name: Reject malformed patch output
         run: git diff --check
@@ -53,6 +58,7 @@ jobs:
         run: |
           rm -rf tools/semantic-migration-parts
           rm -f tools/semantic-capability-migration.py
+          rm -f tools/semantic-capability-import-repair.py
           rm -f .github/workflows/semantic-capability-migration.yml
           rmdir tools 2>/dev/null || true
 
