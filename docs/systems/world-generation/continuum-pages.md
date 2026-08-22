@@ -8,7 +8,7 @@ Pages are not continents, regions, biomes or chunks of world truth. Moving a pag
 
 ## Current checkpoint
 
-Phase 0 has bounded technical page residency plus an automated scale profile around the scalar proof field:
+Phase 0 has bounded technical page residency, an automated scale profile and a runnable visual page/cache inspector around the scalar proof field:
 
 ```text
 large logical Continuum domain
@@ -22,6 +22,8 @@ ContinuumScalarPageCache
 ContinuumMaterializer
         ↓
 authoritative coordinate-addressed scalar field
+        ↓
+observer-only Continuum Inspector
 ```
 
 Page dimensions are constructor configuration. There is deliberately no project-wide magic page size.
@@ -77,7 +79,7 @@ The cache never owns generated facts. Request order or visibility can change hit
 - resident payload bytes;
 - configured page/byte budgets.
 
-`residentKeys()` exposes current technical residency from least- to most-recently used. These observer facts are intentionally sufficient for the upcoming Continuum page/cache overlay without teaching presentation code cache internals.
+`residentKeys()` exposes current technical residency from least- to most-recently used.
 
 ## Automated scale profile
 
@@ -96,9 +98,28 @@ For logical square worlds of 10k, 100k and 1M cells per side the profile hard-ch
 
 The report also records setup/cold/warm timing and JVM heap-used snapshots. Heap-used values are **diagnostic only** because GC/JIT make small deltas noisy; they are not presented as exact allocation counts. The hard memory guarantee at this stage is the bounded resident payload and bounded resident page count.
 
+## Visual page/cache inspection
+
+The development visualizer now exposes a dedicated Phase 0 inspector from the scenario menu with `F2`.
+
+Its standard visual workload is:
+
+```text
+logical domain: 1,000,000 × 1,000,000
+technical page: 256 × 256
+requested neighborhood: at most 3 × 3 pages
+cache capacity: 12 pages
+```
+
+These are inspector defaults only. The display draws page boundaries without materializing every visible page. Only the requested 3×3 neighborhood calls the production cache/materializer. Previously resident pages may remain visible until normal LRU eviction.
+
+The overlay shows requested, resident, recently evicted and focused pages plus hit/miss/load/eviction counters and exact scalar-payload residency. Zoom affects drawing scale only; panning changes the bounded requested neighborhood.
+
+The shaded field is deliberately a diagnostic scalar, **not geography**. Later generation stages will replace/add overlays as real generated facts become available.
+
 ## Verification
 
-Headless tests and the scale profile now prove:
+Headless tests and the scale profile prove:
 
 - configurable page addressing and clipped edge pages;
 - cache hit behavior;
@@ -108,11 +129,8 @@ Headless tests and the scale profile now prove:
 - tiled and untiled requests produce the same global samples;
 - 10k, 100k and 1M logical worlds keep the same resident payload budget for the same active working set;
 - repeated hot-page lookup does not rematerialize;
+- inspector movement requests at most a 3×3 neighborhood, reuses overlap and keeps residency bounded;
 - the scale workload is continuously runnable in CI with explicit timing and heap diagnostics.
-
-## Visualization status
-
-This checkpoint creates no new geographic fact, so there is no aesthetic visual acceptance yet. Page residency **is** spatially useful diagnostic information; the next Phase 0 presentation checkpoint will draw page/request/cache boundaries using these metrics and resident keys.
 
 ## Current limitations
 
@@ -121,7 +139,7 @@ This checkpoint creates no new geographic fact, so there is no aesthetic visual 
 - single-threaded cache ownership;
 - no disk persistence;
 - heap-used snapshots are not an allocation profiler;
-- no Continuum GUI overlay yet.
+- no real geography overlay yet.
 
 These are deliberate Phase 0 boundaries, not geography semantics.
 
@@ -135,7 +153,10 @@ simulation/.../world/continuum/page/ContinuumScalarPageCache.java
 simulation/.../world/continuum/ContinuumPageCacheTest.java
 simulation/.../profile/ContinuumScaleWorkload.java
 simulation/.../profile/ContinuumScaleProfileTest.java
+core/.../visualizer/continuum/ContinuumInspectorModel.java
+core/.../visualizer/screen/ContinuumInspectorScreen.java
+core/.../visualizer/continuum/ContinuumInspectorModelTest.java
 .github/workflows/continuum-scale-profile.yml
 ```
 
-See [Continuum Development Plan](continuum-development-plan.md), [World Generation](overview.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).
+See [Visualizer](../tooling/visualizer.md), [Continuum Development Plan](continuum-development-plan.md), [World Generation](overview.md), and [ADR-024](../../decisions/024-continuum-large-world-architecture.md).
