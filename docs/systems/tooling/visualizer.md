@@ -27,19 +27,38 @@ It remains the common world-oriented inspection surface while Continuum is devel
 
 Stage 2 — Infinite-Time Foundation does not replace this screen with a scheduler dashboard. Its time/sleep/compaction invariants are covered by automated tests and the scale profile.
 
-## Future direction
+## Required world-inspector direction
 
-As later stages create real world content, the same world-oriented inspection approach should gain useful layers and controls instead of being replaced by isolated stage dashboards.
+Once real landscape appears, the main world inspector must grow into a practical successor to the useful parts of the old visualizer:
 
-Examples:
+- **2D map view** for large-area inspection;
+- **3D terrain view** for relief and vertical structure;
+- free pan, zoom and navigation;
+- clear display/settings controls rather than hidden debug hotkeys;
+- switchable diagnostic layers appropriate to the current stage;
+- coordinates and useful inspection information for the point/area being examined;
+- later, simulation-time controls on the same real world view when mutable runtime state exists.
+
+This is a presentation requirement only. 2D/3D mode, camera position, zoom and enabled layers must never change Genesis truth, simulation activity or physical accuracy.
+
+The visualizer may evolve incrementally as new world data becomes available; we do not build fake landscape or premature controls merely to approximate the final UI before there is meaningful data to show.
+
+## Future diagnostic layers
+
+Examples as later stages create real world content:
 
 - ocean / land;
 - continuous elevation;
+- slope / curvature;
+- uplift / erosion / deposition;
 - drainage / watersheds;
+- depressions / spill points;
 - rivers and lake levels;
+- climate;
+- geology / sediment / soil;
 - exact XYZ materialization;
 - active/sleeping runtime water;
-- simulation time controls when a mutable runtime world exists.
+- simulation time and runtime revisions.
 
 ## Observer boundary
 
