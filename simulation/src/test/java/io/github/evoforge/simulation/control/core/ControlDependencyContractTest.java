@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.control.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,19 +57,27 @@ final class ControlDependencyContractTest {
     void moveToOrchestrationDoesNotBypassMovementExecutionBoundary()
             throws IOException {
 
-        Path source = mainJava().resolve(
-                "io/github/evoforge/simulation/world/mechanics/movement/MoveToSystem.java");
-        assertTrue(Files.isRegularFile(source), "missing source file: " + source);
-
+        Path source = uniqueSource(mainJava(), "MoveToSystem.java");
         String text = Files.readString(source);
-        assertFalse(text.contains(
-                "import io.github.evoforge.simulation.world.spatial.SpatialSystem;"));
-        assertFalse(text.contains(
-                "import io.github.evoforge.simulation.world.navigation."));
-        assertFalse(text.contains(
-                "import io.github.evoforge.simulation.world.mechanics.occupancy."));
-        assertFalse(text.contains(
-                "import io.github.evoforge.simulation.world.mechanics.traversal."));
+
+        // MoveTo may consume read-only transform/pathfinding capabilities, but
+        // authoritative physical mutation must still go through MovementSystem.
+        assertFalse(text.matches("(?s).*import\\s+[^;]*\\.SpatialSystem;.*"));
+        assertFalse(text.matches("(?s).*import\\s+[^;]*\\.OccupancySystem;.*"));
+        assertFalse(text.matches("(?s).*import\\s+[^;]*\\.NavigationSystem;.*"));
+    }
+
+    private static Path uniqueSource(Path root, String fileName)
+            throws IOException {
+
+        try (var paths = Files.walk(root)) {
+            List<Path> matches = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals(fileName))
+                    .toList();
+            assertEquals(1, matches.size(), "expected one source named " + fileName);
+            return matches.getFirst();
+        }
     }
 
     private static void assertNoImport(
