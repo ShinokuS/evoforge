@@ -1,11 +1,11 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcing;
-import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSchedule;
-import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSchedule;
-import io.github.evoforge.simulation.world.mechanics.measurement.PhysicalCellVolume;
+import io.github.evoforge.simulation.mechanics.hydrology.AtmosphericWaterForcing;
+import io.github.evoforge.simulation.mechanics.hydrology.EvaporationSchedule;
+import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSchedule;
+import io.github.evoforge.simulation.world.space.measurement.PhysicalCellVolume;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 import java.util.List;
 import java.util.Map;
 

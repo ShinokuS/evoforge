@@ -198,7 +198,7 @@ Those are distinct future mechanics/queries and should not be packed into one un
 Primary implementation lives under:
 
 ```text
-simulation/.../world/mechanics/traversal/
+simulation/.../world/navigation/traversal/
 ```
 
 Tests cover endpoint averaging, grid lengths, Shape-factor role ownership, missing-definition failure, lower-bound validity and Pathfinding optimality against zero-heuristic reference search.

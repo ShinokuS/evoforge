@@ -63,8 +63,9 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 - **Stage 1 — complete and manually accepted.** Local overlapping reads share expensive regional work; PR #122.
 - **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
 - **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
-- **Stage 4 — CURRENT.** Map / Zoom Performance Proof; draft PR #125, awaiting exact-head gates and manual inspection.
-- **Stage 5+ — not started.**
+- **Stage 4 — complete and manually accepted.** Map / Zoom Performance Proof; PR #125 merged. Revalidated during the architecture reset.
+- **Stage 5 — NEXT, not started.** Macro Ocean + Geophysical Skeleton begins after architecture reset PR #132 merges.
+- **Stage 6+ — not started.**
 
 ---
 
@@ -219,4 +220,4 @@ Gradle tests, Docs Site and Continuum Scale Profile are green on the exact PR he
 
 ## Stage discipline
 
-After Stage 4 passes automated gates and manual inspection, stop. Do not start **Stage 5 — Macro Ocean + Geophysical Skeleton** until the user explicitly accepts Stage 4 and asks to continue.
+Stage 4 is accepted. The architecture reset is the final prerequisite before **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 remains not started until PR #132 is merged; after that merge it is the next canonical implementation checkpoint.

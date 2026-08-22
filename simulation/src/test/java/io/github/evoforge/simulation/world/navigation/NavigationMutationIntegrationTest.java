@@ -7,12 +7,12 @@ import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
-import io.github.evoforge.simulation.world.landscape.terrain.storage.SparseTerrainStorage;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionPorts;
+import io.github.evoforge.simulation.world.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 final class NavigationMutationIntegrationTest {
 

@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.world.spatial.indexes;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
+import io.github.evoforge.simulation.world.space.position.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.ObjectSpatialIndex;
 
 import java.util.ArrayList;

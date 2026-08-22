@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
+import io.github.evoforge.simulation.world.soil.SoilProperties;
 import org.junit.jupiter.api.Test;
 
 final class PreStartSoilPropertiesLookupTest {

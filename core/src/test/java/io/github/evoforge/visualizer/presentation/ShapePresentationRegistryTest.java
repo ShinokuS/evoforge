@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import org.junit.jupiter.api.Test;
 
 final class ShapePresentationRegistryTest {

@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.landscape;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.IOException;
@@ -22,17 +23,14 @@ final class LandscapeMutationBoundaryContractTest {
     private static final Pattern LINE_COMMENT =
             Pattern.compile("//.*$", Pattern.MULTILINE);
 
-    private static final Set<Path> ALLOWED_OWNERS = Set.of(
-            Path.of(
-                    "io/github/evoforge/simulation/world/landscape/LandscapeSystem.java"),
-            Path.of(
-                    "io/github/evoforge/simulation/world/landscape/terrain/TerrainSystem.java"));
-
     @Test
-    void productionCodeUsesTerrainSystemOnlyBehindLandscapeBoundary()
+    void productionCodeUsesTerrainSystemOnlyBehindCurrentTerrainBoundary()
             throws IOException {
 
         Path mainJava = mainJava();
+        Set<Path> allowedOwners = Set.of(
+                uniqueSource(mainJava, "LandscapeSystem.java"),
+                uniqueSource(mainJava, "TerrainSystem.java"));
 
         try (var paths = Files.walk(mainJava)) {
             List<Path> javaFiles =
@@ -41,8 +39,7 @@ final class LandscapeMutationBoundaryContractTest {
                             .toList();
 
             for (Path javaFile : javaFiles) {
-                Path relative = mainJava.relativize(javaFile);
-                if (ALLOWED_OWNERS.contains(relative)) {
+                if (allowedOwners.contains(javaFile)) {
                     continue;
                 }
 
@@ -51,9 +48,22 @@ final class LandscapeMutationBoundaryContractTest {
 
                 assertFalse(
                         TERRAIN_SYSTEM_REFERENCE.matcher(source).find(),
-                        () -> relative
-                                + " bypasses LandscapeMutations by depending on TerrainSystem");
+                        () -> mainJava.relativize(javaFile)
+                                + " bypasses the current Terrain mutation boundary by depending on TerrainSystem");
             }
+        }
+    }
+
+    private static Path uniqueSource(Path root, String fileName)
+            throws IOException {
+
+        try (var paths = Files.walk(root)) {
+            List<Path> matches = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals(fileName))
+                    .toList();
+            assertEquals(1, matches.size(), "expected one source named " + fileName);
+            return matches.getFirst();
         }
     }
 

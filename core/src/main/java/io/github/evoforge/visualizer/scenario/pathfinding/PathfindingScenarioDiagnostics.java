@@ -1,10 +1,10 @@
 package io.github.evoforge.visualizer.scenario.pathfinding;
 
-import io.github.evoforge.simulation.world.pathfinding.PathQuery;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
-import io.github.evoforge.simulation.world.pathfinding.PathSearch;
-import io.github.evoforge.simulation.world.pathfinding.PathSearchMetrics;
-import io.github.evoforge.simulation.world.pathfinding.PathSearchStatus;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchMetrics;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 import io.github.evoforge.visualizer.presentation.route.RoutePresentation;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarkerStyle;

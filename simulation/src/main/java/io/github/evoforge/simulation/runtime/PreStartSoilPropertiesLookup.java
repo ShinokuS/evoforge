@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.world.landscape.soil.SoilProperties;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
+import io.github.evoforge.simulation.world.soil.SoilProperties;
+import io.github.evoforge.simulation.world.soil.SoilPropertiesLookup;
 
 /**
  * Stable runtime reference whose authoritative source may be selected once during assembly.

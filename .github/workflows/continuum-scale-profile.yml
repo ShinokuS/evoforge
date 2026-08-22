@@ -3,34 +3,16 @@ name: Continuum Scale Profile
 on:
   pull_request:
     paths:
-      - 'foundation/src/main/java/**'
-      - 'foundation/build.gradle'
-      - 'world/src/main/java/**'
-      - 'world/src/test/java/**'
-      - 'world/build.gradle'
-      - 'generation/src/main/java/**'
-      - 'generation/src/test/java/**'
-      - 'generation/build.gradle'
-      - 'simulation/src/main/java/io/github/evoforge/simulation/time/**'
-      - 'simulation/src/test/java/io/github/evoforge/simulation/time/**'
-      - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumTime*'
+      - 'simulation/src/main/java/**'
+      - 'simulation/src/test/java/**'
       - 'simulation/build.gradle'
       - '.github/workflows/continuum-scale-profile.yml'
   push:
     branches:
       - develop
     paths:
-      - 'foundation/src/main/java/**'
-      - 'foundation/build.gradle'
-      - 'world/src/main/java/**'
-      - 'world/src/test/java/**'
-      - 'world/build.gradle'
-      - 'generation/src/main/java/**'
-      - 'generation/src/test/java/**'
-      - 'generation/build.gradle'
-      - 'simulation/src/main/java/io/github/evoforge/simulation/time/**'
-      - 'simulation/src/test/java/io/github/evoforge/simulation/time/**'
-      - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumTime*'
+      - 'simulation/src/main/java/**'
+      - 'simulation/src/test/java/**'
       - 'simulation/build.gradle'
       - '.github/workflows/continuum-scale-profile.yml'
   workflow_dispatch:
@@ -64,5 +46,5 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run scale profiles
-        run: ./gradlew :world:scaleProfile :simulation:scaleProfile --no-daemon --console=plain
+      - name: Run Continuum and simulation scale profiles
+        run: ./gradlew :simulation:scaleProfile --no-daemon --console=plain

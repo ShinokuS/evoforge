@@ -1,21 +1,21 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.control.core.CommandDispatcher;
-import io.github.evoforge.simulation.control.movement.CancelMoveToCommand;
-import io.github.evoforge.simulation.control.movement.CancelMoveToHandler;
-import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.movement.MoveStepHandler;
-import io.github.evoforge.simulation.control.movement.MoveToCommand;
-import io.github.evoforge.simulation.control.movement.MoveToHandler;
-import io.github.evoforge.simulation.control.sync.SynchronousCommandGateway;
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainHandler;
-import io.github.evoforge.simulation.control.terrain.ReplaceTerrainCommand;
-import io.github.evoforge.simulation.control.terrain.ReplaceTerrainHandler;
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
+import io.github.evoforge.simulation.kernel.command.CommandDispatcher;
+import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.CancelMoveToHandler;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepHandler;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToHandler;
+import io.github.evoforge.simulation.kernel.command.SynchronousCommandGateway;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainHandler;
+import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainHandler;
+import io.github.evoforge.simulation.world.liquid.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
-import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 
 /** Final one-way transition from configured pre-start state into a scheduled simulation runtime. */
 final class SimulationRuntimeStarter {

@@ -7,15 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.control.movement.MoveStepCommand;
-import io.github.evoforge.simulation.control.movement.MoveStepResult;
-import io.github.evoforge.simulation.control.movement.MoveToCommand;
-import io.github.evoforge.simulation.control.movement.MoveToResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
+import io.github.evoforge.simulation.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 
 final class WaterWadingRuntimeIntegrationTest {
 

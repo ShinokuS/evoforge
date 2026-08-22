@@ -3,7 +3,7 @@ package io.github.evoforge.visualizer.visual;
 import java.util.Arrays;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 
 /**
  * Resolves landscape presentation from geometry rather than absolute Z values.

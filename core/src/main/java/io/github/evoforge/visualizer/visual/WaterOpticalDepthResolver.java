@@ -1,13 +1,13 @@
 package io.github.evoforge.visualizer.visual;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceLookup;
+import io.github.evoforge.simulation.world.geometry.CellSpace;
+import io.github.evoforge.simulation.world.space.measurement.CellVolume;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.Shape;
 
 /**
  * Presentation-only Water depth derived from authoritative XYZ quantity + geometry.

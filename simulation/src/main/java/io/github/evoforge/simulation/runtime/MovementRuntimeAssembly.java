@@ -1,24 +1,24 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.time.BoundProcessScheduler;
-import io.github.evoforge.simulation.time.HandlerId;
-import io.github.evoforge.simulation.time.ProcessScheduler;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToSystem;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementActionProcessor;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementStepCompletionRelay;
-import io.github.evoforge.simulation.world.mechanics.movement.MovementSystem;
-import io.github.evoforge.simulation.world.mechanics.traversal.MoverDestinationAccessResolver;
-import io.github.evoforge.simulation.world.mechanics.traversal.MoverTraversalQueryConstraintProvider;
-import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostCalculator;
-import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundCalculator;
-import io.github.evoforge.simulation.world.mechanics.traversal.TransitionCostLowerBoundLookup;
-import io.github.evoforge.simulation.world.mechanics.traversal.water.WaterWadingConstraint;
-import io.github.evoforge.simulation.world.pathfinding.ExactAStarPathfinder;
-import io.github.evoforge.simulation.world.pathfinding.HierarchicalPathfinder;
-import io.github.evoforge.simulation.world.pathfinding.PathHeuristics;
-import io.github.evoforge.simulation.world.pathfinding.PathHierarchyConfig;
-import io.github.evoforge.simulation.world.pathfinding.PathHierarchyIndex;
-import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
+import io.github.evoforge.simulation.kernel.scheduling.BoundProcessScheduler;
+import io.github.evoforge.simulation.kernel.scheduling.HandlerId;
+import io.github.evoforge.simulation.kernel.scheduling.ProcessScheduler;
+import io.github.evoforge.simulation.mechanics.movement.MoveToSystem;
+import io.github.evoforge.simulation.mechanics.movement.MovementActionProcessor;
+import io.github.evoforge.simulation.mechanics.movement.MovementStepCompletionRelay;
+import io.github.evoforge.simulation.mechanics.movement.MovementSystem;
+import io.github.evoforge.simulation.world.navigation.traversal.MoverDestinationAccessResolver;
+import io.github.evoforge.simulation.mechanics.movement.MoverTraversalQueryConstraintProvider;
+import io.github.evoforge.simulation.world.navigation.traversal.TransitionCostCalculator;
+import io.github.evoforge.simulation.world.navigation.traversal.TransitionCostLowerBoundCalculator;
+import io.github.evoforge.simulation.world.navigation.traversal.TransitionCostLowerBoundLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.water.WaterWadingConstraint;
+import io.github.evoforge.simulation.world.navigation.pathfinding.ExactAStarPathfinder;
+import io.github.evoforge.simulation.world.navigation.pathfinding.HierarchicalPathfinder;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathHeuristics;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathHierarchyConfig;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathHierarchyIndex;
+import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;
 
 /** Builds timed movement, traversal constraints and long-range pathfinding. */
 final class MovementRuntimeAssembly {

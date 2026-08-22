@@ -1,57 +1,80 @@
 # Roadmap
 
-The Roadmap answers two questions: **what is already real in EvoForge, and what is intentionally next?** Exact mechanic behavior belongs in [Systems](systems/); global rules belong in [Architecture](architecture.md).
+The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current position
+## Current checkpoint — semantic capability architecture accepted
 
-The dense V12–V15 world-generation line is retired. Continuum development now advances **strictly one stage at a time** according to the canonical [Continuum World Development Plan](systems/world-generation/continuum-development-plan.md).
+PR #132 completes the repository-wide architecture reset defined by ADR-026. The repository now uses one authoritative `:simulation` Gradle module decomposed by independent semantic concepts and consumer-neutral capabilities.
 
-Accepted Continuum checkpoints:
+Accepted reset guarantees:
 
-- **Stage 0** — clean Continuum baseline and legacy worldgen retirement;
-- **Stage 1** — bounded technical paging/cache;
-- **Stage 2** — automated scale/performance gate plus runnable F2 page/cache inspector.
+- `:simulation`, `:core` and `:lwjgl3` are the only code/Gradle modules;
+- reusable capabilities such as Occupancy, Navigation, Pathfinding and Geometry are independent semantic units rather than Movement/Agent internals;
+- mechanics contain workflow-specific orchestration only;
+- lower-level world semantics do not depend on mechanics or agents;
+- legacy `world/mechanics` and forbidden generic technical roots are mechanically rejected;
+- the mandatory reuse test for new concepts lives in root `AGENTS.md`;
+- architecture fitness tests, deterministic tests, measured JaCoCo coverage floors and representative scale profiles are CI gates;
+- canonical documentation points at ADR-026 and the final package ownership;
+- temporary migration/refactor workflows are removed before merge.
 
-Current work:
+## Next allowed world-generation work
 
-- **Stage 3 — Multi-Resolution Continuum** is implemented in PR #121 and awaits manual acceptance before merge.
+Canonical Continuum Stages 0–4 are complete. The next stage is **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 has not started. Its work begins only after PR #132 is merged into `develop`, using the semantic-capability laws as a hard boundary.
 
-No Stage 4+ work may begin until Stage 3 has been reviewed and explicitly accepted.
+## Accepted Continuum foundation before reset
 
-## Stage 3 scope
+The previous dense V12–V15 world-generation line remains retired. Continuum is the canonical large-world direction.
 
-Stage 3 proves that the same logical world can be read directly at several nested sampling scales:
+Accepted foundations include the staged work already present in `develop` around:
 
-```text
-L0 step 1
-L1 step 2
-L2 step 4
-...
-```
+- deterministic addressable large-world sampling;
+- bounded technical paging/cache behavior;
+- cache/request/scale diagnostics;
+- representative 10k/100k/1M-style scale evidence where implemented;
+- multi-resolution/local-query/map foundations already merged before the reset.
 
-A coarse request keeps bounded sample work and does not generate exact cells first. Shared world coordinates must produce identical authoritative values at every level.
+The architecture reset may move these files, but must not silently change their accepted semantics.
 
-The F2 inspector exposes sampling resolution separately from presentation zoom (`PageDown/PageUp` versus `+/-/wheel`).
+## Continuum guardrails after reset
 
-## Architecture guardrails
-
-No later stage may silently reintroduce:
+Later work must not reintroduce:
 
 - giant full-world authoritative rasters;
-- camera-driven simulation fidelity;
-- independent feature painters for unrelated geography;
-- V16/V17/V18 whole-generator lineages;
+- camera-driven authoritative fidelity;
+- chunks/pages/tiles as natural geography or second truth;
+- independent feature painters that create contradictory geography;
+- V16/V17/V18 whole-generator lineages instead of replaceable owner-local algorithms;
 - arbitrary solver constants masquerading as semantic Definitions;
-- universal mutable `WorldCell` / `WorldFact` truth stores.
+- universal mutable `WorldCell` / `WorldFact` truth stores;
+- global `generation/<domain>` or `physics/<domain>` trees that scatter semantic owners.
 
-## Stable non-worldgen foundations
+## Stable foundations that the reset must preserve
 
-The repository retains accepted deterministic simulation/runtime work outside the retired generator: scheduling/time foundations, Definitions, Terrain/Geometry/Navigation, occupancy/movement/pathfinding, autonomous agents, finite Water/Soil mechanics and observer-only diagnostics.
+Existing accepted simulation work includes deterministic time/scheduling, authored Definitions, objective geometry/terrain foundations, movement/navigation/pathfinding/occupancy behavior, autonomous agents, finite Liquid/Water/Soil mechanics, environmental water processes and observer-only diagnostics.
 
-Genesis must eventually hand initial facts to those ordinary owners rather than remain a second runtime simulation.
+The reset is allowed to change package/type ownership and remove obsolete facades. It is not allowed to change accepted behavior accidentally.
 
 ## Development rule
 
-Each stage is a green checkpoint. Applicable stages require correctness, determinism/order/seam checks, measured performance and scale evidence, visual diagnostics, documentation, and explicit manual acceptance where meaningful.
+Every future stage is a green checkpoint:
 
-A stage is not complete if its semantics still require chat history to reconstruct.
+```text
+owner + invariant
+      ↓
+small coherent implementation
+      ↓
+focused correctness evidence
+      ↓
+architecture checks
+      ↓
+representative scale/performance evidence where relevant
+      ↓
+documentation reconciliation
+      ↓
+explicit acceptance
+```
+
+A stage is not complete if its semantics, ownership, algorithms or current status still require chat history to reconstruct.
+
+See [Project Context](project-context.md), [Architecture](architecture.md), [ADR-026](decisions/026-semantic-capability-architecture.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).

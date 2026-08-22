@@ -5,14 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import io.github.evoforge.simulation.world.agent.CapabilityId;
-import io.github.evoforge.simulation.world.agent.decision.AgentDecisionTrace;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
-import io.github.evoforge.simulation.world.agent.search.AgentSearchStatus;
+import io.github.evoforge.simulation.agents.CapabilityId;
+import io.github.evoforge.simulation.agents.decision.AgentDecisionTrace;
+import io.github.evoforge.simulation.agents.need.NeedId;
+import io.github.evoforge.simulation.agents.search.AgentSearchStatus;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 import org.junit.jupiter.api.Test;
 
 final class CowAutonomyIntegrationTest {

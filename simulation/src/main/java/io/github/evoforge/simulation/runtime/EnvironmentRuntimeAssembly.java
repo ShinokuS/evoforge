@@ -1,23 +1,23 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.time.BoundProcessScheduler;
-import io.github.evoforge.simulation.time.HandlerId;
-import io.github.evoforge.simulation.time.ProcessScheduler;
-import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingProcess;
-import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingResult;
-import io.github.evoforge.simulation.world.environment.atmosphere.AtmosphericWaterForcingSystem;
-import io.github.evoforge.simulation.world.environment.evaporation.EvaporationSystem;
-import io.github.evoforge.simulation.world.environment.evaporation.PeriodicEvaporationSystem;
-import io.github.evoforge.simulation.world.environment.precipitation.PeriodicPrecipitationSystem;
-import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationEventLookup;
-import io.github.evoforge.simulation.world.environment.precipitation.PrecipitationSystem;
-import io.github.evoforge.simulation.world.environment.precipitation.SkyPrecipitationSystem;
-import io.github.evoforge.simulation.world.environment.sky.VerticalSkySurfaceSystem;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowProcess;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidFlowSystem;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidSurfaceRetentionLookup;
-import io.github.evoforge.simulation.world.landscape.liquid.TerrainSurfaceRetentionLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidInfiltrationSystem;
+import io.github.evoforge.simulation.kernel.scheduling.BoundProcessScheduler;
+import io.github.evoforge.simulation.kernel.scheduling.HandlerId;
+import io.github.evoforge.simulation.kernel.scheduling.ProcessScheduler;
+import io.github.evoforge.simulation.mechanics.hydrology.AtmosphericWaterForcingProcess;
+import io.github.evoforge.simulation.mechanics.hydrology.AtmosphericWaterForcingResult;
+import io.github.evoforge.simulation.mechanics.hydrology.AtmosphericWaterForcingSystem;
+import io.github.evoforge.simulation.mechanics.hydrology.EvaporationSystem;
+import io.github.evoforge.simulation.mechanics.hydrology.PeriodicEvaporationSystem;
+import io.github.evoforge.simulation.mechanics.hydrology.PeriodicPrecipitationSystem;
+import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationEventLookup;
+import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSystem;
+import io.github.evoforge.simulation.mechanics.hydrology.SkyPrecipitationSystem;
+import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.world.liquid.LiquidFlowProcess;
+import io.github.evoforge.simulation.world.liquid.LiquidFlowSystem;
+import io.github.evoforge.simulation.world.liquid.LiquidSurfaceRetentionLookup;
+import io.github.evoforge.simulation.world.liquid.TerrainSurfaceRetentionLookup;
+import io.github.evoforge.simulation.mechanics.hydrology.SoilLiquidInfiltrationSystem;
 
 /** Builds and schedules atmosphere, free-liquid flow and soil infiltration runtime processes. */
 final class EnvironmentRuntimeAssembly {

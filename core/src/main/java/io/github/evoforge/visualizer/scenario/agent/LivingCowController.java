@@ -1,8 +1,8 @@
 package io.github.evoforge.visualizer.scenario.agent;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.agent.decision.AgentIntentTrace;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
+import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
+import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.visualizer.scenario.ScenarioCellMarker;
 import io.github.evoforge.visualizer.scenario.ScenarioController;

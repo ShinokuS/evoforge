@@ -239,7 +239,7 @@ Deferred:
 Primary code:
 
 ```text
-simulation/.../world/mechanics/occupancy/
+simulation/.../world/space/occupancy/
 simulation/.../world/object/placement/
 ```
 

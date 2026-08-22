@@ -1,10 +1,10 @@
+apply plugin: 'jacoco'
+
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 eclipse.project.name = appName + '-simulation'
 
 dependencies {
-    implementation project(':foundation')
-    implementation project(':world')
     implementation "com.google.code.gson:gson:$gsonVersion"
     implementation "org.slf4j:slf4j-api:$slf4jVersion"
 
@@ -24,8 +24,35 @@ test {
     }
 }
 
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn test
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.82
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.60
+            }
+        }
+    }
+}
+
 tasks.register('scaleProfile', Test) {
-    description = 'Runs the representative living-world scale profile.'
+    description = 'Runs all representative simulation and Continuum scale/performance profiles.'
     group = 'verification'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath

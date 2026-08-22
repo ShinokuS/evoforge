@@ -25,6 +25,11 @@ gradle-app.setting
 hs_err_pid*
 *.attach_pid*
 
+## Python:
+
+__pycache__/
+*.py[cod]
+
 ## Documentation / Node.js:
 
 /node_modules/

@@ -361,7 +361,7 @@ These should be introduced as concrete mechanics behind existing perception/oppo
 Primary code lives under:
 
 ```text
-simulation/.../world/agent/
+simulation/.../agents/
 simulation/.../world/mechanics/interaction/
 simulation/.../world/mechanics/consumption/
 simulation/.../world/mechanics/growth/

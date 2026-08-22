@@ -287,7 +287,7 @@ These are not modes to add to one giant API preemptively.
 Primary code:
 
 ```text
-simulation/.../world/pathfinding/
+simulation/.../world/navigation/pathfinding/
 ```
 
 Representative tests compare exact A* cost against zero-heuristic reference search, verify deterministic expansion budgets/ties, staleness/cancellation, constraints, 3D ramps, hierarchy preflight/invalidation and production MoveTo integration.

@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
+import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 
 final class WorldBoundsHydrologyIntegrationTest {
 

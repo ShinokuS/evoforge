@@ -1,10 +1,10 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.control.core.Command;
-import io.github.evoforge.simulation.control.core.CommandResult;
-import io.github.evoforge.simulation.control.sync.SynchronousCommandGateway;
-import io.github.evoforge.simulation.time.SimulationStepper;
-import io.github.evoforge.simulation.time.SimulationTime;
+import io.github.evoforge.simulation.kernel.command.Command;
+import io.github.evoforge.simulation.kernel.command.CommandResult;
+import io.github.evoforge.simulation.kernel.command.SynchronousCommandGateway;
+import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
+import io.github.evoforge.simulation.kernel.time.SimulationTime;
 
 /**
  * Started simulation runtime. Setup mutation is intentionally absent here.

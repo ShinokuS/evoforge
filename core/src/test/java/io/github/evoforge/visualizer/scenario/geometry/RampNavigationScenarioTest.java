@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.geometry;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.geometry.TransitionMask;
 import org.junit.jupiter.api.Test;
 
 final class RampNavigationScenarioTest {

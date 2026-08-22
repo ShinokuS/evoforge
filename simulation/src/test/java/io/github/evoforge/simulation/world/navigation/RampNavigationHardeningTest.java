@@ -9,10 +9,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.TransitionMask;
+import io.github.evoforge.simulation.world.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.TransitionMask;
 
 final class RampNavigationHardeningTest {
 

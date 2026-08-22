@@ -2,8 +2,8 @@ package io.github.evoforge.visualizer.scenario.agent;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.agent.CapabilityId;
-import io.github.evoforge.simulation.world.agent.need.NeedId;
+import io.github.evoforge.simulation.agents.CapabilityId;
+import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;

@@ -1,6 +1,6 @@
 package io.github.evoforge.visualizer;
 
-import io.github.evoforge.simulation.time.SimulationStepper;
+import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
 
 /**
  * Presentation-owned mapping from real frame time to production simulation ticks.

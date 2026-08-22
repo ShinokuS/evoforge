@@ -3,9 +3,9 @@ package io.github.evoforge.visualizer.render;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.SurfaceBoundaryContinuity;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import io.github.evoforge.visualizer.VisualizerState;
 

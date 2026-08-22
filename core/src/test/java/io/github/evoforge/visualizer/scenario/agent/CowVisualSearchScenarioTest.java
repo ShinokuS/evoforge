@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 import org.junit.jupiter.api.Test;
 

@@ -7,13 +7,13 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceConsumer;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceConsumer;
-import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellVolume;
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceConsumer;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceConsumer;
+import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceLookup;
+import io.github.evoforge.simulation.world.space.measurement.CellVolume;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 
 final class WaterOpticalDepthResolverTest {
 

@@ -10,16 +10,16 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.result.OperationResults;
+import io.github.evoforge.simulation.kernel.operation.OperationResults;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainPlacementResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainRemovalResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainReplacementResult;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainStorage;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometrySystem;
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.terrain.TerrainPlacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainRemovalResult;
+import io.github.evoforge.simulation.world.terrain.TerrainReplacementResult;
+import io.github.evoforge.simulation.world.terrain.TerrainStorage;
+import io.github.evoforge.simulation.world.terrain.TerrainSystem;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.GeometrySystem;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 
 final class LandscapeSystemTest {
 

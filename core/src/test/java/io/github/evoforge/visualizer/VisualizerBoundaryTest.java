@@ -3,8 +3,8 @@ package io.github.evoforge.visualizer;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.time.SimulationStepper;
-import io.github.evoforge.simulation.time.SimulationTime;
+import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
+import io.github.evoforge.simulation.kernel.time.SimulationTime;
 import org.junit.jupiter.api.Test;
 
 final class VisualizerBoundaryTest {

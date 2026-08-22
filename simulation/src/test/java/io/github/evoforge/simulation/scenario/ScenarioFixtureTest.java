@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainCommand;
-import io.github.evoforge.simulation.control.terrain.PlaceTerrainResult;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.FullShape;
 
 final class ScenarioFixtureTest {
 

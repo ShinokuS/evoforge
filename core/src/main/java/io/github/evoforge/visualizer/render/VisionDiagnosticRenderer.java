@@ -5,12 +5,12 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.time.SimulationTime;
-import io.github.evoforge.simulation.world.agent.perception.vision.VisibleCell;
-import io.github.evoforge.simulation.world.agent.perception.vision.VisibleObject;
-import io.github.evoforge.simulation.world.agent.perception.vision.VisionSnapshot;
+import io.github.evoforge.simulation.kernel.time.SimulationTime;
+import io.github.evoforge.simulation.agents.perception.vision.VisibleCell;
+import io.github.evoforge.simulation.agents.perception.vision.VisibleObject;
+import io.github.evoforge.simulation.agents.perception.vision.VisionSnapshot;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.spatial.orientation.FacingDirection;
+import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import io.github.evoforge.visualizer.VisualizerState;
 

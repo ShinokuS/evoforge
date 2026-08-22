@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitionCompiler;
-import io.github.evoforge.simulation.world.mechanics.physical.PhysicalDefinitions;
+import io.github.evoforge.simulation.world.object.physical.PhysicalDefinitionCompiler;
+import io.github.evoforge.simulation.world.object.physical.PhysicalDefinitions;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.WorldObject;

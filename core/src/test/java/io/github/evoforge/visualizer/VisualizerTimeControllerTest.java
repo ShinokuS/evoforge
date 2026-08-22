@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.time.HandlerRegistry;
-import io.github.evoforge.simulation.time.Scheduler;
-import io.github.evoforge.simulation.time.SimulationClock;
-import io.github.evoforge.simulation.time.SimulationStepper;
+import io.github.evoforge.simulation.kernel.scheduling.HandlerRegistry;
+import io.github.evoforge.simulation.kernel.scheduling.Scheduler;
+import io.github.evoforge.simulation.kernel.time.SimulationClock;
+import io.github.evoforge.simulation.kernel.scheduling.SimulationStepper;
 import org.junit.jupiter.api.Test;
 
 final class VisualizerTimeControllerTest {

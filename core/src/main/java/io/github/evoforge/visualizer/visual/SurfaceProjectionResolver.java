@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.visual;
 
 import io.github.evoforge.simulation.runtime.SimulationView;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 
 /**
  * Cheap column-local projection used by the default open-world top-down view.

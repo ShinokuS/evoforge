@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToCompletion;
+import io.github.evoforge.simulation.mechanics.movement.MoveToCompletion;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.visualizer.scenario.ScenarioController;
 import io.github.evoforge.visualizer.scenario.ScenarioDiagnostics;

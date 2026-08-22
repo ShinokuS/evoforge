@@ -1,9 +1,9 @@
 package io.github.evoforge.visualizer.visual;
 
-import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellSpace;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.liquid.water.WaterLookup;
+import io.github.evoforge.simulation.world.geometry.CellSpace;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.geometry.Shape;
 
 /**
  * Resolves the nearest Water layer visible through the selected horizontal cut.

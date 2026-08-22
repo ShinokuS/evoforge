@@ -6,11 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.control.movement.MoveToCommand;
-import io.github.evoforge.simulation.control.movement.MoveToResult;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
+import io.github.evoforge.simulation.mechanics.movement.command.MoveToResult;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.world.object.ObjectId;
-import io.github.evoforge.simulation.world.pathfinding.PathRoute;
+import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.visualizer.presentation.portal.ViewPortal;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
 

@@ -1,31 +1,31 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.world.agent.decision.AgentDecisionLookup;
-import io.github.evoforge.simulation.world.agent.need.NeedLookup;
-import io.github.evoforge.simulation.world.agent.need.progression.NeedProgressionLookup;
-import io.github.evoforge.simulation.world.agent.perception.vision.VisionLookup;
-import io.github.evoforge.simulation.world.agent.search.AgentSearchLookup;
-import io.github.evoforge.simulation.world.landscape.liquid.LiquidSurfaceRetentionLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilLiquidLookup;
-import io.github.evoforge.simulation.world.landscape.soil.SoilPropertiesLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainExtentLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainRevisionLookup;
-import io.github.evoforge.simulation.world.landscape.terrain.TerrainSurfaceLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterFlowLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterLookup;
-import io.github.evoforge.simulation.world.landscape.water.WaterSurfaceLookup;
-import io.github.evoforge.simulation.world.mechanics.consumption.ConsumableStockLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.GeometryLookup;
-import io.github.evoforge.simulation.world.mechanics.growth.GrowthLookup;
-import io.github.evoforge.simulation.world.mechanics.movement.MoveToView;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
+import io.github.evoforge.simulation.agents.decision.AgentDecisionLookup;
+import io.github.evoforge.simulation.agents.need.NeedLookup;
+import io.github.evoforge.simulation.agents.need.progression.NeedProgressionLookup;
+import io.github.evoforge.simulation.agents.perception.vision.VisionLookup;
+import io.github.evoforge.simulation.agents.search.AgentSearchLookup;
+import io.github.evoforge.simulation.world.liquid.LiquidSurfaceRetentionLookup;
+import io.github.evoforge.simulation.world.soil.SoilLiquidLookup;
+import io.github.evoforge.simulation.world.soil.SoilPropertiesLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainExtentLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainRevisionLookup;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterFlowLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterLookup;
+import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceLookup;
+import io.github.evoforge.simulation.world.object.stock.ConsumableStockLookup;
+import io.github.evoforge.simulation.world.geometry.GeometryLookup;
+import io.github.evoforge.simulation.world.object.stock.growth.GrowthLookup;
+import io.github.evoforge.simulation.mechanics.movement.MoveToView;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
-import io.github.evoforge.simulation.world.pathfinding.Pathfinder;
-import io.github.evoforge.simulation.world.spatial.CellObjectLookup;
+import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;
+import io.github.evoforge.simulation.world.space.position.CellObjectLookup;
 import io.github.evoforge.simulation.world.spatial.TransformLookup;
-import io.github.evoforge.simulation.world.spatial.orientation.OrientationLookup;
+import io.github.evoforge.simulation.world.space.orientation.OrientationLookup;
 
 /** Read-only capabilities exposed by a started simulation runtime. */
 public record SimulationView(
