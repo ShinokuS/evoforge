@@ -22,7 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "tools" / "semantic-capability-migration.py"
 PACKAGE_RE = re.compile(r"(?m)^package\s+([A-Za-z_][\w.]*)\s*;")
 IMPORT_LINE_RE = re.compile(r"(?m)^import\s+(static\s+)?([A-Za-z_][\w.]*)\s*;")
-SOURCE_LITERAL_RE = re.compile(r'"(src/(?:main|test)/java/[A-Za-z0-9_./$-]+)"')
+SOURCE_LITERAL_RE = re.compile(
+    r'"((?:src/(?:main|test)/java/)?io/github/evoforge/[A-Za-z0-9_./$-]+)"'
+)
 
 
 def load_pairs() -> list[tuple[str, str]]:
@@ -64,16 +66,22 @@ def explicit_imports(text: str) -> set[str]:
     return {match.group(2) for match in IMPORT_LINE_RE.finditer(text)}
 
 
-def resolve_missing_source_literal(literal: str) -> str | None:
-    existing = [module for module in ("simulation", "core") if (ROOT / module / literal).exists()]
-    if existing:
-        return literal
-
+def source_literal_parts(literal: str) -> tuple[Path, Path]:
     relative = Path(literal)
-    source_prefix = Path(*relative.parts[:4])  # src/main/java or src/test/java
-    leaf = relative.name
-    candidates: list[tuple[str, Path]] = []
+    if literal.startswith("src/"):
+        return Path(*relative.parts[:3]), Path(*relative.parts[3:])
+    return Path("src/main/java"), relative
 
+
+def resolve_missing_source_literal(literal: str) -> str | None:
+    source_prefix, logical_relative = source_literal_parts(literal)
+
+    for module in ("simulation", "core"):
+        if (ROOT / module / source_prefix / logical_relative).exists():
+            return literal
+
+    leaf = logical_relative.name
+    candidates: list[tuple[str, Path, Path]] = []
     for module in ("simulation", "core"):
         source_root = ROOT / module / source_prefix
         if not source_root.exists():
@@ -83,12 +91,16 @@ def resolve_missing_source_literal(literal: str) -> str | None:
         else:
             found = [path for path in source_root.rglob(leaf) if path.is_dir()]
         for path in found:
-            candidates.append((module, path))
+            candidates.append((module, source_root, path))
 
     if len(candidates) != 1:
         return None
-    module, target = candidates[0]
-    return target.relative_to(ROOT / module).as_posix()
+
+    _, source_root, target = candidates[0]
+    logical_target = target.relative_to(source_root).as_posix()
+    if literal.startswith("src/"):
+        return (source_prefix / logical_target).as_posix()
+    return logical_target
 
 
 def repair_source_path_literals(
