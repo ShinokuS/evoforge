@@ -20,8 +20,8 @@ import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchMetr
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathTransitionConstraint;
 import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 
 final class MoveToQueryConstraintProviderTest {
 
@@ -39,8 +39,8 @@ final class MoveToQueryConstraintProviderTest {
         ObjectId objectId = new ObjectFactory(objects, objectDefinitions)
                 .create(walker)
                 .id();
-        CellSpatialIndex cells = new CellSpatialIndex();
-        SpatialSystem spatial = new SpatialSystem(cells);
+        CellPositionIndex cells = new CellPositionIndex();
+        PositionSystem spatial = new PositionSystem(cells);
         spatial.place(objectId, 0, 0, 0);
 
         OccupancyDefinitions occupancyDefinitions = new OccupancyDefinitions();
@@ -57,7 +57,7 @@ final class MoveToQueryConstraintProviderTest {
         ProcessScheduler unusedScheduler = (delay, processId) -> { };
         MovementSystem movement = new MovementSystem(
                 objects,
-                spatial.transforms(),
+                spatial.positions(),
                 (x, y, z) -> 0,
                 movementDefinitions,
                 (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1),
@@ -84,7 +84,7 @@ final class MoveToQueryConstraintProviderTest {
             return noPathSearch();
         };
         MoveToSystem moveTo = new MoveToSystem(
-                spatial.transforms(),
+                spatial.positions(),
                 pathfinder,
                 movement,
                 provider);

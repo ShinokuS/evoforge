@@ -47,7 +47,7 @@ final class ControlDependencyContractTest {
 
         // MoveTo may consume read-only transform/pathfinding capabilities, but
         // authoritative physical mutation must still go through MovementSystem.
-        assertFalse(text.matches("(?s).*import\\s+[^;]*\\.SpatialSystem;.*"));
+        assertFalse(text.matches("(?s).*import\\s+[^;]*\\.PositionSystem;.*"));
         assertFalse(text.matches("(?s).*import\\s+[^;]*\\.OccupancySystem;.*"));
         assertFalse(text.matches("(?s).*import\\s+[^;]*\\.NavigationSystem;.*"));
     }

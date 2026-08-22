@@ -9,7 +9,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 
 final class GeometrySystemTest {
@@ -258,8 +258,8 @@ final class GeometrySystemTest {
     private static final class TestTerrainLookup
             implements TerrainLookup {
 
-        private static final LandscapeDefinitionId TERRAIN =
-                LandscapeDefinitionId.of(0);
+        private static final MaterialDefinitionId TERRAIN =
+                MaterialDefinitionId.of(0);
 
         private final Set<Cell> terrain =
                 new HashSet<>();
@@ -274,7 +274,7 @@ final class GeometrySystemTest {
         }
 
         @Override
-        public LandscapeDefinitionId find(
+        public MaterialDefinitionId find(
                 int x,
                 int y,
                 int z) {

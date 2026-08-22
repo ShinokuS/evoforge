@@ -8,10 +8,10 @@ import io.github.evoforge.simulation.mechanics.movement.command.MoveStepHandler;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveToHandler;
 import io.github.evoforge.simulation.kernel.command.SynchronousCommandGateway;
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainHandler;
-import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
-import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainHandler;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainHandler;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.ReplaceTerrainHandler;
 import io.github.evoforge.simulation.world.liquid.water.WaterFlowLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.WorldObject;
@@ -65,7 +65,7 @@ final class SimulationRuntimeStarter {
 
         SimulationView view = new SimulationView(
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 world.orientations,
                 agents.vision(),
                 world.landscape.terrain(),

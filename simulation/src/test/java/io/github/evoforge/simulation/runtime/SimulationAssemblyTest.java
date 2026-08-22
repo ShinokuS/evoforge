@@ -5,9 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
-import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
-import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.ReplaceTerrainResult;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
@@ -18,7 +18,7 @@ final class SimulationAssemblyTest {
     @Test
     void closesSetupMutationAfterStartAndExposesReadOnlyRuntimeView() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:walker");
         assembly.movementRate(walker, 100);
         ObjectId objectId = assembly.createObject(walker);
@@ -36,8 +36,8 @@ final class SimulationAssemblyTest {
     @Test
     void runtimeTerrainReplacementUsesControlBoundary() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:replace_ground", 1000);
-        LandscapeDefinitionId slow = assembly.landscapeDefinition("test:replace_slow", 6000);
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:replace_ground", 1000);
+        MaterialDefinitionId slow = assembly.landscapeDefinition("test:replace_slow", 6000);
         assembly.placeTerrain(1, 0, -1, ground);
         SimulationRuntime runtime = assembly.start();
         assertEquals(ReplaceTerrainResult.REPLACED,
@@ -50,7 +50,7 @@ final class SimulationAssemblyTest {
     @Test
     void movementUsesProductionGraphAndKeepsCellIndexSynchronized() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:walker");
         assembly.movementRate(walker, 1000);
         ObjectId objectId = assembly.createObject(walker);

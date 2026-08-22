@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 
 final class SurfaceHydrologyIntegrationTest {
@@ -12,7 +12,7 @@ final class SurfaceHydrologyIntegrationTest {
     @Test
     void configuredPrecipitationRunsOnCadenceAndFeedsRetainedWater() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId soil =
+        MaterialDefinitionId soil =
                 assembly.landscapeDefinition("test:soil");
         assembly.soilProperties(
                 soil,
@@ -46,7 +46,7 @@ final class SurfaceHydrologyIntegrationTest {
     @Test
     void periodicEvaporationDriesRetainedWaterAndSkipsSharedRainTicks() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId soil =
+        MaterialDefinitionId soil =
                 assembly.landscapeDefinition("test:soil");
         assembly.soilProperties(
                 soil,
@@ -86,7 +86,7 @@ final class SurfaceHydrologyIntegrationTest {
     @Test
     void runtimeWithoutEnvironmentSchedulesRemainsHydrologicallyIdle() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId terrain =
+        MaterialDefinitionId terrain =
                 assembly.landscapeDefinition("test:terrain");
         assembly.placeTerrain(0, 0, 0, terrain);
 

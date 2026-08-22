@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
@@ -20,7 +20,7 @@ public final class PathfindingUnreachableScenario implements VisualizerScenario 
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_unreachable_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_unreachable_ground");
         ScenarioTerrain.fill(assembly, ground, 0, 5, -2, 2, -1);
         ScenarioTerrain.fill(assembly, ground, 10, 15, -2, 2, -1);
         SimulationRuntime runtime = assembly.start();

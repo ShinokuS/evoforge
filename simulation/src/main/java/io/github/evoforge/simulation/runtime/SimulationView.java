@@ -24,13 +24,13 @@ import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;
 import io.github.evoforge.simulation.world.space.position.CellObjectLookup;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import io.github.evoforge.simulation.world.space.orientation.OrientationLookup;
 
 /** Read-only capabilities exposed by a started simulation runtime. */
 public record SimulationView(
         ObjectLookup objects,
-        TransformLookup transforms,
+        PositionLookup positions,
         OrientationLookup orientations,
         VisionLookup vision,
         TerrainLookup terrain,
@@ -57,7 +57,7 @@ public record SimulationView(
         AgentSearchLookup searches) {
 
     public SimulationView {
-        if (objects == null || transforms == null || orientations == null || vision == null
+        if (objects == null || positions == null || orientations == null || vision == null
                 || terrain == null || terrainExtents == null || terrainSurfaces == null
                 || terrainRevision == null || geometry == null || soilLiquids == null
                 || soilProperties == null || surfaceRetention == null

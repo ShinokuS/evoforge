@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.profile;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
@@ -97,7 +97,7 @@ final class NavigationScaleWorkload {
     private static SimulationRuntime create(int side) {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(0, side - 1, 0, side - 1, -1, 1);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("profile:navigation-ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("profile:navigation-ground");
 
         for (int x = 0; x < side; x++) {
             boolean wallColumn = x >= 2 && x <= side - 3 && Math.floorMod(x - 2, 4) == 0;

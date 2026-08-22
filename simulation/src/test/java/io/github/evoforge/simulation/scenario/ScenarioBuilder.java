@@ -1,7 +1,7 @@
 package io.github.evoforge.simulation.scenario;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.navigation.traversal.SurfaceTraversalCost;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -19,7 +19,7 @@ public final class ScenarioBuilder {
         return new ScenarioBuilder();
     }
 
-    public LandscapeDefinitionId landscapeDefinition(
+    public MaterialDefinitionId landscapeDefinition(
             String key) {
 
         return landscapeDefinition(
@@ -27,7 +27,7 @@ public final class ScenarioBuilder {
                 SurfaceTraversalCost.NEUTRAL_UNITS);
     }
 
-    public LandscapeDefinitionId landscapeDefinition(
+    public MaterialDefinitionId landscapeDefinition(
             String key,
             long traversalCostUnits) {
 
@@ -78,7 +78,7 @@ public final class ScenarioBuilder {
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
 
         assembly.placeTerrain(
                 x,

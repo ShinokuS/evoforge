@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.mechanics.hydrology;
 
 import java.util.TreeSet;
 
-import io.github.evoforge.simulation.world.surface.SkySurface;
-import io.github.evoforge.simulation.world.surface.SkySurfaceLookup;
+import io.github.evoforge.simulation.world.sky.SkySurface;
+import io.github.evoforge.simulation.world.sky.SkySurfaceLookup;
 import io.github.evoforge.simulation.world.soil.SoilLiquidCellsLookup;
 import io.github.evoforge.simulation.world.soil.SoilLiquidSystem;
 import io.github.evoforge.simulation.world.liquid.water.WaterSurfaceLookup;

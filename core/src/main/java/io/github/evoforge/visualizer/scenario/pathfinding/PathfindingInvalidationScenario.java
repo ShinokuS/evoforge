@@ -1,11 +1,11 @@
 package io.github.evoforge.visualizer.scenario.pathfinding;
 
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
-import io.github.evoforge.simulation.world.terrain.command.ReplaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.ReplaceTerrainCommand;
 import io.github.evoforge.simulation.kernel.operation.OperationResults;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
@@ -36,8 +36,8 @@ public final class PathfindingInvalidationScenario implements VisualizerScenario
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_invalidation_ground", 1000);
-        LandscapeDefinitionId slow = assembly.landscapeDefinition("scenario:path_invalidation_slow", 9000);
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_invalidation_ground", 1000);
+        MaterialDefinitionId slow = assembly.landscapeDefinition("scenario:path_invalidation_slow", 9000);
         ScenarioTerrain.fill(assembly, ground, 0, 20, -1, 1, -1);
         SimulationRuntime runtime = assembly.start();
         PathQuery query = PathQuery.between(0, CENTER_Y, 0, 20, CENTER_Y, 0);
@@ -53,8 +53,8 @@ public final class PathfindingInvalidationScenario implements VisualizerScenario
 
     private static final class InvalidationController implements ScenarioController {
         private final SimulationRuntime runtime;
-        private final LandscapeDefinitionId ground;
-        private final LandscapeDefinitionId slow;
+        private final MaterialDefinitionId ground;
+        private final MaterialDefinitionId slow;
         private final PathQuery query;
         private final PathSearch initialVisibleSearch;
         private PathSearch watchedSearch;
@@ -63,8 +63,8 @@ public final class PathfindingInvalidationScenario implements VisualizerScenario
 
         private InvalidationController(
                 SimulationRuntime runtime,
-                LandscapeDefinitionId ground,
-                LandscapeDefinitionId slow,
+                MaterialDefinitionId ground,
+                MaterialDefinitionId slow,
                 PathQuery query,
                 PathSearch initialVisibleSearch,
                 PathSearch watchedSearch) {

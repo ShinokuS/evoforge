@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.agents.need.progression.NeedProgressionTrace;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -76,7 +76,7 @@ final class NeedProgressionIntegrationTest {
     @Test
     void initiallySatisfiedCowBecomesHungryAndExistingAgentBehaviorConsumesFood() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:physiology_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:physiology_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:physiology_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:physiology_grass");
 

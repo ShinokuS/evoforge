@@ -2,7 +2,7 @@ package io.github.evoforge.visualizer.scenario.pathfinding;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
@@ -21,7 +21,7 @@ public final class PathfindingStraightScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:path_straight_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:path_straight_ground");
         ScenarioTerrain.fill(assembly, ground, 0, 12, 0, 0, -1);
         SimulationRuntime runtime = assembly.start();
         PathQuery query = PathQuery.between(0, 0, 0, 12, 0, 0);

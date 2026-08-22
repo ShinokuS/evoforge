@@ -7,9 +7,9 @@ import io.github.evoforge.simulation.definition.DefinitionRegistry;
 import io.github.evoforge.simulation.mechanics.hydrology.EvaporationSystem;
 import io.github.evoforge.simulation.mechanics.hydrology.PrecipitationSystem;
 import io.github.evoforge.simulation.mechanics.hydrology.SkyPrecipitationSystem;
-import io.github.evoforge.simulation.world.surface.VerticalSkySurfaceSystem;
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.sky.VerticalSkySurfaceSystem;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
@@ -112,10 +112,10 @@ final class AtmosphericWaterForcingSystemTest {
     private interface ColumnRate { CellVolumeRate at(int x, int y); }
 
     private static final class Fixture {
-        private final DefinitionRegistry<LandscapeDefinitionId> definitions =
-                new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
-        private final LandscapeDefinitionId ground = definitions.register("test:ground");
-        private final LandscapeSystem landscape = LandscapeSystem.create(
+        private final DefinitionRegistry<MaterialDefinitionId> definitions =
+                new DefinitionRegistry<>(MaterialDefinitionId::of, MaterialDefinitionId::asInt);
+        private final MaterialDefinitionId ground = definitions.register("test:ground");
+        private final TerrainMutationWorkflow landscape = TerrainMutationWorkflow.create(
                 new SparseTerrainStorage(), definitions);
         private final SoilPropertiesDefinitions soilProperties = new SoilPropertiesDefinitions();
         private final LiquidTransportDefinitions transport = new LiquidTransportDefinitions();

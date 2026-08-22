@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
@@ -23,7 +23,7 @@ public final class OccupancyContentionScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:occupancy_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:occupancy_ground");
         ObjectDefinitionId moverDefinition = assembly.objectDefinition("scenario:exclusive_mover");
         assembly.movementRate(moverDefinition, 500);
         assembly.exclusiveOccupancy(moverDefinition);

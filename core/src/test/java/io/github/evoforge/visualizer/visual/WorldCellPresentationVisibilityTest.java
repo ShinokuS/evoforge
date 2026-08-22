@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.visualizer.VisualizerState;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +14,7 @@ final class WorldCellPresentationVisibilityTest {
     @Test
     void surfaceViewShowsStandingCellsAcrossSeveralZLevelsAtOnce() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:route_surface");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:route_surface");
         assembly.placeTerrain(0, 0, -1, ground);
         assembly.placeTerrain(1, 0, 0, ground);
         assembly.placeTerrain(2, 0, 1, ground);
@@ -32,7 +32,7 @@ final class WorldCellPresentationVisibilityTest {
     @Test
     void debugSliceStillUsesExplicitSelectedZ() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:route_slice");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:route_slice");
         assembly.placeTerrain(0, 0, 3, ground);
         SimulationRuntime runtime = assembly.start();
 

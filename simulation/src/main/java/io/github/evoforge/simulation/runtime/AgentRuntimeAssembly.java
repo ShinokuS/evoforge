@@ -90,7 +90,7 @@ final class AgentRuntimeAssembly {
 
         VisionSystem vision = new VisionSystem(
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 world.cells.lookup(),
                 world.orientations,
                 definitions.vision,
@@ -101,7 +101,7 @@ final class AgentRuntimeAssembly {
                 vision,
                 CorrelatedRandomWalkExplorationPolicy.standard());
         RelativeSearchLocomotion searchLocomotion = new RelativeSearchLocomotion(
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 world.navigation.lookup(),
                 vision,
                 movement.moveTo(),
@@ -109,7 +109,7 @@ final class AgentRuntimeAssembly {
 
         NeedSatisfactionOpportunityProvider needSatisfaction = new NeedSatisfactionOpportunityProvider(
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 definitions.agents,
                 definitions.needSatisfaction,
                 definitions.needSolutionKnowledge,
@@ -129,7 +129,7 @@ final class AgentRuntimeAssembly {
         if (!definitions.liquidDrink.isEmpty()) {
             LiquidDrinkOpportunityProvider liquidDrinking = new LiquidDrinkOpportunityProvider(
                     world.objects,
-                    world.spatial.transforms(),
+                    world.spatial.positions(),
                     definitions.liquidDrink,
                     definitions.needSolutionKnowledge,
                     definitions.needMotivation,
@@ -150,7 +150,7 @@ final class AgentRuntimeAssembly {
 
         AgentSystem agents = new AgentSystem(
                 world.objects,
-                world.spatial.transforms(),
+                world.spatial.positions(),
                 definitions.agents,
                 List.copyOf(opportunityProviders),
                 movement.moveTo(),

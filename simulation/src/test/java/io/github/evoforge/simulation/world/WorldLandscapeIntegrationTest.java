@@ -4,8 +4,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.github.evoforge.simulation.definition.DefinitionRegistry;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionBootstrap;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionBootstrap;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.terrain.storage.SparseTerrainStorage;
@@ -35,9 +35,9 @@ final class WorldLandscapeIntegrationTest {
                         """,
                 UTF_8);
 
-        LandscapeDefinitionBootstrap landscapeBootstrap = new LandscapeDefinitionBootstrap();
-        DefinitionRegistry<LandscapeDefinitionId> landscapeDefinitions = landscapeBootstrap.load(landscapeDirectory);
-        LandscapeDefinitionId granite = landscapeDefinitions.resolve("core:granite");
+        MaterialDefinitionBootstrap landscapeBootstrap = new MaterialDefinitionBootstrap();
+        DefinitionRegistry<MaterialDefinitionId> landscapeDefinitions = landscapeBootstrap.load(landscapeDirectory);
+        MaterialDefinitionId granite = landscapeDefinitions.resolve("core:granite");
 
         TerrainSystem terrainSystem = new TerrainSystem(
                 new SparseTerrainStorage(),

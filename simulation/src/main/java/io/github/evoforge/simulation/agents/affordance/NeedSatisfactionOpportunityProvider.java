@@ -27,7 +27,7 @@ import io.github.evoforge.simulation.world.object.stock.ConsumableStockSystem;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,7 +38,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
     private static final ResultCode UNAVAILABLE = ResultCode.of("needs", "opportunity_unavailable");
 
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final AgentDefinitions agents;
     private final NeedSatisfactionDefinitions definitions;
     private final NeedSolutionKnowledgeDefinitions knowledge;
@@ -51,7 +51,7 @@ public final class NeedSatisfactionOpportunityProvider implements AgentOpportuni
 
     public NeedSatisfactionOpportunityProvider(
             ObjectLookup objects,
-            TransformLookup transforms,
+            PositionLookup transforms,
             AgentDefinitions agents,
             NeedSatisfactionDefinitions definitions,
             NeedSolutionKnowledgeDefinitions knowledge,

@@ -183,7 +183,7 @@ placement request
     ↓
 Occupancy admission
     ↓
-SpatialSystem.place
+PositionSystem.place
 ```
 
 Spatial remains the low-level position owner and does not learn Occupancy policy.

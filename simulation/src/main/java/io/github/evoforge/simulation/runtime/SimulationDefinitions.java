@@ -9,7 +9,7 @@ import io.github.evoforge.simulation.agents.need.NeedDefinitions;
 import io.github.evoforge.simulation.agents.need.motivation.NeedMotivationDefinitions;
 import io.github.evoforge.simulation.agents.need.progression.NeedProgressionDefinitions;
 import io.github.evoforge.simulation.agents.perception.vision.VisionDefinitions;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
 import io.github.evoforge.simulation.world.liquid.SurfaceRetentionDefinitions;
@@ -19,15 +19,15 @@ import io.github.evoforge.simulation.world.object.stock.ConsumableStockDefinitio
 import io.github.evoforge.simulation.world.object.stock.growth.GrowthDefinitions;
 import io.github.evoforge.simulation.mechanics.movement.MovementDefinitions;
 import io.github.evoforge.simulation.world.space.occupancy.OccupancyDefinitions;
-import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.MaterialTraversalDefinitions;
 import io.github.evoforge.simulation.world.navigation.traversal.water.WaterWadingDefinitions;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
 /** Mutable authored/runtime definition set owned by one pre-start simulation assembly. */
 final class SimulationDefinitions {
-    final DefinitionRegistry<LandscapeDefinitionId> landscape =
-            new DefinitionRegistry<>(LandscapeDefinitionId::of, LandscapeDefinitionId::asInt);
-    final LandscapeTraversalDefinitions landscapeTraversal = new LandscapeTraversalDefinitions();
+    final DefinitionRegistry<MaterialDefinitionId> landscape =
+            new DefinitionRegistry<>(MaterialDefinitionId::of, MaterialDefinitionId::asInt);
+    final MaterialTraversalDefinitions landscapeTraversal = new MaterialTraversalDefinitions();
     final SoilPropertiesDefinitions soilProperties = new SoilPropertiesDefinitions();
     final SurfaceRetentionDefinitions surfaceRetention = new SurfaceRetentionDefinitions();
     final LiquidTransportDefinitions liquidTransport = new LiquidTransportDefinitions();

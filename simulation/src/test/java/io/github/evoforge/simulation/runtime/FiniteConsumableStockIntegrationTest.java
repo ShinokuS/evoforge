@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,7 @@ final class FiniteConsumableStockIntegrationTest {
     @Test
     void needSatisfactionConsumesAuthoritativeSourceStock() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:finite_stock_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:finite_stock_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:finite_stock_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:finite_stock_grass");
         configureCow(assembly, cow);
@@ -42,7 +42,7 @@ final class FiniteConsumableStockIntegrationTest {
     @Test
     void emptyFiniteSourceIsNotAdvertisedAsAnOpportunity() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:empty_stock_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:empty_stock_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:empty_stock_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:empty_stock_grass");
         configureCow(assembly, cow);

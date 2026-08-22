@@ -97,12 +97,12 @@ final class LivingCowScenarioTest {
     }
 
     private static void assertDifferentCells(ScenarioSession session, ObjectId first, ObjectId second) {
-        int firstX = session.runtime().view().transforms().x(first);
-        int firstY = session.runtime().view().transforms().y(first);
-        int firstZ = session.runtime().view().transforms().z(first);
-        int secondX = session.runtime().view().transforms().x(second);
-        int secondY = session.runtime().view().transforms().y(second);
-        int secondZ = session.runtime().view().transforms().z(second);
+        int firstX = session.runtime().view().positions().x(first);
+        int firstY = session.runtime().view().positions().y(first);
+        int firstZ = session.runtime().view().positions().z(first);
+        int secondX = session.runtime().view().positions().x(second);
+        int secondY = session.runtime().view().positions().y(second);
+        int secondZ = session.runtime().view().positions().z(second);
         assertTrue(firstX != secondX || firstY != secondY || firstZ != secondZ,
                 "exclusive Cows must never overlap");
     }

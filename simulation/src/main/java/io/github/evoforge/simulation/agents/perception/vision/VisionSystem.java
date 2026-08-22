@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
 import io.github.evoforge.simulation.world.space.position.CellObjectLookup;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
 import io.github.evoforge.simulation.world.space.orientation.OrientationLookup;
 import java.util.ArrayList;
@@ -20,13 +20,13 @@ import java.util.Set;
 /** Authoritative current-sight calculation. It owns visual rules, not memory or beliefs. */
 public final class VisionSystem implements VisionLookup, PerceptionLookup {
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final CellObjectLookup cells;
     private final OrientationLookup orientations;
     private final VisionDefinitions definitions;
     private final SightOcclusionLookup occlusion;
 
-    public VisionSystem(ObjectLookup objects, TransformLookup transforms, CellObjectLookup cells,
+    public VisionSystem(ObjectLookup objects, PositionLookup transforms, CellObjectLookup cells,
             OrientationLookup orientations, VisionDefinitions definitions, SightOcclusionLookup occlusion) {
         if (objects == null || transforms == null || cells == null || orientations == null
                 || definitions == null || occlusion == null) {

@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.visualizer.scenario.ScenarioSession;
@@ -27,7 +27,7 @@ public final class CowVisualSearchScenario implements VisualizerScenario {
     @Override
     public ScenarioSession create() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("scenario:search_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("scenario:search_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("scenario:search_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("scenario:search_grass");
         assembly.movementRate(cow, 500);

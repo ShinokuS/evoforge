@@ -30,7 +30,7 @@ core:topsoil
 core:granite
 ```
 
-Runtime systems may resolve those to typed numeric IDs such as `ObjectDefinitionId` or `LandscapeDefinitionId`.
+Runtime systems may resolve those to typed numeric IDs such as `ObjectDefinitionId` or `MaterialDefinitionId`.
 
 Important distinction:
 
@@ -266,7 +266,7 @@ Generic definition infrastructure lives under:
 simulation/.../definition/
 ```
 
-Mechanic-specific compiled definition stores live with their owning domains. Canonical landscape definitions are under `assets/definitions/landscape` and are loaded through the normal bootstrap path in tests so the baseline cannot quietly become a parallel Java registry.
+Mechanic-specific compiled definition stores live with their owning domains. Canonical landscape definitions are under `assets/definitions/material` and are loaded through the normal bootstrap path in tests so the baseline cannot quietly become a parallel Java registry.
 
 ## Sources
 

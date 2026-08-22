@@ -1,12 +1,12 @@
 package io.github.evoforge.simulation.world.navigation.traversal;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.geometry.GridTransitionLength;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
-import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.MaterialTraversalDefinitions;
 
 public final class TransitionCostCalculator
         implements TransitionCostLookup {
@@ -15,12 +15,12 @@ public final class TransitionCostCalculator
 
     private final TerrainLookup terrain;
     private final GeometryLookup geometry;
-    private final LandscapeTraversalDefinitions definitions;
+    private final MaterialTraversalDefinitions definitions;
 
     public TransitionCostCalculator(
             TerrainLookup terrain,
             GeometryLookup geometry,
-            LandscapeTraversalDefinitions definitions) {
+            MaterialTraversalDefinitions definitions) {
 
         if (terrain == null) {
             throw new IllegalArgumentException(
@@ -68,12 +68,12 @@ public final class TransitionCostCalculator
         int sourceAnchorZ = supportAnchorZ(fromZ);
         int destinationAnchorZ = supportAnchorZ(toZ);
 
-        LandscapeDefinitionId sourceDefinition = requireTerrain(
+        MaterialDefinitionId sourceDefinition = requireTerrain(
                 fromX,
                 fromY,
                 sourceAnchorZ,
                 "source");
-        LandscapeDefinitionId destinationDefinition = requireTerrain(
+        MaterialDefinitionId destinationDefinition = requireTerrain(
                 toX,
                 toY,
                 destinationAnchorZ,
@@ -145,13 +145,13 @@ public final class TransitionCostCalculator
                 Math.max(1L, units));
     }
 
-    private LandscapeDefinitionId requireTerrain(
+    private MaterialDefinitionId requireTerrain(
             int x,
             int y,
             int z,
             String role) {
 
-        LandscapeDefinitionId definition = terrain.find(
+        MaterialDefinitionId definition = terrain.find(
                 x,
                 y,
                 z);

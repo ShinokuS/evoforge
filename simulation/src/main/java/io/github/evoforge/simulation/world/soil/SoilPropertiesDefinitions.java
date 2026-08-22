@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.soil;
 
 import java.util.Arrays;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 public final class SoilPropertiesDefinitions {
 
@@ -11,7 +11,7 @@ public final class SoilPropertiesDefinitions {
     private SoilProperties[] properties = new SoilProperties[DEFAULT_CAPACITY];
     private boolean frozen;
 
-    public void put(LandscapeDefinitionId id, SoilProperties value) {
+    public void put(MaterialDefinitionId id, SoilProperties value) {
         if (frozen) {
             throw new IllegalStateException("soil property definitions are frozen");
         }
@@ -27,13 +27,13 @@ public final class SoilPropertiesDefinitions {
         properties[index] = value;
     }
 
-    public boolean has(LandscapeDefinitionId id) {
+    public boolean has(MaterialDefinitionId id) {
         if (id == null) return false;
         int index = id.asInt();
         return index < properties.length && properties[index] != null;
     }
 
-    public SoilProperties get(LandscapeDefinitionId id) {
+    public SoilProperties get(MaterialDefinitionId id) {
         if (!has(id)) {
             throw new IllegalArgumentException(
                     "soil property definition not found: " + id);

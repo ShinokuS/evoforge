@@ -90,9 +90,9 @@ final class LivingCowHerdScenarioTest {
         Set<Cell> occupied = new HashSet<>();
         for (ObjectId cow : cows) {
             Cell cell = new Cell(
-                    session.runtime().view().transforms().x(cow),
-                    session.runtime().view().transforms().y(cow),
-                    session.runtime().view().transforms().z(cow));
+                    session.runtime().view().positions().x(cow),
+                    session.runtime().view().positions().y(cow),
+                    session.runtime().view().positions().z(cow));
             assertTrue(occupied.add(cell), "exclusive Cows must never overlap: " + cell);
         }
     }

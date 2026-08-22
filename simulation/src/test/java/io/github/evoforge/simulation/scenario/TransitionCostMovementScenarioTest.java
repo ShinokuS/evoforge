@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
@@ -18,11 +18,11 @@ final class TransitionCostMovementScenarioTest {
     @Test
     void surfaceCostsChangeAuthoritativeStepDuration() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId source =
+        MaterialDefinitionId source =
                 builder.landscapeDefinition(
                         "test:source",
                         1000);
-        LandscapeDefinitionId destination =
+        MaterialDefinitionId destination =
                 builder.landscapeDefinition(
                         "test:destination",
                         1600);
@@ -48,16 +48,16 @@ final class TransitionCostMovementScenarioTest {
         assertTrue(result.accepted());
 
         scenario.advanceTicks(12);
-        assertEquals(0, scenario.transforms().x(objectId));
+        assertEquals(0, scenario.positions().x(objectId));
 
         scenario.advance();
-        assertEquals(1, scenario.transforms().x(objectId));
+        assertEquals(1, scenario.positions().x(objectId));
     }
 
     @Test
     void shapeArrivalFactorChangesAuthoritativeStepDuration() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId walker =
                 builder.objectDefinition("test:walker");
@@ -86,10 +86,10 @@ final class TransitionCostMovementScenarioTest {
         assertTrue(result.accepted());
 
         scenario.advanceTicks(14);
-        assertEquals(0, scenario.transforms().x(objectId));
+        assertEquals(0, scenario.positions().x(objectId));
 
         scenario.advance();
-        assertEquals(1, scenario.transforms().x(objectId));
+        assertEquals(1, scenario.positions().x(objectId));
     }
 
     private static final class ArrivalPenaltyShape

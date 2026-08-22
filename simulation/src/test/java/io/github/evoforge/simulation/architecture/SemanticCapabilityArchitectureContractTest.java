@@ -74,11 +74,14 @@ final class SemanticCapabilityArchitectureContractTest {
     }
 
     @Test
-    void legacyWorldMechanicsTreeCannotReappear() {
-        Path legacy = simulationPackageRoot().resolve("world/mechanics");
-        assertFalse(
-                Files.exists(legacy),
-                () -> "legacy consumer-owned world capability tree reappeared: " + legacy);
+    void retiredAmbiguousAndUmbrellaWorldRootsCannotReappear() {
+        Path root = simulationPackageRoot().resolve("world");
+        for (String retired : List.of("mechanics", "landscape", "spatial", "surface")) {
+            Path path = root.resolve(retired);
+            assertFalse(
+                    Files.exists(path),
+                    () -> "retired ambiguous/umbrella world root reappeared: " + path);
+        }
     }
 
     @Test

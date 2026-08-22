@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
@@ -26,8 +26,8 @@ import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 
 final class PrecipitationSystemTest {
 
-    private static final LandscapeDefinitionId TERRAIN_ID =
-            LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId TERRAIN_ID =
+            MaterialDefinitionId.of(0);
 
     @Test
     void soilAbsorbsBeforeExcessBecomesSurfaceWater() {

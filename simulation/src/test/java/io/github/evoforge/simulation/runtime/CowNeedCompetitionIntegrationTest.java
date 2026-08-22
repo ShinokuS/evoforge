@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.decision.AgentDecisionTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.water.WaterSystem;
 import io.github.evoforge.simulation.world.interaction.InteractionReachProfiles;
 import io.github.evoforge.simulation.world.object.ObjectId;
@@ -51,7 +51,7 @@ final class CowNeedCompetitionIntegrationTest {
         private Fixture(long hunger, long thirst) {
             SimulationAssembly assembly = SimulationAssembly.create()
                     .worldBounds(-2, 2, -2, 2, -1, 3);
-            LandscapeDefinitionId ground = assembly.landscapeDefinition("test:competition_ground");
+            MaterialDefinitionId ground = assembly.landscapeDefinition("test:competition_ground");
             assembly.surfaceRetention(ground, 100_000);
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) assembly.placeTerrain(x, y, 0, ground);

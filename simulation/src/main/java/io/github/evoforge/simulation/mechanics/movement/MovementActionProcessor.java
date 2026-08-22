@@ -7,8 +7,8 @@ import io.github.evoforge.simulation.world.space.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.navigation.traversal.MoverTraversalConstraint;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import io.github.evoforge.simulation.world.space.orientation.OrientationMutations;
 
 public final class MovementActionProcessor {
@@ -22,16 +22,16 @@ public final class MovementActionProcessor {
 
     private final MovementStateStore state;
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final NavigationLookup navigation;
     private final MoverTraversalConstraint traversalConstraint;
     private final OccupancySystem occupancy;
-    private final SpatialSystem spatial;
+    private final PositionSystem spatial;
     private final OrientationMutations orientations;
     private final MovementStepCompletionSink completions;
 
-    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
-            NavigationLookup navigation, OccupancySystem occupancy, SpatialSystem spatial,
+    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, PositionLookup transforms,
+            NavigationLookup navigation, OccupancySystem occupancy, PositionSystem spatial,
             MovementStepCompletionSink completions) {
         this(
                 state,
@@ -45,8 +45,8 @@ public final class MovementActionProcessor {
                 completions);
     }
 
-    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
-            NavigationLookup navigation, OccupancySystem occupancy, SpatialSystem spatial,
+    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, PositionLookup transforms,
+            NavigationLookup navigation, OccupancySystem occupancy, PositionSystem spatial,
             OrientationMutations orientations, MovementStepCompletionSink completions) {
         this(
                 state,
@@ -60,9 +60,9 @@ public final class MovementActionProcessor {
                 completions);
     }
 
-    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, TransformLookup transforms,
+    public MovementActionProcessor(MovementStateStore state, ObjectLookup objects, PositionLookup transforms,
             NavigationLookup navigation, MoverTraversalConstraint traversalConstraint,
-            OccupancySystem occupancy, SpatialSystem spatial,
+            OccupancySystem occupancy, PositionSystem spatial,
             OrientationMutations orientations, MovementStepCompletionSink completions) {
         if (state == null || objects == null || transforms == null || navigation == null
                 || traversalConstraint == null || occupancy == null || spatial == null

@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportDefinitions;
 import io.github.evoforge.simulation.world.liquid.LiquidTransportProperties;
@@ -17,7 +17,7 @@ import io.github.evoforge.simulation.world.soil.SoilProperties;
 
 final class SoilLiquidInfiltrationSystemTest {
 
-    private static final LandscapeDefinitionId SOIL = LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId SOIL = MaterialDefinitionId.of(0);
     private static final LiquidTypeId WATER = LiquidTypeId.of("water");
     private static final LiquidTypeId BLOOD = LiquidTypeId.of("blood");
 

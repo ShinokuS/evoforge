@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
@@ -15,7 +15,7 @@ final class SimulationPathfindingIntegrationTest {
     @Test
     void runtimeExposesPathfinderOverProductionTraversalFacts() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 assembly.landscapeDefinition("test:ground");
 
         for (int x = 0; x <= 5; x++) {
@@ -40,7 +40,7 @@ final class SimulationPathfindingIntegrationTest {
     @Test
     void runtimeTerrainMutationInvalidatesResumableSearch() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 assembly.landscapeDefinition("test:ground");
 
         for (int x = 0; x <= 20; x++) {

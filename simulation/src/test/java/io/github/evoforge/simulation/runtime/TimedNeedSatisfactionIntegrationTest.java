@@ -9,7 +9,7 @@ import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.decision.AgentIntentPhase;
 import io.github.evoforge.simulation.agents.decision.AgentIntentTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ final class TimedNeedSatisfactionIntegrationTest {
     @Test
     void timedUseDoesNotMutateNeedOrStockBeforeAuthoritativeCompletionTick() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:timed_use_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:timed_use_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:timed_use_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:timed_use_grass");
 
@@ -69,7 +69,7 @@ final class TimedNeedSatisfactionIntegrationTest {
     @Test
     void motivationThresholdPreventsNibblingAtTinyDeficits() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:motivation_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:motivation_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:motivation_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:motivation_grass");
 
@@ -112,7 +112,7 @@ final class TimedNeedSatisfactionIntegrationTest {
     @Test
     void stillDesiredUseContinuesWithoutDroppingUsingIntentBetweenBites() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:continued_use_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:continued_use_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:continued_use_cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:continued_use_grass");
 

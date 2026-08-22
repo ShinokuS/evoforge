@@ -13,12 +13,12 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 final class TerrainSurfaceLookupTest {
 
-    private static final LandscapeDefinitionId TERRAIN =
-            LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId TERRAIN =
+            MaterialDefinitionId.of(0);
 
     @Test
     void tracksTopTerrainPerColumnThroughPlacementAndRemoval() {
@@ -77,11 +77,11 @@ final class TerrainSurfaceLookupTest {
     }
 
     private static final class TestStorage implements TerrainStorage {
-        private final Map<Cell, LandscapeDefinitionId> values =
+        private final Map<Cell, MaterialDefinitionId> values =
                 new HashMap<>();
 
         @Override
-        public LandscapeDefinitionId find(int x, int y, int z) {
+        public MaterialDefinitionId find(int x, int y, int z) {
             return values.get(new Cell(x, y, z));
         }
 
@@ -90,7 +90,7 @@ final class TerrainSurfaceLookupTest {
                 int x,
                 int y,
                 int z,
-                LandscapeDefinitionId definitionId) {
+                MaterialDefinitionId definitionId) {
             values.put(new Cell(x, y, z), definitionId);
         }
 
@@ -101,20 +101,20 @@ final class TerrainSurfaceLookupTest {
     }
 
     private static final class TestDefinitions
-            implements DefinitionCatalog<LandscapeDefinitionId> {
+            implements DefinitionCatalog<MaterialDefinitionId> {
 
         @Override
-        public LandscapeDefinitionId resolve(String key) {
+        public MaterialDefinitionId resolve(String key) {
             return "core:terrain".equals(key) ? TERRAIN : null;
         }
 
         @Override
-        public String keyOf(LandscapeDefinitionId id) {
+        public String keyOf(MaterialDefinitionId id) {
             return TERRAIN.equals(id) ? "core:terrain" : null;
         }
 
         @Override
-        public boolean contains(LandscapeDefinitionId id) {
+        public boolean contains(MaterialDefinitionId id) {
             return TERRAIN.equals(id);
         }
     }

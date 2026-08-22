@@ -148,7 +148,7 @@ public final class VisualizerInteractionController extends InputAdapter {
 
     private void inspectCell(VisualizerCamera.Cell cell, ObjectId object) {
         if (object != null && !state.moveTargeting()) {
-            state.selectCell(cell.x(), cell.y(), view.transforms().z(object), object);
+            state.selectCell(cell.x(), cell.y(), view.positions().z(object), object);
             return;
         }
         state.selectCell(

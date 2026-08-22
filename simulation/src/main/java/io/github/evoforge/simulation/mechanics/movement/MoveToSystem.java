@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearch;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathSearchStatus;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathTransitionConstraint;
 import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,7 +27,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
     private static final ResultCode CANCELLED = ResultCode.of("movement", "move_to_cancelled");
     private static final ResultCode NO_ACTIVE_MOVE_TO = ResultCode.of("movement", "no_active_move_to");
 
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final Pathfinder pathfinder;
     private final MovementSystem movement;
     private final MoveToQueryConstraintProvider queryConstraints;
@@ -39,7 +39,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
     private long nextActionId;
 
     public MoveToSystem(
-            TransformLookup transforms,
+            PositionLookup transforms,
             Pathfinder pathfinder,
             MovementSystem movement) {
         this(
@@ -51,7 +51,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
     }
 
     public MoveToSystem(
-            TransformLookup transforms,
+            PositionLookup transforms,
             Pathfinder pathfinder,
             MovementSystem movement,
             MoveToQueryConstraintProvider queryConstraints) {
@@ -64,7 +64,7 @@ public final class MoveToSystem implements MovementStepCompletionSink, MoveToVie
     }
 
     public MoveToSystem(
-            TransformLookup transforms,
+            PositionLookup transforms,
             Pathfinder pathfinder,
             MovementSystem movement,
             MoveToQueryConstraintProvider queryConstraints,

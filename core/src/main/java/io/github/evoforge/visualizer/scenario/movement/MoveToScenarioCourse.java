@@ -1,7 +1,7 @@
 package io.github.evoforge.visualizer.scenario.movement;
 
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.visualizer.scenario.ScenarioTerrain;
 
@@ -15,7 +15,7 @@ final class MoveToScenarioCourse {
 
     private MoveToScenarioCourse() { }
 
-    static void build(SimulationAssembly assembly, LandscapeDefinitionId ground) {
+    static void build(SimulationAssembly assembly, MaterialDefinitionId ground) {
         ScenarioTerrain.fill(assembly, ground, -5, -1, MIN_Y, MAX_Y, -1);
         for (int level = MIN_STANDING_Z; level < MAX_STANDING_Z; level++) {
             int rampX = level * RAMP_SPACING;

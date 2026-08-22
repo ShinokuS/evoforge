@@ -3,17 +3,17 @@ package io.github.evoforge.simulation.world.terrain.storage;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainStorage;
 
 public final class SparseTerrainStorage implements TerrainStorage {
 
-    private final Map<Cell, LandscapeDefinitionId> terrain =
+    private final Map<Cell, MaterialDefinitionId> terrain =
             new HashMap<>();
     private final CellProbe lookupProbe = new CellProbe();
 
     @Override
-    public LandscapeDefinitionId find(
+    public MaterialDefinitionId find(
             int x,
             int y,
             int z) {
@@ -27,7 +27,7 @@ public final class SparseTerrainStorage implements TerrainStorage {
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
 
         if (definitionId == null) {
             throw new IllegalArgumentException(

@@ -6,15 +6,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 final class SparseTerrainStorageTest {
 
-    private static final LandscapeDefinitionId GRANITE =
-            LandscapeDefinitionId.of(0);
+    private static final MaterialDefinitionId GRANITE =
+            MaterialDefinitionId.of(0);
 
-    private static final LandscapeDefinitionId SOIL =
-            LandscapeDefinitionId.of(1);
+    private static final MaterialDefinitionId SOIL =
+            MaterialDefinitionId.of(1);
 
     @Test
     void emptyPositionReturnsNull() {

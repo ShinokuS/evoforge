@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import org.junit.jupiter.api.Test;
 import io.github.evoforge.simulation.world.geometry.FullShape;
@@ -17,8 +17,8 @@ final class GeometryTraversalLowerBoundTest {
 
     @Test
     void defaultsToNeutralAndTracksCurrentOverrides() {
-        Map<String, LandscapeDefinitionId> terrain = new HashMap<>();
-        LandscapeDefinitionId ground = LandscapeDefinitionId.of(0);
+        Map<String, MaterialDefinitionId> terrain = new HashMap<>();
+        MaterialDefinitionId ground = MaterialDefinitionId.of(0);
         terrain.put("0,0,0", ground);
         terrain.put("1,0,0", ground);
 

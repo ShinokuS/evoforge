@@ -13,16 +13,16 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 final class TerrainSystemTest {
 
-    private static final LandscapeDefinitionId GRANITE =
-            LandscapeDefinitionId.of(0);
-    private static final LandscapeDefinitionId SOIL =
-            LandscapeDefinitionId.of(1);
-    private static final LandscapeDefinitionId UNKNOWN =
-            LandscapeDefinitionId.of(2);
+    private static final MaterialDefinitionId GRANITE =
+            MaterialDefinitionId.of(0);
+    private static final MaterialDefinitionId SOIL =
+            MaterialDefinitionId.of(1);
+    private static final MaterialDefinitionId UNKNOWN =
+            MaterialDefinitionId.of(2);
 
     @Test
     void lookupReturnsTerrainAndReportsEmptyPositions() {
@@ -239,10 +239,10 @@ final class TerrainSystemTest {
     }
 
     private static final class TestTerrainStorage implements TerrainStorage {
-        private final Map<Cell, LandscapeDefinitionId> terrain = new HashMap<>();
+        private final Map<Cell, MaterialDefinitionId> terrain = new HashMap<>();
 
         @Override
-        public LandscapeDefinitionId find(int x, int y, int z) {
+        public MaterialDefinitionId find(int x, int y, int z) {
             return terrain.get(new Cell(x, y, z));
         }
 
@@ -251,7 +251,7 @@ final class TerrainSystemTest {
                 int x,
                 int y,
                 int z,
-                LandscapeDefinitionId definitionId) {
+                MaterialDefinitionId definitionId) {
             terrain.put(new Cell(x, y, z), definitionId);
         }
 
@@ -262,27 +262,27 @@ final class TerrainSystemTest {
     }
 
     private static final class TestDefinitionCatalog
-            implements DefinitionCatalog<LandscapeDefinitionId> {
-        private final Map<String, LandscapeDefinitionId> byKey = new HashMap<>();
-        private final Map<LandscapeDefinitionId, String> byId = new HashMap<>();
+            implements DefinitionCatalog<MaterialDefinitionId> {
+        private final Map<String, MaterialDefinitionId> byKey = new HashMap<>();
+        private final Map<MaterialDefinitionId, String> byId = new HashMap<>();
 
-        void add(String key, LandscapeDefinitionId id) {
+        void add(String key, MaterialDefinitionId id) {
             byKey.put(key, id);
             byId.put(id, key);
         }
 
         @Override
-        public LandscapeDefinitionId resolve(String key) {
+        public MaterialDefinitionId resolve(String key) {
             return byKey.get(key);
         }
 
         @Override
-        public String keyOf(LandscapeDefinitionId id) {
+        public String keyOf(MaterialDefinitionId id) {
             return byId.get(id);
         }
 
         @Override
-        public boolean contains(LandscapeDefinitionId id) {
+        public boolean contains(MaterialDefinitionId id) {
             return byId.containsKey(id);
         }
     }

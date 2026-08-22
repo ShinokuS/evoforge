@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.RampShape;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathQuery;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathRoute;
@@ -16,7 +16,7 @@ final class SimulationPathfinding3dTest {
     @Test
     void productionPathfinderTraversesSuccessiveRampElevations() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 assembly.landscapeDefinition("test:path_3d_ground");
 
         assembly.placeTerrain(-1, 0, -1, ground);

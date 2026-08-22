@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.runtime;
 
-import io.github.evoforge.simulation.world.landscape.LandscapeSystem;
+import io.github.evoforge.simulation.mechanics.terrainmutation.TerrainMutationWorkflow;
 import io.github.evoforge.simulation.world.liquid.LiquidSystem;
 import io.github.evoforge.simulation.world.liquid.storage.SparseLiquidStorage;
 import io.github.evoforge.simulation.world.soil.SoilLiquidSystem;
@@ -14,14 +14,14 @@ import io.github.evoforge.simulation.world.space.occupancy.OccupancySystem;
 import io.github.evoforge.simulation.world.navigation.NavigationSystem;
 import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
-import io.github.evoforge.simulation.world.object.placement.ObjectPlacementSystem;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.placement.ObjectPlacementSystem;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 import io.github.evoforge.simulation.world.space.orientation.OrientationSystem;
 
 /** Authoritative mutable world stores and base systems that exist before runtime scheduling starts. */
 final class SimulationWorldState {
-    final LandscapeSystem landscape;
+    final TerrainMutationWorkflow landscape;
     final WorldGeometryLookup geometry;
     final LiquidSystem liquids;
     final PreStartSoilPropertiesLookup soilProperties;
@@ -30,8 +30,8 @@ final class SimulationWorldState {
     final NavigationSystem navigation;
     final ObjectRepository objects;
     final ObjectFactory objectFactory;
-    final CellSpatialIndex cells;
-    final SpatialSystem spatial;
+    final CellPositionIndex cells;
+    final PositionSystem spatial;
     final OrientationSystem orientations;
     final OccupancySystem occupancy;
     final ObjectPlacementSystem objectPlacement;
@@ -41,7 +41,7 @@ final class SimulationWorldState {
         if (definitions == null) {
             throw new IllegalArgumentException("definitions must not be null");
         }
-        landscape = LandscapeSystem.create(new SparseTerrainStorage(), definitions.landscape);
+        landscape = TerrainMutationWorkflow.create(new SparseTerrainStorage(), definitions.landscape);
         geometry = new WorldGeometryLookup(landscape.geometry());
         liquids = new LiquidSystem(new SparseLiquidStorage(), geometry);
         soilProperties = new PreStartSoilPropertiesLookup(
@@ -56,8 +56,8 @@ final class SimulationWorldState {
         navigation = new NavigationSystem(geometry);
         objects = new ObjectRepository();
         objectFactory = new ObjectFactory(objects, definitions.objects);
-        cells = new CellSpatialIndex();
-        spatial = new SpatialSystem(cells);
+        cells = new CellPositionIndex();
+        spatial = new PositionSystem(cells);
         orientations = new OrientationSystem(objects);
         occupancy = new OccupancySystem(objects, cells.lookup(), definitions.occupancy);
         objectPlacement = new ObjectPlacementSystem(objects, occupancy, spatial);

@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ final class TimedMovementScenarioTest {
     @Test
     void keepsSourcePositionUntilCompletionTick() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId walker =
                 builder.objectDefinition("test:walker");
@@ -60,7 +60,7 @@ final class TimedMovementScenarioTest {
     @Test
     void fasterObjectCompletesSameTransitionEarlier() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId human =
                 builder.objectDefinition("test:human");
@@ -124,7 +124,7 @@ final class TimedMovementScenarioTest {
     @Test
     void diagonalTransitionTakesLongerThanCardinalTransition() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId walker =
                 builder.objectDefinition("test:walker");
@@ -205,7 +205,7 @@ final class TimedMovementScenarioTest {
     @Test
     void rejectsObjectWithoutMovementCapability() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId staticObject =
                 builder.objectDefinition("test:static");
@@ -229,7 +229,7 @@ final class TimedMovementScenarioTest {
     @Test
     void rejectsStructurallyUnavailableTransition() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId walker =
                 builder.objectDefinition("test:walker");
@@ -253,7 +253,7 @@ final class TimedMovementScenarioTest {
     @Test
     void carriesFractionalTimingAcrossSteps() {
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId runner =
                 builder.objectDefinition("test:runner");
@@ -327,19 +327,19 @@ final class TimedMovementScenarioTest {
                 batched.scenario().tick(),
                 individual.scenario().tick());
         assertEquals(
-                batched.scenario().transforms().x(
+                batched.scenario().positions().x(
                         batched.objectId()),
-                individual.scenario().transforms().x(
+                individual.scenario().positions().x(
                         individual.objectId()));
         assertEquals(
-                batched.scenario().transforms().y(
+                batched.scenario().positions().y(
                         batched.objectId()),
-                individual.scenario().transforms().y(
+                individual.scenario().positions().y(
                         individual.objectId()));
         assertEquals(
-                batched.scenario().transforms().z(
+                batched.scenario().positions().z(
                         batched.objectId()),
-                individual.scenario().transforms().z(
+                individual.scenario().positions().z(
                         individual.objectId()));
     }
 
@@ -359,7 +359,7 @@ final class TimedMovementScenarioTest {
             long rate) {
 
         ScenarioBuilder builder = ScenarioBuilder.create();
-        LandscapeDefinitionId ground =
+        MaterialDefinitionId ground =
                 builder.landscapeDefinition("test:ground");
         ObjectDefinitionId walker =
                 builder.objectDefinition("test:walker");
@@ -376,7 +376,7 @@ final class TimedMovementScenarioTest {
 
     private static void support(
             ScenarioBuilder builder,
-            LandscapeDefinitionId ground,
+            MaterialDefinitionId ground,
             int x,
             int y) {
 
@@ -396,13 +396,13 @@ final class TimedMovementScenarioTest {
 
         assertEquals(
                 x,
-                scenario.transforms().x(objectId));
+                scenario.positions().x(objectId));
         assertEquals(
                 y,
-                scenario.transforms().y(objectId));
+                scenario.positions().y(objectId));
         assertEquals(
                 z,
-                scenario.transforms().z(objectId));
+                scenario.positions().z(objectId));
     }
 
     private record ScenarioRun(

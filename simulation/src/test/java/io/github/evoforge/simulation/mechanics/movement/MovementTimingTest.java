@@ -12,8 +12,8 @@ import io.github.evoforge.simulation.world.object.ObjectFactory;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectRepository;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
-import io.github.evoforge.simulation.world.spatial.SpatialSystem;
-import io.github.evoforge.simulation.world.spatial.indexes.CellSpatialIndex;
+import io.github.evoforge.simulation.world.space.position.PositionSystem;
+import io.github.evoforge.simulation.world.space.position.CellPositionIndex;
 import org.junit.jupiter.api.Test;
 
 final class MovementTimingTest {
@@ -27,8 +27,8 @@ final class MovementTimingTest {
 
         ObjectRepository objects = new ObjectRepository();
         ObjectId objectId = new ObjectFactory(objects, objectDefinitions).create(walker).id();
-        CellSpatialIndex cells = new CellSpatialIndex();
-        SpatialSystem spatial = new SpatialSystem(cells);
+        CellPositionIndex cells = new CellPositionIndex();
+        PositionSystem spatial = new PositionSystem(cells);
         spatial.place(objectId, 0, 0, 0);
 
         OccupancyDefinitions occupancyDefinitions = new OccupancyDefinitions();
@@ -45,7 +45,7 @@ final class MovementTimingTest {
         long[] scheduledDelay = {-1};
         MovementSystem movement = new MovementSystem(
                 objects,
-                spatial.transforms(),
+                spatial.positions(),
                 (x, y, z) -> TransitionMask.of(1, 0, 0),
                 movementDefinitions,
                 (fromX, fromY, fromZ, toX, toY, toZ) -> TransitionCost.of(1),

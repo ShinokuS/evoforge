@@ -25,9 +25,9 @@ final class MoveToScenariosTest {
         while (!session.diagnostics().summary().contains("waypoint=2/5") && ticks++ < 300) advance(session);
         assertTrue(session.diagnostics().summary().contains("waypoint=2/5"));
         assertTrue(runtime.view().moveTo().isActive(mover));
-        assertEquals(2, runtime.view().transforms().x(mover));
-        assertEquals(2, runtime.view().transforms().y(mover));
-        assertEquals(1, runtime.view().transforms().z(mover));
+        assertEquals(2, runtime.view().positions().x(mover));
+        assertEquals(2, runtime.view().positions().y(mover));
+        assertEquals(1, runtime.view().positions().z(mover));
         assertEquals(1, session.diagnostics().route().z(0), "next route follows the mover onto the new Z");
         assertEquals(2, goalZ(session.diagnostics()));
     }

@@ -27,7 +27,7 @@ import io.github.evoforge.simulation.world.navigation.traversal.MoverDestination
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.object.WorldObject;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,7 +57,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
                     .thenComparingInt(candidate -> candidate.providerIndex);
 
     private final ObjectLookup objects;
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final AgentDefinitions definitions;
     private final List<AgentOpportunityProvider> providers;
     private final MoveToSystem moveTo;
@@ -75,7 +75,7 @@ public final class AgentSystem implements AgentDecisionLookup, MoveToCompletionS
 
     public AgentSystem(
             ObjectLookup objects,
-            TransformLookup transforms,
+            PositionLookup transforms,
             AgentDefinitions definitions,
             List<AgentOpportunityProvider> providers,
             MoveToSystem moveTo,

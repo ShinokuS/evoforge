@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.mechanics.movement.MoveToSystem;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.navigation.pathfinding.PathTransitionConstraint;
-import io.github.evoforge.simulation.world.spatial.TransformLookup;
+import io.github.evoforge.simulation.world.space.position.PositionLookup;
 
 /**
  * Execution adapter from a coordinate-free relative search target into production MoveTo.
@@ -20,14 +20,14 @@ import io.github.evoforge.simulation.world.spatial.TransformLookup;
 public final class RelativeSearchLocomotion {
     private static final int[] Z_PREFERENCE = { 0, 1, -1 };
 
-    private final TransformLookup transforms;
+    private final PositionLookup transforms;
     private final NavigationLookup navigation;
     private final VisionLookup vision;
     private final MoveToSystem moveTo;
     private final MoveToLookup moveToLookup;
 
     public RelativeSearchLocomotion(
-            TransformLookup transforms,
+            PositionLookup transforms,
             NavigationLookup navigation,
             VisionLookup vision,
             MoveToSystem moveTo,

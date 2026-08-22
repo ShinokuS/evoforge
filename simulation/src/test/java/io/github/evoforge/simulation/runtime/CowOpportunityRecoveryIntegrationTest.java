@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.decision.AgentDecisionTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -20,8 +20,8 @@ final class CowOpportunityRecoveryIntegrationTest {
     void locallyNonEnterableBestOpportunityIsNotSelectedForMoveTo() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 4, -2, 2, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:eligibility_ground");
-        LandscapeDefinitionId wetGround = assembly.landscapeDefinition("test:eligibility_wet_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:eligibility_ground");
+        MaterialDefinitionId wetGround = assembly.landscapeDefinition("test:eligibility_wet_ground");
         assembly.surfaceRetention(wetGround, 100_000);
         for (int x = -1; x <= 4; x++) {
             for (int y = -2; y <= 2; y++) {
@@ -76,7 +76,7 @@ final class CowOpportunityRecoveryIntegrationTest {
     void failedOccupiedOpportunityDoesNotTrapAgentWhenAnotherCandidateExists() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 4, -1, 4, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:recovery_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:recovery_ground");
         for (int x = -1; x <= 4; x++) {
             for (int y = -1; y <= 4; y++) assembly.placeTerrain(x, y, 0, ground);
         }
@@ -109,9 +109,9 @@ final class CowOpportunityRecoveryIntegrationTest {
                 && runtime.view().consumableStocks().quantity(alternativeGrass) > 0; tick++) {
             runtime.stepper().advance();
             assertTrue(
-                    runtime.view().transforms().x(cow) != runtime.view().transforms().x(blocker)
-                            || runtime.view().transforms().y(cow) != runtime.view().transforms().y(blocker)
-                            || runtime.view().transforms().z(cow) != runtime.view().transforms().z(blocker),
+                    runtime.view().positions().x(cow) != runtime.view().positions().x(blocker)
+                            || runtime.view().positions().y(cow) != runtime.view().positions().y(blocker)
+                            || runtime.view().positions().z(cow) != runtime.view().positions().z(blocker),
                     "exclusive objects must never overlap while recovery is attempted");
         }
 
@@ -124,7 +124,7 @@ final class CowOpportunityRecoveryIntegrationTest {
     void multipleBlockedHigherRankedOpportunitiesDoNotStarveReachableCandidate() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-3, 3, -3, 3, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:multi_recovery_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:multi_recovery_ground");
         for (int x = -3; x <= 3; x++) {
             for (int y = -3; y <= 3; y++) assembly.placeTerrain(x, y, 0, ground);
         }
@@ -174,9 +174,9 @@ final class CowOpportunityRecoveryIntegrationTest {
 
     private static void assertNotAt(SimulationRuntime runtime, ObjectId first, ObjectId second) {
         assertTrue(
-                runtime.view().transforms().x(first) != runtime.view().transforms().x(second)
-                        || runtime.view().transforms().y(first) != runtime.view().transforms().y(second)
-                        || runtime.view().transforms().z(first) != runtime.view().transforms().z(second),
+                runtime.view().positions().x(first) != runtime.view().positions().x(second)
+                        || runtime.view().positions().y(first) != runtime.view().positions().y(second)
+                        || runtime.view().positions().z(first) != runtime.view().positions().z(second),
                 "exclusive objects must never overlap while recovery is attempted");
     }
 }

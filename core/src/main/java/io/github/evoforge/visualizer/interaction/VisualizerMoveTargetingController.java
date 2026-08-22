@@ -77,7 +77,7 @@ final class VisualizerMoveTargetingController {
         }
 
         ObjectId mover = state.moveTargetingObject();
-        if (mover == null || !view.transforms().has(mover)) {
+        if (mover == null || !view.positions().has(mover)) {
             clearPreviewSearch();
             state.clearMoveTargetPreview();
             return;
@@ -108,9 +108,9 @@ final class VisualizerMoveTargetingController {
             return;
         }
 
-        int sourceX = view.transforms().x(mover);
-        int sourceY = view.transforms().y(mover);
-        int sourceZ = view.transforms().z(mover);
+        int sourceX = view.positions().x(mover);
+        int sourceY = view.positions().y(mover);
+        int sourceZ = view.positions().z(mover);
         PreviewKey key = new PreviewKey(
                 mover,
                 sourceX,

@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainCommand;
-import io.github.evoforge.simulation.world.terrain.command.PlaceTerrainResult;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainCommand;
+import io.github.evoforge.simulation.mechanics.terrainmutation.command.PlaceTerrainResult;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 
 final class ScenarioFixtureTest {
@@ -19,9 +19,9 @@ final class ScenarioFixtureTest {
     void arrangesBeforeStartThenUsesProductionCommandPath() {
         ScenarioBuilder builder = ScenarioBuilder.create();
 
-        LandscapeDefinitionId granite =
+        MaterialDefinitionId granite =
                 builder.landscapeDefinition("test:granite");
-        LandscapeDefinitionId soil =
+        MaterialDefinitionId soil =
                 builder.landscapeDefinition("test:soil");
 
         builder.placeTerrain(
@@ -70,7 +70,7 @@ final class ScenarioFixtureTest {
     void startClosesArrangeCapabilities() {
         ScenarioBuilder builder = ScenarioBuilder.create();
 
-        LandscapeDefinitionId granite =
+        MaterialDefinitionId granite =
                 builder.landscapeDefinition("test:granite");
 
         builder.start();

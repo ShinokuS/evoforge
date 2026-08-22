@@ -70,9 +70,9 @@ public final class WorldInteractionOverlayRenderer {
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         ObjectId selected = state.selectedObject();
-        if (selected != null && view.transforms().has(selected) && selectedVisible(selected)) {
-            float x = view.transforms().x(selected) + 0.5f;
-            float y = view.transforms().y(selected) + 0.5f;
+        if (selected != null && view.positions().has(selected) && selectedVisible(selected)) {
+            float x = view.positions().x(selected) + 0.5f;
+            float y = view.positions().y(selected) + 0.5f;
             shapes.setColor(state.moveTargeting() ? MOVE : SELECTED);
             shapes.circle(x, y, 0.43f, 28);
             if (state.moveTargeting()) shapes.circle(x, y, 0.50f, 28);
@@ -175,9 +175,9 @@ public final class WorldInteractionOverlayRenderer {
     }
 
     private boolean selectedVisible(ObjectId selected) {
-        int x = view.transforms().x(selected);
-        int y = view.transforms().y(selected);
-        int z = view.transforms().z(selected);
+        int x = view.positions().x(selected);
+        int y = view.positions().y(selected);
+        int z = view.positions().z(selected);
         if (state.viewMode() == VisualizerViewMode.SURFACE) return surfaces.standingZ(x, y) == z;
         if (state.viewMode() == VisualizerViewMode.INTERIOR) {
             return state.interior() != null

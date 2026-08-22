@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.need.NeedId;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ final class CowContentionIntegrationTest {
     void exclusiveCowsNeverOverlapWhileCompetingForOneFiniteSource() {
         SimulationAssembly assembly = SimulationAssembly.create()
                 .worldBounds(-1, 5, -1, 1, -1, 2);
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:contention_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:contention_ground");
         for (int x = 0; x <= 4; x++) assembly.placeTerrain(x, 0, 0, ground);
 
         ObjectDefinitionId cowDefinition = assembly.objectDefinition("test:contention_cow");
@@ -45,9 +45,9 @@ final class CowContentionIntegrationTest {
         for (int tick = 0; tick < 40; tick++) {
             runtime.stepper().advance();
             assertTrue(
-                    runtime.view().transforms().x(leftCow) != runtime.view().transforms().x(rightCow)
-                            || runtime.view().transforms().y(leftCow) != runtime.view().transforms().y(rightCow)
-                            || runtime.view().transforms().z(leftCow) != runtime.view().transforms().z(rightCow),
+                    runtime.view().positions().x(leftCow) != runtime.view().positions().x(rightCow)
+                            || runtime.view().positions().y(leftCow) != runtime.view().positions().y(rightCow)
+                            || runtime.view().positions().z(leftCow) != runtime.view().positions().z(rightCow),
                     "exclusive Cows must never occupy one cell");
         }
 

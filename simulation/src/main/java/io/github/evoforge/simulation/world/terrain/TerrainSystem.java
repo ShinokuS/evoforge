@@ -3,12 +3,12 @@ package io.github.evoforge.simulation.world.terrain;
 import java.util.TreeMap;
 
 import io.github.evoforge.simulation.definition.DefinitionCatalog;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 public final class TerrainSystem {
 
     private final TerrainStorage storage;
-    private final DefinitionCatalog<LandscapeDefinitionId> definitions;
+    private final DefinitionCatalog<MaterialDefinitionId> definitions;
     private final TerrainLookup lookup;
     private final TreeMap<Integer, Integer> zCounts = new TreeMap<>();
     private final TerrainSurfaceIndex surfaceIndex =
@@ -42,7 +42,7 @@ public final class TerrainSystem {
 
     public TerrainSystem(
             TerrainStorage storage,
-            DefinitionCatalog<LandscapeDefinitionId> definitions) {
+            DefinitionCatalog<MaterialDefinitionId> definitions) {
 
         if (storage == null) {
             throw new IllegalArgumentException(
@@ -79,7 +79,7 @@ public final class TerrainSystem {
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
 
         requireKnownDefinition(definitionId);
 
@@ -98,7 +98,7 @@ public final class TerrainSystem {
             int x,
             int y,
             int z,
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
 
         requireKnownDefinition(definitionId);
 
@@ -130,7 +130,7 @@ public final class TerrainSystem {
     }
 
     private void requireKnownDefinition(
-            LandscapeDefinitionId definitionId) {
+            MaterialDefinitionId definitionId) {
 
         if (definitionId == null) {
             throw new IllegalArgumentException(

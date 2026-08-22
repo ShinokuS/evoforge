@@ -9,7 +9,7 @@ import io.github.evoforge.simulation.agents.CapabilityId;
 import io.github.evoforge.simulation.agents.decision.AgentDecisionTrace;
 import io.github.evoforge.simulation.agents.need.NeedId;
 import io.github.evoforge.simulation.agents.search.AgentSearchStatus;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import io.github.evoforge.simulation.world.space.orientation.FacingDirection;
@@ -22,7 +22,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void hungryCowPerceivesFoodMovesAndSatisfiesNeed() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:cow_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:cow_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:grass");
         configureCow(assembly, cow, 8, 80);
@@ -34,7 +34,7 @@ final class CowAutonomyIntegrationTest {
         assembly.placeObject(grassId, 2, 0, 0);
         SimulationRuntime runtime = assembly.start();
         advance(runtime, 3);
-        assertEquals(2, runtime.view().transforms().x(cowId));
+        assertEquals(2, runtime.view().positions().x(cowId));
         assertEquals(50, runtime.view().needs().level(cowId, HUNGER));
         AgentDecisionTrace trace = runtime.view().agents().lastDecision(cowId);
         assertNotNull(trace);
@@ -47,7 +47,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void newHayDefinitionIsUsedWithoutDecisionCodeOrCowBehaviorChanges() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:hay_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:hay_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId hay = assembly.objectDefinition("test:hay");
         configureCow(assembly, cow, 6, 70);
@@ -68,7 +68,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void cowCanPreferFartherHigherBenefitSourceOverNearbyWeakSource() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:choice_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:choice_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:weak_grass");
         ObjectDefinitionId hay = assembly.objectDefinition("test:strong_hay");
@@ -95,7 +95,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void cowDoesNotKnowAboutFoodOutsideCurrentVisionRange() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:perception_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:perception_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:distant_grass");
         configureCow(assembly, cow, 2, 80);
@@ -112,14 +112,14 @@ final class CowAutonomyIntegrationTest {
         assertEquals(0, trace.candidates().size());
         assertNull(trace.selected());
         assertNull(runtime.view().agents().currentTargetKey(cowId));
-        assertEquals(0, runtime.view().transforms().x(cowId));
+        assertEquals(0, runtime.view().positions().x(cowId));
         assertEquals(80, runtime.view().needs().level(cowId, HUNGER));
     }
 
     @Test
     void foodBehindCowIsNotAVisualCandidate() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:fov_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:fov_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:grass");
         configureCow(assembly, cow, 4, 80);
@@ -142,8 +142,8 @@ final class CowAutonomyIntegrationTest {
     @Test
     void opaqueTerrainBlocksFoodFromVision() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:occlusion_ground");
-        LandscapeDefinitionId wall = assembly.landscapeDefinition("test:wall");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:occlusion_ground");
+        MaterialDefinitionId wall = assembly.landscapeDefinition("test:wall");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:grass");
         configureCow(assembly, cow, 5, 80);
@@ -163,7 +163,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void knownNeedSolutionStartsSearchAndFindsFoodOnlyAfterTurningTowardIt() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:search_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:search_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:search_grass");
         configureCow(assembly, cow, 4, 80);
@@ -203,7 +203,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void unseenFoodDoesNotTriggerSearchWithoutGeneralSolutionKnowledge() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:no_knowledge_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:no_knowledge_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:unknown_grass");
         configureCow(assembly, cow, 4, 80);
@@ -225,7 +225,7 @@ final class CowAutonomyIntegrationTest {
     @Test
     void equalCandidatesUseStableObjectIdTieBreak() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:tie_ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:tie_ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId grass = assembly.objectDefinition("test:tie_grass");
         configureCow(assembly, cow, 3, 80);
@@ -260,7 +260,7 @@ final class CowAutonomyIntegrationTest {
 
     private static void line(
             SimulationAssembly assembly,
-            LandscapeDefinitionId ground,
+            MaterialDefinitionId ground,
             int minX,
             int maxX) {
         for (int x = minX; x <= maxX; x++) assembly.placeTerrain(x, 0, -1, ground);

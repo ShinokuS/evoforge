@@ -1,10 +1,10 @@
 package io.github.evoforge.simulation.world.terrain;
 
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 
 public interface TerrainLookup {
 
-    LandscapeDefinitionId find(int x, int y, int z);
+    MaterialDefinitionId find(int x, int y, int z);
 
     default boolean contains(int x, int y, int z) {
         return find(x, y, z) != null;

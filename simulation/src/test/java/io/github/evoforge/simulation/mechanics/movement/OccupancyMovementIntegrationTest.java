@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.mechanics.movement.command.MoveStepCommand;
 import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.runtime.SimulationAssembly;
 import io.github.evoforge.simulation.runtime.SimulationRuntime;
-import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
+import io.github.evoforge.simulation.world.material.MaterialDefinitionId;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,7 @@ final class OccupancyMovementIntegrationTest {
     @Test
     void firstMovementClaimWinsAndLaterPhysicalOccupancyIsDistinct() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:walker");
         assembly.movementRate(walker, 1000);
         assembly.exclusiveOccupancy(walker);
@@ -50,20 +50,20 @@ final class OccupancyMovementIntegrationTest {
 
         advance(runtime, 4);
 
-        assertEquals(1, runtime.view().transforms().x(first));
+        assertEquals(1, runtime.view().positions().x(first));
         assertEquals(
                 OccupancyState.OCCUPIED,
                 runtime.view().occupancy().state(1, 0, 0));
         assertRejected(
                 runtime.submit(new MoveStepCommand(second, 1, 0, 0)),
                 "movement:destination_occupied");
-        assertEquals(2, runtime.view().transforms().x(second));
+        assertEquals(2, runtime.view().positions().x(second));
     }
 
     @Test
     void rejectedClaimLeavesMoverFreeAndDoesNotConsumeTimingCarry() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         ObjectDefinitionId walker = assembly.objectDefinition("test:walker");
         assembly.movementRate(walker, 600);
         assembly.exclusiveOccupancy(walker);
@@ -92,7 +92,7 @@ final class OccupancyMovementIntegrationTest {
 
         assertEquals(
                 3,
-                runtime.view().transforms().x(second));
+                runtime.view().positions().x(second));
         assertEquals(
                 OccupancyState.OCCUPIED,
                 runtime.view().occupancy().state(3, 0, 0));
@@ -101,7 +101,7 @@ final class OccupancyMovementIntegrationTest {
     @Test
     void nonExclusiveMoverMayShareCellWithExclusiveObject() {
         SimulationAssembly assembly = SimulationAssembly.create();
-        LandscapeDefinitionId ground = assembly.landscapeDefinition("test:ground");
+        MaterialDefinitionId ground = assembly.landscapeDefinition("test:ground");
         ObjectDefinitionId cow = assembly.objectDefinition("test:cow");
         ObjectDefinitionId transparentMover =
                 assembly.objectDefinition("test:transparent_mover");
@@ -127,7 +127,7 @@ final class OccupancyMovementIntegrationTest {
 
         advance(runtime, 4);
 
-        assertEquals(1, runtime.view().transforms().x(mover));
+        assertEquals(1, runtime.view().positions().x(mover));
         assertEquals(2, runtime.view().cells().objectCount(1, 0, 0));
         assertEquals(
                 OccupancyState.OCCUPIED,
