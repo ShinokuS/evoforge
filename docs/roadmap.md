@@ -2,9 +2,9 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current checkpoint — final semantic cleanup before Stage 5
+## Current checkpoint — Stage 5 ready to begin
 
-PR #132 established the repository-wide ADR-026 architecture. PR #133 is the final cleanup gate before Stage 5: it removes residual ambiguous/umbrella boundaries and adds bytecode-level dependency/cycle enforcement.
+PR #132 established the repository-wide ADR-026 architecture and PR #133 completed its final semantic cleanup, removing residual ambiguous/umbrella boundaries and adding bytecode-level dependency/cycle enforcement.
 
 Accepted reset guarantees:
 
@@ -22,7 +22,7 @@ Accepted reset guarantees:
 
 ## Next allowed world-generation work
 
-Canonical Continuum Stages 0–4 are complete. The next stage is **Stage 5 — Macro Ocean + Geophysical Skeleton**. Stage 5 has not started. Its work begins only after final architecture cleanup PR #133 is merged into `develop`, using ADR-026 plus the permanent ArchUnit/source fitness gates as hard boundaries.
+Canonical Continuum Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is NEXT and has not started.** PR #133 is merged, so Stage 5 is now allowed to begin under ADR-026 plus the permanent ArchUnit/source fitness gates.
 
 ## Accepted Continuum foundation before reset
 
