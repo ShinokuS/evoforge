@@ -43,7 +43,7 @@ jobs:
       - run: chmod +x gradlew
 
       - name: Apply semantic cleanup
-        run: python tools/apply-final-architecture-cleanup.py
+        run: python tools/run-final-architecture-cleanup.py
 
       - name: Validate patch
         run: git diff --check
@@ -62,6 +62,7 @@ jobs:
       - name: Remove one-shot tooling
         run: |
           rm -f tools/apply-final-architecture-cleanup.py
+          rm -f tools/run-final-architecture-cleanup.py
           rm -f .github/workflows/apply-final-architecture-cleanup.yml
           rm -f .github/workflows/architecture-cleanup-check.yml
           rmdir tools 2>/dev/null || true
