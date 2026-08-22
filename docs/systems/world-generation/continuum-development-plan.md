@@ -61,9 +61,10 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 
 - **Stage 0 — complete.** Legacy dense worldgen is retired and the Continuum foundation exists.
 - **Stage 1 — complete and manually accepted.** Local overlapping reads share expensive regional work; PR #122.
-- **Stage 2 — CURRENT.** Infinite-Time Foundation is implemented in draft PR #123 and awaits final acceptance.
-- **Stage 3 — multi-resolution support already exists from earlier work.** It remains useful, but Stage 2 must still be accepted before proceeding.
-- **Stage 4+ — not started.**
+- **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
+- **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration by the full Gradle suite and `ContinuumScaleResolutionProfileTest`.
+- **Stage 4 — NEXT.** Map / Zoom Performance Proof.
+- **Stage 5+ — not started.**
 
 ---
 
@@ -99,58 +100,45 @@ The world must not become more expensive merely because it is older.
 
 In plain language: if nothing meaningful happened for a million years, the engine must not replay a million years of tiny ticks just to discover that fact. It stores the current state and the future work that still matters.
 
-## Build
+## Accepted result
 
-- exact long-horizon time representation that does not rely on floating point or one lifetime-limited tick counter;
+- exact long-horizon integer time;
 - sleeping-process wake scheduling;
 - one current wake obligation per sleeping process;
-- explicit reason for waking;
-- elapsed-time transition contract so a process can fast-forward from its last evaluated time to the new time;
-- scheduler cleanup so cancelled/completed work is physically removed rather than retained as hidden history;
-- safe reuse of scheduler handle slots;
-- in-memory checkpoint + bounded recent-delta compaction primitive.
+- elapsed-time fast-forward contract;
+- scheduler cleanup and safe handle reuse;
+- bounded in-memory checkpoint + delta-tail compaction;
+- longevity tests and young-vs-ancient scale profile;
+- no fake Stage 2 dashboard; `F2` stays world-oriented.
 
-The existing ordinary runtime clock remains compatible. Stage 2 adds the long-horizon foundation rather than forcing unrelated runtime systems through a risky migration in one PR.
+**Status:** complete.
 
-## Required proof
+---
 
-- a time value can advance far beyond one signed-long timeline without floating-point drift;
-- 100,000 reschedules of one sleeping process retain one wake entry;
-- 100,000 schedule/cancel operations retain zero future queue entries and reuse bounded handle slots;
-- a huge time jump invokes one elapsed-time transition per due process, not one call per skipped tick;
-- one million state changes compact into the current state plus a bounded recent tail;
-- equivalent current working sets at a young and astronomically old world age retain the same structural memory counts.
+# Stage 3 — Multi-Resolution Continuum
 
-## Performance
+## Goal
 
-The scale profile compares equivalent young and ancient states and records:
+Read the same logical world directly at different spatial resolutions without generating exact detail first.
 
-- sleeping processes;
-- physical wake queue entries;
-- generic scheduler pending/physical entries;
-- reusable handle slots;
-- retained delta tail;
-- fast-forward calls;
-- elapsed time.
+In plain language: when we look from far away, we ask the world for fewer samples covering a larger area. When we zoom closer, we ask for finer samples. Both are views of the same world, not two different worlds.
 
-World age alone must not increase those structural counts.
+## Accepted result
 
-## Visualization
+- nested resolution levels with `step = 1, 2, 4, 8...`;
+- resolution-aware page layout;
+- direct coarse materialization from the same deterministic coordinate field;
+- shared coarse/fine coordinates return the same value;
+- page payload/sample count stays bounded while covered world area grows;
+- query order and cache eviction/rematerialization do not change results;
+- visual zoom remains presentation-only and does not change world truth;
+- Stage 3 Inspector was manually accepted by the user;
+- after Stage 1 and Stage 2 integration, the full Gradle suite and scale profile still pass, including L0/L5/L10 bounded-work checks.
 
-Stage 2 has **no dedicated visualization**. Scheduling, long-horizon time and compaction are internal infrastructure; a panel of numbers is not a meaningful view of the world.
-
-`F2` remains the spatial Continuum Inspector. Future runtime time controls will be added to the actual world viewer only when there is a real mutable world state whose evolution can be inspected.
-
-## Boundary
-
-Stage 2 is not the final persistence system. Disk persistence, save/load compaction and full-world long-time stress remain Stage 17. Stage 2 establishes the temporal primitives required to make those later systems possible.
-
-## Done when
-
-Automated tests, Docs Site and Continuum Scale Profile are green, the temporal invariants are documented clearly, and the user accepts Stage 2. No artificial visualization is required.
+**Status:** complete.
 
 ---
 
 ## Stage discipline
 
-After Stage 2 passes automated gates and user acceptance, stop. Do not start Stage 4 or geography. Stage 3 already exists from earlier work and is only considered satisfied in sequence after Stage 2 acceptance.
+The next implementation step is **Stage 4 — Map / Zoom Performance Proof**. Do not start Stage 5 geography until Stage 4 is implemented, tested, performance-profiled, visually understandable, and manually accepted.
