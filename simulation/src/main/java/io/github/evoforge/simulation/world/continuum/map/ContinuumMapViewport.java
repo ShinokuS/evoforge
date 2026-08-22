@@ -5,14 +5,13 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Pure viewport planner for Stage 4.
  *
  * <p>The camera chooses only which derived representation to request. It never changes world truth.
- * Visible tiles are requested before speculative work; nearby space and adjacent zoom levels are
- * warmed opportunistically so normal pan/zoom usually arrives at already-ready data.</p>
+ * Visible tiles are requested before speculative work. Prefetch is bounded by the tile service job
+ * budget and biased toward the user's most recent camera action.</p>
  */
 public final class ContinuumMapViewport {
     private static final double TARGET_TILE_PIXELS = 192d;
@@ -36,6 +35,7 @@ public final class ContinuumMapViewport {
     private int viewportHeightPixels;
     private int selectedLevel;
     private long sourceRevision;
+    private MotionHint motionHint = MotionHint.NONE;
 
     public ContinuumMapViewport(
             long worldWidth,
@@ -105,6 +105,7 @@ public final class ContinuumMapViewport {
         centerX = (worldWidth - 1d) * 0.5d;
         centerY = (worldHeight - 1d) * 0.5d;
         selectedLevel = idealLevel();
+        motionHint = MotionHint.NONE;
     }
 
     /** Moves the camera by a screen-space drag delta. */
@@ -112,6 +113,7 @@ public final class ContinuumMapViewport {
         centerX -= deltaScreenX / pixelsPerWorldUnit;
         centerY += deltaScreenY / pixelsPerWorldUnit;
         clampCenter();
+        if (deltaScreenX != 0d || deltaScreenY != 0d) motionHint = MotionHint.PAN;
     }
 
     /** Zooms around a screen position, preserving the world coordinate under the cursor. */
@@ -124,6 +126,7 @@ public final class ContinuumMapViewport {
         centerY = anchorWorldY - (viewportHeightPixels * 0.5d - screenY) / pixelsPerWorldUnit;
         clampCenter();
         updateSelectedLevel();
+        motionHint = factor > 1d ? MotionHint.ZOOM_IN : MotionHint.ZOOM_OUT;
     }
 
     public double worldXAtScreen(double screenX) {
@@ -152,22 +155,38 @@ public final class ContinuumMapViewport {
         TileRange prefetched = visibleRange(span, prefetchRing);
 
         List<ContinuumMapTileKey> visibleKeys = orderedKeys(visible, level, Integer.MAX_VALUE);
-        LinkedHashSet<ContinuumMapTileKey> speculative = new LinkedHashSet<>();
+        List<ContinuumMapTileKey> spatialCandidates = orderedKeys(prefetched, level, Integer.MAX_VALUE);
+        spatialCandidates.removeAll(visibleKeys);
 
-        if (level > 0) {
-            speculative.addAll(orderedKeys(
-                    visibleRange(tileWorldSpan(level - 1), 0),
-                    level - 1,
-                    MAX_FINER_PREFETCH_TILES));
+        List<ContinuumMapTileKey> finerCandidates = level > 0
+                ? orderedKeys(visibleRange(tileWorldSpan(level - 1), 0), level - 1, MAX_FINER_PREFETCH_TILES)
+                : List.of();
+        List<ContinuumMapTileKey> coarserCandidates = level < maxLevel
+                ? orderedKeys(visibleRange(tileWorldSpan(level + 1), 0), level + 1, MAX_COARSER_PREFETCH_TILES)
+                : List.of();
+
+        LinkedHashSet<ContinuumMapTileKey> orderedSpeculativeCandidates = new LinkedHashSet<>();
+        switch (motionHint) {
+            case ZOOM_IN -> {
+                orderedSpeculativeCandidates.addAll(finerCandidates);
+                orderedSpeculativeCandidates.addAll(spatialCandidates);
+                orderedSpeculativeCandidates.addAll(coarserCandidates);
+            }
+            case ZOOM_OUT -> {
+                orderedSpeculativeCandidates.addAll(coarserCandidates);
+                orderedSpeculativeCandidates.addAll(spatialCandidates);
+                orderedSpeculativeCandidates.addAll(finerCandidates);
+            }
+            case PAN, NONE -> {
+                orderedSpeculativeCandidates.addAll(spatialCandidates);
+                orderedSpeculativeCandidates.addAll(finerCandidates);
+                orderedSpeculativeCandidates.addAll(coarserCandidates);
+            }
         }
-        if (level < maxLevel) {
-            speculative.addAll(orderedKeys(
-                    visibleRange(tileWorldSpan(level + 1), 0),
-                    level + 1,
-                    MAX_COARSER_PREFETCH_TILES));
-        }
-        speculative.addAll(orderedKeys(prefetched, level, Integer.MAX_VALUE));
-        speculative.removeAll(visibleKeys);
+        orderedSpeculativeCandidates.removeAll(visibleKeys);
+
+        int speculativeBudget = Math.max(0, service.maxOutstandingJobs() - visibleKeys.size());
+        LinkedHashSet<ContinuumMapTileKey> speculative = takeFirst(orderedSpeculativeCandidates, speculativeBudget);
 
         LinkedHashSet<ContinuumMapTileKey> demanded = new LinkedHashSet<>(visibleKeys);
         demanded.addAll(speculative);
@@ -217,6 +236,18 @@ public final class ContinuumMapViewport {
 
         if (keys.size() <= limit) return keys;
         return new ArrayList<>(keys.subList(0, limit));
+    }
+
+    private static LinkedHashSet<ContinuumMapTileKey> takeFirst(
+            LinkedHashSet<ContinuumMapTileKey> candidates,
+            int limit) {
+        LinkedHashSet<ContinuumMapTileKey> result = new LinkedHashSet<>(Math.min(candidates.size(), limit));
+        if (limit <= 0) return result;
+        for (ContinuumMapTileKey key : candidates) {
+            result.add(key);
+            if (result.size() >= limit) break;
+        }
+        return result;
     }
 
     private TileRange visibleRange(long span, int ring) {
@@ -282,6 +313,13 @@ public final class ContinuumMapViewport {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(value, max));
+    }
+
+    private enum MotionHint {
+        NONE,
+        PAN,
+        ZOOM_IN,
+        ZOOM_OUT
     }
 
     private record TileRange(long minX, long maxX, long minY, long maxY) {
