@@ -14,7 +14,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 256;
     public static final int MAX_OUTSTANDING_JOBS = 96;
-    public static final int WORKERS = 2;
+    public static final int WORKERS = 4;
     public static final int PREFETCH_RING = 1;
 
     private final ExecutorService executor;
@@ -30,6 +30,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         ExecutorService executor = Executors.newFixedThreadPool(WORKERS, runnable -> {
             Thread thread = new Thread(runnable, "continuum-map-tile");
             thread.setDaemon(true);
+            thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
             return thread;
         });
         return new ContinuumMapInspectorModel(domain, generator, executor, widthPixels, heightPixels);
