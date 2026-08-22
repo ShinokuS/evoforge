@@ -74,7 +74,7 @@ def move_definition_package(source_module: str, source_set: str) -> None:
         shutil.move(str(path), str(target))
 
 
-def move_foundation_normalized_value(source_set: str) -> None:
+def move_foundation_definition(source_set: str) -> None:
     base = ROOT / "foundation" / source_set
     if not base.exists():
         return
@@ -96,20 +96,19 @@ def move_foundation_normalized_value(source_set: str) -> None:
 
 
 def write_build_files() -> None:
-    (ROOT / "settings.gradle").write_text(
-        """plugins {\n"
+    settings = (
+        "plugins {\n"
         "  id(\"org.gradle.toolchains.foojay-resolver-convention\") version \"1.0.0\"\n"
         "}\n"
         "\n"
-        "// Runtime architecture: generator creates initial state; world owns current state/access;\n"
+        "// generator creates initial state; world owns current state/access;\n"
         "// physics advances that state; core/lwjgl3 are presentation and launch only.\n"
         "include 'lwjgl3', 'core', 'world', 'generator', 'physics'\n"
-        """,
-        encoding="utf-8",
     )
+    (ROOT / "settings.gradle").write_text(settings, encoding="utf-8")
 
-    (ROOT / "generator" / "build.gradle").write_text(
-        """[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'\n\n"
+    generator_build = (
+        "[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'\n\n"
         "eclipse.project.name = appName + '-generator'\n\n"
         "dependencies {\n"
         "    implementation project(':world')\n"
@@ -123,9 +122,8 @@ def write_build_files() -> None:
         "        exceptionFormat = \"full\"\n"
         "    }\n"
         "}\n"
-        """,
-        encoding="utf-8",
     )
+    (ROOT / "generator" / "build.gradle").write_text(generator_build, encoding="utf-8")
 
     physics_build = ROOT / "physics" / "build.gradle"
     text = physics_build.read_text(encoding="utf-8")
@@ -176,17 +174,17 @@ def main() -> None:
     move_dir("simulation", "physics")
     move_dir("generation", "generator")
 
-    # Rewrite imports/package declarations before relocating Java source files.
+    # Rename package roots first, then make the directory tree match package declarations.
     rewrite_text_files()
     for module in ("world", "generator", "physics", "core", "lwjgl3"):
         relocate_java_sources(module)
 
-    # Generic definition infrastructure was split into a one-file foundation module.
-    # Put it back together as World model data/contracts instead of preserving a fake layer.
+    # Reunite the generic definition infrastructure. A separate one-file foundation module
+    # adds no useful responsibility boundary here.
     move_definition_package("physics", "src/main/java")
     move_definition_package("physics", "src/test/java")
-    move_foundation_normalized_value("src/main/java")
-    move_foundation_normalized_value("src/test/java")
+    move_foundation_definition("src/main/java")
+    move_foundation_definition("src/test/java")
 
     foundation = ROOT / "foundation"
     if foundation.exists():
