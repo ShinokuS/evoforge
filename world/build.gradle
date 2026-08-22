@@ -1,15 +1,10 @@
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
-eclipse.project.name = appName + '-simulation'
+eclipse.project.name = appName + '-world'
 
 dependencies {
-    implementation project(':world')
-    implementation "com.google.code.gson:gson:$gsonVersion"
-    implementation "org.slf4j:slf4j-api:$slf4jVersion"
-
     testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    testRuntimeOnly "org.slf4j:slf4j-nop:$slf4jVersion"
 }
 
 test {
@@ -24,7 +19,7 @@ test {
 }
 
 tasks.register('scaleProfile', Test) {
-    description = 'Runs the representative living-world scale profile.'
+    description = 'Runs Continuum world scale and responsiveness profiles.'
     group = 'verification'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
@@ -32,9 +27,6 @@ tasks.register('scaleProfile', Test) {
     useJUnitPlatform {
         includeTags 'scale-profile'
     }
-
-    systemProperty 'evoforge.scale.profile',
-            System.getProperty('evoforge.scale.profile', 'medium')
 
     testLogging {
         events "passed", "skipped", "failed"
