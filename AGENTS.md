@@ -1,8 +1,8 @@
 # EvoForge Repository Laws
 
-This file is the mandatory entry point for every human or AI-assisted repository change. Read it **before** inspecting a ticket, designing a class, editing code, changing CI, or updating documentation.
+This file is the mandatory entry point for every human or AI-assisted repository change. Read it **before** designing, editing, moving or deleting code, changing CI, or updating documentation.
 
-The laws below override convenience, historical package names and local implementation habits. If a proposed change conflicts with them, change the design before changing the repository.
+The laws below override convenience, historical package names and the needs of the first feature that happens to use a concept.
 
 ## 0. Required context before any change
 
@@ -12,331 +12,494 @@ Before editing anything:
 2. read `docs/project-context.md`;
 3. read `docs/architecture.md`;
 4. read the relevant current page under `docs/systems/`;
-5. read relevant accepted ADRs under `docs/decisions/`;
-6. inspect the actual current owner package, its tests and its public dependencies;
-7. state the intended owner, architectural block type, invariants, performance risk and verification plan.
+5. read relevant accepted ADRs, especially ADR-026;
+6. inspect the actual current semantic module, its tests, public contracts and dependency direction;
+7. state the concept being changed, its authorities, reusable capabilities, consumers, invariants, performance risk and verification plan.
 
-Never reconstruct current architecture from chat history, old branches or historical Journal notes when current code/tests/normative docs are available.
+Never infer current architecture from chat history or old branches when code/tests/normative docs are available.
 
 ## 1. Repository boundary
 
-The production repository has three code modules only unless an accepted ADR explicitly changes this:
+The code-module topology is:
 
 ```text
-simulation/   all authoritative simulation, Genesis, world state, physics, mechanics and agents
+simulation/   all authoritative simulation, Genesis, world state, physics, capabilities, mechanics and agents
 core/         libGDX presentation, observer/debug UI and presentation adapters
 lwjgl3/       desktop launcher
 ```
 
-`simulation` is pure Java and must not depend on `core`, `lwjgl3`, libGDX presentation classes, camera state or rendering state.
+Do not create Gradle modules merely to represent Terrain, Liquid, Generation, Physics, Movement, Agents or another simulation concept.
 
-Do not create new Gradle modules to represent Terrain, Liquid, World, Generation, Physics, Agents or other simulation concepts. Their isolation is semantic/package-level and enforced by architecture tests.
+`simulation` is pure Java and must not depend on presentation/camera/rendering truth.
 
-## 2. Every production block has exactly one architectural type
+## 2. Primary architectural unit: the semantic module
 
-Before creating a package or non-trivial class, classify it as exactly one of:
+The primary decomposition question is:
 
-1. **OWNER** — owns one family of authoritative mutable facts.
-2. **MECHANIC** — owns a cross-owner law or interaction, but never duplicates authoritative owner state.
-3. **KERNEL SERVICE** — domain-neutral execution infrastructure such as time/scheduling/lifecycle/command dispatch.
-4. **PROJECTION** — rebuildable cache/index/view derived from authoritative facts; deleting it cannot delete world truth.
-5. **COMPOSITION** — wires implementations and lifecycle; contains no domain mathematics/policy.
+> **What independent concept does this code represent?**
 
-If the code does not fit one type cleanly, the responsibility is not yet understood. Do not create a generic sixth category.
+A semantic module is a cohesive concept whose meaning can be explained and tested without naming the feature that first happened to need it.
 
-## 3. Primary package axis: semantic ownership
+Examples of independent concepts include, when real code exists:
 
-The top-level question is **who owns this fact/behavior?**, never **what technical kind of code is this?**
+```text
+world/object
+world/space
+world/space/occupancy
+world/geometry
+world/navigation
+world/visibility
+world/terrain
+world/liquid
+world/soil
+world/atmosphere
+agents
+```
+
+Do not organize reusable concepts under consumers merely because of chronology.
+
+## 3. Reusable capability law
+
+A consumer never owns a reusable capability merely because it uses it first.
+
+Let `C` be a capability and `U` a mechanic/use case/consumer.
+
+If `C` can be defined without mentioning `U`, then:
+
+```text
+U -> C
+```
+
+and **not**:
+
+```text
+C inside U
+C -> U
+U and C mixed as one package
+```
+
+Examples:
+
+- Occupancy can be defined without Movement -> Occupancy is independent of Movement.
+- Navigation can be defined without MoveTo -> Navigation is independent of MoveTo.
+- Pathfinding can be defined without Agent decision making -> it is consumer-neutral Navigation capability/algorithm.
+- Objective Geometry can be defined without traversal -> Geometry is independent of Movement.
+- Generic placement/admission can be used by Movement, Drop, Spawn and Build -> it must not live inside any one of them.
+
+### Reuse test before placing code inside a feature
+
+Ask:
+
+1. Does this concept have meaning without the current consumer?
+2. Could another plausible mechanic need the same semantics?
+3. Would that second consumer otherwise need to import the first consumer or duplicate rules?
+
+If yes, create/use an independent semantic module or public capability now.
+
+This is justified abstraction when the **domain meaning is already independent**, even with one current consumer. It is not permission to extract speculative helpers.
+
+## 4. Architectural roles are orthogonal
+
+Do **not** force every module into one mutually-exclusive type.
+
+A semantic module may contain several roles when all belong to the same concept:
+
+- **AUTHORITY** — authoritative mutable state;
+- **CAPABILITY** — stable operation/query usable by arbitrary consumers;
+- **POLICY / ALGORITHM** — replaceable rule/solver behind the capability;
+- **PROJECTION** — rebuildable derived cache/index/view;
+- **PROCESS** — lifecycle behavior intrinsic to the concept;
+- **GENESIS** — initialization intrinsic to the concept.
+
+Repository-wide roles also exist:
+
+- **KERNEL** — domain-neutral execution infrastructure;
+- **COMPOSITION** — wiring/lifecycle selection without domain policy;
+- **WORKFLOW / MECHANIC** — causal orchestration across independent semantic modules.
+
+A module is split only when concepts or design decisions can vary independently, not to satisfy a role taxonomy.
+
+## 5. One authoritative source per mutable fact
+
+For every mutable fact `F`:
+
+```text
+|authority(F)| = 1
+```
+
+No coordinator, cache, renderer, mechanic or convenience object may become a shadow authority.
+
+Derived data must satisfy:
+
+```text
+P = f(A)
+
+A = authoritative facts
+P = rebuildable projection/cache/index
+```
+
+Deleting `P` may hurt performance but must not delete world truth.
+
+A reusable capability may own genuinely independent state of its own. Example: Occupancy may derive present occupancy from object positions while owning reservation claims. It must not copy object positions as a second truth.
+
+## 6. Mechanics/workflows compose capabilities
+
+A mechanic owns only the causal process/policy specific to that mechanic.
+
+Example:
+
+```text
+Movement
+  -> Navigation capability
+  -> Traversal capability
+  -> Occupancy/admission capability
+  -> Position mutation capability
+  -> Time/Scheduling
+```
+
+A future mechanic:
+
+```text
+DropItem
+  -> Occupancy/admission capability
+  -> Position/placement capability
+```
+
+must reuse the same capabilities without depending on Movement.
+
+If adding a new mechanic forces a shared concept to move out of an older mechanic, the old placement was architecturally wrong.
+
+## 7. Package axis: semantic concept first, technical role second
 
 Correct:
 
 ```text
 world/liquid/
-  ... public semantic contracts ...
+  <small public semantic surface>
   internal/
     genesis/
     flow/
     storage/
 ```
 
-Forbidden architecture:
+Also correct when the concept is independently reusable:
+
+```text
+world/space/occupancy/
+world/navigation/
+world/geometry/
+```
+
+Forbidden global technical decomposition:
 
 ```text
 generation/liquid/
 physics/liquid/
 storage/liquid/
 services/liquid/
+capabilities/occupancy/
 ```
 
-Generation, runtime, physics, storage, algorithms and diagnostics are secondary aspects inside the owning semantic block when they are needed.
+Do not create a root `capabilities/`, `services/` or `shared/` dumping ground. Capabilities live with the semantic concept they express.
 
-## 4. One authoritative owner per mutable fact
+## 8. Dependency direction follows semantic stability
 
-For every mutable fact, name exactly one owner.
+More fundamental/reusable concepts must not depend on higher-level workflows that consume them.
 
-No second authoritative copy is allowed in a coordinator, cache, renderer, world cell, runtime facade or convenience object.
-
-Derived data must satisfy:
+Typical dependency direction:
 
 ```text
-authoritative fact -> rebuildable projection/cache/index
+kernel + neutral values
+        ↑
+fundamental semantic concepts
+        ↑
+reusable semantic capabilities
+        ↑
+mechanics/workflows
+        ↑
+agents / scenario orchestration / presentation adapters
 ```
 
-A projection may be discarded and rebuilt without changing the simulated world.
-
-## 5. Owner versus mechanic rule
-
-Use this decision rule:
-
-- if behavior reads B but mutates only authoritative state of A, it normally belongs to owner A;
-- if a law is independently meaningful and coordinates multiple owners, it may be a `mechanics/<name>` block;
-- a mechanic may own its own process/transaction state, but never copies authoritative facts owned by participants.
-
-Examples:
-
-- Liquid flow reads Terrain geometry and mutates Liquid -> Liquid owner.
-- Movement coordinates Object position, geometry, availability and time -> Movement mechanic.
-- A future erosion law that explicitly exchanges state between terrain/material/liquid owners -> Erosion mechanic.
-
-## 6. Public surface and internals
-
-A semantic component exposes the smallest stable public surface needed by real consumers. Implementation detail stays under `internal` or package-private scope.
-
-Other components must never import another component's `..internal..` package.
-
-Do not create ceremonial `Service`, `Manager`, `Provider`, `Factory`, `Strategy`, `Impl` layers unless the name describes a real independently meaningful responsibility.
-
-Prefer a deep module: small semantic API, substantial hidden implementation.
-
-## 7. Dependency laws
-
-Dependencies must be explicit, typed and acyclic.
+This is a dependency rule, **not a mandatory folder-layer tree**.
 
 Forbidden:
 
-- universal `WorldContext`, `SimulationContext`, `PhysicsContext`, `GenerationContext` or similar service bags;
-- service locators/global registries used to discover arbitrary systems;
-- generic event bus as the causal simulation backbone;
-- owner -> mechanic/agent/presentation dependencies;
-- any import of another component's internal implementation;
-- circular semantic dependencies.
+- lower-level reusable concept -> first consumer;
+- foreign `..internal..` imports;
+- circular semantic dependencies;
+- universal `WorldContext`, `SimulationContext`, `PhysicsContext`, `GenerationContext` or service bags;
+- service locators/global arbitrary registries;
+- generic event bus as causal simulation backbone.
 
-If A and B need each other's internals, the boundary is wrong. Introduce/invert the smallest semantic contract or identify the missing mechanic/owner.
+A cycle means one of three things until proven otherwise:
 
-Composition roots are allowed to know many public contracts. They are not allowed to contain domain policy.
+1. a smaller consumer-neutral capability is missing;
+2. two packages are actually one semantic module;
+3. a workflow is embedded in a lower-level concept.
 
-## 8. Naming laws
+## 9. Public surface and internals
 
-Names communicate semantic responsibility, not implementation fashion.
+Public contracts describe semantic meaning, never the current consumer.
+
+Prefer:
+
+```text
+OccupancyView
+CellAdmission
+CellReservation
+PositionView
+ObjectPlacement
+NavigationGraph
+PathQuery
+VisibilityQuery
+```
+
+Avoid reusable APIs such as:
+
+```text
+MovementOccupancy
+AgentNavigationService
+DropPlacementHelper
+```
+
+unless those semantics are genuinely consumer-specific.
+
+Other modules must never import another semantic module's `..internal..` package.
+
+Prefer deep modules: small semantic surface, substantial hidden implementation.
+
+## 10. File/package naming laws
+
+Names describe concepts and contracts, not architectural fashion.
 
 ### Packages
 
-Use lower-case domain nouns or precise mechanism nouns: `liquid`, `terrain`, `movement`, `scheduling`.
-
-Do not create generic dumping grounds named:
+Use lower-case semantic nouns or precise process nouns:
 
 ```text
-util common misc helpers shared framework managers services base
+liquid
+terrain
+occupancy
+navigation
+visibility
+movement
+scheduling
 ```
 
-A package must be explainable in one sentence and have one owner/type.
+Forbidden generic dumping grounds:
+
+```text
+util common misc helpers shared framework managers services base capabilities
+```
 
 ### Types
 
-- authoritative IDs: `<Concept>Id`;
-- immutable authored semantics: `<Concept>Definition` / `<Concept>Definitions` only when they truly are authored definitions;
-- read-only semantic capability: `<Concept>View` or a precise capability noun; use `Lookup` only when coordinate/key lookup is the actual contract;
-- explicit mutation capability: `<Concept>Mutations` or a verb-specific capability;
-- runtime owner: use the domain noun or `<Concept>System` only when it truly owns that domain's mutable runtime state/processes;
-- algorithm: name the mathematical/domain job (`AStarPathfinder`, `LiquidTransferPlanner`), not `Helper`;
-- result: `<Operation>Result` / `<Operation>Attempt` local to the owning operation;
-- projection/index/cache: name it explicitly `<Concept>Index`, `<Concept>Cache`, `<Concept>Projection`;
-- composition: `<Scope>Assembly` only at a real wiring boundary; prefer one composition root rather than feature-specific assembly proliferation.
+Use names such as:
 
-A file name must match its primary type and one responsibility. Avoid `Utils`, `Common`, `Manager`, `Data`, `Stuff`, `Processor` and vague `Service` names.
+- `<Concept>Id` — stable identity;
+- `<Concept>Definition` — authored immutable semantics only;
+- `<Concept>View` / precise query noun — read capability;
+- verb/operation-specific mutation nouns such as `ObjectPlacement`, `CellAdmission`, `LiquidTransfer`;
+- `<Concept>Index`, `<Concept>Cache`, `<Concept>Projection` — derived data;
+- mathematically/domain-specific algorithm names such as `AStarPathfinder`, not `Helper`;
+- `<Operation>Result` / `<Operation>Attempt` — result local to the operation;
+- `<Scope>Assembly` only at true composition boundaries.
 
-## 9. File creation decision table
+Avoid vague `Manager`, `Utils`, `Common`, `Data`, `Stuff`, `Processor`, generic `Service` and default `Impl` naming.
 
-Before adding a file, choose its home by this order:
+## 11. File creation decision protocol
+
+Before adding a non-trivial file/package:
 
 ```text
-Does it own a mutable fact?                  -> owning domain
-Does it implement behavior of one owner?    -> that owner's internal area
-Does it coordinate independent owners?      -> mechanics/<law>
-Is it domain-neutral execution machinery?   -> kernel/<responsibility>
-Is it rebuildable derived state?            -> owning consumer/domain projection area
-Does it only wire existing blocks?          -> composition root/area
-Is it authored semantic meaning?            -> generic definition infrastructure or owner-local definition
-Otherwise                                   -> do not create it until responsibility is clear
+1. What independent semantic concept is this?
+2. Does it already have a module?
+3. Is this reusable meaning or merely an implementation helper?
+4. Which facts, if any, are authoritative here?
+5. Which public capability does a consumer actually need?
+6. Does the proposed package name mention a consumer unnecessarily?
+7. Could a second plausible consumer reuse it without moving it?
+8. What lower-level concepts may it depend on?
+9. What must never depend back on it?
+10. What invariant/test proves the boundary?
 ```
 
-Never choose a package merely because a similar class already happens to be there.
+If questions 1–7 cannot be answered cleanly, do not create the file yet.
 
-## 10. Genesis and runtime
+## 12. Genesis, physics and storage are secondary axes
 
-Genesis creates initial authoritative facts and then hands them to ordinary owners.
+Genesis creates initial facts then hands them to normal authorities. Domain-specific generation remains with the semantic concept created.
 
-Root Genesis code is composition/coordination only. Domain-specific generation algorithms live with the domain they create.
+Physical behavior belongs with its semantic concept when concept-local. A genuinely cross-concept law becomes a mechanic/workflow.
 
-Genesis does not remain a second runtime owner after startup.
+Storage, ECS/data-oriented layouts, sparse maps, packed arrays, pages and caches are hidden implementation choices unless they themselves represent an independent semantic concept.
 
-Do not introduce a global `generation/<domain>` hierarchy.
+Do not create global `generation`, `physics` or `storage` domain trees.
 
-## 11. Physics and algorithms
+## 13. Kernel law
 
-Do not create a global `physics` package merely because code is physical.
+Kernel contains only domain-neutral machinery such as time, scheduling and generic command dispatch.
 
-- owner-local physical law -> owner;
-- cross-owner physical law -> mechanic;
-- generic numerical primitive -> extract only after multiple real consumers prove a stable common concept.
+Kernel answers **when/how execution is scheduled**, never why Liquid flows or why an Agent acts.
 
-Replace independently meaningful algorithms behind narrow semantic seams. Do not turn every private helper into an interface.
+Kernel must not depend on world domains, mechanics, agents or presentation.
 
-## 12. Determinism and simulation authority
+## 14. Determinism and authority
 
-For the same authoritative inputs and compatible algorithm revision, deterministic systems must reproduce the same authoritative result independent of:
+For fixed authoritative inputs and compatible model revision, deterministic simulation results must not depend on:
 
 - render frame rate;
-- camera/observer position;
-- request order where order is not semantic;
+- camera position;
+- incidental request order;
+- hash iteration order;
 - cache eviction/reload;
-- incidental collection iteration order.
+- visibility/off-screen status.
 
-Authoritative mutation occurs on the simulation thread unless a future accepted ADR explicitly redesigns ownership/concurrency.
+Authoritative mutation occurs on the simulation thread unless a future accepted ADR defines deterministic concurrency/commit semantics.
 
-Optimization may reduce work. It may not silently substitute different physical rules because a region is off-screen or distant.
+## 15. Performance laws
 
-## 13. Performance laws
+Correctness and performance are co-design constraints.
 
-Correctness and performance are co-design constraints, not cleanup stages.
-
-For every non-trivial hot-path candidate:
+For a non-trivial hot path:
 
 1. define expected scale/workload;
-2. avoid avoidable full-world scans, per-tick work, allocations, boxing and temporary collections;
-3. keep world-size-independent structures bounded where the model permits;
-4. instrument representative work before complex optimization;
-5. optimize behind the same semantic contract;
-6. retain a benchmark/scale profile when regression risk is material;
-7. verify memory as well as latency/work count.
+2. avoid avoidable full-world scans, per-tick work, allocations and boxing;
+3. keep world-size-independent structures bounded where possible;
+4. instrument before complex optimization;
+5. optimize behind unchanged semantic contracts;
+6. retain scale/performance evidence where regression risk is material;
+7. measure memory/work count as well as latency.
 
-ECS/data-oriented storage, packed representations, paging and caches are allowed inside owners as replaceable implementation details. They do not define repository architecture.
+A reusable capability must not expose its internal performance representation to consumers just to optimize one current feature.
 
-Never claim a performance improvement without representative evidence.
+## 16. Testing laws
 
-## 14. Testing laws
+Use the nearest meaningful evidence:
 
-Every changed contract needs the nearest meaningful automated evidence.
+- value/pure algorithm -> unit/property tests;
+- authority/state lifecycle -> component invariant tests;
+- reusable capability -> contract tests independent of any one consumer;
+- replaceable algorithm -> substitution tests;
+- mechanic/workflow -> focused integration tests across public capabilities;
+- deterministic process -> replay/order tests;
+- physical transfer -> conservation/bounds tests;
+- hot/unbounded path -> scale/performance profiles;
+- structural law -> architecture fitness test.
 
-Required categories as applicable:
+A capability test that can only be expressed through one current consumer is a warning that the capability boundary may not be independent enough.
 
-- unit tests for pure algorithms/value rules;
-- owner tests for lifecycle/state invariants;
-- deterministic/replay/order tests;
-- conservation/bounds tests for physical flows;
-- substitution tests for replaceable seams;
-- integration tests only at real cross-owner composition boundaries;
-- architecture tests for structural laws;
-- scale/performance profiles for hot or unbounded-looking paths;
-- manual visual acceptance only for properties automation cannot establish.
+Do not weaken tests merely because a refactor breaks them; update them only when the intended contract changes.
 
-Do not weaken a test merely because new code fails it. Change tests when the intended contract deliberately changes and update normative documentation in the same change.
+## 17. Architecture fitness laws
 
-A bug fix must add the smallest regression test that would have caught the bug when practical.
+CI must progressively enforce:
 
-## 15. Architecture fitness laws
+- accepted Gradle topology only;
+- simulation -> presentation dependency is impossible;
+- semantic dependency graph is acyclic;
+- foreign `internal` imports are forbidden;
+- Kernel is domain-neutral;
+- reusable semantic modules do not depend on mechanics/agents/presentation consumers;
+- mechanics do not hide consumer-neutral reusable capabilities in their internals;
+- Continuum remains independent of concrete natural domains;
+- forbidden generic dumping-ground packages do not reappear;
+- package/file naming rules that can be checked mechanically;
+- deterministic and scale gates remain green.
 
-Executable architecture tests must protect at least:
+Important mechanically-checkable laws must not exist only as prose.
 
-- only the accepted Gradle module topology;
-- no simulation -> presentation/libGDX dependency;
-- no semantic package cycles;
-- no foreign `internal` imports;
-- kernel independence from domains;
-- owner independence from agents/mechanics/presentation;
-- Continuum independence from concrete natural domains;
-- forbidden generic root packages do not reappear;
-- package/file naming and ownership rules that can be checked mechanically.
+## 18. Documentation laws
 
-A structural rule that is important and mechanically checkable should not exist only as prose.
+Normative documentation mirrors semantic modules and public capabilities, not feature chronology.
 
-## 16. Documentation is part of the change
-
-Normative documentation must describe current truth, not intentions or chat history.
-
-Canonical ownership:
+Canonical structure:
 
 ```text
-docs/project-context.md      fastest current recovery path
-docs/architecture.md         repository-wide laws only
-docs/roadmap.md              current accepted stage and next blocked work
-docs/systems/**              exact current subsystem semantics/formulas/interactions
-docs/decisions/**            durable rationale/ADRs
-docs/guides/**               contributor procedures
-docs/journal/**              explicitly non-normative history/audits/acceptance
-docs/references.md           reusable external sources and algorithm lineage
+docs/project-context.md
+docs/architecture.md
+docs/roadmap.md
+docs/systems/**
+docs/decisions/**
+docs/guides/**
+docs/journal/**
+docs/references.md
 ```
 
-Every system page must identify ownership, public contracts, exact algorithm/formulas/units, determinism/order, invariants, interactions, performance model, limitations, code/tests and sources.
+Every substantive system page should state:
 
-External algorithms/research must be linked to primary/original sources where possible and labeled as direct model, algorithm lineage or conceptual influence. Never cite a paper to imply fidelity the implementation does not have.
+- semantic concept and responsibility;
+- authoritative facts;
+- reusable public capabilities;
+- consumers and allowed dependency direction;
+- exact algorithms/formulas/units;
+- determinism/order;
+- invariants;
+- performance model;
+- limitations;
+- code/tests;
+- primary/external sources and algorithm lineage.
 
-Historical Journal records are not silently rewritten into current truth; add forward links to current normative pages instead.
+## 19. Change protocol
 
-## 17. Change protocol
-
-Every production task follows this sequence:
+Every production task follows:
 
 ```text
-read laws/current context
+read repository laws/current docs
         ↓
-identify owner + block type
+identify independent semantic concepts
         ↓
-state invariant + performance risk + evidence
+identify reusable capabilities before consumer workflow
+        ↓
+identify authorities + invariants + dependency direction
         ↓
 smallest coherent implementation checkpoint
         ↓
-focused tests
+capability/owner/mechanic tests as applicable
         ↓
 architecture checks
         ↓
-full affected tests / scale evidence
+scale/performance evidence where material
         ↓
 reconcile normative docs
         ↓
-review dependency/package/naming diff
+review dependency + naming + reuse boundary diff
         ↓
 green PR checkpoint
 ```
 
-Do not stack new scope on unexplained red CI.
+## 20. Stop conditions
 
-Refactors that claim behavior preservation separate mechanical moves from semantic changes whenever possible.
+Stop and redesign before adding more code if any of these appears:
 
-## 18. Stop conditions
+- second authority for the same fact;
+- reusable concept placed under a consumer merely because that consumer came first;
+- a second consumer would require moving/extracting an existing capability;
+- a mechanic becomes a warehouse for Navigation/Occupancy/Visibility/etc.;
+- a lower-level capability depends on a higher-level workflow;
+- new universal context/service bag/service locator;
+- semantic dependency cycle;
+- foreign `internal` import;
+- giant `WorldCell`/`WorldFact` universal truth object;
+- central switch must learn every new concrete type;
+- generic dumping-ground package;
+- domain split across global technical layers;
+- cache/projection becomes authoritative;
+- camera/render distance changes simulation truth;
+- one conceptual change requires unrelated package surgery.
 
-Stop and redesign before adding code if any of these appears:
+Architecture friction is evidence about the boundary, not an inconvenience to bypass.
 
-- a second owner for the same fact;
-- a new global context/service bag;
-- a cross-package cycle;
-- a need to import another block's internals;
-- a giant `WorldCell`/`WorldFact` universal truth object;
-- a central switch that must learn every new concrete type/algorithm;
-- a generic package with no semantic owner;
-- a domain split across top-level technical layers;
-- a cache/projection becoming authoritative;
-- camera/render distance changing simulation truth;
-- a new feature requiring edits across many unrelated packages without a real semantic reason.
+## 21. Required final review questions
 
-Architecture friction is a signal, not an inconvenience to work around.
+Before declaring any change complete, answer all three:
 
-## 19. Required final review question
+> Can this concept be understood/replaced without reconstructing unrelated systems?
 
-Before declaring any repository action complete, answer:
+> Can a new plausible consumer reuse its public capability without moving the concept or importing another consumer?
 
-> If a future developer wants to replace, remove, optimize or understand this one concept, can they find its owner quickly and change it without reconstructing unrelated systems?
+> If this consumer disappeared entirely, would the reusable capability still have a coherent semantic home?
 
-If the answer is no, the change is not architecturally complete.
+If any answer is no, the boundary is not complete.
 
-See `docs/architecture.md`, `docs/guides/development-workflow.md`, `docs/guides/testing.md`, `docs/guides/documentation.md` and ADR-025 for the canonical detailed rules and rationale.
+See `docs/architecture.md`, ADR-026, `docs/guides/development-workflow.md`, `docs/guides/testing.md` and `docs/guides/documentation.md` for detailed rules.
