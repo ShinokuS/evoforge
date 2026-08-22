@@ -1,75 +1,71 @@
 # World Generation — Continuum
 
-World generation is being rebuilt on the **Continuum** architecture. The retired dense V12–V15 generator and World Atlas pipeline are historical work, not the current architecture.
+EvoForge world generation is being rebuilt on the **Continuum** architecture. The retired dense V12–V15 generator and World Atlas pipeline are historical work, not the current architecture.
 
-The canonical implementation plan is [Continuum World Development Plan](continuum-development-plan.md).
+The canonical implementation sequence is fixed in [Continuum World Development Plan](continuum-development-plan.md). Stage numbers are immutable.
 
 ## Current position
 
-The large-world foundation is now executable and inspectable:
+- Stage 0 — complete.
+- Stage 1 — **current work: Local Query + Shared Region Cache**.
+- Stage 2 — not started.
+- Stage 3 multi-resolution support already exists from earlier work, but it does not permit skipping unfinished canonical stages.
+- Stage 4+ — not started.
 
-- `ContinuumWorldDomain` represents large logical coordinates without whole-world allocation;
-- coordinate-addressed deterministic fields are independent of request order;
-- bounded pages and an explicit LRU page/byte cache keep residency independent of logical area;
-- 10k / 100k / 1M scale profiles are automated in CI;
-- eviction/rematerialization returns identical data;
-- `F2` opens a bounded page/cache inspector;
-- Stage 3 adds direct nested multi-resolution sampling without generating exact detail first.
+## What Stage 1 proves
 
-Stage 3 is intentionally still **not geography**. It proves that the same logical world can be read at several scales while shared world coordinates remain identical.
+Consumers do not receive an omniscient world object. Each asks for one bounded local area.
 
-## Stage 3 — Multi-Resolution Continuum
-
-The current sampling hierarchy is technical and replaceable:
+When many consumers need overlapping areas:
 
 ```text
-L0: step 1
-L1: step 2
-L2: step 4
-...
+many local requests
+        ↓
+find unique technical regions
+        ↓
+calculate/load each unique region once
+        ↓
+return only each consumer's requested local slice
 ```
 
-A page keeps a bounded number of samples while its covered world span grows with the selected level. A coarse query therefore asks the authoritative field directly for coarse lattice samples instead of materializing all exact cells and shrinking them afterward.
+The expensive shared work scales with unique regions, not with the number of consumers making overlapping requests.
 
-Critical invariant:
+The shared cache remains technical representation only. It is never authoritative world state.
 
-```text
-same world coordinate + same authoritative inputs
-=
-same value regardless of which resolution/query path reached it
-```
+Every query carries a world revision. After the revision changes, old reusable regional representation cannot be returned as current data.
 
-The inspector exposes resolution separately from presentation zoom. Camera zoom cannot change world truth; changing Stage 3 sampling resolution changes only which bounded representation is requested.
+## Existing large-world foundation
+
+The repository already contains useful support proven by tests and profiles:
+
+- large `long` logical coordinates without whole-world allocation;
+- deterministic coordinate-addressed sampling;
+- bounded technical pages and explicit page/payload cache budgets;
+- eviction/rematerialization equality;
+- automated 10k / 100k / 1M scale profiling;
+- nested multi-resolution sampling from the same logical world.
+
+Those capabilities are infrastructure. They do not change the canonical Stage 0–20 order.
 
 ## Architectural laws
 
-1. **Logical world size is not resident storage.** CPU/RAM follow requested/active work, not total world area.
-2. **One continuous XYZ world, separate state owners.** Shared coordinates never imply one giant mutable `WorldCell`.
-3. **Pages/chunks are technical only.** Natural geography may cross any number of paging boundaries.
-4. **Camera is an observer.** Visibility and drawing zoom never change generation or simulation truth.
-5. **Generation is deterministic and addressable.** Seed/version/semantic inputs/coordinates define generated facts; request order and thread order must not.
-6. **Coarse representation is not another reality.** Refinement may add detail but must preserve higher-level constraints/shared facts.
-7. **Genesis and runtime are separate.** Generation establishes initial facts; runtime owners control later mutation.
-8. **Continuous/high-precision terrain precedes exact XYZ materialization.** Cell-scale `+1/-1 Z` noise is a quality failure for ordinary smooth terrain.
-9. **Natural features are consequences of coherent processes.** Rivers, lakes, coasts and mountain systems are not independent decorative painters.
-10. **Definitions remain semantic.** Authored controls express human meaning; solver constants stay inside implementations unless truly semantic.
-11. **Replace modules, not generator versions.** Do not restart a V16/V17/V18 lineage.
+1. Logical world size is not resident storage.
+2. One continuous XYZ world does not imply one giant mutable `WorldCell`.
+3. No global `WorldFact` store; authoritative domains own their own state.
+4. Pages/chunks/tiles are technical only.
+5. Camera/presentation never controls world truth.
+6. Seed/version/definitions/coordinates determine Genesis facts; request order/cache history/thread order must not.
+7. Genesis and mutable Runtime ownership are separate.
+8. Continuous/high-precision terrain precedes exact XYZ materialization.
+9. Rivers, lakes, coasts, valleys and ecological labels are consequences of causes, not independent painters.
+10. Definitions remain semantic and solver-independent where possible.
+11. Runtime cost follows active/requested work, not total area.
+12. World age alone must not increase cost.
+13. Cross-domain mutation uses explicit coupling/transfer.
+14. No whole-generator V16/V17/V18 lineage.
 
-## What Stage 3 does not do
+## Current visual acceptance
 
-Stage 3 introduces no continents, ocean, geology, mountains, rivers, lakes, climate or exact XYZ terrain. It establishes only the scale-aware query/materialization contract on the diagnostic proof field.
+Run the desktop visualizer and press `F2`. The current Stage 1 proof shows consumer requests versus unique shared regional calculations in plain language.
 
-Real geographic stages must consume this foundation rather than invent their own full-world raster or camera-dependent LOD truth.
-
-## Verification
-
-Stage 3 acceptance requires:
-
-- same shared-coordinate values across resolutions;
-- order-independent requests;
-- bounded coarse materialization work;
-- coarse cache eviction/rematerialization equality;
-- 1M logical-domain scale profile;
-- visual inspection through the same production page/materializer contracts.
-
-See [Continuum Technical Pages, Cache and Multi-Resolution Sampling](continuum-pages.md).
+See [Stage 1 — Local Query + Shared Region Cache](stage1-local-query.md).
