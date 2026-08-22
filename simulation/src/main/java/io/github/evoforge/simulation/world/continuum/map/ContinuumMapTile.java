@@ -8,7 +8,20 @@ public final class ContinuumMapTile {
     private final int sampleSide;
     private final byte[] luminance;
 
+    /** Public boundary defensively copies caller-owned memory. */
     public ContinuumMapTile(ContinuumMapTileKey key, int sampleSide, byte[] luminance) {
+        this(key, sampleSide, luminance, true);
+    }
+
+    /**
+     * Internal generator path: the fresh buffer is transferred into this immutable object and must
+     * never be retained or mutated by the caller afterwards.
+     */
+    static ContinuumMapTile fromOwnedLuminance(ContinuumMapTileKey key, int sampleSide, byte[] luminance) {
+        return new ContinuumMapTile(key, sampleSide, luminance, false);
+    }
+
+    private ContinuumMapTile(ContinuumMapTileKey key, int sampleSide, byte[] luminance, boolean copy) {
         if (key == null) throw new IllegalArgumentException("key must not be null");
         if (sampleSide <= 0) throw new IllegalArgumentException("sampleSide must be > 0");
         if (luminance == null) throw new IllegalArgumentException("luminance must not be null");
@@ -17,7 +30,7 @@ public final class ContinuumMapTile {
         }
         this.key = key;
         this.sampleSide = sampleSide;
-        this.luminance = Arrays.copyOf(luminance, luminance.length);
+        this.luminance = copy ? Arrays.copyOf(luminance, luminance.length) : luminance;
     }
 
     public ContinuumMapTileKey key() {
