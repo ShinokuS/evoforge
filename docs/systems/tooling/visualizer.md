@@ -19,13 +19,44 @@ Use the visualizer when there is something meaningful to inspect as a world or s
 
 Internal infrastructure such as scheduler queues, handle reuse, compaction counters or cache bookkeeping is primarily verified by tests and performance profiles. A dashboard of numbers is not a substitute for a world view.
 
-## Current F2 screen
+## Current F2 screen — Stage 4
 
-`F2` opens the spatial **Continuum Inspector**.
+`F2` opens the **Stage 4 map / zoom proof** over a smooth deterministic synthetic Continuum field.
 
-It remains the common world-oriented inspection surface while Continuum is developed. It supports spatial navigation and multi-resolution inspection of the current deterministic synthetic field. This field is diagnostic scaffolding, not geography.
+This is intentionally map-like rather than a page/cache dashboard. The synthetic field exists only to make pan, zoom, asynchronous refinement and fallback behavior visible; it is not geography.
 
-Stage 2 — Infinite-Time Foundation does not replace this screen with a scheduler dashboard. Its time/sleep/compaction invariants are covered by automated tests and the scale profile.
+Controls:
+
+```text
+Left mouse drag  move around the logical world
+Mouse wheel      zoom around the cursor
+Home             fit the whole world
+G                toggle technical tile diagnostics
+Esc              return to menu
+```
+
+By default technical tile borders are hidden.
+
+With `G` enabled:
+
+- green border = requested detail is ready;
+- orange border = a coarser ready parent is temporarily filling that area;
+- bounded CPU/GPU cache counts and async-job counts are shown.
+
+The screen should not show blank holes while fine map tiles are being generated.
+
+## Stage 4 presentation architecture
+
+The map uses disposable derived tiles. Camera state decides only which representation is requested.
+
+It does **not** decide:
+
+- whether a region exists;
+- what the Genesis world contains;
+- whether simulation runs there;
+- physical accuracy or simulation LOD.
+
+CPU tile storage and render resources are independently bounded. Moving slightly should reuse overlapping tiles rather than regenerate the whole screen.
 
 ## Required world-inspector direction
 
@@ -66,4 +97,4 @@ Camera, zoom and inspector controls are presentation only. They must not decide 
 
 Real user actions go through production command/domain paths; presentation does not mutate authoritative owners directly.
 
-See [Stage 2 — Infinite-Time Foundation](../world-generation/stage2-infinite-time.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
+See [Stage 4 — Map / Zoom Performance Proof](../world-generation/stage4-map-zoom.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
