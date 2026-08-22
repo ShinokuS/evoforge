@@ -8,45 +8,24 @@ The canonical implementation sequence is fixed in [Continuum World Development P
 
 - Stage 0 — complete.
 - Stage 1 — complete and manually accepted.
-- Stage 2 — **current work: Infinite-Time Foundation**.
-- Stage 3 multi-resolution support already exists from earlier work, but does not permit skipping Stage 2 acceptance.
-- Stage 4+ — not started.
+- Stage 2 — complete and manually accepted.
+- Stage 3 — complete and manually accepted; revalidated after Stage 1/2 integration.
+- Stage 4 — **next: Map / Zoom Performance Proof**.
+- Stage 5+ — not started.
 
-## What Stage 2 proves
+## Proven foundation
 
-World age must not itself create work or retained history.
-
-The current proof establishes:
-
-- exact long-horizon integer time (`era + tick`);
-- sleeping processes with one current future wake obligation each;
-- huge time jumps that return only due processes rather than replaying every missing tick;
-- scheduler cleanup and safe handle reuse so cancelled historical work is not retained;
-- bounded in-memory delta compaction (`checkpoint + recent tail`);
-- a scale profile comparing equivalent young and astronomically old working sets.
-
-The important rule is:
-
-```text
-cost now = current work + bounded current state
-not
-cost now = all historical ticks and events
-```
-
-Final disk persistence, save/load compaction and the full world long-time proof remain Stage 17.
-
-## Existing large-world foundation
-
-The repository already contains useful support proven by tests and profiles:
+The repository now has:
 
 - large `long` logical coordinates without whole-world allocation;
 - deterministic coordinate-addressed sampling;
 - bounded technical pages and explicit page/payload cache budgets;
-- Stage 1 local queries with shared regional work;
-- automated large-world scale profiling;
-- nested multi-resolution sampling from the same logical world.
+- local queries with shared regional work;
+- long-horizon time, sleeping-process scheduling and bounded history compaction primitives;
+- nested multi-resolution sampling from the same logical world;
+- automated large-world, multi-resolution and time-longevity scale profiles.
 
-Those capabilities are infrastructure. They do not change the canonical Stage 0–20 order.
+Stage 3 still passes after Stage 1/2 integration: direct L0/L5/L10 coarse queries keep the same bounded sample count and payload while covering progressively larger world areas.
 
 ## Architectural laws
 
@@ -67,8 +46,8 @@ Those capabilities are infrastructure. They do not change the canonical Stage 0�
 
 ## Visualizer rule
 
-`F2` is a world-oriented spatial inspector. Stage 2 does not replace it with a scheduler/time dashboard because this stage has no meaningful spatial state to show.
+`F2` is a world-oriented spatial inspector, not a dashboard collection.
 
-Internal Stage 2 behavior is verified by tests and performance profiles. Time controls will be added to the actual world view later, when a real mutable runtime world exists.
+When real landscape appears, the inspector must grow into a useful world-view tool with **2D map and 3D terrain modes**, pan/zoom/navigation, clear settings and switchable diagnostic layers. Presentation controls never change world truth or simulation fidelity.
 
-See [Stage 2 — Infinite-Time Foundation](stage2-infinite-time.md).
+See [Continuum Development Plan](continuum-development-plan.md).
