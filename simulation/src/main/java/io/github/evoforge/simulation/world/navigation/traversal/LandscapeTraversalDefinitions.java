@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.traversal;
+package io.github.evoforge.simulation.world.navigation.traversal;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 

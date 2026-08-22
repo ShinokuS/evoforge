@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.geometry;
+package io.github.evoforge.simulation.world.geometry;
 
 public final class ShapeTraversalFactor {
 

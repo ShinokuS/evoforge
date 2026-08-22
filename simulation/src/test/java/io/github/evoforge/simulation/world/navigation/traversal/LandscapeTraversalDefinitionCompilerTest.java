@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.traversal;
+package io.github.evoforge.simulation.world.navigation.traversal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;

@@ -8,14 +8,14 @@ import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
 import io.github.evoforge.simulation.world.geometry.TransitionMask;
 import io.github.evoforge.simulation.world.geometry.TransitionPorts;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
-import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
 
 final class TransitionCostCalculatorTest {
 

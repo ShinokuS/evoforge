@@ -5,8 +5,8 @@ import io.github.evoforge.simulation.world.terrain.TerrainLookup;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.geometry.GridTransitionLength;
 import io.github.evoforge.simulation.world.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
-import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
 
 public final class TransitionCostCalculator
         implements TransitionCostLookup {

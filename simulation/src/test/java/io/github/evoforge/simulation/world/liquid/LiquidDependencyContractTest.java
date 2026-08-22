@@ -11,9 +11,7 @@ import org.junit.jupiter.api.Test;
 
 final class LiquidDependencyContractTest {
 
-    private static final String LEGACY_WATER_IMPORT =
-            "import io.github.evoforge.simulation.world.landscape.water.";
-    private static final String OWNER_LOCAL_WATER_IMPORT =
+    private static final String WATER_IMPORT =
             "import io.github.evoforge.simulation.world.liquid.water.";
 
     @Test
@@ -38,8 +36,7 @@ final class LiquidDependencyContractTest {
 
                 String source = Files.readString(javaFile);
                 assertFalse(
-                        source.contains(LEGACY_WATER_IMPORT)
-                                || source.contains(OWNER_LOCAL_WATER_IMPORT),
+                        source.contains(WATER_IMPORT),
                         () -> javaFile
                                 + " contains forbidden dependency from generic Liquid onto Water specialization");
             }

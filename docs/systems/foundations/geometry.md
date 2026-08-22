@@ -318,7 +318,7 @@ These require explicit neutral contract changes when a real mechanic needs them.
 Primary code lives under:
 
 ```text
-simulation/.../world/mechanics/geometry/
+simulation/.../world/geometry/
 simulation/.../world/landscape/   Terrain-backed Geometry integration
 ```
 

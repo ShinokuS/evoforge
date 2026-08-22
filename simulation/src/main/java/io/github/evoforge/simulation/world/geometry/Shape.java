@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.geometry;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
 import io.github.evoforge.simulation.world.space.measurement.CellVolume;
 
 public interface Shape {

@@ -14,7 +14,7 @@ import io.github.evoforge.simulation.world.terrain.TerrainSystem;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.geometry.GeometrySystem;
 import io.github.evoforge.simulation.world.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalLowerBoundLookup;
 import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeLookup;
 import io.github.evoforge.simulation.world.navigation.traversal.TraversalChangeTracker;
 import io.github.evoforge.simulation.world.navigation.traversal.TraversalRevisionLookup;

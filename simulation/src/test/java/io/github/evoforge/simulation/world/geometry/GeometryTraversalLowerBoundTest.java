@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.geometry;
+package io.github.evoforge.simulation.world.geometry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

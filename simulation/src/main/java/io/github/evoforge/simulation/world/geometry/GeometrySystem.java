@@ -3,8 +3,8 @@ package io.github.evoforge.simulation.world.geometry;
 import java.util.TreeMap;
 
 import io.github.evoforge.simulation.world.terrain.TerrainLookup;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalLowerBoundLookup;
 
 public final class GeometrySystem {
 

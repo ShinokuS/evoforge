@@ -19,7 +19,7 @@ import io.github.evoforge.simulation.world.object.stock.ConsumableStockLookup;
 import io.github.evoforge.simulation.world.geometry.GeometryLookup;
 import io.github.evoforge.simulation.world.object.stock.growth.GrowthLookup;
 import io.github.evoforge.simulation.mechanics.movement.MoveToView;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyLookup;
 import io.github.evoforge.simulation.world.navigation.NavigationLookup;
 import io.github.evoforge.simulation.world.object.ObjectLookup;
 import io.github.evoforge.simulation.world.navigation.pathfinding.Pathfinder;

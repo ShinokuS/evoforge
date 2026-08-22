@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.traversal;
+package io.github.evoforge.simulation.world.navigation.traversal;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;

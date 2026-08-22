@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.occupancy;
+package io.github.evoforge.simulation.world.space.occupancy;
 
 import io.github.evoforge.simulation.world.space.occupancy.OccupancyState;
 

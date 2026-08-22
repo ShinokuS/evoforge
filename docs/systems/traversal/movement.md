@@ -320,7 +320,7 @@ Primary code lives under:
 
 ```text
 simulation/.../world/mechanics/movement/
-simulation/.../world/pathfinding/   route advice
+simulation/.../world/navigation/pathfinding/   route advice
 ```
 
 Headless coverage includes timing/carry, reservation lifecycle, start/commit revalidation, route ownership/chaining, cancellation, ramps, mover constraints and multi-agent contention. Visualizer movement tools invoke the same Control/domain path and only observe active state.

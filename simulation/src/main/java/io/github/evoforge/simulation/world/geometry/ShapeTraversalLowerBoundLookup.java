@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.world.mechanics.geometry;
+package io.github.evoforge.simulation.world.geometry;
 
 /** Guaranteed minimum positive traversal factor among Shapes currently present in Geometry. */
 public interface ShapeTraversalLowerBoundLookup {

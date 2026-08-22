@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.mechanics.movement.command.MoveStepResult;
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 import io.github.evoforge.simulation.world.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
 import io.github.evoforge.simulation.world.object.ObjectId;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 import org.junit.jupiter.api.Test;

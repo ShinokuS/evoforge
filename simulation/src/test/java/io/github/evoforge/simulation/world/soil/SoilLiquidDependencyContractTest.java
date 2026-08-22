@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 final class SoilLiquidDependencyContractTest {
 
     private static final String WATER_IMPORT =
-            "import io.github.evoforge.simulation.world.landscape.water.";
+            "import io.github.evoforge.simulation.world.liquid.water.";
 
     @Test
     void genericSoilLiquidFoundationDoesNotDependOnWaterIntegration()

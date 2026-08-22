@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.github.evoforge.simulation.world.landscape.definition.LandscapeDefinitionId;
 import org.junit.jupiter.api.Test;
-import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
 
 final class TransitionCostLowerBoundCalculatorTest {
 

@@ -1,8 +1,8 @@
 package io.github.evoforge.simulation.world.navigation.traversal;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalFactor;
-import io.github.evoforge.simulation.world.mechanics.geometry.ShapeTraversalLowerBoundLookup;
-import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalFactor;
+import io.github.evoforge.simulation.world.geometry.ShapeTraversalLowerBoundLookup;
+import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
 
 /** Derives an admissible global edge-cost floor from current traversal facts. */
 public final class TransitionCostLowerBoundCalculator

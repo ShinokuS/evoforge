@@ -7,7 +7,7 @@ import io.github.evoforge.simulation.world.space.position.CellObjectLookup;
 
 import java.util.HashMap;
 import java.util.Map;
-import io.github.evoforge.simulation.world.mechanics.occupancy.OccupancyLookup;
+import io.github.evoforge.simulation.world.space.occupancy.OccupancyLookup;
 
 /**
  * Owns present-tense execution reservations and composes them with actual

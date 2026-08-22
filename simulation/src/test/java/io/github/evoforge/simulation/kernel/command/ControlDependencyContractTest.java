@@ -1,4 +1,4 @@
-package io.github.evoforge.simulation.control.core;
+package io.github.evoforge.simulation.kernel.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -15,31 +15,16 @@ final class ControlDependencyContractTest {
 
     private static final String WORLD_IMPORT =
             "import io.github.evoforge.simulation.world.";
-    private static final String CONTROL_IMPORT =
+    private static final String LEGACY_CONTROL_IMPORT =
             "import io.github.evoforge.simulation.control.";
 
     @Test
     void genericCommandInfrastructureDoesNotDependOnWorldDomains()
             throws IOException {
 
-        Path mainJava = mainJava();
-        Path kernelCommand = mainJava.resolve(
-                "io/github/evoforge/simulation/kernel/command");
-
-        if (Files.isDirectory(kernelCommand)) {
-            assertNoImport(kernelCommand, WORLD_IMPORT);
-            return;
-        }
-
-        // Transitional pre-ADR-025 locations. Remove this branch once the
-        // owner-first package migration itself has been committed.
         assertNoImport(
-                mainJava.resolve(
-                        "io/github/evoforge/simulation/control/core"),
-                WORLD_IMPORT);
-        assertNoImport(
-                mainJava.resolve(
-                        "io/github/evoforge/simulation/control/sync"),
+                mainJava().resolve(
+                        "io/github/evoforge/simulation/kernel/command"),
                 WORLD_IMPORT);
     }
 
@@ -50,7 +35,7 @@ final class ControlDependencyContractTest {
         assertNoImport(
                 mainJava().resolve(
                         "io/github/evoforge/simulation/world"),
-                CONTROL_IMPORT);
+                LEGACY_CONTROL_IMPORT);
     }
 
     @Test
@@ -85,40 +70,30 @@ final class ControlDependencyContractTest {
             String forbiddenImport)
             throws IOException {
 
-        assertTrue(
-                Files.isDirectory(root),
-                "missing source directory: " + root);
+        assertTrue(Files.isDirectory(root), "missing source directory: " + root);
 
         try (var paths = Files.walk(root)) {
-            List<Path> javaFiles =
-                    paths.filter(Files::isRegularFile)
-                            .filter(path -> path.toString().endsWith(".java"))
-                            .toList();
+            List<Path> javaFiles = paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .toList();
 
             for (Path javaFile : javaFiles) {
                 String source = Files.readString(javaFile);
                 assertFalse(
                         source.contains(forbiddenImport),
-                        () -> javaFile
-                                + " contains forbidden dependency "
-                                + forbiddenImport);
+                        () -> javaFile + " contains forbidden dependency " + forbiddenImport);
             }
         }
     }
 
     private static Path mainJava() {
         Path moduleLocal = Path.of("src/main/java");
-        if (Files.isDirectory(moduleLocal)) {
-            return moduleLocal;
-        }
+        if (Files.isDirectory(moduleLocal)) return moduleLocal;
 
-        Path repositoryRelative =
-                Path.of("simulation/src/main/java");
-        if (Files.isDirectory(repositoryRelative)) {
-            return repositoryRelative;
-        }
+        Path repositoryRelative = Path.of("simulation/src/main/java");
+        if (Files.isDirectory(repositoryRelative)) return repositoryRelative;
 
-        throw new IllegalStateException(
-                "cannot locate simulation main Java sources");
+        throw new IllegalStateException("cannot locate simulation main Java sources");
     }
 }

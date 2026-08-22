@@ -19,7 +19,7 @@ import io.github.evoforge.simulation.world.object.stock.ConsumableStockDefinitio
 import io.github.evoforge.simulation.world.object.stock.growth.GrowthDefinitions;
 import io.github.evoforge.simulation.mechanics.movement.MovementDefinitions;
 import io.github.evoforge.simulation.world.space.occupancy.OccupancyDefinitions;
-import io.github.evoforge.simulation.world.mechanics.traversal.LandscapeTraversalDefinitions;
+import io.github.evoforge.simulation.world.navigation.traversal.LandscapeTraversalDefinitions;
 import io.github.evoforge.simulation.world.navigation.traversal.water.WaterWadingDefinitions;
 import io.github.evoforge.simulation.world.object.definition.ObjectDefinitionId;
 
