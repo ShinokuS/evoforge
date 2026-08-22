@@ -4,8 +4,11 @@ on:
   pull_request:
     paths:
       - 'simulation/src/main/java/io/github/evoforge/simulation/world/continuum/**'
+      - 'simulation/src/main/java/io/github/evoforge/simulation/time/**'
       - 'simulation/src/test/java/io/github/evoforge/simulation/world/continuum/**'
+      - 'simulation/src/test/java/io/github/evoforge/simulation/time/**'
       - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumScale*'
+      - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumTime*'
       - 'simulation/build.gradle'
       - '.github/workflows/continuum-scale-profile.yml'
   push:
@@ -13,8 +16,11 @@ on:
       - develop
     paths:
       - 'simulation/src/main/java/io/github/evoforge/simulation/world/continuum/**'
+      - 'simulation/src/main/java/io/github/evoforge/simulation/time/**'
       - 'simulation/src/test/java/io/github/evoforge/simulation/world/continuum/**'
+      - 'simulation/src/test/java/io/github/evoforge/simulation/time/**'
       - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumScale*'
+      - 'simulation/src/test/java/io/github/evoforge/simulation/profile/ContinuumTime*'
       - 'simulation/build.gradle'
       - '.github/workflows/continuum-scale-profile.yml'
   workflow_dispatch:

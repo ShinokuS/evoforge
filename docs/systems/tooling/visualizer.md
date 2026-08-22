@@ -2,58 +2,68 @@
 
 ## Purpose
 
-The Visualizer is an observer. It may display simulation or Continuum diagnostics, but it never decides what is physically true.
+The Visualizer is an observer of the world. It may display simulation or Continuum diagnostics, but it never decides what is physically true.
 
-## Current F2 screen — Stage 1
+## Core rule
 
-`F2` currently opens the **Stage 1 shared-local-query proof**.
+Do not create a visual screen merely because a development stage has diagnostics.
 
-It is intentionally simple:
+Use the visualizer when there is something meaningful to inspect as a world or spatial process:
 
-- **BLUE** — an area requested by one consumer;
-- **GREEN** — a technical region calculated once and reused;
-- **YELLOW** — one consumer's returned local area; nothing outside that area is exposed to that consumer.
+- move around the world;
+- zoom in/out;
+- inspect spatial layers;
+- compare continuous and exact terrain;
+- watch water, terrain or other runtime state evolve;
+- later control/view simulation time on the real world.
 
-The screen shows:
+Internal infrastructure such as scheduler queues, handle reuse, compaction counters or cache bookkeeping is primarily verified by tests and performance profiles. A dashboard of numbers is not a substitute for a world view.
 
-- number of consumers asking now;
-- total region uses without sharing;
-- unique regions actually calculated;
-- repeated region calculations avoided;
-- actual new page loads;
-- current world revision.
+## Current F2 screen
 
-Controls:
+`F2` opens the spatial **Continuum Inspector**.
 
-```text
-1        one consumer
-2        ten consumers
-3        one hundred consumers
-Arrows   move the example
-R        advance world revision
-Home     center
-+/-      drawing scale only
-Esc      back
-```
+It remains the common world-oriented inspection surface while Continuum is developed. It supports spatial navigation and multi-resolution inspection of the current deterministic synthetic field. This field is diagnostic scaffolding, not geography.
 
-The expected proof is easy to see: 1, 10 and 100 strongly overlapping consumers still require the same four unique technical regions. More consumers increase local returned data, but do not multiply the expensive shared regional calculation.
+Stage 2 — Infinite-Time Foundation does not replace this screen with a scheduler dashboard. Its time/sleep/compaction invariants are covered by automated tests and the scale profile.
 
-## Important boundary
+## Required world-inspector direction
 
-The shared cache is not world truth. Consumers never receive whole shared pages directly; each receives only its own bounded local view.
+Once real landscape appears, the main world inspector must grow into a practical successor to the useful parts of the old visualizer:
 
-Camera and drawing scale are presentation only.
+- **2D map view** for large-area inspection;
+- **3D terrain view** for relief and vertical structure;
+- free pan, zoom and navigation;
+- clear display/settings controls rather than hidden debug hotkeys;
+- switchable diagnostic layers appropriate to the current stage;
+- coordinates and useful inspection information for the point/area being examined;
+- later, simulation-time controls on the same real world view when mutable runtime state exists.
 
-## Previous Continuum inspector
+This is a presentation requirement only. 2D/3D mode, camera position, zoom and enabled layers must never change Genesis truth, simulation activity or physical accuracy.
 
-The earlier page/cache and multi-resolution inspector remains in code because that accepted support work is still useful. During Stage 1, `F2` is deliberately routed to the current Stage 1 proof so manual acceptance always matches the stage being reviewed.
+The visualizer may evolve incrementally as new world data becomes available; we do not build fake landscape or premature controls merely to approximate the final UI before there is meaningful data to show.
 
-## Runtime observer boundary
+## Future diagnostic layers
 
-Ordinary runtime visualization continues to read production simulation capabilities. Real user actions go through production command/domain paths; presentation does not mutate authoritative owners directly.
+Examples as later stages create real world content:
 
-## Manual acceptance rule
+- ocean / land;
+- continuous elevation;
+- slope / curvature;
+- uplift / erosion / deposition;
+- drainage / watersheds;
+- depressions / spill points;
+- rivers and lake levels;
+- climate;
+- geology / sediment / soil;
+- exact XYZ materialization;
+- active/sleeping runtime water;
+- simulation time and runtime revisions.
 
-A stage with spatial meaning is not complete only because tests are green. The user must be able to open the current proof and understand what the system is doing without reading internal class names.
+## Observer boundary
 
-See [Stage 1 — Local Query + Shared Region Cache](../world-generation/stage1-local-query.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
+Camera, zoom and inspector controls are presentation only. They must not decide simulation activity, generation truth or physical fidelity.
+
+Real user actions go through production command/domain paths; presentation does not mutate authoritative owners directly.
+
+See [Stage 2 — Infinite-Time Foundation](../world-generation/stage2-infinite-time.md) and [Continuum Development Plan](../world-generation/continuum-development-plan.md).
