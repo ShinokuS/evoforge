@@ -11,31 +11,45 @@ import org.junit.jupiter.api.Test;
 
 final class LiquidDependencyContractTest {
 
-    private static final String WATER_IMPORT =
+    private static final String LEGACY_WATER_IMPORT =
             "import io.github.evoforge.simulation.world.landscape.water.";
+    private static final String OWNER_LOCAL_WATER_IMPORT =
+            "import io.github.evoforge.simulation.world.liquid.water.";
 
     @Test
     void genericLiquidFoundationDoesNotDependOnWaterIntegration()
             throws IOException {
 
-        Path root = mainJava().resolve(
-                "io/github/evoforge/simulation/world/landscape/liquid");
+        Path mainJava = mainJava();
+        Path ownerRoot = mainJava.resolve(
+                "io/github/evoforge/simulation/world/liquid");
+        Path root = Files.isDirectory(ownerRoot)
+                ? ownerRoot
+                : mainJava.resolve(
+                        "io/github/evoforge/simulation/world/landscape/liquid");
         assertTrue(Files.isDirectory(root), "missing liquid source directory: " + root);
 
         try (var paths = Files.walk(root)) {
             for (Path javaFile : paths
                     .filter(Files::isRegularFile)
                     .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> !isWaterSpecialization(root, path))
                     .toList()) {
 
                 String source = Files.readString(javaFile);
                 assertFalse(
-                        source.contains(WATER_IMPORT),
+                        source.contains(LEGACY_WATER_IMPORT)
+                                || source.contains(OWNER_LOCAL_WATER_IMPORT),
                         () -> javaFile
-                                + " contains forbidden Water dependency "
-                                + WATER_IMPORT);
+                                + " contains forbidden dependency from generic Liquid onto Water specialization");
             }
         }
+    }
+
+    private static boolean isWaterSpecialization(Path root, Path file) {
+        Path relative = root.relativize(file);
+        return relative.getNameCount() > 1
+                && relative.getName(0).toString().equals("water");
     }
 
     private static Path mainJava() {
