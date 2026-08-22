@@ -23,9 +23,11 @@ This is the canonical executable roadmap for EvoForge Continuum/world generation
 
 ## Mandatory gate for every stage
 
-A stage is complete only after applicable correctness, property, determinism, order-independence, seam, replaceability, performance, scale, visual-inspection and documentation gates pass.
+A stage is complete only after the **applicable** correctness, property, determinism, order-independence, seam, replaceability, performance, scale, visualization and documentation gates pass.
 
-Tests and performance evidence are part of implementation, not later cleanup. Spatial or temporal behavior must be understandable in the Inspector where useful.
+Tests and performance evidence are part of implementation, not later cleanup.
+
+**Visualization is required only when it genuinely helps inspect world/spatial behavior.** Do not create dashboards or artificial screens merely to satisfy a gate. Internal infrastructure such as scheduling, compaction and cache bookkeeping is proved by tests, profiles and diagnostics. The long-term `F2` Inspector is a world viewer: pan/zoom, spatial layers and later runtime time controls belong there when a real world state exists to show.
 
 ## Canonical Stage 0–20 sequence
 
@@ -57,7 +59,7 @@ Tests and performance evidence are part of implementation, not later cleanup. Sp
 
 - **Stage 0 — complete.** Legacy dense worldgen is retired and the Continuum foundation exists.
 - **Stage 1 — complete and manually accepted.** Local overlapping reads share expensive regional work; PR #122.
-- **Stage 2 — CURRENT.** Infinite-Time Foundation is implemented in draft PR #123 and awaits automated/manual acceptance.
+- **Stage 2 — CURRENT.** Infinite-Time Foundation is implemented in draft PR #123 and awaits final acceptance.
 - **Stage 3 — multi-resolution support already exists from earlier work.** It remains useful, but Stage 2 must still be accepted before proceeding.
 - **Stage 4+ — not started.**
 
@@ -81,7 +83,7 @@ In plain language: if ten objects need almost the same place, the world reads/ca
 - consumer-local immutable views;
 - bounded shared cache;
 - 1 / 10 / 100 consumer performance proof;
-- understandable F2 visualization.
+- understandable spatial F2 visualization.
 
 **Status:** complete.
 
@@ -131,15 +133,11 @@ The scale profile compares equivalent young and ancient states and records:
 
 World age alone must not increase those structural counts.
 
-## Visual acceptance
+## Visualization
 
-`F2` must explain three things without requiring knowledge of class names:
+Stage 2 has **no dedicated visualization**. Scheduling, long-horizon time and compaction are internal infrastructure; a panel of numbers is not a meaningful view of the world.
 
-1. **World age** — young and ancient presets keep the same current working set.
-2. **Sleeping work** — a huge jump handles only processes whose wake condition became due; it does not replay every skipped tick.
-3. **History kept** — a million changes compact into current state + bounded recent history.
-
-The screen also shows that repeated cancelled scheduler tasks leave zero queued history.
+`F2` remains the spatial Continuum Inspector. Future runtime time controls will be added to the actual world viewer only when there is a real mutable world state whose evolution can be inspected.
 
 ## Boundary
 
@@ -147,10 +145,10 @@ Stage 2 is not the final persistence system. Disk persistence, save/load compact
 
 ## Done when
 
-Automated tests, Docs Site and Continuum Scale Profile are green, the F2 explanation is understandable, and the user manually accepts Stage 2.
+Automated tests, Docs Site and Continuum Scale Profile are green, the temporal invariants are documented clearly, and the user accepts Stage 2. No artificial visualization is required.
 
 ---
 
 ## Stage discipline
 
-After Stage 2 passes automated gates and manual inspection, stop. Do not start Stage 4 or geography. Stage 3 already exists from earlier work and is only considered satisfied in sequence after Stage 2 acceptance.
+After Stage 2 passes automated gates and user acceptance, stop. Do not start Stage 4 or geography. Stage 3 already exists from earlier work and is only considered satisfied in sequence after Stage 2 acceptance.
