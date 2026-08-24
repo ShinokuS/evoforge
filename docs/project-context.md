@@ -81,13 +81,14 @@ simulation
 ├── definition/        neutral authored-definition infrastructure only
 ├── genesis/           global initial-world composition only
 ├── world/             objective semantic owners
-│   ├── continuum/
+│   ├── continuum/      neutral large-world addressing/materialization
+│   ├── geophysics/     continuous macro-geophysical skeleton
 │   ├── material/
 │   ├── object/
 │   ├── space/          position, orientation, occupancy, placement, measurement
 │   ├── geometry/
 │   ├── navigation/
-│   ├── geology/
+│   ├── geology/        authored geological profile/unit/material semantics
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
@@ -107,9 +108,13 @@ The dense V12–V15 world-generation line remains retired. Continuum remains the
 
 Accepted work before the architecture reset includes deterministic addressable sampling, bounded page/cache work, scale/performance instrumentation and multi-resolution/local query/map work recorded in the Continuum system pages and development history.
 
-Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
+Continuum remains neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology/Geophysics truth.
 
-Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is NEXT and has not started.** The architecture gate is complete, so Stage 5 is now the allowed substantive world-generation checkpoint.
+Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is IN PROGRESS in PR #135 and is not yet manually accepted.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
+
+Stage 6 remains blocked until Stage 5 passes final automated verification and explicit manual acceptance of the F2 macro-geography.
+
+See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md).
 
 ## Definitions policy
 
