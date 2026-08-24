@@ -16,10 +16,10 @@ final class DeterministicMacroGeophysicalFieldTest {
     void fixedCoordinatesHaveStableRegressionValues() {
         DeterministicMacroGeophysicalField field = field();
 
-        assertEquals(0.4331074953763258d, field.elevationAt(0L, 0L));
-        assertEquals(0.43139189937693984d, field.elevationAt(123_456L, 789_012L));
-        assertEquals(-0.5871485788941916d, field.elevationAt(-987_654_321L, 123_456_789L));
-        assertEquals(0.46860468690359186d, field.elevationAt(1L << 40, -(1L << 39)));
+        assertEquals(-0.12400000000000001d, field.elevationAt(0L, 0L));
+        assertEquals(0.05665542745728361d, field.elevationAt(123_456L, 789_012L));
+        assertEquals(-0.299511651417689d, field.elevationAt(-987_654_321L, 123_456_789L));
+        assertEquals(-0.16502534544554803d, field.elevationAt(1L << 40, -(1L << 39)));
     }
 
     @Test
@@ -92,14 +92,8 @@ final class DeterministicMacroGeophysicalFieldTest {
 
     @Test
     void archipelagoPresetProducesMoreCoastTransitionsThanSupercontinentPreset() {
-        MacroGeophysicalField supercontinent = MacroGeophysics.create(
-                0x45A10F0E2026L,
-                1L,
-                MacroGeophysicsPreset.SUPERCONTINENT.definition());
-        MacroGeophysicalField archipelago = MacroGeophysics.create(
-                0x45A10F0E2026L,
-                1L,
-                MacroGeophysicsPreset.ARCHIPELAGO.definition());
+        MacroGeophysicalField supercontinent = presetField(MacroGeophysicsPreset.SUPERCONTINENT);
+        MacroGeophysicalField archipelago = presetField(MacroGeophysicsPreset.ARCHIPELAGO);
 
         int supercontinentTransitions = coastTransitions(supercontinent, 64, 16_000_000L);
         int archipelagoTransitions = coastTransitions(archipelago, 64, 16_000_000L);
@@ -110,11 +104,26 @@ final class DeterministicMacroGeophysicalFieldTest {
     }
 
     @Test
+    void archipelagoAndOceanicPresetsHaveDifferentGeographicalCharacter() {
+        MacroGeophysicalField archipelago = presetField(MacroGeophysicsPreset.ARCHIPELAGO);
+        MacroGeophysicalField oceanic = presetField(MacroGeophysicsPreset.OCEANIC);
+
+        int archipelagoTransitions = coastTransitions(archipelago, 96, 16_000_000L);
+        int oceanicTransitions = coastTransitions(oceanic, 96, 16_000_000L);
+        double archipelagoLand = landFraction(archipelago, 96, 16_000_000L);
+        double oceanicLand = landFraction(oceanic, 96, 16_000_000L);
+
+        assertTrue(
+                archipelagoTransitions > oceanicTransitions * 2,
+                "archipelago should contain substantially more island-group coastline than oceanic");
+        assertTrue(
+                archipelagoLand > oceanicLand * 1.5d,
+                "oceanic should remain dominated by open ocean with fewer isolated landmasses");
+    }
+
+    @Test
     void archipelagoCoastRemainsMacroStructuredRatherThanSampleScaleNoise() {
-        MacroGeophysicalField archipelago = MacroGeophysics.create(
-                0x45A10F0E2026L,
-                1L,
-                MacroGeophysicsPreset.ARCHIPELAGO.definition());
+        MacroGeophysicalField archipelago = presetField(MacroGeophysicsPreset.ARCHIPELAGO);
 
         double coarseRate = coastTransitionRate(archipelago, 64, 16_000_000L);
         double fineRate = coastTransitionRate(archipelago, 128, 16_000_000L);
@@ -128,6 +137,10 @@ final class DeterministicMacroGeophysicalFieldTest {
         return new DeterministicMacroGeophysicalField(SEED, REVISION, DEFINITION);
     }
 
+    private static MacroGeophysicalField presetField(MacroGeophysicsPreset preset) {
+        return MacroGeophysics.create(0x45A10F0E2026L, 1L, preset.definition());
+    }
+
     private static double coastTransitionRate(
             MacroGeophysicalField field,
             int sideSamples,
@@ -137,15 +150,7 @@ final class DeterministicMacroGeophysicalFieldTest {
     }
 
     private static int coastTransitions(MacroGeophysicalField field, int sideSamples, long logicalSide) {
-        boolean[][] land = new boolean[sideSamples][sideSamples];
-        for (int y = 0; y < sideSamples; y++) {
-            long worldY = Math.round(y * (logicalSide - 1d) / (sideSamples - 1d));
-            for (int x = 0; x < sideSamples; x++) {
-                long worldX = Math.round(x * (logicalSide - 1d) / (sideSamples - 1d));
-                land[y][x] = !field.isOceanAt(worldX, worldY);
-            }
-        }
-
+        boolean[][] land = sampledLand(field, sideSamples, logicalSide);
         int transitions = 0;
         for (int y = 0; y < sideSamples; y++) {
             for (int x = 0; x < sideSamples - 1; x++) {
@@ -158,5 +163,31 @@ final class DeterministicMacroGeophysicalFieldTest {
             }
         }
         return transitions;
+    }
+
+    private static double landFraction(MacroGeophysicalField field, int sideSamples, long logicalSide) {
+        boolean[][] land = sampledLand(field, sideSamples, logicalSide);
+        int landSamples = 0;
+        for (boolean[] row : land) {
+            for (boolean sample : row) {
+                if (sample) landSamples++;
+            }
+        }
+        return landSamples / (double) (sideSamples * sideSamples);
+    }
+
+    private static boolean[][] sampledLand(
+            MacroGeophysicalField field,
+            int sideSamples,
+            long logicalSide) {
+        boolean[][] land = new boolean[sideSamples][sideSamples];
+        for (int y = 0; y < sideSamples; y++) {
+            long worldY = Math.round(y * (logicalSide - 1d) / (sideSamples - 1d));
+            for (int x = 0; x < sideSamples; x++) {
+                long worldX = Math.round(x * (logicalSide - 1d) / (sideSamples - 1d));
+                land[y][x] = !field.isOceanAt(worldX, worldY);
+            }
+        }
+        return land;
     }
 }
