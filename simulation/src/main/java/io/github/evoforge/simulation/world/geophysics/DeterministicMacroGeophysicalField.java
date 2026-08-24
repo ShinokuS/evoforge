@@ -3,16 +3,16 @@ package io.github.evoforge.simulation.world.geophysics;
 /**
  * Bounded deterministic Stage 5 macro-geophysical model hidden behind {@link MacroGeophysics}.
  *
- * <p>The implementation evaluates two nested scales of one crustal-support process. The broad scale
- * establishes continent/ocean-basin sized support while the regional scale perturbs that same
- * support into large geophysical provinces. Authored semantic controls are translated here into
- * internal spans and weights; those solver details are deliberately not part of the public
- * definition contract.</p>
+ * <p>The implementation evaluates two nested macro scales of one crustal-support process. The
+ * broad scale establishes continent/ocean-basin sized support while the regional scale bends that
+ * support into coherent provinces and island groups. Authored semantic controls are translated
+ * here into internal spans and weights; those solver details are deliberately not part of the
+ * public definition contract.</p>
  */
 final class DeterministicMacroGeophysicalField implements MacroGeophysicalField {
     private static final long MIN_CONTINENT_SPAN = 1L << 20;
     private static final long MAX_CONTINENT_SPAN = 1L << 23;
-    private static final long MIN_PROVINCE_SPAN = 1L << 16;
+    private static final long MIN_PROVINCE_SPAN = 1L << 18;
 
     private static final long CONTINENT_SALT = 0x5A17B4C39D2E61F0L;
     private static final long PROVINCE_SALT = 0xC3D2E1F05A174B69L;
@@ -32,7 +32,13 @@ final class DeterministicMacroGeophysicalField implements MacroGeophysicalField 
         this.revision = revision;
         this.definition = definition;
         this.continentSpan = continentSpan(definition.continentalScale().value());
-        this.provinceSpan = Math.max(MIN_PROVINCE_SPAN, continentSpan / 8L);
+
+        // Fragmentation is allowed to shorten the regional structural scale, but only inside a
+        // macro-geographical band. It must never collapse into sample-scale coastline noise.
+        double provinceDivisor = lerp(2.2d, 3.8d, definition.fragmentation().value());
+        this.provinceSpan = Math.max(
+                MIN_PROVINCE_SPAN,
+                Math.round(continentSpan / provinceDivisor));
     }
 
     long seed() {
@@ -57,15 +63,15 @@ final class DeterministicMacroGeophysicalField implements MacroGeophysicalField 
         double stableContinentalSupport = stabilize(continentalSupport, cohesion);
         double provinceSupport = supportAt(x, y, provinceSpan, PROVINCE_SALT);
 
-        // Fragmentation controls how readily regional provinces can interrupt broad support.
-        // Cohesion separately pushes broad support away from the sea datum without changing sign.
-        double regionalWeight = lerp(0.06d, 0.44d, fragmentation);
+        // Fragmentation lets coherent regional provinces interrupt broad support. The bounded
+        // regional span above prevents high fragmentation from degenerating into tiny speckles.
+        double regionalWeight = lerp(0.08d, 0.34d, fragmentation);
         double support = lerp(stableContinentalSupport, provinceSupport, regionalWeight);
 
-        // Variation changes the strength of bounded regional deformation without creating an
-        // independent feature painter. Signed disagreement keeps deformation coupled to support.
+        // Variation changes bounded regional deformation without introducing a separate painter.
+        // Signed disagreement keeps the deformation causally coupled to the two support scales.
         double disagreement = provinceSupport - stableContinentalSupport;
-        double deformationWeight = lerp(0.04d, 0.22d, variation);
+        double deformationWeight = lerp(0.03d, 0.13d, variation);
         double deformation = disagreement * Math.abs(disagreement) * deformationWeight;
 
         // Ocean prevalence is an authored tendency rather than a promise of an exact global area
