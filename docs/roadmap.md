@@ -2,7 +2,7 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current checkpoint — Stage 5 ready to begin
+## Current checkpoint — Stage 5 in progress
 
 PR #132 established the repository-wide ADR-026 architecture and PR #133 completed its final semantic cleanup, removing residual ambiguous/umbrella boundaries and adding bytecode-level dependency/cycle enforcement.
 
@@ -20,9 +20,15 @@ Accepted reset guarantees:
 - canonical documentation points at ADR-026 and the final package ownership;
 - temporary migration/refactor workflows are removed before merge.
 
-## Next allowed world-generation work
+## Current world-generation work
 
-Canonical Continuum Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is NEXT and has not started.** PR #133 is merged, so Stage 5 is now allowed to begin under ADR-026 plus the permanent ArchUnit/source fitness gates.
+Canonical Continuum Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is now in implementation in PR #135 and is not yet accepted.**
+
+The Stage 5 semantic owner is the independent `world/geophysics` concept. It exposes a deterministic continuous macro-elevation skeleton; ocean/land is derived from the same elevation relative to a shared sea datum. Continuum remains neutral addressing/materialization/map infrastructure and does not own geography.
+
+Stage 6 is not allowed to begin until Stage 5 passes its automated gates and the user manually accepts the F2 macro-geography result.
+
+See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) for the exact contract and boundaries.
 
 ## Accepted Continuum foundation before reset
 
