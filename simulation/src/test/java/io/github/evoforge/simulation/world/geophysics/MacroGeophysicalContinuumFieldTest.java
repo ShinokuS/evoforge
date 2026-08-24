@@ -39,7 +39,7 @@ final class MacroGeophysicalContinuumFieldTest {
     }
 
     @Test
-    void overlappingWindowsCannotCreateARepresentationSeam() {
+    void horizontallyOverlappingWindowsCannotCreateARepresentationSeam() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(10_000_000L, 10_000_000L);
         ContinuumScalarField field = new MacroGeophysicalContinuumField(
                 new DeterministicMacroGeophysicalField(42L, 1L));
@@ -52,6 +52,23 @@ final class MacroGeophysicalContinuumFieldTest {
 
         for (int y = 0; y < 64; y++) {
             assertEquals(left.sample(64, y), right.sample(0, y));
+        }
+    }
+
+    @Test
+    void verticallyOverlappingWindowsCannotCreateARepresentationSeam() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(10_000_000L, 10_000_000L);
+        ContinuumScalarField field = new MacroGeophysicalContinuumField(
+                new DeterministicMacroGeophysicalField(42L, 1L));
+        ContinuumMaterializer materializer = new ContinuumMaterializer(domain, field);
+
+        ContinuumScalarPage lower = materializer.materialize(
+                new ContinuumSampleWindow(1_000_000L, 2_000_000L, 64, 65, 4_096L));
+        ContinuumScalarPage upper = materializer.materialize(
+                new ContinuumSampleWindow(1_000_000L, 2_262_144L, 64, 65, 4_096L));
+
+        for (int x = 0; x < 64; x++) {
+            assertEquals(lower.sample(x, 64), upper.sample(x, 0));
         }
     }
 
