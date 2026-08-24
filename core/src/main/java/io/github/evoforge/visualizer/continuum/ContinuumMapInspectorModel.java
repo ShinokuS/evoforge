@@ -16,7 +16,9 @@ import java.util.concurrent.Executors;
 /** Presentation model for the real macro-geography introduced in Continuum Stage 5. */
 public final class ContinuumMapInspectorModel implements AutoCloseable {
     public static final long LOGICAL_SIDE = 16_000_000L;
-    public static final long WORLD_SEED = 0x45A1_0F0E_2026L;
+    public static final long DEFAULT_WORLD_SEED = 0x45A1_0F0E_2026L;
+    /** Compatibility alias for the original fixed inspector seed. */
+    public static final long WORLD_SEED = DEFAULT_WORLD_SEED;
     public static final long GEOPHYSICS_REVISION = 1L;
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 384;
@@ -32,17 +34,26 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     private ContinuumMapTileService tiles;
     private MacroGeophysicsDefinition definition;
     private MacroGeophysicsPreset preset;
+    private long worldSeed;
     private long mapSourceRevision;
     private ContinuumMapViewport.Frame frame;
 
     public static ContinuumMapInspectorModel standard(int widthPixels, int heightPixels) {
-        return standard(widthPixels, heightPixels, MacroGeophysicsPreset.BALANCED);
+        return standard(widthPixels, heightPixels, MacroGeophysicsPreset.BALANCED, DEFAULT_WORLD_SEED);
     }
 
     public static ContinuumMapInspectorModel standard(
             int widthPixels,
             int heightPixels,
             MacroGeophysicsPreset preset) {
+        return standard(widthPixels, heightPixels, preset, DEFAULT_WORLD_SEED);
+    }
+
+    public static ContinuumMapInspectorModel standard(
+            int widthPixels,
+            int heightPixels,
+            MacroGeophysicsPreset preset,
+            long worldSeed) {
         if (preset == null) throw new IllegalArgumentException("preset must not be null");
         ContinuumWorldDomain domain = new ContinuumWorldDomain(LOGICAL_SIDE, LOGICAL_SIDE);
         ExecutorService executor = newExecutor();
@@ -52,7 +63,8 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
                 widthPixels,
                 heightPixels,
                 preset.definition(),
-                preset);
+                preset,
+                worldSeed);
     }
 
     ContinuumMapInspectorModel(
@@ -69,6 +81,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         this.generator = generator;
         this.definition = MacroGeophysicsPreset.BALANCED.definition();
         this.preset = MacroGeophysicsPreset.BALANCED;
+        this.worldSeed = DEFAULT_WORLD_SEED;
         this.tiles = tileService(generator);
         this.viewport = new ContinuumMapViewport(
                 domain.width(),
@@ -88,7 +101,8 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
             int widthPixels,
             int heightPixels,
             MacroGeophysicsDefinition definition,
-            MacroGeophysicsPreset preset) {
+            MacroGeophysicsPreset preset,
+            long worldSeed) {
         if (domain == null || executor == null || definition == null) {
             throw new IllegalArgumentException("domain/executor/definition must not be null");
         }
@@ -96,6 +110,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         this.executor = executor;
         this.definition = definition;
         this.preset = preset;
+        this.worldSeed = worldSeed;
         this.generator = generatorFor(definition);
         this.tiles = tileService(generator);
         this.viewport = new ContinuumMapViewport(
@@ -135,6 +150,10 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         return definition;
     }
 
+    public long seed() {
+        return worldSeed;
+    }
+
     /** Applies a named convenience profile without moving or zooming the inspection camera. */
     public boolean applyPreset(MacroGeophysicsPreset nextPreset) {
         if (nextPreset == null) throw new IllegalArgumentException("preset must not be null");
@@ -144,6 +163,14 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     /** Applies arbitrary authored macro-geophysics intent without changing the inspection camera. */
     public boolean applyDefinition(MacroGeophysicsDefinition nextDefinition) {
         return applyDefinition(nextDefinition, null);
+    }
+
+    /** Changes world identity and rebuilds only the derived map source, preserving the camera. */
+    public boolean applySeed(long nextSeed) {
+        if (worldSeed == nextSeed) return false;
+        worldSeed = nextSeed;
+        rebuildMapSource();
+        return true;
     }
 
     public void panPixels(double deltaX, double deltaY) {
@@ -202,21 +229,25 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         preset = nextPreset;
         if (!changed) return false;
 
+        rebuildMapSource();
+        return true;
+    }
+
+    private void rebuildMapSource() {
         // Cancel queued work from the old derived source. At most the bounded worker count may be
         // finishing already-running old jobs; their service becomes unreachable and cannot publish
         // into the new map source.
         tiles.retainPendingDemand(Set.of());
-        generator = generatorFor(nextDefinition);
+        generator = generatorFor(definition);
         tiles = tileService(generator);
         mapSourceRevision = Math.incrementExact(mapSourceRevision);
         viewport.setSourceRevision(mapSourceRevision);
         frame = viewport.requestFrame(tiles);
-        return true;
     }
 
     private ContinuumScalarMapTileGenerator generatorFor(MacroGeophysicsDefinition sourceDefinition) {
         ContinuumScalarField field = new MacroGeophysicalContinuumField(MacroGeophysics.create(
-                WORLD_SEED,
+                worldSeed,
                 GEOPHYSICS_REVISION,
                 sourceDefinition));
         return new ContinuumScalarMapTileGenerator(domain, field, TILE_SAMPLE_SIDE);
