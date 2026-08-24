@@ -5,12 +5,16 @@ import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTileService
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumScalarMapTileGenerator;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
+import io.github.evoforge.simulation.world.geophysics.DeterministicMacroGeophysicalField;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalContinuumField;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Presentation model for the Stage 4 pan/zoom proof. */
+/** Presentation model for the real macro-geography introduced in Continuum Stage 5. */
 public final class ContinuumMapInspectorModel implements AutoCloseable {
-    public static final long LOGICAL_SIDE = 1_000_000L;
+    public static final long LOGICAL_SIDE = 16_000_000L;
+    public static final long WORLD_SEED = 0x45A1_0F0E_2026L;
+    public static final long GEOPHYSICS_REVISION = 1L;
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 384;
     public static final int MAX_OUTSTANDING_JOBS = 192;
@@ -25,7 +29,8 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
 
     public static ContinuumMapInspectorModel standard(int widthPixels, int heightPixels) {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(LOGICAL_SIDE, LOGICAL_SIDE);
-        ContinuumScalarField field = ContinuumMapInspectorModel::syntheticField;
+        ContinuumScalarField field = new MacroGeophysicalContinuumField(
+                new DeterministicMacroGeophysicalField(WORLD_SEED, GEOPHYSICS_REVISION));
         ContinuumScalarMapTileGenerator generator = new ContinuumScalarMapTileGenerator(domain, field, TILE_SAMPLE_SIDE);
         ExecutorService executor = Executors.newFixedThreadPool(WORKERS, runnable -> {
             Thread thread = new Thread(runnable, "continuum-map-tile");
@@ -121,13 +126,5 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     @Override
     public void close() {
         executor.shutdownNow();
-    }
-
-    private static double syntheticField(long x, long y) {
-        double broad = Math.sin(x / 91_000d) * Math.cos(y / 73_000d);
-        double medium = Math.sin((x + y) / 31_000d) * 0.55d;
-        double fine = Math.cos(x / 9_000d - y / 12_000d) * 0.28d;
-        double diagonal = Math.sin((x * 0.65d - y * 0.35d) / 17_000d) * 0.22d;
-        return Math.max(0d, Math.min(1d, 0.5d + broad * 0.23d + medium * 0.18d + fine * 0.12d + diagonal * 0.08d));
     }
 }
