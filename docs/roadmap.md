@@ -26,7 +26,9 @@ Canonical Continuum Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geoph
 
 The Stage 5 semantic owner is the independent `world/geophysics` concept. It exposes a deterministic continuous macro-elevation skeleton; ocean/land is derived from the same elevation relative to a shared sea datum. Continuum remains neutral addressing/materialization/map infrastructure and does not own geography.
 
-Stage 6 is not allowed to begin until Stage 5 passes its automated gates and the user manually accepts the F2 macro-geography result.
+Stage 5 now includes semantic authored controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. The F2 viewer can compare `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` profiles on the same seed; custom definitions remain the real contract rather than those presets.
+
+Stage 6 is not allowed to begin until Stage 5 passes its automated gates and the user manually accepts the F2 macro-geography across this configurable range.
 
 See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) for the exact contract and boundaries.
 
