@@ -18,7 +18,10 @@ final class MacroGeophysicalContinuumFieldTest {
     @Test
     void sharedCoordinatesRemainIdenticalAcrossResolutionLevels() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(20_000_000L, 20_000_000L);
-        MacroGeophysicalField geophysics = new DeterministicMacroGeophysicalField(91_337L, 5L);
+        MacroGeophysicalField geophysics = MacroGeophysics.create(
+                91_337L,
+                5L,
+                MacroGeophysicsPreset.BALANCED.definition());
         ContinuumScalarField continuumField = new MacroGeophysicalContinuumField(geophysics);
         ContinuumMaterializer materializer = new ContinuumMaterializer(domain, continuumField);
         ContinuumPageLayout coarseLayout = new ContinuumPageLayout(
@@ -39,10 +42,9 @@ final class MacroGeophysicalContinuumFieldTest {
     }
 
     @Test
-    void horizontallyOverlappingWindowsCannotCreateARepresentationSeam() {
+    void overlappingWindowsCannotCreateARepresentationSeam() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(10_000_000L, 10_000_000L);
-        ContinuumScalarField field = new MacroGeophysicalContinuumField(
-                new DeterministicMacroGeophysicalField(42L, 1L));
+        ContinuumScalarField field = continuumField(42L, 1L);
         ContinuumMaterializer materializer = new ContinuumMaterializer(domain, field);
 
         ContinuumScalarPage left = materializer.materialize(
@@ -58,25 +60,23 @@ final class MacroGeophysicalContinuumFieldTest {
     @Test
     void verticallyOverlappingWindowsCannotCreateARepresentationSeam() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(10_000_000L, 10_000_000L);
-        ContinuumScalarField field = new MacroGeophysicalContinuumField(
-                new DeterministicMacroGeophysicalField(42L, 1L));
+        ContinuumScalarField field = continuumField(42L, 1L);
         ContinuumMaterializer materializer = new ContinuumMaterializer(domain, field);
 
-        ContinuumScalarPage lower = materializer.materialize(
-                new ContinuumSampleWindow(1_000_000L, 2_000_000L, 64, 65, 4_096L));
-        ContinuumScalarPage upper = materializer.materialize(
-                new ContinuumSampleWindow(1_000_000L, 2_262_144L, 64, 65, 4_096L));
+        ContinuumScalarPage bottom = materializer.materialize(
+                new ContinuumSampleWindow(2_000_000L, 1_000_000L, 64, 65, 4_096L));
+        ContinuumScalarPage top = materializer.materialize(
+                new ContinuumSampleWindow(2_000_000L, 1_262_144L, 64, 65, 4_096L));
 
         for (int x = 0; x < 64; x++) {
-            assertEquals(lower.sample(x, 64), upper.sample(x, 0));
+            assertEquals(bottom.sample(x, 64), top.sample(x, 0));
         }
     }
 
     @Test
     void unrelatedMaterializationDoesNotChangeRequestedMacroArea() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(50_000_000L, 50_000_000L);
-        ContinuumScalarField field = new MacroGeophysicalContinuumField(
-                new DeterministicMacroGeophysicalField(777L, 9L));
+        ContinuumScalarField field = continuumField(777L, 9L);
         ContinuumMaterializer materializer = new ContinuumMaterializer(domain, field);
         ContinuumSampleWindow target = new ContinuumSampleWindow(5_000_000L, 4_000_000L, 48, 48, 8_192L);
 
@@ -85,5 +85,12 @@ final class MacroGeophysicalContinuumFieldTest {
         double[] after = materializer.materialize(target).copySamples();
 
         assertArrayEquals(before, after);
+    }
+
+    private static ContinuumScalarField continuumField(long seed, long revision) {
+        return new MacroGeophysicalContinuumField(MacroGeophysics.create(
+                seed,
+                revision,
+                MacroGeophysicsPreset.BALANCED.definition()));
     }
 }
