@@ -15,6 +15,8 @@ import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTile;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
 import java.nio.ByteBuffer;
@@ -32,7 +34,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final byte[] PALETTE_B = geophysicalPalette(2);
 
     private final Runnable returnToMenu;
-    private final ContinuumMapInspectorModel model;
+    private ContinuumMapInspectorModel model;
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
     private final Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
@@ -97,6 +99,14 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         skin.dispose();
     }
 
+    private void selectPreset(MacroGeophysicsPreset preset) {
+        if (model.preset() == preset) return;
+        ContinuumMapInspectorModel previous = model;
+        textures.clear();
+        model = ContinuumMapInspectorModel.standard(width, height, preset);
+        previous.close();
+    }
+
     private void drawMap() {
         ContinuumMapViewport.Frame frame = model.frame();
         long span = model.tileWorldSpan(frame.desiredLevel());
@@ -138,6 +148,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private void drawOverlay() {
         var frame = model.frame();
         var metrics = model.metrics();
+        MacroGeophysicsDefinition definition = model.preset().definition();
         batch.setProjectionMatrix(projection);
         batch.begin();
         font.getData().setScale(0.86f);
@@ -147,15 +158,26 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
         font.draw(batch,
-                "drag mouse: move   wheel: zoom   Home: whole world   G: tile diagnostics   Esc: back",
+                "drag: move   wheel: zoom   Home: whole world   1-4: world profile   G: diagnostics   Esc: back",
                 22f,
                 27f);
 
         font.draw(batch,
-                "blue = ocean   green/brown = land   seed " + ContinuumMapInspectorModel.WORLD_SEED
-                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION,
+                "profile " + model.preset().displayName()
+                        + "   ocean " + percent(definition.oceanPrevalence().value())
+                        + "   scale " + percent(definition.continentalScale().value())
+                        + "   cohesion " + percent(definition.landmassCohesion().value())
+                        + "   fragmentation " + percent(definition.fragmentation().value())
+                        + "   variation " + percent(definition.macroVariation().value()),
                 22f,
                 height - 50f);
+
+        font.draw(batch,
+                "1 supercontinent   2 balanced   3 archipelago   4 oceanic   seed "
+                        + ContinuumMapInspectorModel.WORLD_SEED
+                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION,
+                22f,
+                height - 74f);
 
         font.draw(batch,
                 "center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
@@ -164,7 +186,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                         + "   detailed " + frame.exactReadyCount()
                         + "   temporary coarse " + frame.fallbackCount(),
                 22f,
-                height - 74f);
+                height - 98f);
 
         if (showDiagnostics) {
             font.setColor(TEXT);
@@ -175,11 +197,11 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                             + "   prefetch queue " + metrics.prefetchPendingJobs()
                             + "   running " + metrics.runningJobs(),
                     22f,
-                    height - 98f);
+                    height - 122f);
             font.setColor(FALLBACK_BORDER);
-            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 122f);
+            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 146f);
             font.setColor(FINE_BORDER);
-            font.draw(batch, "green border = requested detail is ready", 22f, height - 144f);
+            font.draw(batch, "green border = requested detail is ready", 22f, height - 168f);
         }
         batch.end();
     }
@@ -241,6 +263,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return palette;
     }
 
+    private static int percent(double normalized) {
+        return (int) Math.round(normalized * 100d);
+    }
+
     private final class MapInput extends InputAdapter {
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
@@ -280,6 +306,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         public boolean keyDown(int keycode) {
             switch (keycode) {
                 case Input.Keys.HOME -> model.fitWholeWorld();
+                case Input.Keys.NUM_1, Input.Keys.NUMPAD_1 -> selectPreset(MacroGeophysicsPreset.SUPERCONTINENT);
+                case Input.Keys.NUM_2, Input.Keys.NUMPAD_2 -> selectPreset(MacroGeophysicsPreset.BALANCED);
+                case Input.Keys.NUM_3, Input.Keys.NUMPAD_3 -> selectPreset(MacroGeophysicsPreset.ARCHIPELAGO);
+                case Input.Keys.NUM_4, Input.Keys.NUMPAD_4 -> selectPreset(MacroGeophysicsPreset.OCEANIC);
                 case Input.Keys.G -> showDiagnostics = !showDiagnostics;
                 case Input.Keys.ESCAPE -> returnToMenu.run();
                 default -> {
