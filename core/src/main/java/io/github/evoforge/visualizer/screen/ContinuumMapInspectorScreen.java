@@ -22,6 +22,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.scenes.scene2d.ui.Window;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
@@ -32,6 +33,7 @@ import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
 import java.nio.ByteBuffer;
+import java.util.concurrent.ThreadLocalRandom;
 
 /** World-oriented pan/zoom view of the Stage 5 macro-geophysical skeleton. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
@@ -60,6 +62,8 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private final Stage uiStage = new Stage(new ScreenViewport());
     private final Window settingsWindow;
     private final Label profileLabel = new Label("", skin);
+    private final TextField seedField = new TextField("", skin);
+    private final Label seedStatus = new Label("", skin);
     private final Slider oceanSlider = normalizedSlider();
     private final Slider scaleSlider = normalizedSlider();
     private final Slider cohesionSlider = normalizedSlider();
@@ -91,6 +95,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         this.input = new InputMultiplexer(uiStage, mapInput);
         projection.setToOrtho2D(0f, 0f, width, height);
         syncControls(model.definition());
+        syncSeedControl();
         resize(width, height);
     }
 
@@ -148,6 +153,31 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         window.add(profileLabel).colspan(3).left().growX();
         window.row();
 
+        window.add(new Label("World seed", skin)).left();
+        window.add(seedField).width(SETTINGS_SLIDER_WIDTH).growX();
+        TextButton applySeed = new TextButton("Apply", skin);
+        applySeed.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                applySeedFromField();
+            }
+        });
+        window.add(applySeed).width(62f).height(28f);
+        window.row();
+
+        TextButton randomSeed = new TextButton("Random seed", skin);
+        randomSeed.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                randomizeSeed();
+            }
+        });
+        window.add(randomSeed).colspan(3).growX().height(28f);
+        window.row();
+        seedStatus.setColor(MUTED);
+        window.add(seedStatus).colspan(3).left().growX();
+        window.row();
+
         Table presets = new Table();
         addPresetButton(presets, "Supercontinent", MacroGeophysicsPreset.SUPERCONTINENT);
         addPresetButton(presets, "Balanced", MacroGeophysicsPreset.BALANCED);
@@ -188,6 +218,15 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         cohesionSlider.addListener(values);
         fragmentationSlider.addListener(values);
         variationSlider.addListener(values);
+
+        seedField.addListener(new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode != Input.Keys.ENTER) return false;
+                applySeedFromField();
+                return true;
+            }
+        });
 
         // The settings block is intentionally an input boundary. Empty panel space, sliders and
         // buttons must not also pan the underlying map.
@@ -235,6 +274,45 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         boolean changed = model.applyPreset(preset);
         if (changed) textures.clear();
         syncControls(model.definition());
+    }
+
+    private void applySeedFromField() {
+        try {
+            applyWorldSeed(parseSeed(seedField.getText()));
+            seedStatus.setColor(MUTED);
+            seedStatus.setText("Seed applied");
+        } catch (NumberFormatException invalid) {
+            seedStatus.setColor(FALLBACK_BORDER);
+            seedStatus.setText("Invalid seed");
+        }
+    }
+
+    private void randomizeSeed() {
+        long randomSeed = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+        seedField.setText(Long.toString(randomSeed));
+        applyWorldSeed(randomSeed);
+        seedStatus.setColor(MUTED);
+        seedStatus.setText("Random seed applied");
+    }
+
+    private void applyWorldSeed(long seed) {
+        boolean changed = model.applySeed(seed);
+        if (changed) textures.clear();
+        syncSeedControl();
+    }
+
+    static long parseSeed(String rawSeed) {
+        if (rawSeed == null) throw new NumberFormatException("seed must not be null");
+        String seed = rawSeed.trim().replace("_", "");
+        if (seed.startsWith("0x") || seed.startsWith("0X")) {
+            if (seed.length() == 2) throw new NumberFormatException("hex seed has no digits");
+            return Long.parseUnsignedLong(seed.substring(2), 16);
+        }
+        return Long.parseLong(seed);
+    }
+
+    private void syncSeedControl() {
+        seedField.setText(Long.toString(model.seed()));
     }
 
     private void applyCustomDefinition() {
@@ -336,7 +414,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
         font.draw(batch,
-                "seed " + ContinuumMapInspectorModel.WORLD_SEED
+                "seed " + model.seed()
                         + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION
                         + "   center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
                         + "   LOD L" + frame.desiredLevel(),
