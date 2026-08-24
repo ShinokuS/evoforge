@@ -104,6 +104,8 @@ independent of:
 
 The field is evaluated directly from coordinates. Page and map boundaries therefore cannot be physical boundaries of the geography.
 
+Both horizontal and vertical overlapping-window tests prove the world field itself is continuous across representation boundaries. The map presentation must preserve the same row/column orientation when converting a tile to a GPU texture; a tile-local flip is a presentation bug, not geography.
+
 ## Boundedness and scale
 
 One sample performs a fixed amount of local mathematical work. It does not enumerate continents, pages or the logical world.
@@ -141,6 +143,8 @@ Visual meaning:
 
 The colors are a presentation palette only. They do not create ocean or land.
 
+With diagnostics hidden and `temporary coarse = 0`, tile boundaries must be visually indistinguishable from any other sample boundary. Large straight horizontal/vertical discontinuities are a failed visual check even when the underlying field tests are green.
+
 ## Explicit Stage 5 boundary
 
 Stage 5 does **not** implement:
@@ -163,7 +167,8 @@ Those remain in their fixed later stages.
 Stage 5 may be marked complete only after all of the following are true on the final PR head:
 
 - focused geophysics correctness/determinism tests pass;
-- shared-coordinate multi-resolution and overlap/seam tests pass;
+- shared-coordinate multi-resolution and horizontal/vertical overlap/seam tests pass;
+- map texture conversion preserves tile row/column orientation;
 - architecture fitness and ArchUnit remain green without weakened rules;
 - full Gradle tests and JaCoCo coverage gate pass;
 - Continuum scale profile including the Stage 5 workload passes;
