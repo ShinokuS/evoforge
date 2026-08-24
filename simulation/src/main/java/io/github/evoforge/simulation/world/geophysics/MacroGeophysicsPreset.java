@@ -9,16 +9,16 @@ package io.github.evoforge.simulation.world.geophysics;
 public enum MacroGeophysicsPreset {
     SUPERCONTINENT(
             "supercontinent",
-            MacroGeophysicsDefinition.of(0.05d, 0.70d, 0.95d, 0.05d, 0.25d)),
+            MacroGeophysicsDefinition.of(0.18d, 0.78d, 0.92d, 0.08d, 0.25d)),
     BALANCED(
             "balanced",
-            MacroGeophysicsDefinition.of(0.65d, 0.65d, 0.60d, 0.35d, 0.55d)),
+            MacroGeophysicsDefinition.of(0.64d, 0.68d, 0.60d, 0.30d, 0.50d)),
     ARCHIPELAGO(
             "archipelago",
-            MacroGeophysicsDefinition.of(0.72d, 0.35d, 0.15d, 0.90d, 0.75d)),
+            MacroGeophysicsDefinition.of(0.74d, 0.50d, 0.30d, 0.88d, 0.72d)),
     OCEANIC(
             "oceanic",
-            MacroGeophysicsDefinition.of(0.88d, 0.45d, 0.25d, 0.75d, 0.65d));
+            MacroGeophysicsDefinition.of(0.90d, 0.72d, 0.68d, 0.18d, 0.45d));
 
     private final String displayName;
     private final MacroGeophysicsDefinition definition;
