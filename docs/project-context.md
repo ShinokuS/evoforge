@@ -112,7 +112,9 @@ Continuum remains neutral infrastructure: coordinates/pages/caches/materializati
 
 Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is IN PROGRESS in PR #135 and is not yet manually accepted.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
 
-Stage 6 remains blocked until Stage 5 passes final automated verification and explicit manual acceptance of the F2 macro-geography.
+Stage 5 now exposes authored `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. These are normalized semantic world-generation inputs rather than exposed solver coefficients. Contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets exist for quick inspection, while custom definitions remain the actual contract.
+
+Stage 6 remains blocked until Stage 5 passes final automated verification and explicit manual acceptance of the F2 macro-geography across contrasting profiles.
 
 See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md).
 
@@ -121,6 +123,8 @@ See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/st
 Definitions describe immutable authored semantic meaning. Root definition infrastructure is neutral; domain-specific definition types/compilers belong with the owner/mechanic that consumes them.
 
 Human-facing semantic controls normally use normalized meaning (`0..1` or `-1..1`) where appropriate. Solver coefficients/thresholds/tuning constants remain implementation/model policy unless they are genuinely authored semantic content.
+
+Stage 5 is the reference world-generation example: `MacroGeophysicsDefinition` exposes meaningful world character, while lattice spans, salts, interpolation exponents and blend coefficients remain hidden inside the replaceable geophysical algorithm.
 
 ## Performance policy
 
