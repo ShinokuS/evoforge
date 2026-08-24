@@ -188,12 +188,28 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         int side = tile.sampleSide();
         byte[] luminance = tile.copyLuminance();
         Pixmap pixmap = new Pixmap(side, side, Pixmap.Format.RGBA8888);
-        ByteBuffer pixels = pixmap.getPixels();
-        int rowBytes = side * 4;
+        writeTexturePixels(luminance, side, pixmap.getPixels());
 
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
+        return texture;
+    }
+
+    static void writeTexturePixels(byte[] luminance, int side, ByteBuffer pixels) {
+        if (side <= 0) throw new IllegalArgumentException("side must be > 0");
+        if (luminance == null || luminance.length != Math.multiplyExact(side, side)) {
+            throw new IllegalArgumentException("luminance must contain exactly side*side samples");
+        }
+        if (pixels == null || pixels.capacity() < Math.multiplyExact(luminance.length, 4)) {
+            throw new IllegalArgumentException("pixel buffer is too small");
+        }
+
+        int rowBytes = side * 4;
         for (int sourceY = 0; sourceY < side; sourceY++) {
             int sourceRow = sourceY * side;
-            int destinationRow = (side - 1 - sourceY) * rowBytes;
+            int destinationRow = sourceY * rowBytes;
             for (int x = 0; x < side; x++) {
                 int value = Byte.toUnsignedInt(luminance[sourceRow + x]);
                 int pixel = destinationRow + x * 4;
@@ -203,11 +219,6 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 pixels.put(pixel + 3, (byte) 0xFF);
             }
         }
-
-        Texture texture = new Texture(pixmap);
-        pixmap.dispose();
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        return texture;
     }
 
     private static byte[] geophysicalPalette(int channel) {
