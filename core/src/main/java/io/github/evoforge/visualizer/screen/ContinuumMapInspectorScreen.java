@@ -13,6 +13,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -52,6 +53,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private final Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
     private final BitmapFont font = skin.getFont("window");
     private final Matrix4 projection = new Matrix4();
+    private final Vector2 uiPointer = new Vector2();
     private final BoundedRenderCache<ContinuumMapTile, Texture> textures =
             new BoundedRenderCache<>(MAX_GPU_TEXTURES, this::createTexture, Texture::dispose);
     private final InputAdapter mapInput = new MapInput();
@@ -86,7 +88,6 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         this.model = ContinuumMapInspectorModel.standard(width, height);
         this.settingsWindow = createSettingsWindow();
         uiStage.addActor(settingsWindow);
-        uiStage.setScrollFocus(settingsWindow);
         this.input = new InputMultiplexer(uiStage, mapInput);
         projection.setToOrtho2D(0f, 0f, width, height);
         syncControls(model.definition());
@@ -189,20 +190,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         variationSlider.addListener(values);
 
         // The settings block is intentionally an input boundary. Empty panel space, sliders and
-        // buttons must not also pan/zoom the underlying map.
+        // buttons must not also pan the underlying map.
         window.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                return true;
-            }
-
-            @Override
-            public boolean scrolled(
-                    InputEvent event,
-                    float x,
-                    float y,
-                    float amountX,
-                    float amountY) {
                 return true;
             }
         });
@@ -284,6 +275,15 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         float x = Math.max(SETTINGS_MARGIN, width - settingsWindow.getWidth() - SETTINGS_MARGIN);
         float y = Math.max(SETTINGS_MARGIN, height - settingsWindow.getHeight() - SETTINGS_MARGIN);
         settingsWindow.setPosition(x, y);
+    }
+
+    private boolean pointerOverSettings() {
+        uiPointer.set(Gdx.input.getX(), Gdx.input.getY());
+        uiStage.screenToStageCoordinates(uiPointer);
+        return uiPointer.x >= settingsWindow.getX()
+                && uiPointer.x <= settingsWindow.getX() + settingsWindow.getWidth()
+                && uiPointer.y >= settingsWindow.getY()
+                && uiPointer.y <= settingsWindow.getY() + settingsWindow.getHeight();
     }
 
     private void drawMap() {
@@ -466,6 +466,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
+            if (pointerOverSettings()) return true;
             if (amountY == 0f) return false;
             double factor = amountY < 0f ? 1.22d : 1d / 1.22d;
             model.zoomAt(factor, Gdx.input.getX(), Gdx.input.getY());
