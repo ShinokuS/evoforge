@@ -19,7 +19,7 @@ import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
 import java.nio.ByteBuffer;
 
-/** Stage 4 world-oriented pan/zoom proof over a deterministic synthetic Continuum field. */
+/** World-oriented pan/zoom view of the Stage 5 macro-geophysical skeleton. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color BACKGROUND = new Color(0.025f, 0.032f, 0.038f, 1f);
     private static final Color FINE_BORDER = new Color(0.30f, 0.86f, 0.65f, 0.9f);
@@ -27,9 +27,9 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color TEXT = new Color(0.94f, 0.96f, 0.97f, 1f);
     private static final Color MUTED = new Color(0.66f, 0.71f, 0.74f, 1f);
     private static final int MAX_GPU_TEXTURES = 192;
-    private static final byte[] PALETTE_R = palette(0.08f, 0.62f);
-    private static final byte[] PALETTE_G = palette(0.11f, 0.70f);
-    private static final byte[] PALETTE_B = palette(0.16f, 0.76f);
+    private static final byte[] PALETTE_R = geophysicalPalette(0);
+    private static final byte[] PALETTE_G = geophysicalPalette(1);
+    private static final byte[] PALETTE_B = geophysicalPalette(2);
 
     private final Runnable returnToMenu;
     private final ContinuumMapInspectorModel model;
@@ -142,7 +142,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         batch.begin();
         font.getData().setScale(0.86f);
         font.setColor(TEXT);
-        font.draw(batch, "STAGE 4 / MAP + ZOOM", 22f, height - 24f);
+        font.draw(batch, "STAGE 5 / MACRO OCEAN + GEOPHYSICAL SKELETON", 22f, height - 24f);
 
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
@@ -152,13 +152,19 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 27f);
 
         font.draw(batch,
+                "blue = ocean   green/brown = land   seed " + ContinuumMapInspectorModel.WORLD_SEED
+                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION,
+                22f,
+                height - 50f);
+
+        font.draw(batch,
                 "center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
                         + "   LOD L" + frame.desiredLevel()
                         + "   visible " + frame.visibleTileCount()
                         + "   detailed " + frame.exactReadyCount()
                         + "   temporary coarse " + frame.fallbackCount(),
                 22f,
-                height - 50f);
+                height - 74f);
 
         if (showDiagnostics) {
             font.setColor(TEXT);
@@ -169,22 +175,15 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                             + "   prefetch queue " + metrics.prefetchPendingJobs()
                             + "   running " + metrics.runningJobs(),
                     22f,
-                    height - 74f);
+                    height - 98f);
             font.setColor(FALLBACK_BORDER);
-            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 98f);
+            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 122f);
             font.setColor(FINE_BORDER);
-            font.draw(batch, "green = requested detail is ready", 22f, height - 120f);
+            font.draw(batch, "green border = requested detail is ready", 22f, height - 144f);
         }
         batch.end();
     }
 
-    /**
-     * Converts the tiny scalar tile to RGBA with direct buffer writes.
-     *
-     * <p>The old implementation performed setColor + drawPixel for every pixel on the render
-     * thread. A precomputed 256-entry palette and direct byte writes remove that avoidable work
-     * before the unavoidable GPU upload.</p>
-     */
     private Texture createTexture(ContinuumMapTile tile) {
         int side = tile.sampleSide();
         byte[] luminance = tile.copyLuminance();
@@ -211,11 +210,22 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return texture;
     }
 
-    private static byte[] palette(float base, float scale) {
+    private static byte[] geophysicalPalette(int channel) {
         byte[] palette = new byte[256];
-        for (int i = 0; i < palette.length; i++) {
-            float value = base + (i / 255f) * scale;
-            palette[i] = (byte) Math.round(Math.max(0f, Math.min(1f, value)) * 255f);
+        for (int value = 0; value < palette.length; value++) {
+            float[] start;
+            float[] end;
+            float amount;
+            if (value < 128) {
+                start = new float[] {0.025f, 0.09f, 0.24f};
+                end = new float[] {0.18f, 0.48f, 0.68f};
+                amount = value / 127f;
+            } else {
+                start = new float[] {0.20f, 0.48f, 0.23f};
+                end = new float[] {0.78f, 0.72f, 0.58f};
+                amount = (value - 128) / 127f;
+            }
+            palette[value] = (byte) Math.round((start[channel] + (end[channel] - start[channel]) * amount) * 255f);
         }
         return palette;
     }
