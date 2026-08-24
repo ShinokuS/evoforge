@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.ByteBuffer;
 import org.junit.jupiter.api.Test;
@@ -23,5 +24,13 @@ final class ContinuumMapInspectorScreenTest {
         assertEquals(199, Byte.toUnsignedInt(rgba.get(12)));
         assertEquals(255, Byte.toUnsignedInt(rgba.get(3)));
         assertEquals(255, Byte.toUnsignedInt(rgba.get(15)));
+    }
+
+    @Test
+    void seedInputAcceptsReadableDecimalAndHexForms() {
+        assertEquals(42L, ContinuumMapInspectorScreen.parseSeed("42"));
+        assertEquals(-42L, ContinuumMapInspectorScreen.parseSeed(" -42 "));
+        assertEquals(0x45A10F0E2026L, ContinuumMapInspectorScreen.parseSeed("0x45A1_0F0E_2026"));
+        assertThrows(NumberFormatException.class, () -> ContinuumMapInspectorScreen.parseSeed("not-a-seed"));
     }
 }
