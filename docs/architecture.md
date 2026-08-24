@@ -78,6 +78,7 @@ world/space/occupancy
 world/geometry
 world/navigation
 world/visibility
+world/geophysics
 world/terrain
 world/liquid
 world/soil
@@ -360,6 +361,7 @@ io.github.evoforge.simulation
 ├── genesis/                    global startup composition only
 ├── world/
 │   ├── continuum/              neutral large-world addressing/materialization
+│   ├── geophysics/             continuous configurable macro-geophysical skeleton
 │   ├── material/               authored material identity shared by semantic aspects
 │   ├── object/                 object identity/existence semantics
 │   ├── space/
@@ -370,7 +372,7 @@ io.github.evoforge.simulation
 │   │   └── measurement/        physical space/volume units
 │   ├── geometry/               objective physical geometry
 │   ├── navigation/             connectivity/traversal/pathfinding capability
-│   ├── geology/
+│   ├── geology/                authored geological profile/unit/material semantics
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
@@ -525,6 +527,8 @@ Domain-specific definitions stay with their semantic concept.
 
 Do not turn runtime algorithm knobs into content definitions merely for configurability.
 
+A semantic setting is justified when it describes authored world meaning independently of the current implementation. Stage 5 is the reference example: ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation are authored geophysical intent, while lattice spans, salts, interpolation exponents and blend coefficients remain hidden algorithm policy.
+
 ## Determinism
 
 For fixed authoritative inputs and compatible model revision:
@@ -554,7 +558,7 @@ A future concurrency model requires an explicit ADR defining deterministic commi
 
 Continuum owns neutral large-world addressing/materialization/query/cache mechanics.
 
-It does not own semantic Terrain/Liquid/Geology truth.
+It does not own semantic Terrain/Liquid/Geology/Geophysics truth.
 
 Pages/tiles/chunks are representation, not natural geography.
 
@@ -595,6 +599,8 @@ Replaceability has three useful levels.
 ```text
 PathQuery <- AStarPathfinder / future solver
 ```
+
+Stage 5 follows the same rule: consumers request `MacroGeophysicalField` through the `MacroGeophysics` creation boundary and do not construct the current hidden deterministic implementation directly.
 
 ### Semantic-module implementation
 
