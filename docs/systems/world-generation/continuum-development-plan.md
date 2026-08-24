@@ -64,7 +64,7 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 - **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
 - **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
 - **Stage 4 — complete and manually accepted.** Map / Zoom Performance Proof; PR #125 merged. Revalidated during the architecture reset.
-- **Stage 5 — NEXT, not started.** Macro Ocean + Geophysical Skeleton is now allowed to begin; final architecture cleanup PR #133 is merged.
+- **Stage 5 — IN PROGRESS, not accepted.** Macro Ocean + Geophysical Skeleton is implemented in PR #135 and remains blocked on final automated verification plus manual visual acceptance.
 - **Stage 6+ — not started.**
 
 ---
@@ -218,6 +218,70 @@ Gradle tests, Docs Site and Continuum Scale Profile are green on the exact PR he
 
 ---
 
+# Stage 5 — Macro Ocean + Geophysical Skeleton
+
+## Goal
+
+Create the first real world-scale geophysical cause: one continuous deterministic macro-elevation skeleton from which ocean/land and later surface processes can follow.
+
+In plain language: broad continental support and ocean-basin depressions are established first. Ocean is wherever that same macro elevation falls below the shared sea datum. Pages, tiles and camera views only sample this fact; they never create it.
+
+## Build
+
+- independent `world/geophysics` semantic ownership for the macro skeleton;
+- replaceable coordinate-addressed `MacroGeophysicalField` contract;
+- deterministic implementation from nested spatial scales of one crustal-support process;
+- signed dimensionless macro elevation, not final terrain height;
+- ocean/land classification derived from the same elevation and sea datum, never an independent painter;
+- narrow read-only adapter into `ContinuumScalarField`;
+- direct reuse of accepted bounded materialization, multi-resolution and map infrastructure;
+- F2 map visualization of the real Stage 5 macro field.
+
+## Required proof
+
+- fixed seed + revision + coordinates return stable values;
+- changing seed or revision changes addressed truth;
+- query order and unrelated materialization cannot change results;
+- overlapping windows agree at shared coordinates;
+- coarse and fine resolution views agree at shared coordinates;
+- ocean classification is exactly a consequence of elevation relative to sea datum;
+- macro values remain bounded;
+- architecture fitness remains green without new exceptions.
+
+## Performance
+
+One macro sample performs fixed local work and never enumerates the logical world.
+
+The Stage 5 scale profile materializes the same `128 x 128` requested window in progressively larger logical worlds and requires exactly `16,384` field evaluations in every case. The architectural gate is constant requested work; timings are diagnostic evidence.
+
+## Visual acceptance
+
+The existing Continuum map viewer samples the Stage 5 field directly. The standard inspection domain is `16,000,000 x 16,000,000` logical units so several macro structures are visible together.
+
+```text
+Left mouse drag  pan
+Mouse wheel      zoom around cursor
+Home             fit whole logical world
+G                toggle tile/cache diagnostics
+Esc              back
+```
+
+Blue shows the ocean side of the macro field; green through brown shows the land side. Tile diagnostic colors retain their Stage 4 presentation-only meaning.
+
+Detailed semantics are recorded in [Stage 5 — Macro Ocean + Geophysical Skeleton](stage5-macro-geophysics.md).
+
+## Boundary
+
+Stage 5 stops at the macro skeleton. It does not implement erosion, continuous surface evolution, drainage topology, rivers, lakes, climate, sediment, soil or exact XYZ terrain materialization.
+
+## Done when
+
+Focused Stage 5 tests, architecture checks, full Gradle + JaCoCo, Continuum Scale Profile and Docs Site are green on the exact PR head, and the user manually accepts the F2 macro-geography result.
+
+**Status:** implementation in progress in PR #135; not manually accepted.
+
+---
+
 ## Stage discipline
 
-Stage 4 is accepted and final architecture cleanup PR #133 is merged. **Stage 5 — Macro Ocean + Geophysical Skeleton** is now the next canonical implementation checkpoint and has not started yet.
+Stage 5 is the active checkpoint. **Stage 6 remains blocked until Stage 5 is explicitly accepted.**
