@@ -3,25 +3,32 @@ package io.github.evoforge.simulation.world.geophysics;
 /**
  * Bounded deterministic Stage 5 macro-geophysical model hidden behind {@link MacroGeophysics}.
  *
- * <p>The implementation evaluates two nested macro scales of one crustal-support process. The
- * broad scale establishes continent/ocean-basin sized support while the regional scale bends that
- * support into coherent provinces and island groups. Authored semantic controls are translated
- * here into internal spans and weights; those solver details are deliberately not part of the
- * public definition contract.</p>
+ * <p>The field is intentionally low-frequency. A domain-warped gradient field establishes broad
+ * continental support, two progressively smaller (but still macro-scale) octaves break symmetry,
+ * and regional structure is allowed to reshape only the coastal transition band. High
+ * fragmentation can additionally lift narrow regional boundary ridges into island chains. This
+ * keeps continental interiors coherent and prevents authored fragmentation from degenerating into
+ * sample-scale speckle.</p>
  */
 final class DeterministicMacroGeophysicalField implements MacroGeophysicalField {
     private static final long MIN_CONTINENT_SPAN = 1L << 20;
     private static final long MAX_CONTINENT_SPAN = 1L << 23;
     private static final long MIN_PROVINCE_SPAN = 1L << 18;
+    private static final double INV_SQRT_2 = 0.7071067811865476d;
 
     private static final long CONTINENT_SALT = 0x5A17B4C39D2E61F0L;
+    private static final long CONTINENT_SECONDARY_SALT = 0x19C6D87A42E5B301L;
+    private static final long CONTINENT_TERTIARY_SALT = 0x8B31E6C5A70D249FL;
     private static final long PROVINCE_SALT = 0xC3D2E1F05A174B69L;
+    private static final long ISLAND_ARC_SALT = 0x7419A0E5D236BC8FL;
+    private static final long WARP_X_SALT = 0x29D1C7B4E8530A6FL;
+    private static final long WARP_Y_SALT = 0xE4B68A172D95C30FL;
 
     private final long seed;
     private final long revision;
     private final MacroGeophysicsDefinition definition;
     private final long continentSpan;
-    private final long provinceSpan;
+    private final double provinceSpan;
 
     DeterministicMacroGeophysicalField(
             long seed,
@@ -33,12 +40,9 @@ final class DeterministicMacroGeophysicalField implements MacroGeophysicalField 
         this.definition = definition;
         this.continentSpan = continentSpan(definition.continentalScale().value());
 
-        // Fragmentation is allowed to shorten the regional structural scale, but only inside a
-        // macro-geographical band. It must never collapse into sample-scale coastline noise.
-        double provinceDivisor = lerp(2.2d, 3.8d, definition.fragmentation().value());
-        this.provinceSpan = Math.max(
-                MIN_PROVINCE_SPAN,
-                Math.round(continentSpan / provinceDivisor));
+        // Fragmentation may shorten the regional structure scale, but it remains decisively macro.
+        double provinceDivisor = lerp(2.6d, 4.4d, definition.fragmentation().value());
+        this.provinceSpan = Math.max(MIN_PROVINCE_SPAN, continentSpan / provinceDivisor);
     }
 
     long seed() {
@@ -59,51 +63,104 @@ final class DeterministicMacroGeophysicalField implements MacroGeophysicalField 
         double fragmentation = definition.fragmentation().value();
         double variation = definition.macroVariation().value();
 
-        double continentalSupport = supportAt(x, y, continentSpan, CONTINENT_SALT);
+        // Very broad displacement removes obvious lattice alignment without adding fine detail.
+        double warpSpan = continentSpan * 1.8d;
+        double warpAmplitude = continentSpan * lerp(0.04d, 0.24d, variation);
+        double warpedX = x + gradientNoiseAt(x, y, warpSpan, WARP_X_SALT) * warpAmplitude;
+        double warpedY = y + gradientNoiseAt(x, y, warpSpan, WARP_Y_SALT) * warpAmplitude;
+
+        double continentalSupport = continentalSupportAt(warpedX, warpedY);
         double stableContinentalSupport = stabilize(continentalSupport, cohesion);
-        double provinceSupport = supportAt(x, y, provinceSpan, PROVINCE_SALT);
 
-        // Fragmentation lets coherent regional provinces interrupt broad support. The bounded
-        // regional span above prevents high fragmentation from degenerating into tiny speckles.
-        double regionalWeight = lerp(0.08d, 0.34d, fragmentation);
-        double support = lerp(stableContinentalSupport, provinceSupport, regionalWeight);
+        // Regional structure is strongest around continental margins. Deep continental interiors
+        // and deep ocean basins therefore remain broad and readable rather than being perforated.
+        double coastalInfluence = 1.0d
+                - smoothStep(0.18d, 0.62d, Math.abs(stableContinentalSupport));
+        double provinceSupport = gradientNoiseAt(warpedX, warpedY, provinceSpan, PROVINCE_SALT);
+        double regionalWeight = lerp(0.035d, 0.225d, fragmentation);
+        double support = stableContinentalSupport
+                + provinceSupport * regionalWeight * coastalInfluence;
 
-        // Variation changes bounded regional deformation without introducing a separate painter.
-        // Signed disagreement keeps the deformation causally coupled to the two support scales.
-        double disagreement = provinceSupport - stableContinentalSupport;
-        double deformationWeight = lerp(0.03d, 0.13d, variation);
-        double deformation = disagreement * Math.abs(disagreement) * deformationWeight;
+        // At high fragmentation, sinuous zero-crossings of a separate regional field can emerge as
+        // island arcs inside the same coastal transition zone. This creates groups/chains rather
+        // than uniformly increasing high-frequency noise across the entire world.
+        double arcField = gradientNoiseAt(
+                warpedX,
+                warpedY,
+                provinceSpan * 1.25d,
+                ISLAND_ARC_SALT);
+        double islandArc = 1.0d - smoothStep(0.08d, 0.36d, Math.abs(arcField));
+        support += islandArc
+                * fragmentation
+                * fragmentation
+                * 0.10d
+                * coastalInfluence;
 
-        // Ocean prevalence is an authored tendency rather than a promise of an exact global area
-        // percentage. It shifts the shared elevation field relative to the fixed sea datum at zero.
-        double seaBias = (0.5d - definition.oceanPrevalence().value()) * 0.85d;
-        return clamp(support + deformation + seaBias, -1.0d, 1.0d);
+        // Ocean prevalence remains a tendency applied to the one authoritative elevation field.
+        // The sea datum itself stays fixed at zero.
+        double seaBias = (0.5d - definition.oceanPrevalence().value()) * 0.95d;
+        return clamp(support + seaBias, -1.0d, 1.0d);
     }
 
-    private double supportAt(long x, long y, long span, long salt) {
-        long cellX = Math.floorDiv(x, span);
-        long cellY = Math.floorDiv(y, span);
-        double localX = Math.floorMod(x, span) / (double) span;
-        double localY = Math.floorMod(y, span) / (double) span;
+    private double continentalSupportAt(double x, double y) {
+        double primary = gradientNoiseAt(x, y, continentSpan, CONTINENT_SALT);
+        double secondary = gradientNoiseAt(
+                x,
+                y,
+                Math.max(MIN_PROVINCE_SPAN, continentSpan / 2.0d),
+                CONTINENT_SECONDARY_SALT);
+        double tertiary = gradientNoiseAt(
+                x,
+                y,
+                Math.max(MIN_PROVINCE_SPAN, continentSpan / 4.0d),
+                CONTINENT_TERTIARY_SALT);
+        return (primary + secondary * 0.48d + tertiary * 0.20d) / 1.68d;
+    }
+
+    private double gradientNoiseAt(double x, double y, double span, long salt) {
+        double gridX = x / span;
+        double gridY = y / span;
+        long cellX = (long) Math.floor(gridX);
+        long cellY = (long) Math.floor(gridY);
+        double localX = gridX - cellX;
+        double localY = gridY - cellY;
         double blendX = smooth(localX);
         double blendY = smooth(localY);
 
-        double v00 = latticeValue(cellX, cellY, salt);
-        double v10 = latticeValue(cellX + 1L, cellY, salt);
-        double v01 = latticeValue(cellX, cellY + 1L, salt);
-        double v11 = latticeValue(cellX + 1L, cellY + 1L, salt);
+        double n00 = gradientDot(cellX, cellY, localX, localY, salt);
+        double n10 = gradientDot(cellX + 1L, cellY, localX - 1.0d, localY, salt);
+        double n01 = gradientDot(cellX, cellY + 1L, localX, localY - 1.0d, salt);
+        double n11 = gradientDot(cellX + 1L, cellY + 1L, localX - 1.0d, localY - 1.0d, salt);
 
-        double lower = lerp(v00, v10, blendX);
-        double upper = lerp(v01, v11, blendX);
-        return lerp(lower, upper, blendY);
+        double lower = lerp(n00, n10, blendX);
+        double upper = lerp(n01, n11, blendX);
+        return clamp(lerp(lower, upper, blendY) * 1.55d, -1.0d, 1.0d);
     }
 
-    private double latticeValue(long cellX, long cellY, long salt) {
+    private double gradientDot(
+            long cellX,
+            long cellY,
+            double offsetX,
+            double offsetY,
+            long salt) {
+        int direction = (int) (latticeHash(cellX, cellY, salt) & 7L);
+        return switch (direction) {
+            case 0 -> offsetX;
+            case 1 -> -offsetX;
+            case 2 -> offsetY;
+            case 3 -> -offsetY;
+            case 4 -> (offsetX + offsetY) * INV_SQRT_2;
+            case 5 -> (-offsetX + offsetY) * INV_SQRT_2;
+            case 6 -> (offsetX - offsetY) * INV_SQRT_2;
+            default -> (-offsetX - offsetY) * INV_SQRT_2;
+        };
+    }
+
+    private long latticeHash(long cellX, long cellY, long salt) {
         long value = mix64(seed ^ salt);
         value = mix64(value ^ mix64(cellX));
         value = mix64(value ^ Long.rotateLeft(mix64(cellY), 29));
-        value = mix64(value ^ revision);
-        return ((value >>> 11) * 0x1.0p-53) * 2.0d - 1.0d;
+        return mix64(value ^ revision);
     }
 
     private static long continentSpan(double scale) {
@@ -113,8 +170,13 @@ final class DeterministicMacroGeophysicalField implements MacroGeophysicalField 
 
     private static double stabilize(double support, double cohesion) {
         if (support == 0d) return 0d;
-        double exponent = lerp(1.0d, 0.5d, cohesion);
+        double exponent = lerp(1.0d, 0.58d, cohesion);
         return Math.copySign(Math.pow(Math.abs(support), exponent), support);
+    }
+
+    private static double smoothStep(double edge0, double edge1, double value) {
+        double amount = clamp((value - edge0) / (edge1 - edge0), 0.0d, 1.0d);
+        return amount * amount * (3.0d - 2.0d * amount);
     }
 
     private static double smooth(double value) {
