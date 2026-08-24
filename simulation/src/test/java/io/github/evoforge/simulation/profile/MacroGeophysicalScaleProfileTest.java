@@ -46,7 +46,7 @@ final class MacroGeophysicalScaleProfileTest {
             long elapsed = System.nanoTime() - started;
 
             assertEquals(EXPECTED_SAMPLES, calls.get());
-            assertEquals(EXPECTED_SAMPLES, page.sampleCount());
+            assertEquals(EXPECTED_SAMPLES, page.copySamples().length);
             assertTrue(elapsed < MAX_MATERIALIZE_NANOS, "macro geophysics exceeded generous 5s gate");
 
             System.out.println("macro-geophysical-profile"
