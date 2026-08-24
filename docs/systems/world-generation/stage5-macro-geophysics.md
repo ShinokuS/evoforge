@@ -64,23 +64,28 @@ These are authored world semantics. They are intentionally different from solver
 
 `MacroGeophysicsPreset` supplies convenience profiles (`SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO`, `OCEANIC`) over the same definition contract. Presets are not a second configuration system: arbitrary custom definitions remain valid.
 
+`ARCHIPELAGO` and `OCEANIC` intentionally describe different world character. Archipelago uses high fragmentation to produce many coherent island groups and chains. Oceanic uses very high ocean prevalence with low fragmentation, producing large open-ocean regions and comparatively few isolated landmasses.
+
 No setting promises an exact global topology such as "exactly four continents". Such a guarantee would require whole-world connectivity analysis and would conflict with the current local addressable generation model. Stage 5 controls world character rather than globally optimizing a finished raster.
 
 ## Current deterministic model
 
 The current implementation is hidden behind `MacroGeophysics.create(...) -> MacroGeophysicalField` and may be replaced without changing consumers.
 
-It evaluates two nested spatial scales of one crustal-support process:
+The implementation is deliberately low-frequency and separates macro shape from later terrain detail:
 
-1. broad continental support establishes continent/ocean-basin sized tendencies;
-2. a regional **macro** support field bends that broad support into provinces and island groups;
-3. landmass cohesion stabilizes broad support away from the sea datum;
-4. fragmentation controls how strongly coherent regional support may interrupt the broad support and, within a bounded range, how much smaller the regional structural scale is;
-5. macro variation controls bounded signed deformation between the two support scales;
-6. ocean prevalence shifts the shared result relative to the fixed sea datum;
-7. sea datum derives ocean versus land.
+1. a broad gradient field establishes continent/ocean-basin scale support;
+2. two progressively smaller, still macro-scale gradient octaves break simple blob symmetry without introducing fine coastline noise;
+3. very broad deterministic domain warping bends those structures so the hidden sampling lattice does not become visible geography;
+4. landmass cohesion stabilizes broad interiors away from the sea datum;
+5. regional support is strongest only in a broad coastal transition band, so fragmentation can create bays, straits and islands without perforating deep continental interiors or deep ocean basins;
+6. at high fragmentation, narrow zero-crossing ridges of a separate regional field may be lifted into coherent island chains/arcs inside that same transition band;
+7. ocean prevalence shifts the one shared result relative to the fixed sea datum;
+8. sea datum derives ocean versus land.
 
-A high fragmentation value is **not permission for high-frequency noise**. The regional structural span has a macro-scale lower bound and its influence is bounded. An archipelago profile should read as groups of substantial islands and channels, not as sample-scale speckle or checkerboard perforation.
+A high fragmentation value is **not permission for high-frequency noise**. Every structural layer has a macro-scale lower bound, and regional influence is spatially constrained to the coastal transition. An archipelago profile should read as groups of substantial islands and channels, not as sample-scale speckle or checkerboard perforation.
+
+This model aims for plausible large-scale geography, not final geomorphology. Detailed coastlines, erosion, mountain systems, drainage and surface evolution remain later causal stages; they must refine this macro skeleton rather than reveal hidden high-frequency Stage 5 noise.
 
 ## Continuum reuse
 
@@ -118,7 +123,9 @@ The field is evaluated directly from coordinates. Page and map boundaries theref
 
 Both horizontal and vertical overlapping-window tests prove the world field itself is continuous across representation boundaries. The map presentation must preserve the same row/column orientation when converting a tile to a GPU texture; a tile-local flip is a presentation bug, not geography.
 
-The archipelago quality regression also compares coastline transition density across observation resolutions. Refining the observation lattice must expose coherent boundaries rather than reveal a hidden checkerboard of tiny alternating land/ocean samples.
+The archipelago quality regression compares coastline transition density across observation resolutions. Refining the observation lattice must expose coherent boundaries rather than reveal a hidden checkerboard of tiny alternating land/ocean samples.
+
+A second profile regression requires Archipelago and Oceanic to remain structurally distinct at the same seed: Archipelago must expose substantially more macro coastline while Oceanic remains more strongly dominated by open ocean.
 
 ## Boundedness and scale
 
@@ -141,13 +148,17 @@ The existing Continuum map viewer renders the real Stage 5 field. The standard i
 A dedicated **WORLD GENERATION** panel is separate from the technical map HUD. It contains:
 
 - the active profile name;
+- an editable world seed field with explicit `Apply` action;
+- a `Random seed` action which chooses and immediately applies a new seed;
 - buttons for Supercontinent, Balanced, Archipelago and Oceanic presets;
 - sliders for all five `MacroGeophysicsDefinition` controls;
 - an explicit `Apply custom` action.
 
+Decimal signed `long` seeds and `0x...` hexadecimal seeds are accepted. The selected seed is always displayed, so a randomly generated world can be reproduced exactly later.
+
 Preset buttons apply immediately. Moving sliders only edits the pending custom values; the world source is regenerated when `Apply custom` is pressed, avoiding a burst of expensive tile regeneration while a slider is being dragged.
 
-Changing the definition invalidates the derived map source and GPU textures but preserves the current map center and zoom. It does not change the world seed or turn camera state into generation input.
+Changing either the definition or the seed invalidates the derived map source and GPU textures while preserving the current map center and zoom. Changing definition does not change world identity; changing seed changes world identity while preserving the active profile/settings. Neither operation turns camera state into generation input.
 
 Keyboard shortcuts `1` through `4` remain optional fast preset selection.
 
@@ -196,14 +207,15 @@ Stage 5 may be marked complete only after all of the following are true on the f
 
 - focused geophysics correctness/determinism tests pass;
 - authored controls produce distinct deterministic world character without exposing solver knobs;
+- Archipelago and Oceanic remain visibly and quantitatively distinct at the same seed;
 - the archipelago profile remains macro-structured rather than sample-scale noisy;
 - shared-coordinate multi-resolution and horizontal/vertical overlap/seam tests pass;
 - map texture conversion preserves tile row/column orientation;
-- the dedicated settings panel can select presets and apply arbitrary custom definitions without resetting map navigation;
+- the dedicated settings panel can select presets, edit/randomize seed and apply arbitrary custom definitions without resetting map navigation;
 - architecture fitness and ArchUnit remain green without weakened rules;
 - full Gradle tests and JaCoCo coverage gate pass;
 - Continuum scale profile including the Stage 5 workload passes;
 - Docs Site builds;
-- the user manually inspects the F2 macro map across contrasting/custom settings and accepts the geography behavior.
+- the user manually inspects the F2 macro map across contrasting/custom settings and multiple seeds and accepts the geography behavior.
 
 Until that explicit manual acceptance, Stage 5 remains in progress and Stage 6 must not begin.
