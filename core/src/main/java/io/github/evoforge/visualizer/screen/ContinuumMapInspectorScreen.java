@@ -225,12 +225,12 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         table.add(button).width(130f).height(28f).pad(2f);
     }
 
-    private static void addSettingRow(
+    private void addSettingRow(
             Window window,
             String text,
             Slider slider,
             Label value) {
-        window.add(new Label(text, window.getSkin())).left();
+        window.add(new Label(text, skin)).left();
         window.add(slider).width(SETTINGS_SLIDER_WIDTH).growX();
         window.add(value).width(38f).right();
         window.row();
