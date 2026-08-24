@@ -16,10 +16,10 @@ final class DeterministicMacroGeophysicalFieldTest {
     void fixedCoordinatesHaveStableRegressionValues() {
         DeterministicMacroGeophysicalField field = field();
 
-        assertEquals(0.45772718566638565d, field.elevationAt(0L, 0L));
-        assertEquals(0.253988623047904d, field.elevationAt(123_456L, 789_012L));
-        assertEquals(-0.5713694549443915d, field.elevationAt(-987_654_321L, 123_456_789L));
-        assertEquals(0.32868554974810266d, field.elevationAt(1L << 40, -(1L << 39)));
+        assertEquals(0.4331074953763258d, field.elevationAt(0L, 0L));
+        assertEquals(0.43139189937693984d, field.elevationAt(123_456L, 789_012L));
+        assertEquals(-0.5871485788941916d, field.elevationAt(-987_654_321L, 123_456_789L));
+        assertEquals(0.46860468690359186d, field.elevationAt(1L << 40, -(1L << 39)));
     }
 
     @Test
@@ -109,8 +109,31 @@ final class DeterministicMacroGeophysicalFieldTest {
                 "archipelago intent should produce a more fragmented macro coastline");
     }
 
+    @Test
+    void archipelagoCoastRemainsMacroStructuredRatherThanSampleScaleNoise() {
+        MacroGeophysicalField archipelago = MacroGeophysics.create(
+                0x45A10F0E2026L,
+                1L,
+                MacroGeophysicsPreset.ARCHIPELAGO.definition());
+
+        double coarseRate = coastTransitionRate(archipelago, 64, 16_000_000L);
+        double fineRate = coastTransitionRate(archipelago, 128, 16_000_000L);
+
+        assertTrue(
+                fineRate < coarseRate * 0.70d,
+                "refining the observation lattice should reveal coherent boundaries, not checkerboard-like coast noise");
+    }
+
     private static DeterministicMacroGeophysicalField field() {
         return new DeterministicMacroGeophysicalField(SEED, REVISION, DEFINITION);
+    }
+
+    private static double coastTransitionRate(
+            MacroGeophysicalField field,
+            int sideSamples,
+            long logicalSide) {
+        double possibleEdges = 2.0d * sideSamples * (sideSamples - 1);
+        return coastTransitions(field, sideSamples, logicalSide) / possibleEdges;
     }
 
     private static int coastTransitions(MacroGeophysicalField field, int sideSamples, long logicalSide) {
