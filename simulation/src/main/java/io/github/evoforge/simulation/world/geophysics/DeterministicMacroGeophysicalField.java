@@ -1,50 +1,77 @@
 package io.github.evoforge.simulation.world.geophysics;
 
 /**
- * Bounded deterministic Stage 5 macro-geophysical model.
+ * Bounded deterministic Stage 5 macro-geophysical model hidden behind {@link MacroGeophysics}.
  *
  * <p>The implementation evaluates two nested scales of one crustal-support process. The broad scale
  * establishes continent/ocean-basin sized support while the regional scale perturbs that same
- * support into large geophysical provinces. Their disagreement contributes bounded deformation to
- * the skeleton. No terrain detail, erosion, drainage or exact XYZ materialization is performed.
+ * support into large geophysical provinces. Authored semantic controls are translated here into
+ * internal spans and weights; those solver details are deliberately not part of the public
+ * definition contract.</p>
  */
-public final class DeterministicMacroGeophysicalField implements MacroGeophysicalField {
-    private static final long CONTINENT_SPAN = 1L << 21;
-    private static final long PROVINCE_SPAN = 1L << 18;
+final class DeterministicMacroGeophysicalField implements MacroGeophysicalField {
+    private static final long MIN_CONTINENT_SPAN = 1L << 20;
+    private static final long MAX_CONTINENT_SPAN = 1L << 23;
+    private static final long MIN_PROVINCE_SPAN = 1L << 16;
 
     private static final long CONTINENT_SALT = 0x5A17B4C39D2E61F0L;
     private static final long PROVINCE_SALT = 0xC3D2E1F05A174B69L;
 
     private final long seed;
     private final long revision;
+    private final MacroGeophysicsDefinition definition;
+    private final long continentSpan;
+    private final long provinceSpan;
 
-    public DeterministicMacroGeophysicalField(long seed, long revision) {
+    DeterministicMacroGeophysicalField(
+            long seed,
+            long revision,
+            MacroGeophysicsDefinition definition) {
+        if (definition == null) throw new IllegalArgumentException("definition must not be null");
         this.seed = seed;
         this.revision = revision;
+        this.definition = definition;
+        this.continentSpan = continentSpan(definition.continentalScale().value());
+        this.provinceSpan = Math.max(MIN_PROVINCE_SPAN, continentSpan / 8L);
     }
 
-    public long seed() {
+    long seed() {
         return seed;
     }
 
-    public long revision() {
+    long revision() {
         return revision;
+    }
+
+    MacroGeophysicsDefinition definition() {
+        return definition;
     }
 
     @Override
     public double elevationAt(long x, long y) {
-        double continentalSupport = supportAt(x, y, CONTINENT_SPAN, CONTINENT_SALT);
-        double provinceSupport = supportAt(x, y, PROVINCE_SPAN, PROVINCE_SALT);
+        double cohesion = definition.landmassCohesion().value();
+        double fragmentation = definition.fragmentation().value();
+        double variation = definition.macroVariation().value();
 
-        // A regional province that disagrees with its broad continental support represents bounded
-        // deformation of the same crustal-support system rather than an independent feature layer.
-        double deformation = Math.abs(provinceSupport - continentalSupport);
-        double elevation =
-                continentalSupport * 0.74d
-                        + provinceSupport * 0.26d
-                        + (deformation - 0.35d) * 0.12d
-                        - 0.06d;
-        return clamp(elevation, -1.0d, 1.0d);
+        double continentalSupport = supportAt(x, y, continentSpan, CONTINENT_SALT);
+        double stableContinentalSupport = stabilize(continentalSupport, cohesion);
+        double provinceSupport = supportAt(x, y, provinceSpan, PROVINCE_SALT);
+
+        // Fragmentation controls how readily regional provinces can interrupt broad support.
+        // Cohesion separately pushes broad support away from the sea datum without changing sign.
+        double regionalWeight = lerp(0.06d, 0.44d, fragmentation);
+        double support = lerp(stableContinentalSupport, provinceSupport, regionalWeight);
+
+        // Variation changes the strength of bounded regional deformation without creating an
+        // independent feature painter. Signed disagreement keeps deformation coupled to support.
+        double disagreement = provinceSupport - stableContinentalSupport;
+        double deformationWeight = lerp(0.04d, 0.22d, variation);
+        double deformation = disagreement * Math.abs(disagreement) * deformationWeight;
+
+        // Ocean prevalence is an authored tendency rather than a promise of an exact global area
+        // percentage. It shifts the shared elevation field relative to the fixed sea datum at zero.
+        double seaBias = (0.5d - definition.oceanPrevalence().value()) * 0.85d;
+        return clamp(support + deformation + seaBias, -1.0d, 1.0d);
     }
 
     private double supportAt(long x, long y, long span, long salt) {
@@ -71,6 +98,17 @@ public final class DeterministicMacroGeophysicalField implements MacroGeophysica
         value = mix64(value ^ Long.rotateLeft(mix64(cellY), 29));
         value = mix64(value ^ revision);
         return ((value >>> 11) * 0x1.0p-53) * 2.0d - 1.0d;
+    }
+
+    private static long continentSpan(double scale) {
+        double ratio = MAX_CONTINENT_SPAN / (double) MIN_CONTINENT_SPAN;
+        return Math.round(MIN_CONTINENT_SPAN * Math.pow(ratio, scale));
+    }
+
+    private static double stabilize(double support, double cohesion) {
+        if (support == 0d) return 0d;
+        double exponent = lerp(1.0d, 0.5d, cohesion);
+        return Math.copySign(Math.pow(Math.abs(support), exponent), support);
     }
 
     private static double smooth(double value) {
