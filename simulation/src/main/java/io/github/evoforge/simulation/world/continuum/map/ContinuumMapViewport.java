@@ -22,7 +22,7 @@ public final class ContinuumMapViewport {
     private static final double LOD_KEEP_MAX_TILE_PIXELS = 200d;
     private static final double MIN_PIXELS_PER_WORLD_UNIT = 1e-9d;
     private static final double MAX_PIXELS_PER_WORLD_UNIT = 32d;
-    private static final int MAX_FINER_PREFETCH_TILES = 128;
+    private static final int MAX_FINER_PREFETCH_TILES = 256;
     private static final int MAX_COARSER_PREFETCH_TILES = 32;
 
     private final long worldWidth;
