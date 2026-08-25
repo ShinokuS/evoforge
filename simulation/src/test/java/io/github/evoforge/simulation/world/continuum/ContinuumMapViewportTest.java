@@ -50,6 +50,31 @@ final class ContinuumMapViewportTest {
     }
 
     @Test
+    void partiallyReadyVisibleTilesDoNotCreateSquareMixedLodFrames() {
+        QueueExecutor executor = new QueueExecutor();
+        ContinuumMapTileService service = new ContinuumMapTileService(
+                ContinuumMapViewportTest::tile,
+                executor,
+                13,
+                128,
+                96,
+                2);
+        ContinuumMapViewport viewport = new ContinuumMapViewport(1_000_000L, 1_000_000L, 128, 13, 1, 1600, 900);
+        ContinuumMapViewport.Frame initial = viewport.requestFrame(service);
+        assertTrue(initial.visibleTileCount() > 1);
+
+        executor.runOne();
+        ContinuumMapViewport.Frame partial = viewport.requestFrame(service);
+
+        assertEquals(0, partial.exactReadyCount(), "one ready fine tile must not be promoted on its own");
+        assertEquals(partial.visibleTileCount(), partial.fallbackCount());
+        assertEquals(
+                1L,
+                partial.tiles().stream().map(ContinuumMapViewport.DisplayTile::fallbackDepth).distinct().count(),
+                "all visible targets must use one common representation depth");
+    }
+
+    @Test
     void settledViewPrewarmsTheNextFinerZoomLevel() {
         ContinuumMapTileService service = new ContinuumMapTileService(
                 ContinuumMapViewportTest::tile,
@@ -113,6 +138,12 @@ final class ContinuumMapViewportTest {
         @Override
         public void execute(Runnable command) {
             queue.add(command);
+        }
+
+        void runOne() {
+            Runnable next = queue.poll();
+            if (next == null) throw new IllegalStateException("no queued work");
+            next.run();
         }
     }
 }
