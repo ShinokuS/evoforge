@@ -8,18 +8,27 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 /**
  * Derived F2 map representation of the authoritative continuous Terrain surface.
  *
- * <p>Each tile samples one extra row/column of raw Z so hillshade can be computed from actual
- * neighbouring Terrain heights without tile-edge discontinuities. The requested Continuum level
- * controls sample spacing only; Terrain truth remains {@link ContinuousTerrainSurface}.</p>
+ * <p>The map requests a scale-aware observation when the concrete Terrain source supports it. This
+ * filters only the disposable representation: exact Terrain truth remains unchanged. A one-sample
+ * ghost border on every side permits centered slope estimates without tile-edge lighting seams.</p>
+ *
+ * <p>One byte carries two independent presentation facts. Bit 7 is land/ocean, bits 6..3 are
+ * elevation/depth band, and bits 2..0 are hillshade. Elevation therefore owns hue while slope owns
+ * brightness; a shadow can no longer turn a green lowland into a brown pseudo-mountain.</p>
  */
 public final class TerrainSurfaceMapTileGenerator implements ContinuumMapTileGenerator {
-    private static final double HILLSHADE_VERTICAL_EXAGGERATION = 46.0d;
-    private static final double LIGHT_X = -0.4454354d;
-    private static final double LIGHT_Y = 0.8181489d;
-    private static final double LIGHT_Z = 0.3636910d;
+    private static final double HILLSHADE_VERTICAL_EXAGGERATION = 34.0d;
+    private static final double LIGHT_X = -0.4866643d;
+    private static final double LIGHT_Y = 0.6083304d;
+    private static final double LIGHT_Z = 0.6263284d;
+
+    private static final int LAND_BIT = 0x80;
+    private static final int ELEVATION_BANDS = 16;
+    private static final int SHADE_BANDS = 8;
 
     private final ContinuumWorldDomain domain;
     private final ContinuousTerrainSurface surface;
+    private final TerrainSurfaceMapObservation mapObservation;
     private final int sampleSide;
     private final int maxLevel;
 
@@ -33,6 +42,9 @@ public final class TerrainSurfaceMapTileGenerator implements ContinuumMapTileGen
         if (sampleSide <= 0) throw new IllegalArgumentException("sampleSide must be > 0");
         this.domain = domain;
         this.surface = surface;
+        this.mapObservation = surface instanceof TerrainSurfaceMapObservation observation
+                ? observation
+                : null;
         this.sampleSide = sampleSide;
         this.maxLevel = computeMaxLevel(domain, sampleSide);
     }
@@ -60,60 +72,79 @@ public final class TerrainSurfaceMapTileGenerator implements ContinuumMapTileGen
         long maxX = domain.width() - 1L;
         long maxY = domain.height() - 1L;
 
-        int gridSide = sampleSide + 1;
+        int gridSide = sampleSide + 2;
         double[] z = new double[Math.multiplyExact(gridSide, gridSide)];
-        for (int y = 0; y < gridSide; y++) {
-            long worldY = coordinate(originY, y, step, maxY);
-            int row = y * gridSide;
-            for (int x = 0; x < gridSide; x++) {
-                long worldX = coordinate(originX, x, step, maxX);
-                z[row + x] = surface.surfaceZAt(worldX, worldY);
+        for (int gridY = 0; gridY < gridSide; gridY++) {
+            long worldY = coordinateWithGhost(originY, gridY - 1, step, maxY);
+            int row = gridY * gridSide;
+            for (int gridX = 0; gridX < gridSide; gridX++) {
+                long worldX = coordinateWithGhost(originX, gridX - 1, step, maxX);
+                z[row + gridX] = mapSampleAt(worldX, worldY, step);
             }
         }
 
         byte[] pixels = new byte[Math.multiplyExact(sampleSide, sampleSide)];
         for (int y = 0; y < sampleSide; y++) {
-            int gridRow = y * gridSide;
+            int centerRow = (y + 1) * gridSide;
+            int southRow = y * gridSide;
+            int northRow = (y + 2) * gridSide;
             int pixelRow = y * sampleSide;
             for (int x = 0; x < sampleSide; x++) {
-                double center = z[gridRow + x];
-                double east = z[gridRow + x + 1];
-                double north = z[gridRow + gridSide + x];
-                pixels[pixelRow + x] = encode(center, east, north, step);
+                int centerIndex = centerRow + x + 1;
+                double center = z[centerIndex];
+                double west = z[centerIndex - 1];
+                double east = z[centerIndex + 1];
+                double south = z[southRow + x + 1];
+                double north = z[northRow + x + 1];
+                pixels[pixelRow + x] = encode(center, west, east, south, north, step);
             }
         }
         return new ContinuumMapTile(key, sampleSide, pixels);
     }
 
-    private byte encode(double z, double east, double north, long step) {
-        if (!Double.isFinite(z) || !Double.isFinite(east) || !Double.isFinite(north)) return 0;
-        double slopeX = (east - z) / step;
-        double slopeY = (north - z) / step;
+    private double mapSampleAt(long x, long y, long step) {
+        return mapObservation == null
+                ? surface.surfaceZAt(x, y)
+                : mapObservation.surfaceZForMapAt(x, y, step);
+    }
+
+    private static byte encode(
+            double z,
+            double west,
+            double east,
+            double south,
+            double north,
+            long step) {
+        if (!Double.isFinite(z)
+                || !Double.isFinite(west)
+                || !Double.isFinite(east)
+                || !Double.isFinite(south)
+                || !Double.isFinite(north)) {
+            return 0;
+        }
+
+        double slopeX = (east - west) / (2.0d * step);
+        double slopeY = (north - south) / (2.0d * step);
         double nx = -slopeX * HILLSHADE_VERTICAL_EXAGGERATION;
-        double ny = 1.0d;
-        double nz = -slopeY * HILLSHADE_VERTICAL_EXAGGERATION;
+        double ny = -slopeY * HILLSHADE_VERTICAL_EXAGGERATION;
+        double nz = 1.0d;
         double inverseLength = 1.0d / Math.sqrt(nx * nx + ny * ny + nz * nz);
         nx *= inverseLength;
         ny *= inverseLength;
         nz *= inverseLength;
         double diffuse = Math.max(0.0d, nx * LIGHT_X + ny * LIGHT_Y + nz * LIGHT_Z);
-        double shade = 0.34d + 0.66d * diffuse;
-        double slopeStrength = clamp(Math.hypot(slopeX, slopeY) * 18.0d, 0.0d, 1.0d);
+        double shade = 0.47d + 0.53d * diffuse;
+        int shadeBand = quantizeBand(shade, SHADE_BANDS);
 
-        double normalized;
         if (z < ContinuousTerrainSurface.SEA_DATUM) {
-            double depth = Math.pow(clamp(-z / 3_300.0d, 0.0d, 1.0d), 0.58d);
-            normalized = 0.445d - 0.300d * depth + 0.055d * (shade - 0.62d);
-            normalized = clamp(normalized, 0.015d, 0.495d);
-        } else {
-            double height = Math.pow(clamp(z / 2_800.0d, 0.0d, 1.0d), 0.54d);
-            normalized = 0.565d
-                    + 0.275d * height
-                    + 0.170d * (shade - 0.62d)
-                    + 0.045d * slopeStrength;
-            normalized = clamp(normalized, 0.505d, 1.0d);
+            double depth = Math.pow(clamp(-z / 3_300.0d, 0.0d, 1.0d), 0.60d);
+            int depthBand = quantizeBand(depth, ELEVATION_BANDS);
+            return (byte) ((depthBand << 3) | shadeBand);
         }
-        return quantize(normalized);
+
+        double height = Math.pow(clamp(z / 3_000.0d, 0.0d, 1.0d), 0.58d);
+        int heightBand = quantizeBand(height, ELEVATION_BANDS);
+        return (byte) (LAND_BIT | (heightBand << 3) | shadeBand);
     }
 
     private void requireValidKey(ContinuumMapTileKey key) {
@@ -127,16 +158,15 @@ public final class TerrainSurfaceMapTileGenerator implements ContinuumMapTileGen
         }
     }
 
-    private static long coordinate(long origin, int index, long step, long maximum) {
-        long offset = Math.multiplyExact((long) index, step);
-        if (origin >= maximum || offset >= maximum - origin) return maximum;
-        return origin + offset;
+    private static long coordinateWithGhost(long origin, int sampleIndex, long step, long maximum) {
+        long offset = Math.multiplyExact((long) sampleIndex, step);
+        long coordinate = Math.addExact(origin, offset);
+        return Math.max(0L, Math.min(maximum, coordinate));
     }
 
-    private static byte quantize(double value) {
-        if (Double.isNaN(value) || value <= 0.0d) return 0;
-        if (value >= 1.0d) return (byte) 0xFF;
-        return (byte) (int) (value * 255.0d + 0.5d);
+    private static int quantizeBand(double value, int bandCount) {
+        double bounded = clamp(value, 0.0d, 1.0d);
+        return Math.min(bandCount - 1, (int) Math.floor(bounded * bandCount));
     }
 
     private static int computeMaxLevel(ContinuumWorldDomain domain, int sampleSide) {
