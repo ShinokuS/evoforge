@@ -110,13 +110,13 @@ Accepted work before the architecture reset includes deterministic addressable s
 
 Continuum remains neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology/Geophysics truth.
 
-Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is IN PROGRESS in PR #135 and is not yet manually accepted.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
+Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
 
-Stage 5 now exposes authored `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. These are normalized semantic world-generation inputs rather than exposed solver coefficients. Contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets exist for quick inspection, while custom definitions remain the actual contract.
+Stage 5 exposes authored `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. These are normalized semantic world-generation inputs rather than exposed solver coefficients. Contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets exist for quick inspection, while custom definitions remain the actual contract. The F2 world-generation panel also supports explicit/reproducible world seeds and random seed generation.
 
-Stage 6 remains blocked until Stage 5 passes final automated verification and explicit manual acceptance of the F2 macro-geography across contrasting profiles.
+**Stage 6 — Continuous Surface Evolution Prototype is the next allowed checkpoint and has not started.** It must build from the accepted Stage 5 geophysical cause while preserving Continuum boundedness, determinism and observer independence. Stage 7 drainage topology and all later river/lake/climate/materialization work remain blocked until Stage 6 is independently accepted.
 
-See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md).
+See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
 
 ## Definitions policy
 
