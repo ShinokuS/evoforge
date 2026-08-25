@@ -5,16 +5,15 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTileService;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
-import io.github.evoforge.simulation.world.continuum.map.ContinuumScalarMapTileGenerator;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalField;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysics;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
 import io.github.evoforge.simulation.world.terrain.ContinuousTerrainSurface;
-import io.github.evoforge.simulation.world.terrain.ContinuousTerrainSurfaceContinuumField;
 import io.github.evoforge.simulation.world.terrain.TerrainSurfaceDefinition;
 import io.github.evoforge.simulation.world.terrain.TerrainSurfaceEvolution;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceMapTileGenerator;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,7 +25,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     /** Compatibility alias for the original fixed inspector seed. */
     public static final long WORLD_SEED = DEFAULT_WORLD_SEED;
     public static final long GEOPHYSICS_REVISION = 1L;
-    public static final long SURFACE_REVISION = 3L;
+    public static final long SURFACE_REVISION = 4L;
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 384;
     public static final int MAX_OUTSTANDING_JOBS = 192;
@@ -37,7 +36,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     private final ExecutorService executor;
     private final ContinuumMapViewport viewport;
 
-    private ContinuumScalarMapTileGenerator generator;
+    private TerrainSurfaceMapTileGenerator generator;
     private ContinuumMapTileService tiles;
     private ContinuousTerrainSurface surface;
     private ContinuumMaterializer surfaceMaterializer;
@@ -268,9 +267,6 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     }
 
     private void rebuildMapSource() {
-        // Cancel queued work from the old derived source. At most the bounded worker count may be
-        // finishing already-running old jobs; their service becomes unreachable and cannot publish
-        // into the new Stage 6 map source.
         tiles.retainPendingDemand(Set.of());
         generator = generatorFor(definition, surfaceDefinition);
         tiles = tileService(generator);
@@ -279,7 +275,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         frame = viewport.requestFrame(tiles);
     }
 
-    private ContinuumScalarMapTileGenerator generatorFor(
+    private TerrainSurfaceMapTileGenerator generatorFor(
             MacroGeophysicsDefinition macroDefinition,
             TerrainSurfaceDefinition terrainDefinition) {
         MacroGeophysicalField geophysics = MacroGeophysics.create(
@@ -292,13 +288,10 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
                 geophysics,
                 terrainDefinition);
         surfaceMaterializer = new ContinuumMaterializer(domain, surface::surfaceZAt);
-        return new ContinuumScalarMapTileGenerator(
-                domain,
-                new ContinuousTerrainSurfaceContinuumField(surface),
-                TILE_SAMPLE_SIDE);
+        return new TerrainSurfaceMapTileGenerator(domain, surface, TILE_SAMPLE_SIDE);
     }
 
-    private ContinuumMapTileService tileService(ContinuumScalarMapTileGenerator sourceGenerator) {
+    private ContinuumMapTileService tileService(TerrainSurfaceMapTileGenerator sourceGenerator) {
         return new ContinuumMapTileService(
                 sourceGenerator,
                 executor,
