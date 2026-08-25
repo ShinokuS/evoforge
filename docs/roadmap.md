@@ -2,7 +2,7 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current checkpoint — Stage 5 in progress
+## Current checkpoint — Stage 6 ready to begin
 
 PR #132 established the repository-wide ADR-026 architecture and PR #133 completed its final semantic cleanup, removing residual ambiguous/umbrella boundaries and adding bytecode-level dependency/cycle enforcement.
 
@@ -22,15 +22,15 @@ Accepted reset guarantees:
 
 ## Current world-generation work
 
-Canonical Continuum Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is now in implementation in PR #135 and is not yet accepted.**
+Canonical Continuum Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.**
 
 The Stage 5 semantic owner is the independent `world/geophysics` concept. It exposes a deterministic continuous macro-elevation skeleton; ocean/land is derived from the same elevation relative to a shared sea datum. Continuum remains neutral addressing/materialization/map infrastructure and does not own geography.
 
-Stage 5 now includes semantic authored controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. The F2 viewer can compare `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` profiles on the same seed; custom definitions remain the real contract rather than those presets.
+Stage 5 includes semantic authored controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation; reproducible/custom world seeds; and `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` inspection profiles over the same stable definition contract.
 
-Stage 6 is not allowed to begin until Stage 5 passes its automated gates and the user manually accepts the F2 macro-geography across this configurable range.
+**Stage 6 — Continuous Surface Evolution Prototype is the next allowed checkpoint and has not started yet.** It must build on the accepted Stage 5 macro-geophysical cause without skipping ahead into Stage 7 drainage topology or later rivers/lakes/climate/materialization work.
 
-See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) for the exact contract and boundaries.
+See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
 
 ## Accepted Continuum foundation before reset
 
