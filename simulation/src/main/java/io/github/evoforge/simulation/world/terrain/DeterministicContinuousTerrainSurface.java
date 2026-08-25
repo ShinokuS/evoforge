@@ -5,27 +5,46 @@ import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalField;
 /**
  * Bounded deterministic Stage 6 surface model hidden behind {@link TerrainSurfaceEvolution}.
  *
- * <p>The model is intentionally hierarchical. Stage 5 supplies world-scale vertical support;
- * broad structural fields create regional provinces; smooth zero-crossing belts concentrate
- * orogenic/rift relief; province interiors create plateaus/lowlands; and smaller relief is allowed
- * only as a subordinate deformation of those larger structures. The smallest structural span is
- * thousands of future horizontal cells, so the source cannot contain block-scale Z ripple.</p>
+ * <p>Stage 5 remains the world-scale land/ocean support. Stage 6 turns that support into a
+ * continuous physical surface using broad provinces, sparse finite mountain systems, plateau and
+ * lowland interiors, and progressively smaller subordinate relief. Mountain systems are finite
+ * curved regional features rather than zero-crossing contour bands, preventing the worm-like
+ * global ridge networks that an earlier prototype produced.</p>
+ *
+ * <p>All local relief is strongly suppressed through the coastal transition and the final surface
+ * preserves the Stage 5 side of the shared sea datum. Stage 6 therefore enriches coastal relief
+ * without punching accidental lakes, lagoons, or islands into the macro landmass silhouette.
+ * Drainage-connected water topology remains a later Genesis responsibility.</p>
  */
 final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSurface {
     private static final long MIN_REGIONAL_SPAN = 1L << 18;
     private static final long MAX_REGIONAL_SPAN = 1L << 20;
-    private static final long MIN_DETAIL_SPAN = 1L << 13;
+    private static final long MIN_MEDIUM_SPAN = 1L << 14;
+    private static final long MIN_FINE_SPAN = 1L << 12;
+    private static final long MIN_MICRO_SPAN = 1L << 10;
     private static final double INV_SQRT_2 = 0.7071067811865476d;
     private static final double MIN_SURFACE_Z = -4_096.0d;
     private static final double MAX_SURFACE_Z = 4_096.0d;
 
-    private static final long WARP_X_SALT = 0x6D3A9F21C7B45E10L;
-    private static final long WARP_Y_SALT = 0xA4E17C305BD268F9L;
-    private static final long PROVINCE_SALT = 0x39C7D5A16E824BF0L;
-    private static final long STRUCTURE_SALT = 0xD2B9186F43A05CE7L;
-    private static final long REGIME_SALT = 0x71F4C30DA9B5628EL;
-    private static final long MEDIUM_RELIEF_SALT = 0xC5A2703E19D8F64BL;
-    private static final long DETAIL_RELIEF_SALT = 0x2E8F41B7D356A09CL;
+    private static final long WARP_X_SALT = 0x4C9A731DB8E2056FL;
+    private static final long WARP_Y_SALT = 0x91E64B2AC7D83510L;
+    private static final long PROVINCE_SALT = 0xC8047E31B5A269DFL;
+    private static final long TECTONIC_SALT = 0x5F28C1B96A73D40EL;
+    private static final long MEDIUM_RELIEF_SALT = 0x739E25B4C1D86A0FL;
+    private static final long FINE_RELIEF_SALT = 0x0D54A7C9E31B682FL;
+    private static final long MICRO_RELIEF_SALT = 0xB6F10C4D29A875E3L;
+    private static final long OCEAN_BROAD_SALT = 0x3A71D6C5E92B408FL;
+    private static final long OCEAN_MEDIUM_SALT = 0x8D25F0B143CE769AL;
+    private static final long MOUNTAIN_RANGE_SALT = 0xD6A8F241C30B597EL;
+
+    private static final long ACTIVE_VARIANT = 0x9E3779B97F4A7C15L;
+    private static final long CENTER_X_VARIANT = 0xA24BAED4963EE407L;
+    private static final long CENTER_Y_VARIANT = 0x9FB21C651E98DF25L;
+    private static final long ANGLE_VARIANT = 0xC13FA9A902A6328FL;
+    private static final long LENGTH_VARIANT = 0x91E10DA5C79E7B1DL;
+    private static final long WIDTH_VARIANT = 0xD1B54A32D192ED03L;
+    private static final long STRENGTH_VARIANT = 0x94D049BB133111EBL;
+    private static final long BEND_VARIANT = 0xDB4F0B9175AE2165L;
 
     private final long worldSeed;
     private final long surfaceRevision;
@@ -54,117 +73,254 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         double ruggedness = definition.regionalRuggedness().value();
         double plateauTendency = definition.plateauTendency().value();
         double macroElevation = macroGeophysics.elevationAt(x, y);
+        double macroMagnitude = Math.abs(macroElevation);
 
-        // Stage 5 remains the world-scale vertical support. Ocean basins are intentionally deeper
-        // than continental support is high, with a smooth transition around the shared sea datum.
-        double landScale = smoothStep(-0.18d, 0.18d, macroElevation);
-        double macroVerticalScale = lerp(2_200.0d, 1_800.0d, landScale);
+        // Stage 5 remains the large-scale vertical support. A slightly steeper coastal transfer
+        // gives the sea datum a readable margin while retaining a continuous approach to Z=0.
+        double landFactor = smoothStep(-0.12d, 0.22d, macroElevation);
+        double macroVerticalScale = lerp(2_350.0d, 1_750.0d, landFactor);
+        double coastSteepening = lerp(
+                1.20d,
+                1.0d,
+                smoothStep(0.0d, 0.20d, macroMagnitude));
         double macroZ = macroElevation
                 * macroVerticalScale
-                * (0.70d + 0.30d * Math.sqrt(Math.abs(macroElevation)));
+                * coastSteepening
+                * (0.86d + 0.14d * Math.sqrt(macroMagnitude));
 
-        // Very broad warping bends structural belts without introducing a new small spatial scale.
-        double warpSpan = regionalSpan * 2.6d;
-        double warpAmplitude = regionalSpan * lerp(0.06d, 0.18d, ruggedness);
+        // A shallow submerged shelf avoids turning every ocean margin into the same smooth bowl.
+        double shallowShelf = smoothStep(0.0d, 0.10d, -macroElevation)
+                * (1.0d - smoothStep(0.10d, 0.32d, -macroElevation));
+        macroZ -= shallowShelf * 110.0d;
+
+        // Broad coordinate warping only bends regional structures; it does not introduce a new
+        // authored frequency or a fine-scale noise layer.
+        double warpSpan = regionalSpan * 4.2d;
+        double warpAmplitude = regionalSpan * lerp(0.05d, 0.16d, ruggedness);
         double warpedX = x + gradientNoiseAt(x, y, warpSpan, WARP_X_SALT) * warpAmplitude;
         double warpedY = y + gradientNoiseAt(x, y, warpSpan, WARP_Y_SALT) * warpAmplitude;
 
-        // Smooth regional fields are interpreted structurally instead of simply being summed as
-        // octaves. Zero-crossing bands form elongated province boundaries; a broader regime field
-        // decides whether those boundaries tend toward uplift or extension.
-        double province = gradientNoiseAt(warpedX, warpedY, regionalSpan, PROVINCE_SALT);
-        double structural = gradientNoiseAt(
+        // Local relief fades out before the shared sea datum. This preserves coherent coastlines
+        // while still allowing inland terrain to become rugged immediately beyond the margin.
+        double landInterior = smoothStep(0.035d, 0.20d, macroElevation);
+        double coastGuard = smoothStep(0.025d, 0.16d, macroMagnitude);
+        double province = gradientNoiseAt(
                 warpedX,
                 warpedY,
-                regionalSpan * 0.72d,
-                STRUCTURE_SALT);
-        double regime = gradientNoiseAt(
+                regionalSpan * 1.4d,
+                PROVINCE_SALT);
+        double tectonic = gradientNoiseAt(
                 warpedX,
                 warpedY,
-                regionalSpan * 1.65d,
-                REGIME_SALT);
+                regionalSpan * 3.4d,
+                TECTONIC_SALT);
+        double tectonicGate = smoothStep(-0.30d, 0.52d, tectonic);
 
-        double belt = 1.0d - smoothStep(0.055d, 0.30d, Math.abs(structural));
-        double provinceInterior = smoothStep(0.20d, 0.58d, Math.abs(structural));
-        double compression = smoothStep(-0.20d, 0.52d, regime);
-        double landContext = smoothStep(-0.10d, 0.22d, macroElevation);
-        double oceanContext = 1.0d - smoothStep(-0.42d, 0.02d, macroElevation);
-        double positiveProvince = smoothStep(0.03d, 0.68d, province);
-        double negativeProvince = smoothStep(0.03d, 0.68d, -province);
-
-        // Orogenic relief is concentrated in compressive structural belts; extensional parts of
-        // the same broad boundary network become rifts/depressions rather than another ridge map.
-        double ridge = belt
-                * compression
-                * landContext
-                * 1_200.0d
+        // Sparse finite mountain systems replace the old infinite zero-crossing belts. Each range
+        // is a deterministic bent two-segment feature living in a broad regional hash cell. Only a
+        // fixed 3x3 neighbourhood can influence a query, so work stays bounded and order-free.
+        double rangeSpan = regionalSpan * 3.2d;
+        RangeInfluence range = mountainRangeInfluenceAt(
+                warpedX,
+                warpedY,
+                rangeSpan,
+                ruggedness);
+        double mountainSystem = clamp(
+                (range.core() * 0.72d + range.shoulder() * 0.40d)
+                        * (0.50d + 0.50d * tectonicGate),
+                0.0d,
+                1.2d);
+        double mountainUplift = mountainSystem
+                * landInterior
+                * coastGuard
+                * 1_700.0d
                 * relief
-                * lerp(0.42d, 1.0d, ruggedness);
-        double rift = -belt
-                * (1.0d - compression)
-                * landContext
-                * 420.0d
-                * relief
-                * lerp(0.55d, 1.0d, ruggedness);
+                * lerp(0.52d, 1.0d, ruggedness);
 
-        // Province interiors express broad high surfaces and lowlands. Plateau tendency also
-        // suppresses subordinate relief inside plateaus so they remain spatially readable.
-        double plateau = positiveProvince
-                * provinceInterior
-                * landContext
-                * 720.0d
+        // Broad provinces provide readable uplands, plateaus and lowlands between mountain systems
+        // instead of leaving the continent as a flat plane decorated by isolated ridges.
+        double upland = smoothStep(0.10d, 0.66d, province);
+        double lowland = smoothStep(0.12d, 0.68d, -province);
+        double plateauShape = upland * smoothStep(-0.30d, 0.45d, tectonic);
+        double plateauOffset = plateauShape
+                * (1.0d - 0.50d * clamp(mountainSystem, 0.0d, 1.0d))
+                * landInterior
+                * coastGuard
+                * 650.0d
                 * relief
                 * plateauTendency;
-        double lowland = -negativeProvince
-                * provinceInterior
-                * landContext
-                * 360.0d
+        double lowlandOffset = -lowland
+                * landInterior
+                * coastGuard
+                * 250.0d
                 * relief;
-        double oceanFloor = province * oceanContext * 230.0d * relief;
+        double rollingBase = (upland - 0.30d * lowland)
+                * 190.0d
+                * relief
+                * (0.35d + 0.65d * ruggedness)
+                * landInterior
+                * coastGuard;
 
-        double uplandContext = clamp(
-                0.10d * landContext
-                        + 0.75d * belt
-                        + 0.45d * positiveProvince * provinceInterior,
+        // Nested subordinate relief ensures zooming into the same authoritative surface reveals new
+        // causal structure rather than a magnified interpolation of the coarse view. The hard
+        // minimum span remains 1024 future horizontal cells, far above one-block Z noise.
+        double reliefActivity = clamp(
+                0.38d + 0.62d * Math.max(mountainSystem, upland * 0.55d),
                 0.0d,
                 1.0d);
         double plateauFlattening = 1.0d
-                - plateauTendency * positiveProvince * provinceInterior * 0.60d;
+                - plateauTendency * plateauShape * 0.72d;
 
-        // Medium and fine deformation are deliberately subordinate to the structural context. The
-        // hard minimum span is far above one future block and is private model policy rather than
-        // an authored knob.
+        double mediumSpan = Math.max(MIN_MEDIUM_SPAN, regionalSpan / 7.5d);
         double mediumRelief = gradientNoiseAt(
                 warpedX,
                 warpedY,
-                regionalSpan / 5.5d,
+                mediumSpan,
                 MEDIUM_RELIEF_SALT);
         double mediumOffset = mediumRelief
-                * 220.0d
+                * 230.0d
                 * relief
-                * ruggedness
-                * uplandContext
-                * plateauFlattening;
+                * lerp(0.48d, 1.0d, ruggedness)
+                * reliefActivity
+                * plateauFlattening
+                * landInterior
+                * coastGuard;
 
-        double detailSpan = Math.max(
-                MIN_DETAIL_SPAN,
-                regionalSpan / lerp(18.0d, 28.0d, ruggedness));
-        double detailRelief = gradientNoiseAt(
+        double fineSpan = Math.max(MIN_FINE_SPAN, regionalSpan / 42.0d);
+        double fineRelief = gradientNoiseAt(
                 warpedX,
                 warpedY,
-                detailSpan,
-                DETAIL_RELIEF_SALT);
-        double detailOffset = detailRelief
-                * 95.0d
+                fineSpan,
+                FINE_RELIEF_SALT);
+        double fineOffset = fineRelief
+                * 115.0d
                 * relief
-                * ruggedness
-                * uplandContext
-                * plateauFlattening;
+                * lerp(0.55d, 1.0d, ruggedness)
+                * reliefActivity
+                * plateauFlattening
+                * landInterior
+                * coastGuard;
 
-        return clamp(
-                macroZ + ridge + rift + plateau + lowland + oceanFloor + mediumOffset + detailOffset,
-                MIN_SURFACE_Z,
-                MAX_SURFACE_Z);
+        double microSpan = Math.max(MIN_MICRO_SPAN, fineSpan / 4.0d);
+        double microRelief = gradientNoiseAt(
+                warpedX,
+                warpedY,
+                microSpan,
+                MICRO_RELIEF_SALT);
+        double microOffset = microRelief
+                * 42.0d
+                * relief
+                * lerp(0.60d, 1.0d, ruggedness)
+                * reliefActivity
+                * plateauFlattening
+                * landInterior
+                * coastGuard;
+
+        // Submerged terrain receives its own broad structure. Stage 6 still describes one surface;
+        // this is ocean-floor relief, not a second ocean mask or water simulation.
+        double oceanInterior = smoothStep(0.04d, 0.24d, -macroElevation);
+        double oceanBroad = gradientNoiseAt(
+                warpedX,
+                warpedY,
+                regionalSpan * 1.7d,
+                OCEAN_BROAD_SALT);
+        double oceanMedium = gradientNoiseAt(
+                warpedX,
+                warpedY,
+                Math.max(32_768.0d, regionalSpan / 4.8d),
+                OCEAN_MEDIUM_SALT);
+        double oceanOffset = (oceanBroad * 260.0d + oceanMedium * 90.0d)
+                * relief
+                * oceanInterior;
+
+        double candidate = macroZ
+                + mountainUplift
+                + plateauOffset
+                + lowlandOffset
+                + rollingBase
+                + mediumOffset
+                + fineOffset
+                + microOffset
+                + oceanOffset;
+
+        // Stage 6 is not allowed to punch a random water topology through Stage 5's macro coastline.
+        // The floor/ceiling approaches zero continuously with macroZ and only acts if deformation
+        // would otherwise cross the shared datum.
+        if (macroElevation > 0.0d) {
+            candidate = Math.max(candidate, Math.min(4.0d, macroZ));
+        } else if (macroElevation < 0.0d) {
+            candidate = Math.min(candidate, Math.max(-4.0d, macroZ));
+        }
+
+        return clamp(candidate, MIN_SURFACE_Z, MAX_SURFACE_Z);
+    }
+
+    private RangeInfluence mountainRangeInfluenceAt(
+            double x,
+            double y,
+            double span,
+            double ruggedness) {
+        long cellX = (long) Math.floor(x / span);
+        long cellY = (long) Math.floor(y / span);
+        double bestCore = 0.0d;
+        double bestShoulder = 0.0d;
+
+        for (int offsetY = -1; offsetY <= 1; offsetY++) {
+            for (int offsetX = -1; offsetX <= 1; offsetX++) {
+                long rangeCellX = cellX + offsetX;
+                long rangeCellY = cellY + offsetY;
+                long baseHash = latticeHash(
+                        rangeCellX,
+                        rangeCellY,
+                        MOUNTAIN_RANGE_SALT);
+                if (unitDouble(hashVariant(baseHash, ACTIVE_VARIANT)) <= 0.67d) {
+                    continue;
+                }
+
+                double centerX = (rangeCellX
+                                + 0.18d
+                                + 0.64d * unitDouble(hashVariant(baseHash, CENTER_X_VARIANT)))
+                        * span;
+                double centerY = (rangeCellY
+                                + 0.18d
+                                + 0.64d * unitDouble(hashVariant(baseHash, CENTER_Y_VARIANT)))
+                        * span;
+                double angle = unitDouble(hashVariant(baseHash, ANGLE_VARIANT)) * Math.PI;
+                double halfLength = span
+                        * (0.30d
+                                + 0.24d * unitDouble(hashVariant(baseHash, LENGTH_VARIANT)));
+                double width = span
+                        * (0.065d
+                                + 0.055d * unitDouble(hashVariant(baseHash, WIDTH_VARIANT)))
+                        * (1.12d - 0.28d * ruggedness);
+                double directionX = Math.cos(angle);
+                double directionY = Math.sin(angle);
+                double endOffsetX = directionX * halfLength;
+                double endOffsetY = directionY * halfLength;
+                double ax = centerX - endOffsetX;
+                double ay = centerY - endOffsetY;
+                double bx = centerX + endOffsetX;
+                double by = centerY + endOffsetY;
+
+                double bend = (unitDouble(hashVariant(baseHash, BEND_VARIANT)) - 0.5d)
+                        * 0.50d
+                        * halfLength;
+                double midX = centerX - directionY * bend;
+                double midY = centerY + directionX * bend;
+
+                double distance = Math.min(
+                        segmentDistance(x, y, ax, ay, midX, midY),
+                        segmentDistance(x, y, midX, midY, bx, by));
+                double core = 1.0d - smoothStep(0.0d, width, distance);
+                double shoulder = 1.0d - smoothStep(width, width * 2.8d, distance);
+                double strength = 0.62d
+                        + 0.38d * unitDouble(hashVariant(baseHash, STRENGTH_VARIANT));
+                bestCore = Math.max(bestCore, core * strength);
+                bestShoulder = Math.max(bestShoulder, shoulder * strength);
+            }
+        }
+
+        return new RangeInfluence(bestCore, bestShoulder);
     }
 
     private double gradientNoiseAt(double x, double y, double span, long salt) {
@@ -213,6 +369,34 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         return mix64(value ^ surfaceRevision);
     }
 
+    private static long hashVariant(long baseHash, long variant) {
+        return mix64(baseHash ^ variant);
+    }
+
+    private static double unitDouble(long hash) {
+        return (hash >>> 11) * 0x1.0p-53;
+    }
+
+    private static double segmentDistance(
+            double x,
+            double y,
+            double ax,
+            double ay,
+            double bx,
+            double by) {
+        double vx = bx - ax;
+        double vy = by - ay;
+        double wx = x - ax;
+        double wy = y - ay;
+        double denominator = vx * vx + vy * vy;
+        double amount = denominator == 0.0d
+                ? 0.0d
+                : clamp((wx * vx + wy * vy) / denominator, 0.0d, 1.0d);
+        double nearestX = ax + amount * vx;
+        double nearestY = ay + amount * vy;
+        return Math.hypot(x - nearestX, y - nearestY);
+    }
+
     private static double regionalSpan(double scale) {
         double ratio = MAX_REGIONAL_SPAN / (double) MIN_REGIONAL_SPAN;
         return MIN_REGIONAL_SPAN * Math.pow(ratio, scale);
@@ -240,4 +424,6 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         value = (value ^ (value >>> 27)) * 0x94D049BB133111EBL;
         return value ^ (value >>> 31);
     }
+
+    private record RangeInfluence(double core, double shoulder) {}
 }
