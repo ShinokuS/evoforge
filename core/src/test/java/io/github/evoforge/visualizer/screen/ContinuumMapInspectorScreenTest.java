@@ -34,9 +34,12 @@ final class ContinuumMapInspectorScreenTest {
         int lowlandBand = 3;
         byte dark = (byte) (0x80 | (lowlandBand << 3));
         byte light = (byte) (0x80 | (lowlandBand << 3) | 0x07);
-        ByteBuffer rgba = ByteBuffer.allocate(8);
+        ByteBuffer rgba = ByteBuffer.allocate(16);
 
-        ContinuumMapInspectorScreen.writeTexturePixels(new byte[] {dark, light}, 2, rgba);
+        ContinuumMapInspectorScreen.writeTexturePixels(
+                new byte[] {dark, light, dark, light},
+                2,
+                rgba);
 
         int darkR = Byte.toUnsignedInt(rgba.get(0));
         int darkG = Byte.toUnsignedInt(rgba.get(1));
