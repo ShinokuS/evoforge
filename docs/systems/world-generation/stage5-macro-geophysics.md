@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implementation in progress in PR #135. Manual acceptance is still required. Stage 6 has not started.**
+**Complete and manually accepted in PR #135. Stage 6 is the next allowed checkpoint and has not started.**
 
 ## Goal
 
@@ -201,21 +201,21 @@ Stage 5 does **not** implement:
 
 Those remain in their fixed later stages.
 
-## Acceptance gate
+## Acceptance result
 
-Stage 5 may be marked complete only after all of the following are true on the final PR head:
+All Stage 5 gates passed on the accepted PR head:
 
-- focused geophysics correctness/determinism tests pass;
-- authored controls produce distinct deterministic world character without exposing solver knobs;
-- Archipelago and Oceanic remain visibly and quantitatively distinct at the same seed;
-- the archipelago profile remains macro-structured rather than sample-scale noisy;
-- shared-coordinate multi-resolution and horizontal/vertical overlap/seam tests pass;
-- map texture conversion preserves tile row/column orientation;
-- the dedicated settings panel can select presets, edit/randomize seed and apply arbitrary custom definitions without resetting map navigation;
-- architecture fitness and ArchUnit remain green without weakened rules;
-- full Gradle tests and JaCoCo coverage gate pass;
-- Continuum scale profile including the Stage 5 workload passes;
-- Docs Site builds;
-- the user manually inspects the F2 macro map across contrasting/custom settings and multiple seeds and accepts the geography behavior.
+- focused geophysics correctness/determinism tests;
+- semantic world-character controls and profile distinction tests;
+- Archipelago/Oceanic separation and anti-noise regression;
+- shared-coordinate multi-resolution and horizontal/vertical overlap/seam tests;
+- map texture orientation regression;
+- seed/custom-definition inspection workflow;
+- architecture fitness and ArchUnit;
+- full Gradle tests and JaCoCo coverage;
+- Continuum scale profile;
+- Docs Site.
 
-Until that explicit manual acceptance, Stage 5 remains in progress and Stage 6 must not begin.
+The user manually inspected the F2 macro map across profiles, custom settings and multiple seeds and explicitly accepted the resulting Stage 5 geography.
+
+**Stage 5 is complete. Stage 6 may begin; Stage 7 remains blocked until Stage 6 is separately accepted.**
