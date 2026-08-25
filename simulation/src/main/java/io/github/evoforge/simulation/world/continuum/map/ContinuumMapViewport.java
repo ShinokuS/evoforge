@@ -193,7 +193,11 @@ public final class ContinuumMapViewport {
         }
         orderedSpeculativeCandidates.removeAll(visibleKeys);
 
-        int speculativeBudget = Math.max(0, service.maxOutstandingJobs() - visibleKeys.size());
+        // The tile service itself enforces the outstanding-job cap and always protects/promotes
+        // visible requests ahead of prefetch. Do not permanently reserve capacity for visible keys
+        // which are already resident: a settled viewport must be able to fill the complete next
+        // finer viewport before the LOD threshold is crossed.
+        int speculativeBudget = service.maxOutstandingJobs();
         LinkedHashSet<ContinuumMapTileKey> speculative = takeFirst(orderedSpeculativeCandidates, speculativeBudget);
 
         LinkedHashSet<ContinuumMapTileKey> demanded = new LinkedHashSet<>(visibleKeys);
