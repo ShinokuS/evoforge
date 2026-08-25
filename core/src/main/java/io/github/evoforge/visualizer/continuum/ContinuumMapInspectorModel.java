@@ -26,7 +26,7 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     /** Compatibility alias for the original fixed inspector seed. */
     public static final long WORLD_SEED = DEFAULT_WORLD_SEED;
     public static final long GEOPHYSICS_REVISION = 1L;
-    public static final long SURFACE_REVISION = 2L;
+    public static final long SURFACE_REVISION = 3L;
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 384;
     public static final int MAX_OUTSTANDING_JOBS = 192;
