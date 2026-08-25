@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.screen;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -12,14 +13,29 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Slider;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.ui.Window;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTile;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
 import java.nio.ByteBuffer;
+import java.util.concurrent.ThreadLocalRandom;
 
-/** Stage 4 world-oriented pan/zoom proof over a deterministic synthetic Continuum field. */
+/** World-oriented pan/zoom view of the Stage 5 macro-geophysical skeleton. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color BACKGROUND = new Color(0.025f, 0.032f, 0.038f, 1f);
     private static final Color FINE_BORDER = new Color(0.30f, 0.86f, 0.65f, 0.9f);
@@ -27,21 +43,40 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color TEXT = new Color(0.94f, 0.96f, 0.97f, 1f);
     private static final Color MUTED = new Color(0.66f, 0.71f, 0.74f, 1f);
     private static final int MAX_GPU_TEXTURES = 192;
-    private static final byte[] PALETTE_R = palette(0.08f, 0.62f);
-    private static final byte[] PALETTE_G = palette(0.11f, 0.70f);
-    private static final byte[] PALETTE_B = palette(0.16f, 0.76f);
+    private static final float SETTINGS_MARGIN = 14f;
+    private static final float SETTINGS_SLIDER_WIDTH = 150f;
+    private static final byte[] PALETTE_R = geophysicalPalette(0);
+    private static final byte[] PALETTE_G = geophysicalPalette(1);
+    private static final byte[] PALETTE_B = geophysicalPalette(2);
 
     private final Runnable returnToMenu;
-    private final ContinuumMapInspectorModel model;
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
     private final Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
     private final BitmapFont font = skin.getFont("window");
     private final Matrix4 projection = new Matrix4();
+    private final Vector2 uiPointer = new Vector2();
     private final BoundedRenderCache<ContinuumMapTile, Texture> textures =
             new BoundedRenderCache<>(MAX_GPU_TEXTURES, this::createTexture, Texture::dispose);
-    private final InputAdapter input = new MapInput();
+    private final InputAdapter mapInput = new MapInput();
+    private final Stage uiStage = new Stage(new ScreenViewport());
+    private final Window settingsWindow;
+    private final Label profileLabel = new Label("", skin);
+    private final TextField seedField = new TextField("", skin);
+    private final Label seedStatus = new Label("", skin);
+    private final Slider oceanSlider = normalizedSlider();
+    private final Slider scaleSlider = normalizedSlider();
+    private final Slider cohesionSlider = normalizedSlider();
+    private final Slider fragmentationSlider = normalizedSlider();
+    private final Slider variationSlider = normalizedSlider();
+    private final Label oceanValue = new Label("", skin);
+    private final Label scaleValue = new Label("", skin);
+    private final Label cohesionValue = new Label("", skin);
+    private final Label fragmentationValue = new Label("", skin);
+    private final Label variationValue = new Label("", skin);
+    private final InputMultiplexer input;
 
+    private ContinuumMapInspectorModel model;
     private int width = 1;
     private int height = 1;
     private boolean showDiagnostics;
@@ -55,7 +90,13 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         this.width = Math.max(1, Gdx.graphics.getWidth());
         this.height = Math.max(1, Gdx.graphics.getHeight());
         this.model = ContinuumMapInspectorModel.standard(width, height);
+        this.settingsWindow = createSettingsWindow();
+        uiStage.addActor(settingsWindow);
+        this.input = new InputMultiplexer(uiStage, mapInput);
         projection.setToOrtho2D(0f, 0f, width, height);
+        syncControls(model.definition());
+        syncSeedControl();
+        resize(width, height);
     }
 
     @Override
@@ -71,6 +112,8 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         drawMap();
         if (showDiagnostics) drawTileDiagnostics();
         drawOverlay();
+        uiStage.act(delta);
+        uiStage.draw();
     }
 
     @Override
@@ -80,6 +123,8 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         this.height = height;
         projection.setToOrtho2D(0f, 0f, width, height);
         model.update(width, height);
+        uiStage.getViewport().update(width, height, true);
+        positionSettingsWindow();
     }
 
     @Override
@@ -92,9 +137,231 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         hide();
         textures.close();
         model.close();
+        uiStage.dispose();
         shapes.dispose();
         batch.dispose();
         skin.dispose();
+    }
+
+    private Window createSettingsWindow() {
+        Window window = new Window("WORLD GENERATION", skin);
+        window.setMovable(false);
+        window.setResizable(false);
+        window.pad(30f, 14f, 14f, 14f);
+        window.defaults().pad(4f);
+
+        window.add(profileLabel).colspan(3).left().growX();
+        window.row();
+
+        window.add(new Label("World seed", skin)).left();
+        window.add(seedField).width(SETTINGS_SLIDER_WIDTH).growX();
+        TextButton applySeed = new TextButton("Apply", skin);
+        applySeed.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                applySeedFromField();
+            }
+        });
+        window.add(applySeed).width(62f).height(28f);
+        window.row();
+
+        TextButton randomSeed = new TextButton("Random seed", skin);
+        randomSeed.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                randomizeSeed();
+            }
+        });
+        window.add(randomSeed).colspan(3).growX().height(28f);
+        window.row();
+        seedStatus.setColor(MUTED);
+        window.add(seedStatus).colspan(3).left().growX();
+        window.row();
+
+        Table presets = new Table();
+        addPresetButton(presets, "Supercontinent", MacroGeophysicsPreset.SUPERCONTINENT);
+        addPresetButton(presets, "Balanced", MacroGeophysicsPreset.BALANCED);
+        presets.row();
+        addPresetButton(presets, "Archipelago", MacroGeophysicsPreset.ARCHIPELAGO);
+        addPresetButton(presets, "Oceanic", MacroGeophysicsPreset.OCEANIC);
+        window.add(presets).colspan(3).growX();
+        window.row();
+
+        addSettingRow(window, "Ocean prevalence", oceanSlider, oceanValue);
+        addSettingRow(window, "Continental scale", scaleSlider, scaleValue);
+        addSettingRow(window, "Landmass cohesion", cohesionSlider, cohesionValue);
+        addSettingRow(window, "Fragmentation", fragmentationSlider, fragmentationValue);
+        addSettingRow(window, "Macro variation", variationSlider, variationValue);
+
+        TextButton apply = new TextButton("Apply custom", skin);
+        apply.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                applyCustomDefinition();
+            }
+        });
+        window.add(apply).colspan(3).growX().height(30f).padTop(8f);
+        window.row();
+
+        Label hint = new Label("Presets apply immediately. Sliders apply on button.", skin);
+        hint.setColor(MUTED);
+        window.add(hint).colspan(3).left().padTop(4f);
+
+        ChangeListener values = new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                updateValueLabels();
+            }
+        };
+        oceanSlider.addListener(values);
+        scaleSlider.addListener(values);
+        cohesionSlider.addListener(values);
+        fragmentationSlider.addListener(values);
+        variationSlider.addListener(values);
+
+        seedField.addListener(new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode != Input.Keys.ENTER) return false;
+                applySeedFromField();
+                return true;
+            }
+        });
+
+        // The settings block is intentionally an input boundary. Empty panel space, sliders and
+        // buttons must not also pan the underlying map.
+        window.addListener(new InputListener() {
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                return true;
+            }
+        });
+
+        window.pack();
+        return window;
+    }
+
+    private void addPresetButton(
+            Table table,
+            String text,
+            MacroGeophysicsPreset preset) {
+        TextButton button = new TextButton(text, skin);
+        button.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                selectPreset(preset);
+            }
+        });
+        table.add(button).width(130f).height(28f).pad(2f);
+    }
+
+    private void addSettingRow(
+            Window window,
+            String text,
+            Slider slider,
+            Label value) {
+        window.add(new Label(text, skin)).left();
+        window.add(slider).width(SETTINGS_SLIDER_WIDTH).growX();
+        window.add(value).width(38f).right();
+        window.row();
+    }
+
+    private Slider normalizedSlider() {
+        return new Slider(0f, 1f, 0.01f, false, skin);
+    }
+
+    private void selectPreset(MacroGeophysicsPreset preset) {
+        boolean changed = model.applyPreset(preset);
+        if (changed) textures.clear();
+        syncControls(model.definition());
+    }
+
+    private void applySeedFromField() {
+        try {
+            applyWorldSeed(parseSeed(seedField.getText()));
+            seedStatus.setColor(MUTED);
+            seedStatus.setText("Seed applied");
+        } catch (NumberFormatException invalid) {
+            seedStatus.setColor(FALLBACK_BORDER);
+            seedStatus.setText("Invalid seed");
+        }
+    }
+
+    private void randomizeSeed() {
+        long randomSeed = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+        seedField.setText(Long.toString(randomSeed));
+        applyWorldSeed(randomSeed);
+        seedStatus.setColor(MUTED);
+        seedStatus.setText("Random seed applied");
+    }
+
+    private void applyWorldSeed(long seed) {
+        boolean changed = model.applySeed(seed);
+        if (changed) textures.clear();
+        syncSeedControl();
+    }
+
+    static long parseSeed(String rawSeed) {
+        if (rawSeed == null) throw new NumberFormatException("seed must not be null");
+        String seed = rawSeed.trim().replace("_", "");
+        if (seed.startsWith("0x") || seed.startsWith("0X")) {
+            if (seed.length() == 2) throw new NumberFormatException("hex seed has no digits");
+            return Long.parseUnsignedLong(seed.substring(2), 16);
+        }
+        return Long.parseLong(seed);
+    }
+
+    private void syncSeedControl() {
+        seedField.setText(Long.toString(model.seed()));
+    }
+
+    private void applyCustomDefinition() {
+        MacroGeophysicsDefinition custom = MacroGeophysicsDefinition.of(
+                oceanSlider.getValue(),
+                scaleSlider.getValue(),
+                cohesionSlider.getValue(),
+                fragmentationSlider.getValue(),
+                variationSlider.getValue());
+        boolean changed = model.applyDefinition(custom);
+        if (changed) textures.clear();
+        updateProfileLabel();
+    }
+
+    private void syncControls(MacroGeophysicsDefinition definition) {
+        oceanSlider.setValue((float) definition.oceanPrevalence().value());
+        scaleSlider.setValue((float) definition.continentalScale().value());
+        cohesionSlider.setValue((float) definition.landmassCohesion().value());
+        fragmentationSlider.setValue((float) definition.fragmentation().value());
+        variationSlider.setValue((float) definition.macroVariation().value());
+        updateValueLabels();
+        updateProfileLabel();
+    }
+
+    private void updateValueLabels() {
+        oceanValue.setText(percent(oceanSlider.getValue()));
+        scaleValue.setText(percent(scaleSlider.getValue()));
+        cohesionValue.setText(percent(cohesionSlider.getValue()));
+        fragmentationValue.setText(percent(fragmentationSlider.getValue()));
+        variationValue.setText(percent(variationSlider.getValue()));
+    }
+
+    private void updateProfileLabel() {
+        profileLabel.setText("Macro profile: " + model.profileName());
+    }
+
+    private void positionSettingsWindow() {
+        float x = Math.max(SETTINGS_MARGIN, width - settingsWindow.getWidth() - SETTINGS_MARGIN);
+        float y = Math.max(SETTINGS_MARGIN, height - settingsWindow.getHeight() - SETTINGS_MARGIN);
+        settingsWindow.setPosition(x, y);
+    }
+
+    private boolean pointerOverSettings() {
+        uiPointer.set(Gdx.input.getX(), Gdx.input.getY());
+        uiStage.screenToStageCoordinates(uiPointer);
+        return uiPointer.x >= settingsWindow.getX()
+                && uiPointer.x <= settingsWindow.getX() + settingsWindow.getWidth()
+                && uiPointer.y >= settingsWindow.getY()
+                && uiPointer.y <= settingsWindow.getY() + settingsWindow.getHeight();
     }
 
     private void drawMap() {
@@ -142,59 +409,77 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         batch.begin();
         font.getData().setScale(0.86f);
         font.setColor(TEXT);
-        font.draw(batch, "STAGE 4 / MAP + ZOOM", 22f, height - 24f);
+        font.draw(batch, "STAGE 5 / MACRO OCEAN + GEOPHYSICAL SKELETON", 22f, height - 24f);
 
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
         font.draw(batch,
-                "drag mouse: move   wheel: zoom   Home: whole world   G: tile diagnostics   Esc: back",
-                22f,
-                27f);
-
-        font.draw(batch,
-                "center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
-                        + "   LOD L" + frame.desiredLevel()
-                        + "   visible " + frame.visibleTileCount()
-                        + "   detailed " + frame.exactReadyCount()
-                        + "   temporary coarse " + frame.fallbackCount(),
+                "seed " + model.seed()
+                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION
+                        + "   center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
+                        + "   LOD L" + frame.desiredLevel(),
                 22f,
                 height - 50f);
+
+        font.draw(batch,
+                "drag: move   wheel: zoom   Home: whole world   G: diagnostics   Esc: back",
+                22f,
+                27f);
 
         if (showDiagnostics) {
             font.setColor(TEXT);
             font.draw(batch,
-                    "CPU tiles " + metrics.residentTiles() + "/" + metrics.maxResidentTiles()
-                            + "   GPU textures " + textures.size() + "/" + textures.maxEntries()
-                            + "   visible queue " + metrics.visiblePendingJobs()
+                    "visible " + frame.visibleTileCount()
+                            + "   detailed " + frame.exactReadyCount()
+                            + "   temporary coarse " + frame.fallbackCount()
+                            + "   CPU tiles " + metrics.residentTiles() + "/" + metrics.maxResidentTiles()
+                            + "   GPU textures " + textures.size() + "/" + textures.maxEntries(),
+                    22f,
+                    height - 74f);
+            font.setColor(MUTED);
+            font.draw(batch,
+                    "visible queue " + metrics.visiblePendingJobs()
                             + "   prefetch queue " + metrics.prefetchPendingJobs()
                             + "   running " + metrics.runningJobs(),
                     22f,
-                    height - 74f);
+                    height - 98f);
             font.setColor(FALLBACK_BORDER);
-            font.draw(batch, "orange = a coarse parent is briefly covering detail that is still being prepared", 22f, height - 98f);
+            font.draw(batch,
+                    "orange = temporary coarse parent fallback",
+                    22f,
+                    height - 122f);
             font.setColor(FINE_BORDER);
-            font.draw(batch, "green = requested detail is ready", 22f, height - 120f);
+            font.draw(batch, "green border = requested detail ready", 22f, height - 144f);
         }
         batch.end();
     }
 
-    /**
-     * Converts the tiny scalar tile to RGBA with direct buffer writes.
-     *
-     * <p>The old implementation performed setColor + drawPixel for every pixel on the render
-     * thread. A precomputed 256-entry palette and direct byte writes remove that avoidable work
-     * before the unavoidable GPU upload.</p>
-     */
     private Texture createTexture(ContinuumMapTile tile) {
         int side = tile.sampleSide();
         byte[] luminance = tile.copyLuminance();
         Pixmap pixmap = new Pixmap(side, side, Pixmap.Format.RGBA8888);
-        ByteBuffer pixels = pixmap.getPixels();
-        int rowBytes = side * 4;
+        writeTexturePixels(luminance, side, pixmap.getPixels());
 
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
+        return texture;
+    }
+
+    static void writeTexturePixels(byte[] luminance, int side, ByteBuffer pixels) {
+        if (side <= 0) throw new IllegalArgumentException("side must be > 0");
+        if (luminance == null || luminance.length != Math.multiplyExact(side, side)) {
+            throw new IllegalArgumentException("luminance must contain exactly side*side samples");
+        }
+        if (pixels == null || pixels.capacity() < Math.multiplyExact(luminance.length, 4)) {
+            throw new IllegalArgumentException("pixel buffer is too small");
+        }
+
+        int rowBytes = side * 4;
         for (int sourceY = 0; sourceY < side; sourceY++) {
             int sourceRow = sourceY * side;
-            int destinationRow = (side - 1 - sourceY) * rowBytes;
+            int destinationRow = sourceY * rowBytes;
             for (int x = 0; x < side; x++) {
                 int value = Byte.toUnsignedInt(luminance[sourceRow + x]);
                 int pixel = destinationRow + x * 4;
@@ -204,20 +489,30 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 pixels.put(pixel + 3, (byte) 0xFF);
             }
         }
-
-        Texture texture = new Texture(pixmap);
-        pixmap.dispose();
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        return texture;
     }
 
-    private static byte[] palette(float base, float scale) {
+    private static byte[] geophysicalPalette(int channel) {
         byte[] palette = new byte[256];
-        for (int i = 0; i < palette.length; i++) {
-            float value = base + (i / 255f) * scale;
-            palette[i] = (byte) Math.round(Math.max(0f, Math.min(1f, value)) * 255f);
+        for (int value = 0; value < palette.length; value++) {
+            float[] start;
+            float[] end;
+            float amount;
+            if (value < 128) {
+                start = new float[] {0.025f, 0.09f, 0.24f};
+                end = new float[] {0.18f, 0.48f, 0.68f};
+                amount = value / 127f;
+            } else {
+                start = new float[] {0.20f, 0.48f, 0.23f};
+                end = new float[] {0.78f, 0.72f, 0.58f};
+                amount = (value - 128) / 127f;
+            }
+            palette[value] = (byte) Math.round((start[channel] + (end[channel] - start[channel]) * amount) * 255f);
         }
         return palette;
+    }
+
+    private static String percent(double normalized) {
+        return Math.round(normalized * 100d) + "%";
     }
 
     private final class MapInput extends InputAdapter {
@@ -249,6 +544,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
+            if (pointerOverSettings()) return true;
             if (amountY == 0f) return false;
             double factor = amountY < 0f ? 1.22d : 1d / 1.22d;
             model.zoomAt(factor, Gdx.input.getX(), Gdx.input.getY());
@@ -259,6 +555,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         public boolean keyDown(int keycode) {
             switch (keycode) {
                 case Input.Keys.HOME -> model.fitWholeWorld();
+                case Input.Keys.NUM_1, Input.Keys.NUMPAD_1 -> selectPreset(MacroGeophysicsPreset.SUPERCONTINENT);
+                case Input.Keys.NUM_2, Input.Keys.NUMPAD_2 -> selectPreset(MacroGeophysicsPreset.BALANCED);
+                case Input.Keys.NUM_3, Input.Keys.NUMPAD_3 -> selectPreset(MacroGeophysicsPreset.ARCHIPELAGO);
+                case Input.Keys.NUM_4, Input.Keys.NUMPAD_4 -> selectPreset(MacroGeophysicsPreset.OCEANIC);
                 case Input.Keys.G -> showDiagnostics = !showDiagnostics;
                 case Input.Keys.ESCAPE -> returnToMenu.run();
                 default -> {

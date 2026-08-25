@@ -64,8 +64,9 @@ The long-term `F2` Inspector is a real world viewer. Once landscape exists, it m
 - **Stage 2 — complete and manually accepted.** Infinite-Time Foundation; PR #123.
 - **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
 - **Stage 4 — complete and manually accepted.** Map / Zoom Performance Proof; PR #125 merged. Revalidated during the architecture reset.
-- **Stage 5 — NEXT, not started.** Macro Ocean + Geophysical Skeleton is now allowed to begin; final architecture cleanup PR #133 is merged.
-- **Stage 6+ — not started.**
+- **Stage 5 — complete and manually accepted.** Macro Ocean + Geophysical Skeleton; PR #135.
+- **Stage 6 — not started; next allowed checkpoint.** Continuous Surface Evolution Prototype.
+- **Stage 7+ — not started and blocked until Stage 6 is explicitly accepted.**
 
 ---
 
@@ -218,6 +219,99 @@ Gradle tests, Docs Site and Continuum Scale Profile are green on the exact PR he
 
 ---
 
+# Stage 5 — Macro Ocean + Geophysical Skeleton
+
+## Goal
+
+Create the first real world-scale geophysical cause: one continuous deterministic macro-elevation skeleton from which ocean/land and later surface processes can follow.
+
+In plain language: broad continental support and ocean-basin depressions are established first. Ocean is wherever that same macro elevation falls below the shared sea datum. Pages, tiles and camera views only sample this fact; they never create it.
+
+The stage supports meaningfully different authored world characters rather than freezing one accidental seed/style as the only valid output.
+
+## Accepted build
+
+- independent `world/geophysics` semantic ownership for the macro skeleton;
+- replaceable coordinate-addressed `MacroGeophysicalField` contract;
+- public `MacroGeophysics.create(...)` creation boundary so consumers do not construct the current algorithm directly;
+- semantic `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation;
+- contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets as convenience profiles over that definition;
+- editable reproducible world seed plus random-seed inspection workflow;
+- deterministic hidden low-frequency domain-warped gradient implementation with broad continental support, still-macro regional structure, coastal-band fragmentation and high-fragmentation island-chain ridges;
+- deep continental/ocean interiors protected from regional speckle/perforation;
+- signed dimensionless macro elevation, not final terrain height;
+- ocean/land classification derived from the same elevation and sea datum, never an independent painter;
+- narrow read-only adapter into `ContinuumScalarField`;
+- direct reuse of accepted bounded materialization, multi-resolution and map infrastructure;
+- dedicated F2 `WORLD GENERATION` panel for presets, semantic sliders and seed controls.
+
+The semantic definition does not expose lattice spans, salts, interpolation equations, warp amplitudes or blend coefficients. Those remain replaceable algorithm details.
+
+`oceanPrevalence` is a monotonic tendency rather than a promise of an exact global water-area percentage. Stage 5 also does not promise an exact `continentCount = N`; exact connected-component constraints would require a separate global-topology design rather than a hidden whole-world repair pass.
+
+## Accepted proof
+
+- fixed seed + revision + definition + coordinates return stable values;
+- changing seed or revision changes addressed truth;
+- query order and unrelated materialization cannot change results;
+- overlapping windows agree at shared coordinates horizontally and vertically;
+- coarse and fine resolution views agree at shared coordinates;
+- ocean classification is exactly a consequence of elevation relative to sea datum;
+- increasing ocean prevalence moves the same field monotonically toward ocean;
+- contrasting semantic profiles produce measurably different macro coastline character;
+- `ARCHIPELAGO` remains substantially more coast-structured than `OCEANIC` on the same seed while `OCEANIC` is more open-ocean dominated;
+- increasing observation resolution does not reveal hidden checkerboard coastline noise;
+- macro values remain bounded;
+- map raster orientation cannot manufacture visual seams;
+- architecture fitness remains green without new exceptions.
+
+## Performance
+
+One macro sample performs fixed local work and never enumerates the logical world.
+
+The Stage 5 scale profile materializes the same `128 x 128` requested window in progressively larger logical worlds and requires exactly `16,384` field evaluations in every case. The architectural gate is constant requested work; timings are diagnostic evidence.
+
+## Visual acceptance
+
+The Continuum map viewer samples the Stage 5 field directly. The standard inspection domain is `16,000,000 x 16,000,000` logical units so several macro structures are visible together.
+
+The dedicated `WORLD GENERATION` panel supports:
+
+- Supercontinent, Balanced, Archipelago and Oceanic presets;
+- custom sliders for all five semantic macro-geophysics controls;
+- explicit decimal or `0x...` seed entry;
+- random seed generation while retaining reproducibility of the chosen value.
+
+Changing profile, custom definition or seed invalidates only the derived map source while preserving camera center/zoom. Camera/presentation never becomes generation input.
+
+```text
+Left mouse drag  pan
+Mouse wheel      zoom around cursor
+Home             fit whole logical world
+1                SUPERCONTINENT profile
+2                BALANCED profile
+3                ARCHIPELAGO profile
+4                OCEANIC profile
+G                toggle tile/cache diagnostics
+Esc              back
+```
+
+Blue shows the ocean side of the macro field; green through brown shows the land side. The land color is macro geophysical support, **not final physical terrain height**. Tile diagnostic colors retain their Stage 4 presentation-only meaning.
+
+Detailed semantics are recorded in [Stage 5 — Macro Ocean + Geophysical Skeleton](stage5-macro-geophysics.md).
+
+## Boundary
+
+Stage 5 stops at the configurable macro skeleton. It does not implement erosion, continuous surface evolution, drainage topology, rivers, lakes, climate, sediment, soil or exact XYZ terrain materialization.
+
+## Acceptance result
+
+Focused Stage 5 tests, architecture checks, full Gradle + JaCoCo, Continuum Scale Profile and Docs Site were green on the accepted PR head. The user manually inspected the F2 map across presets, custom settings and multiple seeds and accepted the resulting macro geography.
+
+**Status:** complete and manually accepted in PR #135.
+
+---
+
 ## Stage discipline
 
-Stage 4 is accepted and final architecture cleanup PR #133 is merged. **Stage 5 — Macro Ocean + Geophysical Skeleton** is now the next canonical implementation checkpoint and has not started yet.
+Stage 5 is complete. **Stage 6 — Continuous Surface Evolution Prototype is the next allowed checkpoint.** Stage 7 remains blocked until Stage 6 has its own explicit contract, automated evidence and manual acceptance where applicable.

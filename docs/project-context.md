@@ -81,13 +81,14 @@ simulation
 ├── definition/        neutral authored-definition infrastructure only
 ├── genesis/           global initial-world composition only
 ├── world/             objective semantic owners
-│   ├── continuum/
+│   ├── continuum/      neutral large-world addressing/materialization
+│   ├── geophysics/     continuous macro-geophysical skeleton
 │   ├── material/
 │   ├── object/
 │   ├── space/          position, orientation, occupancy, placement, measurement
 │   ├── geometry/
 │   ├── navigation/
-│   ├── geology/
+│   ├── geology/        authored geological profile/unit/material semantics
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
@@ -107,15 +108,23 @@ The dense V12–V15 world-generation line remains retired. Continuum remains the
 
 Accepted work before the architecture reset includes deterministic addressable sampling, bounded page/cache work, scale/performance instrumentation and multi-resolution/local query/map work recorded in the Continuum system pages and development history.
 
-Continuum must remain neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology truth.
+Continuum remains neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology/Geophysics truth.
 
-Stages 0–4 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton is NEXT and has not started.** The architecture gate is complete, so Stage 5 is now the allowed substantive world-generation checkpoint.
+Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
+
+Stage 5 exposes authored `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. These are normalized semantic world-generation inputs rather than exposed solver coefficients. Contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets exist for quick inspection, while custom definitions remain the actual contract. The F2 world-generation panel also supports explicit/reproducible world seeds and random seed generation.
+
+**Stage 6 — Continuous Surface Evolution Prototype is the next allowed checkpoint and has not started.** It must build from the accepted Stage 5 geophysical cause while preserving Continuum boundedness, determinism and observer independence. Stage 7 drainage topology and all later river/lake/climate/materialization work remain blocked until Stage 6 is independently accepted.
+
+See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
 
 ## Definitions policy
 
 Definitions describe immutable authored semantic meaning. Root definition infrastructure is neutral; domain-specific definition types/compilers belong with the owner/mechanic that consumes them.
 
 Human-facing semantic controls normally use normalized meaning (`0..1` or `-1..1`) where appropriate. Solver coefficients/thresholds/tuning constants remain implementation/model policy unless they are genuinely authored semantic content.
+
+Stage 5 is the reference world-generation example: `MacroGeophysicsDefinition` exposes meaningful world character, while lattice spans, salts, interpolation exponents and blend coefficients remain hidden inside the replaceable geophysical algorithm.
 
 ## Performance policy
 
