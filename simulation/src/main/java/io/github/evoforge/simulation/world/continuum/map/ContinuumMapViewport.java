@@ -14,9 +14,12 @@ import java.util.Optional;
  * budget and biased toward the user's most recent camera action.</p>
  */
 public final class ContinuumMapViewport {
-    private static final double TARGET_TILE_PIXELS = 192d;
-    private static final double LOD_KEEP_MIN_TILE_PIXELS = 132d;
-    private static final double LOD_KEEP_MAX_TILE_PIXELS = 288d;
+    // Keep one 128-sample tile close to one screen pixel per sample. The previous 192/132/288
+    // policy allowed a tile to be magnified to 2.25x before requesting a finer LOD, visibly turning
+    // every map feature into blurred/pixelated texels during zoom.
+    private static final double TARGET_TILE_PIXELS = 144d;
+    private static final double LOD_KEEP_MIN_TILE_PIXELS = 92d;
+    private static final double LOD_KEEP_MAX_TILE_PIXELS = 200d;
     private static final double MIN_PIXELS_PER_WORLD_UNIT = 1e-9d;
     private static final double MAX_PIXELS_PER_WORLD_UNIT = 32d;
     private static final int MAX_FINER_PREFETCH_TILES = 128;
