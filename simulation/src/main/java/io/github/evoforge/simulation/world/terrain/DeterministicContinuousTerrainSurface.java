@@ -5,46 +5,67 @@ import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalField;
 /**
  * Bounded deterministic Stage 6 surface model hidden behind {@link TerrainSurfaceEvolution}.
  *
- * <p>Stage 5 remains the world-scale land/ocean support. Stage 6 turns that support into a
- * continuous physical surface using broad provinces, sparse finite mountain systems, plateau and
- * lowland interiors, and progressively smaller subordinate relief. Mountain systems are finite
- * curved regional features rather than zero-crossing contour bands, preventing the worm-like
- * global ridge networks that an earlier prototype produced.</p>
+ * <p>Stage 5 remains the macro land/ocean support. Stage 6 refines that support with a narrow,
+ * multi-scale coastal band and builds inland relief from finite mountain systems made of
+ * overlapping massifs. Mountain systems are areas, not painted centre-lines: broad shoulders,
+ * individual massif lobes, subordinate ridges and local peaks all contribute to one continuous
+ * height field. This avoids both the smooth-coast/blurred-zoom failure mode and the worm-like ridge
+ * networks produced by contour-based mountain masks.</p>
  *
- * <p>All local relief is strongly suppressed through the coastal transition and the final surface
- * preserves the Stage 5 side of the shared sea datum. Stage 6 therefore enriches coastal relief
- * without punching accidental lakes, lagoons, or islands into the macro landmass silhouette.
- * Drainage-connected water topology remains a later Genesis responsibility.</p>
+ * <p>Every query examines only a fixed neighbourhood of deterministic hash cells. No world-sized
+ * arrays, mutable caches or traversal-order state participate in terrain truth.</p>
  */
 final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSurface {
     private static final long MIN_REGIONAL_SPAN = 1L << 18;
     private static final long MAX_REGIONAL_SPAN = 1L << 20;
-    private static final long MIN_MEDIUM_SPAN = 1L << 14;
-    private static final long MIN_FINE_SPAN = 1L << 12;
-    private static final long MIN_MICRO_SPAN = 1L << 10;
-    private static final double INV_SQRT_2 = 0.7071067811865476d;
     private static final double MIN_SURFACE_Z = -4_096.0d;
     private static final double MAX_SURFACE_Z = 4_096.0d;
+    private static final double INV_SQRT_2 = 0.7071067811865476d;
 
-    private static final long WARP_X_SALT = 0x4C9A731DB8E2056FL;
-    private static final long WARP_Y_SALT = 0x91E64B2AC7D83510L;
-    private static final long PROVINCE_SALT = 0xC8047E31B5A269DFL;
-    private static final long TECTONIC_SALT = 0x5F28C1B96A73D40EL;
-    private static final long MEDIUM_RELIEF_SALT = 0x739E25B4C1D86A0FL;
-    private static final long FINE_RELIEF_SALT = 0x0D54A7C9E31B682FL;
-    private static final long MICRO_RELIEF_SALT = 0xB6F10C4D29A875E3L;
-    private static final long OCEAN_BROAD_SALT = 0x3A71D6C5E92B408FL;
-    private static final long OCEAN_MEDIUM_SALT = 0x8D25F0B143CE769AL;
-    private static final long MOUNTAIN_RANGE_SALT = 0xD6A8F241C30B597EL;
+    private static final long COAST_WARP_X_SALT = 0xA7B4C19D3E6205F1L;
+    private static final long COAST_WARP_Y_SALT = 0x19D6E84A52B703C1L;
+    private static final long COAST_BROAD_SALT = 0x8C31E6B5A70D249FL;
+    private static final long COAST_MEDIUM_SALT = 0xC4D2E1F05A173B69L;
+    private static final long COAST_FINE_SALT = 0x7419A0D5E236BC8FL;
+    private static final long COAST_MICRO_SALT = 0x29D1C7A4E8530B6FL;
 
-    private static final long ACTIVE_VARIANT = 0x9E3779B97F4A7C15L;
-    private static final long CENTER_X_VARIANT = 0xA24BAED4963EE407L;
-    private static final long CENTER_Y_VARIANT = 0x9FB21C651E98DF25L;
-    private static final long ANGLE_VARIANT = 0xC13FA9A902A6328FL;
-    private static final long LENGTH_VARIANT = 0x91E10DA5C79E7B1DL;
-    private static final long WIDTH_VARIANT = 0xD1B54A32D192ED03L;
-    private static final long STRENGTH_VARIANT = 0x94D049BB133111EBL;
-    private static final long BEND_VARIANT = 0xDB4F0B9175AE2165L;
+    private static final long PROVINCE_SALT = 0xD8047E31A5B269CFL;
+    private static final long ROLLING_SALT = 0x739E25A4C1D86B0FL;
+    private static final long HILL_SALT = 0x0D54A7B9E31C682FL;
+    private static final long FINE_RELIEF_SALT = 0xB6F10C5D29A874E3L;
+    private static final long MICRO_RELIEF_SALT = 0x3A71D6B5E92C408FL;
+    private static final long NANO_RELIEF_SALT = 0x8D25F0A143CE769BL;
+    private static final long OCEAN_BROAD_SALT = 0x5F28C1A96B73D40EL;
+    private static final long OCEAN_FINE_SALT = 0xD6A8F241B30C597EL;
+
+    private static final long SYSTEM_SALT = 0x9E3779B97F4A7C15L;
+    private static final long SYSTEM_ACTIVE_VARIANT = 0xA24BAED4963EE407L;
+    private static final long SYSTEM_CENTER_X_VARIANT = 0x9FB21C651E98DF25L;
+    private static final long SYSTEM_CENTER_Y_VARIANT = 0xC13FA9A902A6328FL;
+    private static final long SYSTEM_ANGLE_VARIANT = 0x91E10DA5C79E7B1DL;
+    private static final long SYSTEM_LENGTH_VARIANT = 0xD1B54A32D192ED03L;
+    private static final long SYSTEM_WIDTH_VARIANT = 0x94D049BB133111EBL;
+    private static final long SYSTEM_CURVE_VARIANT = 0xDB4F0B9175AE2165L;
+    private static final long SYSTEM_STRENGTH_VARIANT = 0xBBE0563303A4615FL;
+    private static final long SYSTEM_BRANCH_VARIANT = 0xE7037ED1A0B428DBL;
+
+    private static final long MASSIF_ALONG_VARIANT = 0x8EBC6AF09C88C6E3L;
+    private static final long MASSIF_SIDE_VARIANT = 0x589965CC75374CC3L;
+    private static final long MASSIF_RADIUS_X_VARIANT = 0x1D8E4E27C47D124FL;
+    private static final long MASSIF_RADIUS_Y_VARIANT = 0xEB44ACCAB455D165L;
+    private static final long MASSIF_STRENGTH_VARIANT = 0x6E5B9D8A7C31F240L;
+    private static final long MASSIF_PEAK_VARIANT = 0xF1357AEA2E62A9C5L;
+
+    private static final long PEAK_SALT = 0xC6BC279692B5C323L;
+    private static final long PEAK_X_VARIANT = 0xD2B74407B1CE6E93L;
+    private static final long PEAK_Y_VARIANT = 0xCA5A826395121157L;
+    private static final long PEAK_RADIUS_VARIANT = 0x9E3779B185EBCA87L;
+    private static final long PEAK_STRENGTH_VARIANT = 0xA4093822299F31D0L;
+
+    private static final long RIDGE_WARP_X_SALT = 0x082EFA98EC4E6C89L;
+    private static final long RIDGE_WARP_Y_SALT = 0x452821E638D01377L;
+    private static final long RIDGE_BROAD_SALT = 0xBE5466CF34E90C6CL;
+    private static final long RIDGE_FINE_SALT = 0xC0AC29B7C97C50DDL;
 
     private final long worldSeed;
     private final long surfaceRevision;
@@ -75,252 +96,272 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         double macroElevation = macroGeophysics.elevationAt(x, y);
         double macroMagnitude = Math.abs(macroElevation);
 
-        // Stage 5 remains the large-scale vertical support. A slightly steeper coastal transfer
-        // gives the sea datum a readable margin while retaining a continuous approach to Z=0.
-        double landFactor = smoothStep(-0.12d, 0.22d, macroElevation);
-        double macroVerticalScale = lerp(2_350.0d, 1_750.0d, landFactor);
-        double coastSteepening = lerp(
-                1.20d,
-                1.0d,
-                smoothStep(0.0d, 0.20d, macroMagnitude));
-        double macroZ = macroElevation
-                * macroVerticalScale
-                * coastSteepening
-                * (0.86d + 0.14d * Math.sqrt(macroMagnitude));
+        // Keep the macro signal broad, but do not freeze its zero contour. Stage 6 is allowed to
+        // reshape only the narrow coastal band below, so Stage 5 remains the world-scale geography.
+        double macroVerticalScale = lerp(2_450.0d, 1_850.0d, smoothStep(-0.10d, 0.25d, macroElevation));
+        double macroZ = signedPower(macroElevation, 0.92d) * macroVerticalScale;
 
-        // A shallow submerged shelf avoids turning every ocean margin into the same smooth bowl.
-        double shallowShelf = smoothStep(0.0d, 0.10d, -macroElevation)
-                * (1.0d - smoothStep(0.10d, 0.32d, -macroElevation));
-        macroZ -= shallowShelf * 110.0d;
+        // Multi-scale coastal refinement. The displacement is strongest very near the Stage-5 sea
+        // crossing and fades rapidly inland/offshore, preventing long artificial peninsulas while
+        // still producing bays, capes, coves and small near-shore islands.
+        double coastWarpSpan = 360_000.0d;
+        double coastWarp = 32_000.0d * (0.55d + 0.45d * ruggedness);
+        double coastX = x + gradientNoiseAt(x, y, coastWarpSpan, COAST_WARP_X_SALT) * coastWarp;
+        double coastY = y + gradientNoiseAt(x, y, coastWarpSpan, COAST_WARP_Y_SALT) * coastWarp;
+        double coastalBand = 1.0d - smoothStep(0.015d, 0.20d, macroMagnitude);
+        double coastalShape =
+                gradientNoiseAt(coastX, coastY, 220_000.0d, COAST_BROAD_SALT) * 0.48d
+                        + gradientNoiseAt(coastX, coastY, 64_000.0d, COAST_MEDIUM_SALT) * 0.28d
+                        + gradientNoiseAt(coastX, coastY, 18_000.0d, COAST_FINE_SALT) * 0.16d
+                        + gradientNoiseAt(coastX, coastY, 4_096.0d, COAST_MICRO_SALT) * 0.08d;
+        double coastalOffset = coastalShape
+                * coastalBand
+                * 260.0d
+                * (0.55d + 0.45d * ruggedness);
 
-        // Broad coordinate warping only bends regional structures; it does not introduce a new
-        // authored frequency or a fine-scale noise layer.
-        double warpSpan = regionalSpan * 4.2d;
-        double warpAmplitude = regionalSpan * lerp(0.05d, 0.16d, ruggedness);
-        double warpedX = x + gradientNoiseAt(x, y, warpSpan, WARP_X_SALT) * warpAmplitude;
-        double warpedY = y + gradientNoiseAt(x, y, warpSpan, WARP_Y_SALT) * warpAmplitude;
+        double landInterior = smoothStep(0.045d, 0.22d, macroElevation);
+        double oceanInterior = smoothStep(0.045d, 0.24d, -macroElevation);
 
-        // Local relief fades out before the shared sea datum. This preserves coherent coastlines
-        // while still allowing inland terrain to become rugged immediately beyond the margin.
-        double landInterior = smoothStep(0.035d, 0.20d, macroElevation);
-        double coastGuard = smoothStep(0.025d, 0.16d, macroMagnitude);
-        double province = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                regionalSpan * 1.4d,
-                PROVINCE_SALT);
-        double tectonic = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                regionalSpan * 3.4d,
-                TECTONIC_SALT);
-        double tectonicGate = smoothStep(-0.30d, 0.52d, tectonic);
-
-        // Sparse finite mountain systems replace the old infinite zero-crossing belts. Each range
-        // is a deterministic bent two-segment feature living in a broad regional hash cell. Only a
-        // fixed 3x3 neighbourhood can influence a query, so work stays bounded and order-free.
-        double rangeSpan = regionalSpan * 3.2d;
-        RangeInfluence range = mountainRangeInfluenceAt(
-                warpedX,
-                warpedY,
-                rangeSpan,
-                ruggedness);
-        double mountainSystem = clamp(
-                (range.core() * 0.72d + range.shoulder() * 0.40d)
-                        * (0.50d + 0.50d * tectonicGate),
-                0.0d,
-                1.2d);
-        double mountainUplift = mountainSystem
-                * landInterior
-                * coastGuard
-                * 1_700.0d
+        // Broad provinces determine whether inland terrain reads as lowland, rolling upland or
+        // plateau. They are intentionally independent from mountain placement.
+        double province = gradientNoiseAt(x, y, regionalSpan * 1.55d, PROVINCE_SALT);
+        double upland = smoothStep(0.04d, 0.70d, province);
+        double lowland = smoothStep(0.10d, 0.72d, -province);
+        double plateau = smoothStep(0.22d, 0.78d, province) * plateauTendency;
+        double provinceOffset = (upland * 320.0d - lowland * 180.0d)
                 * relief
-                * lerp(0.52d, 1.0d, ruggedness);
-
-        // Broad provinces provide readable uplands, plateaus and lowlands between mountain systems
-        // instead of leaving the continent as a flat plane decorated by isolated ridges.
-        double upland = smoothStep(0.10d, 0.66d, province);
-        double lowland = smoothStep(0.12d, 0.68d, -province);
-        double plateauShape = upland * smoothStep(-0.30d, 0.45d, tectonic);
-        double plateauOffset = plateauShape
-                * (1.0d - 0.50d * clamp(mountainSystem, 0.0d, 1.0d))
-                * landInterior
-                * coastGuard
-                * 650.0d
+                * landInterior;
+        double plateauOffset = plateau
+                * 380.0d
                 * relief
-                * plateauTendency;
-        double lowlandOffset = -lowland
-                * landInterior
-                * coastGuard
-                * 250.0d
-                * relief;
-        double rollingBase = (upland - 0.30d * lowland)
-                * 190.0d
-                * relief
-                * (0.35d + 0.65d * ruggedness)
-                * landInterior
-                * coastGuard;
+                * landInterior;
 
-        // Nested subordinate relief ensures zooming into the same authoritative surface reveals new
-        // causal structure rather than a magnified interpolation of the coarse view. The hard
-        // minimum span remains 1024 future horizontal cells, far above one-block Z noise.
-        double reliefActivity = clamp(
-                0.38d + 0.62d * Math.max(mountainSystem, upland * 0.55d),
-                0.0d,
-                1.0d);
-        double plateauFlattening = 1.0d
-                - plateauTendency * plateauShape * 0.72d;
-
-        double mediumSpan = Math.max(MIN_MEDIUM_SPAN, regionalSpan / 7.5d);
-        double mediumRelief = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                mediumSpan,
-                MEDIUM_RELIEF_SALT);
-        double mediumOffset = mediumRelief
-                * 230.0d
+        // Finite mountain systems are built from overlapping area massifs. The envelope is broad
+        // enough to read as a mountain region at world scale, while subordinate fields below reveal
+        // peaks and ridges only as the same authoritative surface is sampled more finely.
+        MountainInfluence mountains = mountainInfluenceAt(x, y, ruggedness);
+        double mountainActivity = mountains.envelope() * landInterior;
+        double mountainBase = mountainActivity
+                * (760.0d + 660.0d * mountains.massif())
                 * relief
-                * lerp(0.48d, 1.0d, ruggedness)
-                * reliefActivity
+                * lerp(0.62d, 1.05d, ruggedness);
+
+        double ridgeWarpSpan = Math.max(24_576.0d, regionalSpan / 9.0d);
+        double ridgeWarpAmount = ridgeWarpSpan * 0.34d;
+        double ridgeX = x + gradientNoiseAt(x, y, ridgeWarpSpan * 2.4d, RIDGE_WARP_X_SALT) * ridgeWarpAmount;
+        double ridgeY = y + gradientNoiseAt(x, y, ridgeWarpSpan * 2.4d, RIDGE_WARP_Y_SALT) * ridgeWarpAmount;
+        double ridgeBroad = ridgedNoiseAt(ridgeX, ridgeY, Math.max(8_192.0d, regionalSpan / 20.0d), RIDGE_BROAD_SALT);
+        double ridgeFine = ridgedNoiseAt(ridgeX, ridgeY, Math.max(2_048.0d, regionalSpan / 72.0d), RIDGE_FINE_SALT);
+        double localPeaks = peakFieldAt(x, y, Math.max(6_144.0d, regionalSpan / 34.0d));
+        double mountainTexture = mountainActivity
+                * (ridgeBroad * 300.0d + ridgeFine * 125.0d + localPeaks * 620.0d * mountains.massif())
+                * relief
+                * lerp(0.55d, 1.0d, ruggedness);
+
+        // Rolling relief keeps non-mountain interiors alive. Plateau areas deliberately attenuate
+        // the smaller layers rather than becoming perfectly flat mathematical shelves.
+        double plateauFlattening = 1.0d - plateau * 0.72d;
+        double rolling = gradientNoiseAt(x, y, Math.max(32_768.0d, regionalSpan / 5.5d), ROLLING_SALT);
+        double hills = gradientNoiseAt(x, y, Math.max(10_240.0d, regionalSpan / 18.0d), HILL_SALT);
+        double fine = gradientNoiseAt(x, y, Math.max(2_048.0d, regionalSpan / 64.0d), FINE_RELIEF_SALT);
+        double micro = gradientNoiseAt(x, y, Math.max(384.0d, regionalSpan / 768.0d), MICRO_RELIEF_SALT);
+        double nano = gradientNoiseAt(x, y, Math.max(128.0d, regionalSpan / 4_096.0d), NANO_RELIEF_SALT);
+        double rollingOffset = (rolling * 145.0d + hills * 82.0d + fine * 38.0d + micro * 12.0d + nano * 4.0d)
+                * relief
+                * lerp(0.35d, 1.0d, ruggedness)
                 * plateauFlattening
                 * landInterior
-                * coastGuard;
+                * (1.0d - mountains.envelope() * 0.45d);
 
-        double fineSpan = Math.max(MIN_FINE_SPAN, regionalSpan / 42.0d);
-        double fineRelief = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                fineSpan,
-                FINE_RELIEF_SALT);
-        double fineOffset = fineRelief
-                * 115.0d
-                * relief
-                * lerp(0.55d, 1.0d, ruggedness)
-                * reliefActivity
-                * plateauFlattening
-                * landInterior
-                * coastGuard;
-
-        double microSpan = Math.max(MIN_MICRO_SPAN, fineSpan / 4.0d);
-        double microRelief = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                microSpan,
-                MICRO_RELIEF_SALT);
-        double microOffset = microRelief
-                * 42.0d
-                * relief
-                * lerp(0.60d, 1.0d, ruggedness)
-                * reliefActivity
-                * plateauFlattening
-                * landInterior
-                * coastGuard;
-
-        // Submerged terrain receives its own broad structure. Stage 6 still describes one surface;
-        // this is ocean-floor relief, not a second ocean mask or water simulation.
-        double oceanInterior = smoothStep(0.04d, 0.24d, -macroElevation);
-        double oceanBroad = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                regionalSpan * 1.7d,
-                OCEAN_BROAD_SALT);
-        double oceanMedium = gradientNoiseAt(
-                warpedX,
-                warpedY,
-                Math.max(32_768.0d, regionalSpan / 4.8d),
-                OCEAN_MEDIUM_SALT);
-        double oceanOffset = (oceanBroad * 260.0d + oceanMedium * 90.0d)
+        // The same field continues beneath sea level. Ocean relief stays broad so the coastline is
+        // not surrounded by a noisy bathymetric halo.
+        double oceanBroad = gradientNoiseAt(x, y, regionalSpan * 1.8d, OCEAN_BROAD_SALT);
+        double oceanFine = gradientNoiseAt(x, y, Math.max(49_152.0d, regionalSpan / 3.8d), OCEAN_FINE_SALT);
+        double oceanOffset = (oceanBroad * 240.0d + oceanFine * 72.0d)
                 * relief
                 * oceanInterior;
 
-        double candidate = macroZ
-                + mountainUplift
-                + plateauOffset
-                + lowlandOffset
-                + rollingBase
-                + mediumOffset
-                + fineOffset
-                + microOffset
-                + oceanOffset;
-
-        // Stage 6 is not allowed to punch a random water topology through Stage 5's macro coastline.
-        // The floor/ceiling approaches zero continuously with macroZ and only acts if deformation
-        // would otherwise cross the shared datum.
-        if (macroElevation > 0.0d) {
-            candidate = Math.max(candidate, Math.min(4.0d, macroZ));
-        } else if (macroElevation < 0.0d) {
-            candidate = Math.min(candidate, Math.max(-4.0d, macroZ));
-        }
-
-        return clamp(candidate, MIN_SURFACE_Z, MAX_SURFACE_Z);
+        return clamp(
+                macroZ
+                        + coastalOffset
+                        + provinceOffset
+                        + plateauOffset
+                        + mountainBase
+                        + mountainTexture
+                        + rollingOffset
+                        + oceanOffset,
+                MIN_SURFACE_Z,
+                MAX_SURFACE_Z);
     }
 
-    private RangeInfluence mountainRangeInfluenceAt(
-            double x,
-            double y,
-            double span,
-            double ruggedness) {
-        long cellX = (long) Math.floor(x / span);
-        long cellY = (long) Math.floor(y / span);
-        double bestCore = 0.0d;
-        double bestShoulder = 0.0d;
+    private MountainInfluence mountainInfluenceAt(double x, double y, double ruggedness) {
+        double systemSpan = regionalSpan * 2.9d;
+        long cellX = (long) Math.floor(x / systemSpan);
+        long cellY = (long) Math.floor(y / systemSpan);
+        double bestEnvelope = 0.0d;
+        double bestMassif = 0.0d;
 
         for (int offsetY = -1; offsetY <= 1; offsetY++) {
             for (int offsetX = -1; offsetX <= 1; offsetX++) {
-                long rangeCellX = cellX + offsetX;
-                long rangeCellY = cellY + offsetY;
-                long baseHash = latticeHash(
-                        rangeCellX,
-                        rangeCellY,
-                        MOUNTAIN_RANGE_SALT);
-                if (unitDouble(hashVariant(baseHash, ACTIVE_VARIANT)) <= 0.67d) {
-                    continue;
+                long systemCellX = cellX + offsetX;
+                long systemCellY = cellY + offsetY;
+                long baseHash = latticeHash(systemCellX, systemCellY, SYSTEM_SALT);
+                double active = unitDouble(hashVariant(baseHash, SYSTEM_ACTIVE_VARIANT));
+                if (active < lerp(0.76d, 0.61d, ruggedness)) continue;
+
+                double centerX = (systemCellX
+                                + 0.18d
+                                + unitDouble(hashVariant(baseHash, SYSTEM_CENTER_X_VARIANT)) * 0.64d)
+                        * systemSpan;
+                double centerY = (systemCellY
+                                + 0.18d
+                                + unitDouble(hashVariant(baseHash, SYSTEM_CENTER_Y_VARIANT)) * 0.64d)
+                        * systemSpan;
+                double angle = unitDouble(hashVariant(baseHash, SYSTEM_ANGLE_VARIANT)) * Math.PI;
+                double dirX = Math.cos(angle);
+                double dirY = Math.sin(angle);
+                double sideX = -dirY;
+                double sideY = dirX;
+                double halfLength = systemSpan
+                        * lerp(0.26d, 0.48d, unitDouble(hashVariant(baseHash, SYSTEM_LENGTH_VARIANT)));
+                double systemWidth = systemSpan
+                        * lerp(0.075d, 0.145d, unitDouble(hashVariant(baseHash, SYSTEM_WIDTH_VARIANT)));
+                double curvature = (unitDouble(hashVariant(baseHash, SYSTEM_CURVE_VARIANT)) - 0.5d)
+                        * halfLength
+                        * 0.54d;
+                double systemStrength = lerp(
+                        0.70d,
+                        1.08d,
+                        unitDouble(hashVariant(baseHash, SYSTEM_STRENGTH_VARIANT)));
+
+                int massifCount = 4 + (int) Math.floorMod(baseHash >>> 7, 3L);
+                for (int index = 0; index < massifCount; index++) {
+                    long massifHash = mix64(baseHash ^ ((long) index * 0x9E3779B97F4A7C15L));
+                    double t = massifCount == 1
+                            ? 0.0d
+                            : -1.0d + (2.0d * index / (massifCount - 1.0d));
+                    double alongJitter = (unitDouble(hashVariant(massifHash, MASSIF_ALONG_VARIANT)) - 0.5d)
+                            * halfLength
+                            * 0.28d;
+                    double sideJitter = (unitDouble(hashVariant(massifHash, MASSIF_SIDE_VARIANT)) - 0.5d)
+                            * systemWidth
+                            * 1.15d;
+                    double bend = curvature * (1.0d - t * t) * Math.copySign(1.0d, t == 0.0d ? 1.0d : t);
+                    double massifCenterX = centerX
+                            + dirX * (t * halfLength + alongJitter)
+                            + sideX * (bend + sideJitter);
+                    double massifCenterY = centerY
+                            + dirY * (t * halfLength + alongJitter)
+                            + sideY * (bend + sideJitter);
+                    double radiusAlong = systemWidth
+                            * lerp(0.95d, 1.65d, unitDouble(hashVariant(massifHash, MASSIF_RADIUS_X_VARIANT)));
+                    double radiusSide = systemWidth
+                            * lerp(0.72d, 1.28d, unitDouble(hashVariant(massifHash, MASSIF_RADIUS_Y_VARIANT)));
+                    double strength = systemStrength
+                            * lerp(0.72d, 1.08d, unitDouble(hashVariant(massifHash, MASSIF_STRENGTH_VARIANT)));
+                    double massif = ellipticalBump(
+                            x,
+                            y,
+                            massifCenterX,
+                            massifCenterY,
+                            dirX,
+                            dirY,
+                            radiusAlong,
+                            radiusSide);
+                    double shoulder = ellipticalBump(
+                            x,
+                            y,
+                            massifCenterX,
+                            massifCenterY,
+                            dirX,
+                            dirY,
+                            radiusAlong * 2.15d,
+                            radiusSide * 2.35d);
+                    bestMassif = Math.max(bestMassif, massif * strength);
+                    bestEnvelope = Math.max(bestEnvelope, shoulder * strength * 0.82d);
+
+                    // A subset of massifs grows one short oblique lobe. This gives mountain systems
+                    // natural forks and compact side ranges without tracing an infinite boundary.
+                    if (unitDouble(hashVariant(massifHash, SYSTEM_BRANCH_VARIANT)) > 0.68d) {
+                        double branchSide = unitDouble(hashVariant(massifHash, MASSIF_PEAK_VARIANT)) > 0.5d ? 1.0d : -1.0d;
+                        double branchX = massifCenterX + sideX * radiusSide * 1.25d * branchSide;
+                        double branchY = massifCenterY + sideY * radiusSide * 1.25d * branchSide;
+                        double branch = ellipticalBump(
+                                x,
+                                y,
+                                branchX,
+                                branchY,
+                                sideX,
+                                sideY,
+                                radiusAlong * 0.72d,
+                                radiusSide * 0.82d);
+                        bestMassif = Math.max(bestMassif, branch * strength * 0.78d);
+                        bestEnvelope = Math.max(bestEnvelope, branch * strength * 0.66d);
+                    }
                 }
-
-                double centerX = (rangeCellX
-                                + 0.18d
-                                + 0.64d * unitDouble(hashVariant(baseHash, CENTER_X_VARIANT)))
-                        * span;
-                double centerY = (rangeCellY
-                                + 0.18d
-                                + 0.64d * unitDouble(hashVariant(baseHash, CENTER_Y_VARIANT)))
-                        * span;
-                double angle = unitDouble(hashVariant(baseHash, ANGLE_VARIANT)) * Math.PI;
-                double halfLength = span
-                        * (0.30d
-                                + 0.24d * unitDouble(hashVariant(baseHash, LENGTH_VARIANT)));
-                double width = span
-                        * (0.065d
-                                + 0.055d * unitDouble(hashVariant(baseHash, WIDTH_VARIANT)))
-                        * (1.12d - 0.28d * ruggedness);
-                double directionX = Math.cos(angle);
-                double directionY = Math.sin(angle);
-                double endOffsetX = directionX * halfLength;
-                double endOffsetY = directionY * halfLength;
-                double ax = centerX - endOffsetX;
-                double ay = centerY - endOffsetY;
-                double bx = centerX + endOffsetX;
-                double by = centerY + endOffsetY;
-
-                double bend = (unitDouble(hashVariant(baseHash, BEND_VARIANT)) - 0.5d)
-                        * 0.50d
-                        * halfLength;
-                double midX = centerX - directionY * bend;
-                double midY = centerY + directionX * bend;
-
-                double distance = Math.min(
-                        segmentDistance(x, y, ax, ay, midX, midY),
-                        segmentDistance(x, y, midX, midY, bx, by));
-                double core = 1.0d - smoothStep(0.0d, width, distance);
-                double shoulder = 1.0d - smoothStep(width, width * 2.8d, distance);
-                double strength = 0.62d
-                        + 0.38d * unitDouble(hashVariant(baseHash, STRENGTH_VARIANT));
-                bestCore = Math.max(bestCore, core * strength);
-                bestShoulder = Math.max(bestShoulder, shoulder * strength);
             }
         }
 
-        return new RangeInfluence(bestCore, bestShoulder);
+        return new MountainInfluence(
+                clamp(bestEnvelope, 0.0d, 1.25d),
+                clamp(bestMassif, 0.0d, 1.35d));
+    }
+
+    private double peakFieldAt(double x, double y, double span) {
+        long cellX = (long) Math.floor(x / span);
+        long cellY = (long) Math.floor(y / span);
+        double best = 0.0d;
+        for (int offsetY = -1; offsetY <= 1; offsetY++) {
+            for (int offsetX = -1; offsetX <= 1; offsetX++) {
+                long peakCellX = cellX + offsetX;
+                long peakCellY = cellY + offsetY;
+                long hash = latticeHash(peakCellX, peakCellY, PEAK_SALT);
+                double centerX = (peakCellX
+                                + 0.12d
+                                + 0.76d * unitDouble(hashVariant(hash, PEAK_X_VARIANT)))
+                        * span;
+                double centerY = (peakCellY
+                                + 0.12d
+                                + 0.76d * unitDouble(hashVariant(hash, PEAK_Y_VARIANT)))
+                        * span;
+                double radius = span
+                        * lerp(0.28d, 0.62d, unitDouble(hashVariant(hash, PEAK_RADIUS_VARIANT)));
+                double dx = x - centerX;
+                double dy = y - centerY;
+                double distance = Math.sqrt(dx * dx + dy * dy) / radius;
+                double bump = 1.0d - smoothStep(0.0d, 1.0d, distance);
+                double strength = lerp(0.55d, 1.0d, unitDouble(hashVariant(hash, PEAK_STRENGTH_VARIANT)));
+                best = Math.max(best, bump * bump * strength);
+            }
+        }
+        return best;
+    }
+
+    private static double ellipticalBump(
+            double x,
+            double y,
+            double centerX,
+            double centerY,
+            double axisX,
+            double axisY,
+            double radiusAlong,
+            double radiusSide) {
+        double dx = x - centerX;
+        double dy = y - centerY;
+        double along = (dx * axisX + dy * axisY) / radiusAlong;
+        double side = (-dx * axisY + dy * axisX) / radiusSide;
+        double normalizedDistance = Math.sqrt(along * along + side * side);
+        double bump = 1.0d - smoothStep(0.0d, 1.0d, normalizedDistance);
+        return bump * bump * (3.0d - 2.0d * bump);
+    }
+
+    private double ridgedNoiseAt(double x, double y, double span, long salt) {
+        double raw = gradientNoiseAt(x, y, span, salt);
+        double ridge = 1.0d - Math.abs(raw);
+        ridge *= ridge;
+        // Remove the broad floor so only readable ridges remain; this is always masked by a finite
+        // mountain-system envelope before reaching the final surface.
+        return smoothStep(0.20d, 0.92d, ridge);
     }
 
     private double gradientNoiseAt(double x, double y, double span, long salt) {
@@ -377,29 +418,14 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         return (hash >>> 11) * 0x1.0p-53;
     }
 
-    private static double segmentDistance(
-            double x,
-            double y,
-            double ax,
-            double ay,
-            double bx,
-            double by) {
-        double vx = bx - ax;
-        double vy = by - ay;
-        double wx = x - ax;
-        double wy = y - ay;
-        double denominator = vx * vx + vy * vy;
-        double amount = denominator == 0.0d
-                ? 0.0d
-                : clamp((wx * vx + wy * vy) / denominator, 0.0d, 1.0d);
-        double nearestX = ax + amount * vx;
-        double nearestY = ay + amount * vy;
-        return Math.hypot(x - nearestX, y - nearestY);
-    }
-
     private static double regionalSpan(double scale) {
         double ratio = MAX_REGIONAL_SPAN / (double) MIN_REGIONAL_SPAN;
         return MIN_REGIONAL_SPAN * Math.pow(ratio, scale);
+    }
+
+    private static double signedPower(double value, double exponent) {
+        if (value == 0.0d) return 0.0d;
+        return Math.copySign(Math.pow(Math.abs(value), exponent), value);
     }
 
     private static double smoothStep(double edge0, double edge1, double value) {
@@ -425,5 +451,5 @@ final class DeterministicContinuousTerrainSurface implements ContinuousTerrainSu
         return value ^ (value >>> 31);
     }
 
-    private record RangeInfluence(double core, double shoulder) {}
+    private record MountainInfluence(double envelope, double massif) {}
 }
