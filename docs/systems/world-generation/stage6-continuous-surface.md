@@ -4,13 +4,11 @@
 
 **In progress on the Stage 6 feature branch. Not accepted. Stage 7 remains blocked.**
 
-This page is the canonical Stage 6 contract for the current prototype. The implementation may be revised while Stage 6 is unaccepted, but the semantic ownership, determinism, bounded-work and multi-resolution laws below remain mandatory.
+This page is the canonical Stage 6 contract. Manual visual acceptance is required before merge.
 
 ## Goal
 
-Stage 6 turns the accepted Stage 5 `MacroGeophysicalField` into one deterministic, coordinate-addressable **continuous Terrain surface** with a readable hierarchy of coast, lowlands, uplands, plateaus, mountain systems and subordinate relief.
-
-Conceptually:
+Stage 6 turns the accepted Stage 5 `MacroGeophysicalField` into one deterministic, coordinate-addressable **continuous Terrain surface** with a readable hierarchy of coast, lowlands, uplands, plateaus and mountains.
 
 ```text
 MacroGeophysicalField
@@ -24,316 +22,279 @@ Stage 7 drainage topology
 Stage 10 exact integer XYZ Terrain
 ```
 
-Stage 5 remains the world-scale geophysical support. Stage 6 develops that support into continuous Z geometry and may refine the local sea crossing inside a bounded coastal band; it does not create an unrelated second world map.
+Stage 5 remains the world-scale geophysical cause. Stage 6 develops that cause into continuous Z geometry; it does not create an unrelated second terrain painter.
 
-Finer observation must reveal additional deterministic structure in the same already-defined surface rather than camera-created detail.
+## Ownership
 
-## Semantic ownership
-
-Stage 6 belongs to:
+The authoritative generated surface belongs to:
 
 ```text
 world/terrain
 ```
 
-The reusable concept is the Terrain surface itself. It can be consumed by drainage, hydrology, later refinement, exact XYZ materialization and presentation without naming any one consumer.
+`world/continuum` remains technical addressing/materialization/cache/LOD infrastructure. The visualizer owns only presentation. Runtime `TerrainSystem` remains the authority for materialized mutable XYZ Terrain and is not reused as Genesis surface truth.
 
-Ownership and dependency direction are:
+No top-level `world/surface` module is introduced.
 
-```text
-world/geophysics
-        ↓
-world/terrain continuous surface
-        ↓
-consumer-neutral Continuum adapter
-        ↓
-Continuum materialization/map infrastructure
-```
-
-`world/continuum` remains technical addressing/materialization/cache/LOD infrastructure and does not own Terrain truth.
-
-The runtime `TerrainSystem` remains the authority for exact mutable XYZ Terrain presence/material identity. The integer `TerrainSurfaceLookup` remains a projection of materialized runtime columns. Stage 6 does not write runtime Terrain cells and does not turn that projection into the Genesis source.
-
-Until Stage 10, `ContinuousTerrainSurface` is the canonical generated surface geometry.
-
-## Authoritative continuous contract
-
-The Stage 6 source contract is:
+## Authoritative contract
 
 ```text
 double surfaceZAt(long x, long y)
 ```
 
-The returned value is continuous Z in logical world-cell coordinates. The shared sea datum is `0.0`:
+The returned value is continuous Z in logical world-cell coordinates. Sea datum is `0.0`:
 
 ```text
-surfaceZ < 0  -> submerged surface
-surfaceZ >= 0 -> exposed surface
+surfaceZ < 0  -> submerged
+surfaceZ >= 0 -> exposed
 ```
 
-Submergence is derived from the one surface rather than from an independent ocean mask.
-
-The contract must satisfy:
-
-```text
-same seed
-+ same geophysics revision
-+ same surface revision
-+ same macro definition
-+ same surface definition
-+ same XY
-= same continuous Z
-```
-
-The result must not depend on:
+For fixed authoritative inputs and XY, the returned Z is fixed. It must not depend on:
 
 - camera position or zoom;
 - map tile/page/window identity;
-- requested LOD except for which coordinates are sampled;
-- query order;
+- selected representation LOD;
+- request order;
 - unrelated queries;
-- cache residency/eviction/rematerialization;
-- thread scheduling in presentation preparation.
+- cache residency or eviction;
+- presentation scheduling.
 
-Shared coordinates sampled through different Continuum resolutions must therefore return identical source values.
+Shared source coordinates therefore remain identical across Continuum resolutions.
 
-## Stage 6 authored settings
+## Authored settings
 
 Stage 6 exposes four normalized semantic controls:
 
-- `reliefIntensity` — overall amplitude of Stage 6 relief;
-- `regionalRuggedness` — tendency for mountain/upland regions to express stronger relief contrasts and a greater density of active mountain systems;
+- `reliefIntensity` — overall Stage 6 relief amplitude;
+- `regionalRuggedness` — mountain/upland contrast and mountain-system activity;
 - `plateauTendency` — tendency for elevated provinces to form broad high surfaces;
-- `regionalReliefScale` — characteristic horizontal scale of regional provinces and mountain systems.
+- `regionalReliefScale` — characteristic scale of provinces and mountain systems.
 
-These are world semantics, not solver knobs.
+These are world-character settings. Public Definitions do not expose octaves, salts, lattice spans, peak counts, cache sizes, blend weights or other algorithm tuning.
 
-The public Definition must not expose implementation details such as octave counts, salts, lattice sizes, blend weights, peak counts, cache/tile sizes or numerical tuning constants.
+Changing Stage 6 settings preserves world seed. Changing seed preserves selected Stage 5 and Stage 6 settings.
 
-Changing Stage 6 settings does not change world seed. Changing seed preserves selected Stage 5 and Stage 6 settings.
+## Current causal model — surface revision 4
 
-## Current causal surface model — revision 3
-
-The current bounded model is deliberately not a generic `noise -> heightmap` stack and not a line painter.
+Revision 4 replaces the rejected Stage 6 shoreline and mountain prototypes rather than tuning them cosmetically.
 
 ### 1. Macro vertical support
 
-Stage 5 signed macro elevation establishes continental and ocean-basin support. Its broad world character remains recognizable at the largest scale.
+Stage 5 signed macro elevation remains the broad continental/ocean-basin support. Deep continental and deep ocean character is inherited directly from it.
 
-### 2. Bounded coastal refinement
+### 2. Coherent coastal refinement by coordinate warp
 
-Stage 6 does **not** freeze the exact Stage-5 zero contour. Doing so produced unnaturally smooth coastlines that could not gain real detail at finer observation.
+The rejected revision 3 coast added independent multi-scale height noise around `Z=0`. Although bounded, thresholding that sum produced visibly shredded shorelines and unrealistic short appendages.
 
-Instead, only a narrow band around the Stage-5 sea crossing receives additional multi-scale displacement:
+Revision 4 does **not** add noise directly to coastal Z.
+
+Instead it bends the Stage 5 field coordinates inside a narrow coastal transition:
 
 ```text
-broad coast structure
-    + medium coast structure
-    + fine coast structure
-    + micro coast structure
+Stage-5 macro field
+       ↓
+bounded broad coordinate displacement
+       +
+bounded medium coordinate displacement
+       +
+bounded fine coordinate displacement
+       ↓
+resample the same Stage-5 field
+       ↓
+blend only near the original sea crossing
 ```
 
-The coastal influence fades rapidly with distance from the macro sea crossing. This allows bays, capes, coves and small near-shore islands without allowing local detail to carve arbitrary inland seas or grow very long artificial appendages from deep continental/ocean support.
+The current hidden displacement scales descend only to regional shoreline structure; there is no tiny coastline-noise layer. Far enough inland/offshore the warp weight becomes zero, so deep support cannot be flipped.
 
-Deep continental support remains land and deep ocean support remains submerged.
+The intended result is coherent bays, capes and near-shore variation without a noisy saw-edge.
 
 ### 3. Broad regional provinces
 
-Independent low-frequency provinces organize ordinary continental interiors into coherent:
+Independent low-frequency provinces organize ordinary continental interiors into:
 
 - lowlands;
 - rolling uplands;
 - plateau/highland regions.
 
-These provinces are independent from mountain placement so continents do not become flat planes with isolated decorative ridges.
+Mountain placement does not own all interior elevation.
 
-### 4. Finite mountain systems made from massifs
+### 4. Finite mountain systems
 
-Mountain systems are **areas**, not zero-crossing contour bands and not single bent centre-lines.
+Mountains exist only inside finite deterministic regional systems. A system contains several unequal overlapping two-dimensional massifs with local offsets, curvature and occasional short side branches.
 
-Each active deterministic regional system contains several overlapping two-dimensional massifs with unequal:
+The massif union defines **where a mountain region exists**. It is not itself the final mountain shape.
 
-- centres;
-- longitudinal and transverse radii;
-- strengths;
-- offsets along the system;
-- lateral offsets;
-- curvature response.
+This prevents both previously rejected failure modes:
 
-Some massifs add one short oblique lobe, creating compact side ranges and forks. Because every system is finite and only a fixed neighbourhood can influence a query, a range naturally has beginnings, endings and gaps rather than becoming a world-spanning stripe.
+- world-spanning zero-crossing ridge networks;
+- one smooth painted bent strip masquerading as a mountain range.
 
-At world scale the overlapping shoulders read as one mountain region or chain. At closer scale the unequal massifs separate into individual high areas.
+### 5. Ridge-dominant mountain interior
 
-### 5. Subordinate ridges and local peaks
+Revision 4 deliberately reduces the smooth massif pedestal. Most mountain height now comes from several differently oriented ridged fields inside the finite massif envelope:
 
-Within the finite mountain envelope, smaller deterministic fields add:
+```text
+finite massif envelope
+       ↓
+broad ridged relief
+ + medium ridged relief
+ + fine ridged relief
+ + local peaks
+       ↓
+mountain surface
+```
 
-- secondary ridge structure;
-- fine ridge structure;
-- local peak bumps.
+The different ridge scales/orientations break a system into ridges, shoulders, saddles and peaks when observed more closely. Ridged fields never choose global mountain placement; outside a finite mountain envelope they contribute no mountain height.
 
-Ridged structure is therefore **masked by an already finite mountain region**. It is never used globally as the mountain-placement rule, avoiding the worm-like contour networks rejected during Stage 6 iteration.
+### 6. Ordinary nested relief
 
-### 6. Nested ordinary relief
+Non-mountain land receives descending rolling/hill/fine/micro relief. Smaller layers have smaller amplitudes so the continuous source does not predict one-cell Z chatter during later integer materialization.
 
-Non-mountain interiors receive progressively smaller continuous rolling/fine/micro/nano relief. The current smallest causal span is still far above a one-cell feature and is continuous rather than sample noise.
-
-Plateau tendency attenuates the small layers without turning plateaus into perfectly flat mathematical shelves.
+Plateau tendency attenuates smaller relief rather than creating mathematically flat shelves.
 
 ### 7. Ocean-floor relief
 
-Submerged terrain receives broad bathymetric structure as part of the same surface. It is not a second ocean system.
+Broad bathymetric structure remains part of the same continuous surface. It is not a second ocean mask.
+
+## F2 map representation
+
+A major visual failure in the previous prototype was attempting to represent raw Terrain Z using only one globally normalized color value. At useful zoom levels, substantial local relief could collapse to almost the same green byte even though raw Z differed.
+
+Revision 4 therefore separates **Terrain truth** from **map presentation**.
+
+`TerrainSurfaceMapTileGenerator` samples the same authoritative surface on a bounded tile lattice plus one ghost row/column:
+
+```text
+128 × 128 displayed samples
+129 × 129 raw-Z samples
+```
+
+The extra samples are used only to compute a scale-appropriate local normal/hillshade. No additional terrain is generated and no map value feeds back into world truth.
+
+As Continuum requests finer levels, hillshade is recomputed from the finer raw-Z lattice. Finer observation can therefore reveal real slopes/ridges that were invisible in a coarse overview instead of merely stretching one flat color.
+
+The canonical source consistency law still applies to `ContinuousTerrainSurface`; LOD-aware hillshade is explicitly a derived representation.
+
+## Atomic visible LOD promotion
+
+The previous map renderer could mix ready fine tiles with coarse parent fallback tiles in the same viewport frame. With strong terrain contrast this appears as transient square/checkerboard artifacts during pan/zoom.
+
+Revision 4 changes the viewport presentation rule:
+
+> visible map detail is promoted atomically.
+
+Tiles may still generate asynchronously and independently, but while any visible target needs a coarser ancestor, all visible targets are rendered at one common fallback depth. The viewport switches to the finer visible level only when that level is ready coherently.
+
+This is representation policy only and does not affect Terrain truth or cache semantics.
+
+## 3D inspector
+
+F2 retains a real bounded 3D view sampled directly from `ContinuousTerrainSurface`.
+
+The 3D observer may use presentation-only vertical exaggeration and nested sampling density. It may not modify source Z. Shared coordinates remain exact source values.
 
 ## Realism requirements
 
-A plausible Stage 6 surface must show a readable hierarchy:
+Stage 6 visual acceptance requires a readable hierarchy:
 
 ```text
 continent / ocean basin
     ↓
-coast + regional province
+coherent coast + regional province
     ↓
 lowland / plateau / finite mountain system
     ↓
-massif / secondary ridge / local peak
+massif region
+    ↓
+ridges / saddles / peaks
     ↓
 small continuous relief
 ```
 
 Required qualitative properties:
 
-- coastlines contain several scales of shape rather than one overly smooth spline-like boundary;
-- coastal detail remains local and does not produce narrow kilometer-scale-looking appendages from deep support;
-- mountain systems are finite two-dimensional regions, not stripes drawn over the map;
-- individual systems contain multiple massifs and can have short branches, endings and gaps;
-- mountains are spatially clustered rather than uniformly salted across all land;
-- plateaus are broad regions rather than noisy collections of peaks;
-- lowlands/depressions are coherent regions;
-- smaller relief is modulated by larger relief;
-- zooming reveals additional causal structure instead of only magnifying interpolation;
-- no layer introduces checkerboard, stipple, isolated single-cell extrema or alternating Z noise.
+- coastlines are coherent curves with regional irregularity, not smooth blobs and not noisy saw-edges;
+- coast refinement does not create frequent short sign alternation at small horizontal steps;
+- deep land/ocean cannot be flipped by shoreline refinement;
+- mountain systems are finite areas with beginnings, endings, gaps and possible branches;
+- mountains read as ranges/massifs with internal relief rather than smooth stains or single strips;
+- zooming reveals deterministic additional relief structure;
+- non-mountain interiors are not perfectly flat;
+- no sample-scale checkerboard, isolated spike or one-cell stipple appears in continuous Z.
 
-## Minimum feature scale and future block stability
+## Future block stability
 
-Stage 6 must prevent source geometry that would predictably become one-block Z noise during Stage 10 materialization.
+Stage 6 already guards against source geometry that would predict one-block Z noise at Stage 10.
 
-The implementation policy remains:
+Automated checks cover representative unit-grid windows for:
 
-> the smallest causal relief wavelength is many future horizontal cells, never approximately one cell.
-
-Revision 3 extends detail below the old ~1024-cell floor, but the smallest current layer remains on the order of hundreds of cells and uses continuous gradient interpolation with small amplitude. This permits visible nested zoom detail without turning exact XY neighbours into independent random heights.
-
-Automated evidence examines representative windows for:
-
-- local slope;
-- second-difference / curvature magnitude;
+- adjacent slope;
+- second difference / curvature;
 - isolated quantized extrema;
-- checkerboard/corner-supported Z patterns.
+- 2×2 checkerboard alternation.
 
-Stage 9 must preserve this property while refining. Stage 10 will enforce the exact `>= 2 blocks` natural-feature thickness invariant on materialized XYZ Terrain.
+This does not replace Stage 10's exact voxel-thickness acceptance. It prevents Stage 6 from handing Stage 10 an obviously pathological source.
 
-## Continuum and multi-resolution behavior
+## Continuum / boundedness
 
-Stage 6 reuses Continuum rather than allocating a full-world raster.
+Stage 6 never materializes the whole logical world.
 
-A read-only adapter exposes the same continuous surface as a `ContinuumScalarField` for map/materialization infrastructure. The adapter is representation only.
+Cost remains bounded by requested coordinates and fixed local deterministic work. Page, tile and cache boundaries are technical only and cannot become Terrain seams.
 
-No Stage 6 operation may require enumerating the whole logical world.
+Required representation/source evidence includes:
 
-Cost remains bounded by:
-
-```text
-requested region
-× requested sample count/resolution
-× fixed local deterministic work
-```
-
-The massif model examines only a fixed neighbouring set of deterministic regional cells. Local peaks similarly examine a fixed local neighbourhood. There is no precomputed global mountain list.
-
-For nested Continuum levels, a coarse request samples the same `ContinuousTerrainSurface` at coarser coordinates. It does not generate all exact cells and downsample them, and it does not choose a different terrain algorithm.
-
-## Seam contract
-
-Page/tile/window boundaries are never physical Terrain boundaries.
-
-Required evidence includes:
-
-- horizontal overlapping-window equality;
-- vertical overlapping-window equality;
-- diagonal/corner adjacency continuity;
+- horizontal/vertical/diagonal overlap equality for source sampling;
 - arbitrary overlapping-window equality;
-- shared-coordinate equality between coarse and fine LOD;
-- query-order independence;
-- cache eviction/rematerialization independence.
+- shared-coordinate equality across source resolutions;
+- deterministic eviction/rematerialization;
+- bounded requested work;
+- no whole-world raster;
+- coherent visible fallback LOD during asynchronous map preparation.
 
-With diagnostic borders hidden, technical tile/page boundaries must not be discoverable from Terrain discontinuities.
+## Automated proof
 
-## F2 Inspector contract
+Stage 6 currently requires tests for:
 
-F2 provides two views of the same Stage 6 surface:
-
-- **2D world map** — pan/zoom, tile fallback/diagnostics, seed controls and Stage 5/6 settings;
-- **3D terrain view** — bounded region sampled from the same source with perspective/orbit/pan/zoom.
-
-Camera distance may request different sampling density but cannot modify Terrain truth.
-
-The 2D map must not hide available detail through magnification filtering. Revision 3 therefore uses:
-
-```text
-minification: Linear
-magnification: Nearest
-```
-
-Coarse imagery can still shrink smoothly, while a ready detailed tile is not blurred when enlarged. This is presentation-only and does not alter the generated surface.
-
-## Required automated proof
-
-Stage 6 acceptance requires, where applicable:
-
-- deterministic equality across equivalent fresh sources;
+- deterministic equivalent-source equality;
 - seed sensitivity;
 - surface revision sensitivity;
-- Stage 5 Definition sensitivity;
-- Stage 6 Definition sensitivity;
-- query-order and unrelated-query independence;
-- bounded finite output;
-- submergence derived only from surface Z and the shared datum;
-- coastal zero-band proof showing Stage 6 can refine both sides of the Stage-5 crossing;
-- deep-land/deep-ocean proof showing coastal detail cannot flip deep support;
-- horizontal/vertical/diagonal/arbitrary overlap seam proofs;
-- shared-coordinate multi-resolution equality;
-- coarse observation proof that finer sampling exposes real additional structure;
-- near-field proof that detail exists below the previous kilocell floor;
-- unit-grid slope/curvature and anti-spike/checkerboard properties;
-- lazy creation and bounded requested-work behavior;
-- representative scale profile with constant work for the same requested sample count across larger logical worlds;
-- architecture/ArchUnit gates;
-- full Gradle tests and JaCoCo gate;
-- Docs Site;
-- manual F2 inspection across multiple seeds and materially different settings.
+- Stage 5 and Stage 6 Definition sensitivity;
+- query-order/unrelated-query independence;
+- finite bounded Z;
+- coherent bounded coastline refinement;
+- deep-land/deep-ocean preservation;
+- finer-observation residual structure;
+- sub-kilocell causal detail;
+- anti-spike/checkerboard source properties;
+- terrain-map hillshade contrast and land/ocean palette separation;
+- bounded map sampling using one ghost border;
+- atomic visible LOD promotion;
+- Continuum scale profile;
+- full Gradle/JaCoCo/ArchUnit gates;
+- Docs Site.
 
-A deliberate source-model replacement increments the Stage 6 revision so derived presentation/cache identity cannot silently reuse a previous terrain model.
+Automated tests do not constitute aesthetic acceptance.
 
 ## Explicit Stage 6 boundary
 
 Stage 6 does **not** implement:
 
 - Stage 7 drainage/depression topology;
-- river networks or lake basins as independent systems;
-- Stage 8 coupled rivers/lakes/surface;
+- rivers or lakes;
+- Stage 8 coupled hydrology;
 - Stage 9 hierarchical regional refinement;
 - Stage 10 integer XYZ materialization;
 - climate;
-- geology/sediment/soil evolution;
-- runtime mutable surface evolution;
+- sediment/soil evolution;
+- runtime mutable erosion;
 - global whole-world erosion solves.
 
-No later-stage system may be introduced merely to improve the Stage 6 picture.
+No later-stage system may be introduced merely to improve the Stage 6 image.
 
 ## Done when
 
-Stage 6 is complete only when production surface, tests, scale evidence, F2 inspection and canonical documentation are coherent and green on one Stage 6 PR head, followed by explicit manual user acceptance.
+Stage 6 is complete only when production surface, bounded map/3D inspection, tests, scale evidence and canonical documentation are coherent and green on one PR head **and** the user explicitly accepts the visual result across multiple seeds/settings/zoom levels.
 
-Until that acceptance:
+Until then:
 
 **Stage 6 must not be merged and Stage 7 must not begin.**
