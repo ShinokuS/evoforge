@@ -583,7 +583,8 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
         Texture texture = new Texture(pixmap);
         pixmap.dispose();
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        // Keep downsampling smooth, but never blur a detailed Continuum tile when the user zooms in.
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Nearest);
         texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
         return texture;
     }
