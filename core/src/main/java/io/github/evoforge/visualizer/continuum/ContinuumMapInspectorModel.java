@@ -1,25 +1,32 @@
 package io.github.evoforge.visualizer.continuum;
 
-import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarField;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumMaterializer;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTileService;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumScalarMapTileGenerator;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
-import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalContinuumField;
+import io.github.evoforge.simulation.world.geophysics.MacroGeophysicalField;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysics;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
+import io.github.evoforge.simulation.world.terrain.ContinuousTerrainSurface;
+import io.github.evoforge.simulation.world.terrain.ContinuousTerrainSurfaceContinuumField;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceDefinition;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceEvolution;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Presentation model for the real macro-geography introduced in Continuum Stage 5. */
+/** Presentation model for the real continuous landscape introduced in Continuum Stage 6. */
 public final class ContinuumMapInspectorModel implements AutoCloseable {
     public static final long LOGICAL_SIDE = 16_000_000L;
     public static final long DEFAULT_WORLD_SEED = 0x45A1_0F0E_2026L;
     /** Compatibility alias for the original fixed inspector seed. */
     public static final long WORLD_SEED = DEFAULT_WORLD_SEED;
     public static final long GEOPHYSICS_REVISION = 1L;
+    public static final long SURFACE_REVISION = 1L;
     public static final int TILE_SAMPLE_SIDE = 128;
     public static final int MAX_CPU_TILES = 384;
     public static final int MAX_OUTSTANDING_JOBS = 192;
@@ -32,7 +39,10 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
 
     private ContinuumScalarMapTileGenerator generator;
     private ContinuumMapTileService tiles;
+    private ContinuousTerrainSurface surface;
+    private ContinuumMaterializer surfaceMaterializer;
     private MacroGeophysicsDefinition definition;
+    private TerrainSurfaceDefinition surfaceDefinition;
     private MacroGeophysicsPreset preset;
     private long worldSeed;
     private long mapSourceRevision;
@@ -63,36 +73,9 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
                 widthPixels,
                 heightPixels,
                 preset.definition(),
+                TerrainSurfaceDefinition.balanced(),
                 preset,
                 worldSeed);
-    }
-
-    ContinuumMapInspectorModel(
-            ContinuumWorldDomain domain,
-            ContinuumScalarMapTileGenerator generator,
-            ExecutorService executor,
-            int widthPixels,
-            int heightPixels) {
-        if (domain == null || generator == null || executor == null) {
-            throw new IllegalArgumentException("domain/generator/executor must not be null");
-        }
-        this.domain = domain;
-        this.executor = executor;
-        this.generator = generator;
-        this.definition = MacroGeophysicsPreset.BALANCED.definition();
-        this.preset = MacroGeophysicsPreset.BALANCED;
-        this.worldSeed = DEFAULT_WORLD_SEED;
-        this.tiles = tileService(generator);
-        this.viewport = new ContinuumMapViewport(
-                domain.width(),
-                domain.height(),
-                generator.sampleSide(),
-                generator.maxLevel(),
-                PREFETCH_RING,
-                Math.max(1, widthPixels),
-                Math.max(1, heightPixels));
-        viewport.setSourceRevision(mapSourceRevision);
-        update(widthPixels, heightPixels);
     }
 
     private ContinuumMapInspectorModel(
@@ -101,17 +84,19 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
             int widthPixels,
             int heightPixels,
             MacroGeophysicsDefinition definition,
+            TerrainSurfaceDefinition surfaceDefinition,
             MacroGeophysicsPreset preset,
             long worldSeed) {
-        if (domain == null || executor == null || definition == null) {
-            throw new IllegalArgumentException("domain/executor/definition must not be null");
+        if (domain == null || executor == null || definition == null || surfaceDefinition == null) {
+            throw new IllegalArgumentException("domain/executor/definitions must not be null");
         }
         this.domain = domain;
         this.executor = executor;
         this.definition = definition;
+        this.surfaceDefinition = surfaceDefinition;
         this.preset = preset;
         this.worldSeed = worldSeed;
-        this.generator = generatorFor(definition);
+        this.generator = generatorFor(definition, surfaceDefinition);
         this.tiles = tileService(generator);
         this.viewport = new ContinuumMapViewport(
                 domain.width(),
@@ -146,26 +131,75 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
         return preset == null ? "custom" : preset.displayName();
     }
 
+    /** Stage 5 authored macro-geophysics definition retained by the Stage 6 source. */
     public MacroGeophysicsDefinition definition() {
         return definition;
+    }
+
+    public TerrainSurfaceDefinition surfaceDefinition() {
+        return surfaceDefinition;
     }
 
     public long seed() {
         return worldSeed;
     }
 
-    /** Applies a named convenience profile without moving or zooming the inspection camera. */
+    public long sourceRevision() {
+        return mapSourceRevision;
+    }
+
+    public long worldWidth() {
+        return domain.width();
+    }
+
+    public long worldHeight() {
+        return domain.height();
+    }
+
+    /** Bounded raw-Z materialization used by the real 3D terrain inspection mode. */
+    public ContinuumScalarPage materializeSurface(ContinuumSampleWindow window) {
+        return surfaceMaterializer.materialize(window);
+    }
+
+    /** Applies a named Stage 5 convenience profile without changing Stage 6 authored settings. */
     public boolean applyPreset(MacroGeophysicsPreset nextPreset) {
         if (nextPreset == null) throw new IllegalArgumentException("preset must not be null");
         return applyDefinition(nextPreset.definition(), nextPreset);
     }
 
-    /** Applies arbitrary authored macro-geophysics intent without changing the inspection camera. */
+    /** Applies arbitrary authored Stage 5 intent without changing Stage 6 settings or camera. */
     public boolean applyDefinition(MacroGeophysicsDefinition nextDefinition) {
         return applyDefinition(nextDefinition, null);
     }
 
-    /** Changes world identity and rebuilds only the derived map source, preserving the camera. */
+    /** Applies Stage 6 surface intent without changing Stage 5 settings, seed or camera. */
+    public boolean applySurfaceDefinition(TerrainSurfaceDefinition nextDefinition) {
+        if (nextDefinition == null) throw new IllegalArgumentException("surface definition must not be null");
+        if (surfaceDefinition.equals(nextDefinition)) return false;
+        surfaceDefinition = nextDefinition;
+        rebuildMapSource();
+        return true;
+    }
+
+    /** Applies both authored layers with one source rebuild; Stage 5 preset identity is preserved when unchanged. */
+    public boolean applyDefinitions(
+            MacroGeophysicsDefinition nextMacroDefinition,
+            TerrainSurfaceDefinition nextSurfaceDefinition) {
+        if (nextMacroDefinition == null || nextSurfaceDefinition == null) {
+            throw new IllegalArgumentException("definitions must not be null");
+        }
+        boolean macroChanged = !definition.equals(nextMacroDefinition);
+        boolean surfaceChanged = !surfaceDefinition.equals(nextSurfaceDefinition);
+        if (!macroChanged && !surfaceChanged) return false;
+
+        definition = nextMacroDefinition;
+        surfaceDefinition = nextSurfaceDefinition;
+        if (macroChanged) preset = null;
+        rebuildMapSource();
+        return true;
+    }
+
+    /** Changes world identity while preserving both Stage 5 and Stage 6 authored settings. */
     public boolean applySeed(long nextSeed) {
         if (worldSeed == nextSeed) return false;
         worldSeed = nextSeed;
@@ -236,21 +270,32 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     private void rebuildMapSource() {
         // Cancel queued work from the old derived source. At most the bounded worker count may be
         // finishing already-running old jobs; their service becomes unreachable and cannot publish
-        // into the new map source.
+        // into the new Stage 6 map source.
         tiles.retainPendingDemand(Set.of());
-        generator = generatorFor(definition);
+        generator = generatorFor(definition, surfaceDefinition);
         tiles = tileService(generator);
         mapSourceRevision = Math.incrementExact(mapSourceRevision);
         viewport.setSourceRevision(mapSourceRevision);
         frame = viewport.requestFrame(tiles);
     }
 
-    private ContinuumScalarMapTileGenerator generatorFor(MacroGeophysicsDefinition sourceDefinition) {
-        ContinuumScalarField field = new MacroGeophysicalContinuumField(MacroGeophysics.create(
+    private ContinuumScalarMapTileGenerator generatorFor(
+            MacroGeophysicsDefinition macroDefinition,
+            TerrainSurfaceDefinition terrainDefinition) {
+        MacroGeophysicalField geophysics = MacroGeophysics.create(
                 worldSeed,
                 GEOPHYSICS_REVISION,
-                sourceDefinition));
-        return new ContinuumScalarMapTileGenerator(domain, field, TILE_SAMPLE_SIDE);
+                macroDefinition);
+        surface = TerrainSurfaceEvolution.create(
+                worldSeed,
+                SURFACE_REVISION,
+                geophysics,
+                terrainDefinition);
+        surfaceMaterializer = new ContinuumMaterializer(domain, surface::surfaceZAt);
+        return new ContinuumScalarMapTileGenerator(
+                domain,
+                new ContinuousTerrainSurfaceContinuumField(surface),
+                TILE_SAMPLE_SIDE);
     }
 
     private ContinuumMapTileService tileService(ContinuumScalarMapTileGenerator sourceGenerator) {
