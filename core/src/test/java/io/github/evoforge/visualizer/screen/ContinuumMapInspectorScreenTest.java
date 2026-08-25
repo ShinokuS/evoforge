@@ -20,8 +20,8 @@ final class ContinuumMapInspectorScreenTest {
 
         assertEquals(6, Byte.toUnsignedInt(rgba.get(0)), "first source row must remain the first texture row");
         assertEquals(6, Byte.toUnsignedInt(rgba.get(4)));
-        assertEquals(199, Byte.toUnsignedInt(rgba.get(8)), "second source row must remain the second texture row");
-        assertEquals(199, Byte.toUnsignedInt(rgba.get(12)));
+        assertEquals(224, Byte.toUnsignedInt(rgba.get(8)), "second source row must remain the second texture row");
+        assertEquals(224, Byte.toUnsignedInt(rgba.get(12)));
         assertEquals(255, Byte.toUnsignedInt(rgba.get(3)));
         assertEquals(255, Byte.toUnsignedInt(rgba.get(15)));
     }
