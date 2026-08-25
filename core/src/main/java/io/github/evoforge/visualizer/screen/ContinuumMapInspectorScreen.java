@@ -30,12 +30,14 @@ import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTile;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
 import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
+import io.github.evoforge.simulation.world.terrain.TerrainSurfaceDefinition;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
+import io.github.evoforge.visualizer.continuum.TerrainSurface3DInspector;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** World-oriented pan/zoom view of the Stage 5 macro-geophysical skeleton. */
+/** 2D world map and bounded 3D observer of the authoritative Stage 6 continuous Terrain surface. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color BACKGROUND = new Color(0.025f, 0.032f, 0.038f, 1f);
     private static final Color FINE_BORDER = new Color(0.30f, 0.86f, 0.65f, 0.9f);
@@ -49,6 +51,11 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final byte[] PALETTE_G = geophysicalPalette(1);
     private static final byte[] PALETTE_B = geophysicalPalette(2);
 
+    private enum SurfaceViewMode {
+        MAP_2D,
+        TERRAIN_3D
+    }
+
     private final Runnable returnToMenu;
     private final ShapeRenderer shapes = new ShapeRenderer();
     private final SpriteBatch batch = new SpriteBatch();
@@ -60,10 +67,13 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
             new BoundedRenderCache<>(MAX_GPU_TEXTURES, this::createTexture, Texture::dispose);
     private final InputAdapter mapInput = new MapInput();
     private final Stage uiStage = new Stage(new ScreenViewport());
-    private final Window settingsWindow;
+    private final InputMultiplexer input;
+
     private final Label profileLabel = new Label("", skin);
+    private final TextButton viewModeButton = new TextButton("", skin);
     private final TextField seedField = new TextField("", skin);
     private final Label seedStatus = new Label("", skin);
+
     private final Slider oceanSlider = normalizedSlider();
     private final Slider scaleSlider = normalizedSlider();
     private final Slider cohesionSlider = normalizedSlider();
@@ -74,13 +84,26 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private final Label cohesionValue = new Label("", skin);
     private final Label fragmentationValue = new Label("", skin);
     private final Label variationValue = new Label("", skin);
-    private final InputMultiplexer input;
+
+    private final Slider reliefSlider = normalizedSlider();
+    private final Slider ruggednessSlider = normalizedSlider();
+    private final Slider plateauSlider = normalizedSlider();
+    private final Slider reliefScaleSlider = normalizedSlider();
+    private final Label reliefValue = new Label("", skin);
+    private final Label ruggednessValue = new Label("", skin);
+    private final Label plateauValue = new Label("", skin);
+    private final Label reliefScaleValue = new Label("", skin);
 
     private ContinuumMapInspectorModel model;
+    private TerrainSurface3DInspector terrain3d;
+    private Window settingsWindow;
+    private SurfaceViewMode viewMode = SurfaceViewMode.MAP_2D;
     private int width = 1;
     private int height = 1;
     private boolean showDiagnostics;
-    private boolean dragging;
+    private boolean draggingMap;
+    private boolean orbitingTerrain;
+    private boolean panningTerrain;
     private int lastDragX;
     private int lastDragY;
 
@@ -90,12 +113,14 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         this.width = Math.max(1, Gdx.graphics.getWidth());
         this.height = Math.max(1, Gdx.graphics.getHeight());
         this.model = ContinuumMapInspectorModel.standard(width, height);
+        this.terrain3d = new TerrainSurface3DInspector(model);
         this.settingsWindow = createSettingsWindow();
         uiStage.addActor(settingsWindow);
         this.input = new InputMultiplexer(uiStage, mapInput);
         projection.setToOrtho2D(0f, 0f, width, height);
-        syncControls(model.definition());
+        syncControls(model.definition(), model.surfaceDefinition());
         syncSeedControl();
+        updateViewButton();
         resize(width, height);
     }
 
@@ -106,11 +131,21 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        model.update(width, height);
-        Gdx.gl.glClearColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b, BACKGROUND.a);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        drawMap();
-        if (showDiagnostics) drawTileDiagnostics();
+        if (viewMode == SurfaceViewMode.MAP_2D) {
+            model.update(width, height);
+            Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
+            Gdx.gl.glClearColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b, BACKGROUND.a);
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+            drawMap();
+            if (showDiagnostics) drawTileDiagnostics();
+        } else {
+            Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
+            Gdx.gl.glClearColor(BACKGROUND.r, BACKGROUND.g, BACKGROUND.b, BACKGROUND.a);
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
+            terrain3d.render(width, height);
+            Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
+        }
+
         drawOverlay();
         uiStage.act(delta);
         uiStage.draw();
@@ -136,6 +171,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     public void dispose() {
         hide();
         textures.close();
+        terrain3d.close();
         model.close();
         uiStage.dispose();
         shapes.dispose();
@@ -148,7 +184,16 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         window.setMovable(false);
         window.setResizable(false);
         window.pad(30f, 14f, 14f, 14f);
-        window.defaults().pad(4f);
+        window.defaults().pad(3f);
+
+        window.add(viewModeButton).colspan(3).growX().height(30f);
+        window.row();
+        viewModeButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                toggleViewMode();
+            }
+        });
 
         window.add(profileLabel).colspan(3).left().growX();
         window.row();
@@ -178,6 +223,11 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         window.add(seedStatus).colspan(3).left().growX();
         window.row();
 
+        Label macroHeader = new Label("STAGE 5 / MACRO GEOPHYSICS", skin);
+        macroHeader.setColor(MUTED);
+        window.add(macroHeader).colspan(3).left().padTop(5f);
+        window.row();
+
         Table presets = new Table();
         addPresetButton(presets, "Supercontinent", MacroGeophysicsPreset.SUPERCONTINENT);
         addPresetButton(presets, "Balanced", MacroGeophysicsPreset.BALANCED);
@@ -193,17 +243,26 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         addSettingRow(window, "Fragmentation", fragmentationSlider, fragmentationValue);
         addSettingRow(window, "Macro variation", variationSlider, variationValue);
 
-        TextButton apply = new TextButton("Apply custom", skin);
+        Label surfaceHeader = new Label("STAGE 6 / CONTINUOUS SURFACE", skin);
+        surfaceHeader.setColor(MUTED);
+        window.add(surfaceHeader).colspan(3).left().padTop(7f);
+        window.row();
+        addSettingRow(window, "Relief intensity", reliefSlider, reliefValue);
+        addSettingRow(window, "Regional ruggedness", ruggednessSlider, ruggednessValue);
+        addSettingRow(window, "Plateau tendency", plateauSlider, plateauValue);
+        addSettingRow(window, "Regional relief scale", reliefScaleSlider, reliefScaleValue);
+
+        TextButton apply = new TextButton("Apply authored settings", skin);
         apply.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                applyCustomDefinition();
+                applyCustomDefinitions();
             }
         });
         window.add(apply).colspan(3).growX().height(30f).padTop(8f);
         window.row();
 
-        Label hint = new Label("Presets apply immediately. Sliders apply on button.", skin);
+        Label hint = new Label("Macro presets apply immediately; sliders apply together.", skin);
         hint.setColor(MUTED);
         window.add(hint).colspan(3).left().padTop(4f);
 
@@ -218,6 +277,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         cohesionSlider.addListener(values);
         fragmentationSlider.addListener(values);
         variationSlider.addListener(values);
+        reliefSlider.addListener(values);
+        ruggednessSlider.addListener(values);
+        plateauSlider.addListener(values);
+        reliefScaleSlider.addListener(values);
 
         seedField.addListener(new InputListener() {
             @Override
@@ -229,7 +292,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         });
 
         // The settings block is intentionally an input boundary. Empty panel space, sliders and
-        // buttons must not also pan the underlying map.
+        // buttons must not also pan/orbit the underlying surface view.
         window.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -270,10 +333,28 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return new Slider(0f, 1f, 0.01f, false, skin);
     }
 
+    private void toggleViewMode() {
+        if (viewMode == SurfaceViewMode.MAP_2D) {
+            viewMode = SurfaceViewMode.TERRAIN_3D;
+            terrain3d.centerOn(Math.round(model.centerX()), Math.round(model.centerY()));
+        } else {
+            viewMode = SurfaceViewMode.MAP_2D;
+        }
+        draggingMap = false;
+        orbitingTerrain = false;
+        panningTerrain = false;
+        updateViewButton();
+    }
+
+    private void updateViewButton() {
+        viewModeButton.setText(viewMode == SurfaceViewMode.MAP_2D
+                ? "View: 2D world map  (switch to 3D)"
+                : "View: 3D terrain  (switch to 2D)");
+    }
+
     private void selectPreset(MacroGeophysicsPreset preset) {
-        boolean changed = model.applyPreset(preset);
-        if (changed) textures.clear();
-        syncControls(model.definition());
+        if (model.applyPreset(preset)) sourceChanged();
+        syncControls(model.definition(), model.surfaceDefinition());
     }
 
     private void applySeedFromField() {
@@ -296,8 +377,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     }
 
     private void applyWorldSeed(long seed) {
-        boolean changed = model.applySeed(seed);
-        if (changed) textures.clear();
+        if (model.applySeed(seed)) sourceChanged();
         syncSeedControl();
     }
 
@@ -315,24 +395,39 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         seedField.setText(Long.toString(model.seed()));
     }
 
-    private void applyCustomDefinition() {
-        MacroGeophysicsDefinition custom = MacroGeophysicsDefinition.of(
+    private void applyCustomDefinitions() {
+        MacroGeophysicsDefinition macro = MacroGeophysicsDefinition.of(
                 oceanSlider.getValue(),
                 scaleSlider.getValue(),
                 cohesionSlider.getValue(),
                 fragmentationSlider.getValue(),
                 variationSlider.getValue());
-        boolean changed = model.applyDefinition(custom);
-        if (changed) textures.clear();
+        TerrainSurfaceDefinition surface = TerrainSurfaceDefinition.of(
+                reliefSlider.getValue(),
+                ruggednessSlider.getValue(),
+                plateauSlider.getValue(),
+                reliefScaleSlider.getValue());
+        if (model.applyDefinitions(macro, surface)) sourceChanged();
         updateProfileLabel();
     }
 
-    private void syncControls(MacroGeophysicsDefinition definition) {
-        oceanSlider.setValue((float) definition.oceanPrevalence().value());
-        scaleSlider.setValue((float) definition.continentalScale().value());
-        cohesionSlider.setValue((float) definition.landmassCohesion().value());
-        fragmentationSlider.setValue((float) definition.fragmentation().value());
-        variationSlider.setValue((float) definition.macroVariation().value());
+    private void sourceChanged() {
+        textures.clear();
+        terrain3d.invalidateSurface();
+    }
+
+    private void syncControls(
+            MacroGeophysicsDefinition macro,
+            TerrainSurfaceDefinition surface) {
+        oceanSlider.setValue((float) macro.oceanPrevalence().value());
+        scaleSlider.setValue((float) macro.continentalScale().value());
+        cohesionSlider.setValue((float) macro.landmassCohesion().value());
+        fragmentationSlider.setValue((float) macro.fragmentation().value());
+        variationSlider.setValue((float) macro.macroVariation().value());
+        reliefSlider.setValue((float) surface.reliefIntensity().value());
+        ruggednessSlider.setValue((float) surface.regionalRuggedness().value());
+        plateauSlider.setValue((float) surface.plateauTendency().value());
+        reliefScaleSlider.setValue((float) surface.regionalReliefScale().value());
         updateValueLabels();
         updateProfileLabel();
     }
@@ -343,6 +438,10 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         cohesionValue.setText(percent(cohesionSlider.getValue()));
         fragmentationValue.setText(percent(fragmentationSlider.getValue()));
         variationValue.setText(percent(variationSlider.getValue()));
+        reliefValue.setText(percent(reliefSlider.getValue()));
+        ruggednessValue.setText(percent(ruggednessSlider.getValue()));
+        plateauValue.setText(percent(plateauSlider.getValue()));
+        reliefScaleValue.setText(percent(reliefScaleSlider.getValue()));
     }
 
     private void updateProfileLabel() {
@@ -403,55 +502,77 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     }
 
     private void drawOverlay() {
-        var frame = model.frame();
-        var metrics = model.metrics();
         batch.setProjectionMatrix(projection);
         batch.begin();
         font.getData().setScale(0.86f);
         font.setColor(TEXT);
-        font.draw(batch, "STAGE 5 / MACRO OCEAN + GEOPHYSICAL SKELETON", 22f, height - 24f);
+        font.draw(batch, "STAGE 6 / CONTINUOUS SURFACE EVOLUTION PROTOTYPE", 22f, height - 24f);
 
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
-        font.draw(batch,
-                "seed " + model.seed()
-                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION
-                        + "   center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
-                        + "   LOD L" + frame.desiredLevel(),
-                22f,
-                height - 50f);
-
-        font.draw(batch,
-                "drag: move   wheel: zoom   Home: whole world   G: diagnostics   Esc: back",
-                22f,
-                27f);
-
-        if (showDiagnostics) {
-            font.setColor(TEXT);
+        if (viewMode == SurfaceViewMode.MAP_2D) {
+            var frame = model.frame();
             font.draw(batch,
-                    "visible " + frame.visibleTileCount()
-                            + "   detailed " + frame.exactReadyCount()
-                            + "   temporary coarse " + frame.fallbackCount()
-                            + "   CPU tiles " + metrics.residentTiles() + "/" + metrics.maxResidentTiles()
-                            + "   GPU textures " + textures.size() + "/" + textures.maxEntries(),
+                    "2D map   seed " + model.seed()
+                            + "   geophysics r" + ContinuumMapInspectorModel.GEOPHYSICS_REVISION
+                            + "   surface r" + ContinuumMapInspectorModel.SURFACE_REVISION
+                            + "   center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
+                            + "   LOD L" + frame.desiredLevel(),
                     22f,
-                    height - 74f);
-            font.setColor(MUTED);
+                    height - 50f);
             font.draw(batch,
-                    "visible queue " + metrics.visiblePendingJobs()
-                            + "   prefetch queue " + metrics.prefetchPendingJobs()
-                            + "   running " + metrics.runningJobs(),
+                    "drag: move   wheel: zoom   Home: whole world   T/Tab: 3D terrain   G: diagnostics   Esc: back",
                     22f,
-                    height - 98f);
+                    27f);
+
+            if (showDiagnostics) drawMapDiagnosticsText(frame);
+        } else {
+            font.draw(batch,
+                    "3D terrain   seed " + model.seed()
+                            + "   center " + terrain3d.centerX() + ", " + terrain3d.centerY()
+                            + "   sample step " + terrain3d.sampleStep()
+                            + "   span " + terrain3d.sampledWorldSpan(),
+                    22f,
+                    height - 50f);
+            font.draw(batch,
+                    "left drag: orbit   right drag: pan   wheel: nested LOD   Home: reset   T/Tab: 2D map   Esc: back",
+                    22f,
+                    27f);
             font.setColor(FALLBACK_BORDER);
             font.draw(batch,
-                    "orange = temporary coarse parent fallback",
+                    "inspection vertical exaggeration x" + Math.round(TerrainSurface3DInspector.VERTICAL_EXAGGERATION)
+                            + "   (surface Z values themselves are unchanged)",
                     22f,
-                    height - 122f);
-            font.setColor(FINE_BORDER);
-            font.draw(batch, "green border = requested detail ready", 22f, height - 144f);
+                    height - 74f);
         }
         batch.end();
+    }
+
+    private void drawMapDiagnosticsText(ContinuumMapViewport.Frame frame) {
+        var metrics = model.metrics();
+        font.setColor(TEXT);
+        font.draw(batch,
+                "visible " + frame.visibleTileCount()
+                        + "   detailed " + frame.exactReadyCount()
+                        + "   temporary coarse " + frame.fallbackCount()
+                        + "   CPU tiles " + metrics.residentTiles() + "/" + metrics.maxResidentTiles()
+                        + "   GPU textures " + textures.size() + "/" + textures.maxEntries(),
+                22f,
+                height - 74f);
+        font.setColor(MUTED);
+        font.draw(batch,
+                "visible queue " + metrics.visiblePendingJobs()
+                        + "   prefetch queue " + metrics.prefetchPendingJobs()
+                        + "   running " + metrics.runningJobs(),
+                22f,
+                height - 98f);
+        font.setColor(FALLBACK_BORDER);
+        font.draw(batch,
+                "orange = temporary coarse parent fallback",
+                22f,
+                height - 122f);
+        font.setColor(FINE_BORDER);
+        font.draw(batch, "green border = requested detail ready", 22f, height - 144f);
     }
 
     private Texture createTexture(ContinuumMapTile tile) {
@@ -518,8 +639,16 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private final class MapInput extends InputAdapter {
         @Override
         public boolean touchDown(int screenX, int screenY, int pointer, int button) {
-            if (button != Input.Buttons.LEFT) return false;
-            dragging = true;
+            if (viewMode == SurfaceViewMode.MAP_2D) {
+                if (button != Input.Buttons.LEFT) return false;
+                draggingMap = true;
+            } else if (button == Input.Buttons.LEFT) {
+                orbitingTerrain = true;
+            } else if (button == Input.Buttons.RIGHT) {
+                panningTerrain = true;
+            } else {
+                return false;
+            }
             lastDragX = screenX;
             lastDragY = screenY;
             return true;
@@ -527,39 +656,66 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
         @Override
         public boolean touchDragged(int screenX, int screenY, int pointer) {
-            if (!dragging) return false;
             int dx = screenX - lastDragX;
             int dy = screenY - lastDragY;
             lastDragX = screenX;
             lastDragY = screenY;
-            model.panPixels(dx, dy);
-            return true;
+
+            if (viewMode == SurfaceViewMode.MAP_2D && draggingMap) {
+                model.panPixels(dx, dy);
+                return true;
+            }
+            if (viewMode == SurfaceViewMode.TERRAIN_3D && orbitingTerrain) {
+                terrain3d.orbitPixels(dx, dy);
+                return true;
+            }
+            if (viewMode == SurfaceViewMode.TERRAIN_3D && panningTerrain) {
+                terrain3d.panPixels(dx, dy, width, height);
+                return true;
+            }
+            return false;
         }
 
         @Override
         public boolean touchUp(int screenX, int screenY, int pointer, int button) {
-            if (button == Input.Buttons.LEFT) dragging = false;
-            return button == Input.Buttons.LEFT;
+            if (button == Input.Buttons.LEFT) {
+                draggingMap = false;
+                orbitingTerrain = false;
+                return true;
+            }
+            if (button == Input.Buttons.RIGHT) {
+                panningTerrain = false;
+                return true;
+            }
+            return false;
         }
 
         @Override
         public boolean scrolled(float amountX, float amountY) {
             if (pointerOverSettings()) return true;
             if (amountY == 0f) return false;
-            double factor = amountY < 0f ? 1.22d : 1d / 1.22d;
-            model.zoomAt(factor, Gdx.input.getX(), Gdx.input.getY());
+            if (viewMode == SurfaceViewMode.MAP_2D) {
+                double factor = amountY < 0f ? 1.22d : 1d / 1.22d;
+                model.zoomAt(factor, Gdx.input.getX(), Gdx.input.getY());
+            } else {
+                terrain3d.zoom(amountY < 0f);
+            }
             return true;
         }
 
         @Override
         public boolean keyDown(int keycode) {
             switch (keycode) {
-                case Input.Keys.HOME -> model.fitWholeWorld();
+                case Input.Keys.HOME -> {
+                    if (viewMode == SurfaceViewMode.MAP_2D) model.fitWholeWorld();
+                    else terrain3d.resetToMapCenter();
+                }
                 case Input.Keys.NUM_1, Input.Keys.NUMPAD_1 -> selectPreset(MacroGeophysicsPreset.SUPERCONTINENT);
                 case Input.Keys.NUM_2, Input.Keys.NUMPAD_2 -> selectPreset(MacroGeophysicsPreset.BALANCED);
                 case Input.Keys.NUM_3, Input.Keys.NUMPAD_3 -> selectPreset(MacroGeophysicsPreset.ARCHIPELAGO);
                 case Input.Keys.NUM_4, Input.Keys.NUMPAD_4 -> selectPreset(MacroGeophysicsPreset.OCEANIC);
                 case Input.Keys.G -> showDiagnostics = !showDiagnostics;
+                case Input.Keys.T, Input.Keys.TAB -> toggleViewMode();
                 case Input.Keys.ESCAPE -> returnToMenu.run();
                 default -> {
                     return false;
