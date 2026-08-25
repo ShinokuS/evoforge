@@ -567,9 +567,9 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         Pixmap pixmap = new Pixmap(side, side, Pixmap.Format.RGBA8888);
         writeTexturePixels(luminance, side, pixmap.getPixels());
 
-        Texture texture = new Texture(pixmap);
+        Texture texture = new Texture(pixmap, true);
         pixmap.dispose();
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        texture.setFilter(Texture.TextureFilter.MipMapLinearLinear, Texture.TextureFilter.Linear);
         texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
         return texture;
     }
@@ -598,39 +598,64 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         }
     }
 
+    /**
+     * Decodes the packed Terrain map byte. Height/depth selects the base hue; the low three bits
+     * only modulate brightness. This keeps cartographic relief readable without recoloring ordinary
+     * shaded land as rocky high terrain.
+     */
     private static byte[] geophysicalPalette(int channel) {
         byte[] palette = new byte[256];
         for (int value = 0; value < palette.length; value++) {
-            float[] start;
-            float[] end;
-            float amount;
-            if (value < 128) {
-                start = new float[] {0.025f, 0.09f, 0.24f};
-                end = new float[] {0.18f, 0.48f, 0.68f};
-                amount = value / 127f;
+            boolean land = (value & 0x80) != 0;
+            int elevationBand = (value >>> 3) & 0x0F;
+            int shadeBand = value & 0x07;
+            float elevation = elevationBand / 15f;
+            float shade = shadeBand / 7f;
+
+            float[] base;
+            float brightness;
+            if (!land) {
+                base = interpolateColor(
+                        new float[] {0.17f, 0.43f, 0.62f},
+                        new float[] {0.025f, 0.09f, 0.22f},
+                        elevation);
+                brightness = 0.90f + shade * 0.12f;
             } else {
-                float land = (value - 128) / 127f;
-                if (land < 0.34f) {
-                    start = new float[] {0.11f, 0.31f, 0.13f};
-                    end = new float[] {0.25f, 0.52f, 0.25f};
-                    amount = land / 0.34f;
-                } else if (land < 0.66f) {
-                    start = new float[] {0.25f, 0.52f, 0.25f};
-                    end = new float[] {0.48f, 0.46f, 0.29f};
-                    amount = (land - 0.34f) / 0.32f;
-                } else if (land < 0.86f) {
-                    start = new float[] {0.48f, 0.46f, 0.29f};
-                    end = new float[] {0.58f, 0.57f, 0.52f};
-                    amount = (land - 0.66f) / 0.20f;
+                if (elevation < 0.34f) {
+                    base = interpolateColor(
+                            new float[] {0.20f, 0.43f, 0.19f},
+                            new float[] {0.31f, 0.49f, 0.23f},
+                            elevation / 0.34f);
+                } else if (elevation < 0.64f) {
+                    base = interpolateColor(
+                            new float[] {0.31f, 0.49f, 0.23f},
+                            new float[] {0.47f, 0.40f, 0.27f},
+                            (elevation - 0.34f) / 0.30f);
+                } else if (elevation < 0.86f) {
+                    base = interpolateColor(
+                            new float[] {0.47f, 0.40f, 0.27f},
+                            new float[] {0.58f, 0.55f, 0.49f},
+                            (elevation - 0.64f) / 0.22f);
                 } else {
-                    start = new float[] {0.58f, 0.57f, 0.52f};
-                    end = new float[] {0.88f, 0.87f, 0.82f};
-                    amount = (land - 0.86f) / 0.14f;
+                    base = interpolateColor(
+                            new float[] {0.58f, 0.55f, 0.49f},
+                            new float[] {0.84f, 0.82f, 0.76f},
+                            (elevation - 0.86f) / 0.14f);
                 }
+                brightness = 0.78f + shade * 0.32f;
             }
-            palette[value] = (byte) Math.round((start[channel] + (end[channel] - start[channel]) * amount) * 255f);
+            palette[value] = (byte) Math.round(Math.min(1f, base[channel] * brightness) * 255f);
         }
         return palette;
+    }
+
+    private static float[] interpolateColor(float[] from, float[] to, float amount) {
+        float bounded = Math.max(0f, Math.min(1f, amount));
+        return new float[] {
+            from[0] + (to[0] - from[0]) * bounded,
+            from[1] + (to[1] - from[1]) * bounded,
+            from[2] + (to[2] - from[2]) * bounded
+        };
     }
 
     private static String percent(double normalized) {
