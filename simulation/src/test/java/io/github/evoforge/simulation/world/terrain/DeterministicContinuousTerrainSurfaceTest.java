@@ -24,11 +24,11 @@ final class DeterministicContinuousTerrainSurfaceTest {
     void fixedCoordinatesHaveStableRegressionValues() {
         ContinuousTerrainSurface surface = surface();
 
-        assertEquals(-217.1788752911183d, surface.surfaceZAt(0L, 0L), 1.0e-9d);
-        assertEquals(85.15693365098902d, surface.surfaceZAt(123_456L, 789_012L), 1.0e-9d);
-        assertEquals(-581.3574380750503d, surface.surfaceZAt(-987_654_321L, 123_456_789L), 1.0e-9d);
-        assertEquals(-286.8415087539345d, surface.surfaceZAt(1L << 40, -(1L << 39)), 1.0e-9d);
-        assertEquals(-1437.1759341633222d, surface.surfaceZAt(4_321_000L, 6_543_000L), 1.0e-9d);
+        assertEquals(-388.4693124720581d, surface.surfaceZAt(0L, 0L), 1.0e-8d);
+        assertEquals(119.14142703582746d, surface.surfaceZAt(123_456L, 789_012L), 1.0e-8d);
+        assertEquals(-575.5925142605636d, surface.surfaceZAt(-987_654_321L, 123_456_789L), 1.0e-8d);
+        assertEquals(-480.6903807296766d, surface.surfaceZAt(1L << 40, -(1L << 39)), 1.0e-8d);
+        assertEquals(-1439.4565227676019d, surface.surfaceZAt(4_321_000L, 6_543_000L), 1.0e-8d);
     }
 
     @Test
@@ -102,6 +102,24 @@ final class DeterministicContinuousTerrainSurfaceTest {
     }
 
     @Test
+    void stage6ReliefDoesNotRandomlyPunchThroughTheStage5Coastline() {
+        MacroGeophysicalField macro = macro(MacroGeophysicsPreset.BALANCED.definition());
+        ContinuousTerrainSurface surface = TerrainSurfaceEvolution.create(SEED, SURFACE_REVISION, macro, DEFINITION);
+
+        for (long y = 0L; y <= 12_000_000L; y += 97_531L) {
+            for (long x = 0L; x <= 12_000_000L; x += 89_177L) {
+                double macroElevation = macro.elevationAt(x, y);
+                if (macroElevation == 0.0d) continue;
+                double surfaceZ = surface.surfaceZAt(x, y);
+                assertEquals(
+                        Math.signum(macroElevation),
+                        Math.signum(surfaceZ),
+                        "Stage 6 must shape relief without inventing a second coastline");
+            }
+        }
+    }
+
+    @Test
     void finerObservationRevealsRealDeterministicStructureRatherThanOnlyInterpolation() {
         ContinuousTerrainSurface surface = surface();
         long originX = 2_000_000L;
@@ -130,6 +148,40 @@ final class DeterministicContinuousTerrainSurfaceTest {
 
         assertTrue(largestResidual > 10.0d, "finer observation should reveal subordinate causal relief");
         assertTrue(meaningfulResiduals >= 20, "additional detail must be spatially substantial, not one accidental point");
+    }
+
+    @Test
+    void nearFieldZoomAlsoRevealsNewCausalTerrainStructure() {
+        MacroGeophysicalField inland = (x, y) -> 0.35d;
+        ContinuousTerrainSurface surface = TerrainSurfaceEvolution.create(
+                0x45A10F0E2026L,
+                1L,
+                inland,
+                DEFINITION);
+        long coarseStep = 8_192L;
+        int meaningfulResiduals = 0;
+        double largestResidual = 0.0d;
+
+        for (int y = 0; y < 12; y++) {
+            for (int x = 0; x < 12; x++) {
+                long x0 = 1_000_000L + x * coarseStep;
+                long y0 = 1_000_000L + y * coarseStep;
+                double z00 = surface.surfaceZAt(x0, y0);
+                double z10 = surface.surfaceZAt(x0 + coarseStep, y0);
+                double z01 = surface.surfaceZAt(x0, y0 + coarseStep);
+                double z11 = surface.surfaceZAt(x0 + coarseStep, y0 + coarseStep);
+                double interpolatedMidpoint = (z00 + z10 + z01 + z11) * 0.25d;
+                double actualMidpoint = surface.surfaceZAt(
+                        x0 + coarseStep / 2L,
+                        y0 + coarseStep / 2L);
+                double residual = Math.abs(actualMidpoint - interpolatedMidpoint);
+                largestResidual = Math.max(largestResidual, residual);
+                if (residual > 0.5d) meaningfulResiduals++;
+            }
+        }
+
+        assertTrue(largestResidual > 8.0d, "close zoom must expose more than a magnified coarse interpolation");
+        assertTrue(meaningfulResiduals >= 100, "close-scale added detail must be widespread in active terrain");
     }
 
     @Test
