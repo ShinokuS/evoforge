@@ -291,8 +291,6 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
             }
         });
 
-        // The settings block is intentionally an input boundary. Empty panel space, sliders and
-        // buttons must not also pan/orbit the underlying surface view.
         window.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -304,10 +302,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return window;
     }
 
-    private void addPresetButton(
-            Table table,
-            String text,
-            MacroGeophysicsPreset preset) {
+    private void addPresetButton(Table table, String text, MacroGeophysicsPreset preset) {
         TextButton button = new TextButton(text, skin);
         button.addListener(new ChangeListener() {
             @Override
@@ -318,11 +313,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         table.add(button).width(130f).height(28f).pad(2f);
     }
 
-    private void addSettingRow(
-            Window window,
-            String text,
-            Slider slider,
-            Label value) {
+    private void addSettingRow(Window window, String text, Slider slider, Label value) {
         window.add(new Label(text, skin)).left();
         window.add(slider).width(SETTINGS_SLIDER_WIDTH).growX();
         window.add(value).width(38f).right();
@@ -416,9 +407,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         terrain3d.invalidateSurface();
     }
 
-    private void syncControls(
-            MacroGeophysicsDefinition macro,
-            TerrainSurfaceDefinition surface) {
+    private void syncControls(MacroGeophysicsDefinition macro, TerrainSurfaceDefinition surface) {
         oceanSlider.setValue((float) macro.oceanPrevalence().value());
         scaleSlider.setValue((float) macro.continentalScale().value());
         cohesionSlider.setValue((float) macro.landmassCohesion().value());
@@ -567,10 +556,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 22f,
                 height - 98f);
         font.setColor(FALLBACK_BORDER);
-        font.draw(batch,
-                "orange = temporary coarse parent fallback",
-                22f,
-                height - 122f);
+        font.draw(batch, "orange = temporary common coarse fallback", 22f, height - 122f);
         font.setColor(FINE_BORDER);
         font.draw(batch, "green border = requested detail ready", 22f, height - 144f);
     }
@@ -583,8 +569,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
 
         Texture texture = new Texture(pixmap);
         pixmap.dispose();
-        // Keep downsampling smooth, but never blur a detailed Continuum tile when the user zooms in.
-        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Nearest);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
         return texture;
     }
@@ -624,9 +609,24 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 end = new float[] {0.18f, 0.48f, 0.68f};
                 amount = value / 127f;
             } else {
-                start = new float[] {0.20f, 0.48f, 0.23f};
-                end = new float[] {0.78f, 0.72f, 0.58f};
-                amount = (value - 128) / 127f;
+                float land = (value - 128) / 127f;
+                if (land < 0.34f) {
+                    start = new float[] {0.11f, 0.31f, 0.13f};
+                    end = new float[] {0.25f, 0.52f, 0.25f};
+                    amount = land / 0.34f;
+                } else if (land < 0.66f) {
+                    start = new float[] {0.25f, 0.52f, 0.25f};
+                    end = new float[] {0.48f, 0.46f, 0.29f};
+                    amount = (land - 0.34f) / 0.32f;
+                } else if (land < 0.86f) {
+                    start = new float[] {0.48f, 0.46f, 0.29f};
+                    end = new float[] {0.58f, 0.57f, 0.52f};
+                    amount = (land - 0.66f) / 0.20f;
+                } else {
+                    start = new float[] {0.58f, 0.57f, 0.52f};
+                    end = new float[] {0.88f, 0.87f, 0.82f};
+                    amount = (land - 0.86f) / 0.14f;
+                }
             }
             palette[value] = (byte) Math.round((start[channel] + (end[channel] - start[channel]) * amount) * 255f);
         }
