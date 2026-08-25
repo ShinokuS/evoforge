@@ -200,18 +200,9 @@ public final class ContinuumMapViewport {
         for (ContinuumMapTileKey key : visibleKeys) service.requestVisible(key);
         for (ContinuumMapTileKey key : speculative) service.requestPrefetch(key);
 
-        List<DisplayTile> display = new ArrayList<>(visibleKeys.size());
-        int fallbackCount = 0;
-        int exactReadyCount = 0;
-        for (ContinuumMapTileKey target : visibleKeys) {
-            Optional<ContinuumMapTile> available = service.bestAvailable(target);
-            if (available.isEmpty()) continue;
-            ContinuumMapTile source = available.get();
-            int fallbackDepth = source.key().level() - target.level();
-            if (fallbackDepth == 0) exactReadyCount++;
-            else fallbackCount++;
-            display.add(new DisplayTile(target, source, fallbackDepth));
-        }
+        List<DisplayTile> display = resolveUniformDisplay(service, visibleKeys);
+        int exactReadyCount = display.isEmpty() || display.get(0).fallbackDepth() != 0 ? 0 : display.size();
+        int fallbackCount = exactReadyCount == display.size() ? 0 : display.size();
 
         return new Frame(
                 level,
@@ -220,6 +211,51 @@ public final class ContinuumMapViewport {
                 demanded.size(),
                 exactReadyCount,
                 fallbackCount);
+    }
+
+    /**
+     * Never mixes fine tiles with visibly coarser parent tiles in the same frame.
+     *
+     * <p>Asynchronous detail is still prepared tile-by-tile, but promotion is viewport-atomic: until
+     * every visible target can be represented at the desired level, all visible targets use one
+     * common ancestor depth. This avoids transient square/checkerboard artifacts while panning or
+     * zooming.</p>
+     */
+    private List<DisplayTile> resolveUniformDisplay(
+            ContinuumMapTileService service,
+            List<ContinuumMapTileKey> visibleKeys) {
+        if (visibleKeys.isEmpty()) return List.of();
+
+        int commonDepth = 0;
+        for (ContinuumMapTileKey target : visibleKeys) {
+            Optional<ContinuumMapTile> available = service.bestAvailable(target);
+            if (available.isEmpty()) return List.of();
+            commonDepth = Math.max(commonDepth, available.get().key().level() - target.level());
+        }
+
+        while (true) {
+            int requiredDepth = commonDepth;
+            List<DisplayTile> display = new ArrayList<>(visibleKeys.size());
+            for (ContinuumMapTileKey target : visibleKeys) {
+                ContinuumMapTileKey ancestor = ancestorAtDepth(target, commonDepth);
+                Optional<ContinuumMapTile> available = service.bestAvailable(ancestor);
+                if (available.isEmpty()) return List.of();
+                ContinuumMapTile source = available.get();
+                int actualDepth = source.key().level() - target.level();
+                requiredDepth = Math.max(requiredDepth, actualDepth);
+                display.add(new DisplayTile(target, source, actualDepth));
+            }
+            if (requiredDepth == commonDepth) return display;
+            commonDepth = requiredDepth;
+        }
+    }
+
+    private ContinuumMapTileKey ancestorAtDepth(ContinuumMapTileKey target, int depth) {
+        ContinuumMapTileKey ancestor = target;
+        for (int index = 0; index < depth && ancestor.level() < maxLevel; index++) {
+            ancestor = ancestor.parent();
+        }
+        return ancestor;
     }
 
     private List<ContinuumMapTileKey> orderedKeys(TileRange range, int level, int limit) {
@@ -322,9 +358,9 @@ public final class ContinuumMapViewport {
 
     private enum MotionHint {
         NONE,
-        PAN,
         ZOOM_IN,
-        ZOOM_OUT
+        ZOOM_OUT,
+        PAN
     }
 
     private record TileRange(long minX, long maxX, long minY, long maxY) {
