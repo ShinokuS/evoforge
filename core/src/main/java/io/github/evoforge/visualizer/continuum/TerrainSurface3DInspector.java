@@ -7,18 +7,18 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 
 /**
- * Minimal real 3D observer for a bounded window of the authoritative Stage 6 surface.
+ * Real bounded 3D observer for the authoritative Stage 6 surface.
  *
- * <p>LOD changes only the integer sampling step of the same surface. The 65x65 lattice is nested:
- * halving the step retains all shared coarse coordinates and adds samples between them. Camera and
- * presentation state never participate in Terrain generation.</p>
+ * <p>LOD changes only the integer sampling step of the same surface. The 129x129 lattice is nested:
+ * halving the step retains all shared coarse coordinates and inserts new deterministic samples
+ * between them. Camera and presentation state never participate in Terrain generation.</p>
  */
 public final class TerrainSurface3DInspector implements AutoCloseable {
-    public static final int SAMPLE_SIDE = 65;
-    public static final int DEFAULT_SAMPLE_STEP = 8_192;
-    public static final int MIN_SAMPLE_STEP = 128;
+    public static final int SAMPLE_SIDE = 129;
+    public static final int DEFAULT_SAMPLE_STEP = 4_096;
+    public static final int MIN_SAMPLE_STEP = 64;
     public static final int MAX_SAMPLE_STEP = 65_536;
-    public static final float VERTICAL_EXAGGERATION = 32.0f;
+    public static final float VERTICAL_EXAGGERATION = 128.0f;
 
     private static final int HALF_SAMPLES = (SAMPLE_SIDE - 1) / 2;
     private static final float LOCAL_WIDTH = 10.0f;
@@ -27,7 +27,7 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
     private static final float MAX_PITCH_DEGREES = 78.0f;
 
     private final ContinuumMapInspectorModel model;
-    private final PerspectiveCamera camera = new PerspectiveCamera(55.0f, 1.0f, 1.0f);
+    private final PerspectiveCamera camera = new PerspectiveCamera(52.0f, 1.0f, 1.0f);
     private final ImmediateModeRenderer20 renderer =
             new ImmediateModeRenderer20((SAMPLE_SIDE - 1) * (SAMPLE_SIDE - 1) * 6, false, true, 0);
     private final float[] surfaceZ = new float[SAMPLE_SIDE * SAMPLE_SIDE];
@@ -38,7 +38,7 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
     private long centerY;
     private int sampleStep = DEFAULT_SAMPLE_STEP;
     private float yawDegrees = 42.0f;
-    private float pitchDegrees = 38.0f;
+    private float pitchDegrees = 35.0f;
     private long sampledSourceRevision = Long.MIN_VALUE;
     private boolean dirty = true;
 
@@ -84,14 +84,11 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
         centerOn(centerX - worldDx, centerY + worldDy);
     }
 
-    /** Zooms by choosing a nested sampling level; it never changes Terrain truth. */
+    /** Zooms by choosing a denser nested sample lattice; it never changes Terrain truth. */
     public boolean zoom(boolean closer) {
-        int nextStep;
-        if (closer) {
-            nextStep = Math.max(MIN_SAMPLE_STEP, sampleStep / 2);
-        } else {
-            nextStep = Math.min(MAX_SAMPLE_STEP, sampleStep * 2);
-        }
+        int nextStep = closer
+                ? Math.max(MIN_SAMPLE_STEP, sampleStep / 2)
+                : Math.min(MAX_SAMPLE_STEP, sampleStep * 2);
         if (nextStep == sampleStep) return false;
         sampleStep = nextStep;
         centerX = alignedClampedCenter(centerX, model.worldWidth());
@@ -103,7 +100,7 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
     public void resetToMapCenter() {
         sampleStep = DEFAULT_SAMPLE_STEP;
         yawDegrees = 42.0f;
-        pitchDegrees = 38.0f;
+        pitchDegrees = 35.0f;
         centerOn(Math.round(model.centerX()), Math.round(model.centerY()));
     }
 
@@ -147,13 +144,23 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
                 SAMPLE_SIDE,
                 sampleStep));
 
-        float horizontalScale = LOCAL_WIDTH / sampledWorldSpan();
+        double sum = 0.0d;
         for (int y = 0; y < SAMPLE_SIDE; y++) {
             for (int x = 0; x < SAMPLE_SIDE; x++) {
                 int index = index(x, y);
                 surfaceZ[index] = (float) page.sample(x, y);
-                localHeight[index] = surfaceZ[index] * horizontalScale * VERTICAL_EXAGGERATION;
+                sum += surfaceZ[index];
             }
+        }
+
+        // Translation by the local mean is presentation-only: it keeps high or deep windows near
+        // the camera origin without changing a single surface Z value or any local slope.
+        float localDatum = (float) (sum / surfaceZ.length);
+        float horizontalScale = LOCAL_WIDTH / sampledWorldSpan();
+        for (int index = 0; index < surfaceZ.length; index++) {
+            localHeight[index] = (surfaceZ[index] - localDatum)
+                    * horizontalScale
+                    * VERTICAL_EXAGGERATION;
         }
         computeLighting();
         sampledSourceRevision = model.sourceRevision();
@@ -181,8 +188,8 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
                 ny *= inverseLength;
                 nz *= inverseLength;
 
-                float diffuse = Math.max(0.0f, nx * -0.35f + ny * 0.86f + nz * 0.37f);
-                shade[index(x, y)] = 0.62f + 0.38f * diffuse;
+                float diffuse = Math.max(0.0f, nx * -0.42f + ny * 0.82f + nz * 0.39f);
+                shade[index(x, y)] = 0.52f + 0.48f * diffuse;
             }
         }
     }
@@ -202,21 +209,26 @@ public final class TerrainSurface3DInspector implements AutoCloseable {
         float b;
         if (z < 0.0f) {
             float depth = clamp(-z / 2_200.0f, 0.0f, 1.0f);
-            r = lerp(0.10f, 0.025f, depth);
-            g = lerp(0.34f, 0.08f, depth);
-            b = lerp(0.55f, 0.24f, depth);
+            r = lerp(0.12f, 0.025f, depth);
+            g = lerp(0.38f, 0.08f, depth);
+            b = lerp(0.61f, 0.24f, depth);
         } else {
-            float height = clamp(z / 1_800.0f, 0.0f, 1.0f);
-            if (height < 0.55f) {
-                float amount = height / 0.55f;
-                r = lerp(0.18f, 0.48f, amount);
-                g = lerp(0.45f, 0.42f, amount);
-                b = lerp(0.20f, 0.26f, amount);
+            float height = clamp(z / 1_900.0f, 0.0f, 1.0f);
+            if (height < 0.32f) {
+                float amount = height / 0.32f;
+                r = lerp(0.19f, 0.31f, amount);
+                g = lerp(0.47f, 0.50f, amount);
+                b = lerp(0.20f, 0.24f, amount);
+            } else if (height < 0.72f) {
+                float amount = (height - 0.32f) / 0.40f;
+                r = lerp(0.31f, 0.50f, amount);
+                g = lerp(0.50f, 0.42f, amount);
+                b = lerp(0.24f, 0.29f, amount);
             } else {
-                float amount = (height - 0.55f) / 0.45f;
-                r = lerp(0.48f, 0.82f, amount);
+                float amount = (height - 0.72f) / 0.28f;
+                r = lerp(0.50f, 0.82f, amount);
                 g = lerp(0.42f, 0.80f, amount);
-                b = lerp(0.26f, 0.76f, amount);
+                b = lerp(0.29f, 0.76f, amount);
             }
         }
         renderer.color(r * lighting, g * lighting, b * lighting, 1.0f);
