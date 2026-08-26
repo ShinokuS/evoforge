@@ -12,7 +12,8 @@ PR #132 established ADR-026 semantic-capability architecture and PR #133 complet
 - one mutable fact has one authoritative owner;
 - camera/visibility never changes simulation truth;
 - deterministic results do not depend on query order, cache history, rendering, thread scheduling or whether a location is being observed;
-- performance optimization must preserve semantics rather than replace distant simulation with a different world model.
+- performance optimization must preserve semantics rather than replace distant simulation with a different world model;
+- **every finite EvoForge world is surrounded by ocean: land and later terrain uplift may never reach or be clipped by the logical coordinate boundary.**
 
 ## World-generation checkpoint
 
@@ -24,19 +25,22 @@ The replacement direction is recorded by ADR-027 and the canonical Continuum Dev
 
 ### Stage 5 preparation before Stage 6
 
-The accepted Stage 5 visual macro-elevation remains valid, but its current public contract exposes future stages only to one scalar `elevationAt(x,y)`. That is insufficient for structure-first Stage 6: a later terrain algorithm would otherwise have to invent continental margins and regional structural causes independently.
+The accepted Stage 5 visual macro-elevation remains the intrinsic macro model, but its original public contract exposed future stages only to one scalar `elevationAt(x,y)`. That is insufficient for structure-first Stage 6: a later terrain algorithm would otherwise have to invent continental margins and regional structural causes independently.
 
-A **separate Stage 5 follow-up PR** may therefore expand `world/geophysics` with a bounded deterministic structural read capability while preserving the already accepted macro-elevation values and Stage 5 visual result.
+A **separate Stage 5 follow-up PR** therefore expands `world/geophysics` with a bounded deterministic structural read capability and restores the finite-world ocean-boundary invariant that existed in the useful legacy generation line.
 
-That preparation may expose consumer-neutral geophysical facts such as:
+That preparation exposes consumer-neutral geophysical facts such as:
 
 - broad continental support versus deep ocean support;
 - macro-margin influence;
 - stable macro structural-region identity;
 - local shared-boundary orientation;
-- convergent/divergent/transform-like boundary regime and strength.
+- convergent/divergent/transform-like boundary regime and strength;
+- finite-world boundary-ocean influence.
 
-It must **not** generate mountains, rivers, lakes, detailed terrain or runtime physics. Those remain later owners/stages.
+The finite-world model has a **non-zero hard outer ocean belt on all four sides plus a broader smooth inward transition**. This is not a cosmetic render mask and not an authored preset. The hard belt is geophysical truth and every later Genesis terrain stage must preserve it below the shared sea datum. Continents, islands, plateaus and mountain systems therefore exist *inside* the surrounding ocean and can never terminate because the map ended.
+
+The Stage 5 preparation must **not** generate mountains, rivers, lakes, detailed terrain or runtime physics. Those remain later owners/stages.
 
 ### Replacement Stage 6 — structural terrain + proven local morphology
 
@@ -67,9 +71,11 @@ The local surface synthesis deliberately reuses the successful ideas from the re
 
 V13's useful elongated/asymmetric mountain profiles may inform the profile of individual ridge children, but isolated V13-style mountain spots are not the global mountain model. Major mountains are explicit connected belts/ridge families first.
 
+Stage 6 has one non-negotiable boundary condition inherited from Stage 5: where `boundaryOceanInfluence == 1`, the resulting Terrain surface remains below sea datum. Natural coast refinement may happen inward of that belt, but no Stage 6 feature may create land at the logical world edge.
+
 Stage 6 acceptance requires simultaneous quality at three scales:
 
-1. country/continental view — coherent landmasses, broad plains/plateaus/basins and readable mountain systems;
+1. country/continental view — coherent landmasses, broad plains/plateaus/basins and readable mountain systems, visibly surrounded by ocean rather than clipped by map edges;
 2. regional view — several Songs-of-Syx-scale landscape regions with believable mountain/coast/plain relationships;
 3. cell-near view — balanced local terrain comparable to the accepted strengths of V12, with no one-block Z noise.
 
@@ -86,9 +92,9 @@ It determines deterministic Genesis topology such as:
 - accumulated upstream support;
 - depressions and nested depression hierarchy;
 - saddles/spill points;
-- connectivity toward ocean/outflow.
+- connectivity toward the surrounding ocean/outflow.
 
-The output is topology and causal information for later river/lake generation.
+The guaranteed outer ocean supplies a stable terminal receiving boundary for drainage. The output is topology and causal information for later river/lake generation.
 
 ### Stage 8 — coupled Genesis rivers, lakes and surface adjustment
 
@@ -115,7 +121,7 @@ Storage cost therefore follows the amount of changed world rather than total pot
 
 Stage 9 proves hierarchical regional refinement, overlapping-request identity and seam-free lazy realization. A requested area may be rebuilt after cache eviction and must reproduce exactly the same natural structures.
 
-Stage 10 materializes exact integer XYZ Terrain from the accepted continuous surface. This is where the visualizer stops showing only a projected future grid and can inspect authoritative exact cells.
+Stage 10 materializes exact integer XYZ Terrain from the accepted continuous surface. This is where the visualizer stops showing only a projected future grid and can inspect authoritative exact cells. Exact XYZ materialization must preserve the hard Stage 5 outer-ocean belt as ocean-side terrain rather than rounding isolated boundary cells back into land.
 
 ## Simulation-scale law for later ecology/agents
 
@@ -141,6 +147,7 @@ It must eventually support one continuous inspection path from world scale to ce
 
 ```text
 macro geophysics
+boundary-ocean constraint
 structural regions/boundaries
 coast/landmass support
 mountain belts / plateaus / basins
@@ -153,6 +160,7 @@ later: runtime Terrain changes
 
 Presentation requirements:
 
+- whole-world view must visibly prove ocean on every logical edge for representative seeds/profiles;
 - ordinary pan cannot change simulation truth or semantic detail;
 - no visible incomplete checkerboard/fallback state;
 - expensive generation never blocks the render thread;
@@ -175,7 +183,8 @@ Do not reintroduce:
 - arbitrary solver constants as authored Definitions;
 - universal mutable `WorldCell` / `WorldFact` stores;
 - real runtime erosion/water history merely to construct Genesis rivers;
-- distant-living-object semantic downgrades driven by observation.
+- distant-living-object semantic downgrades driven by observation;
+- land, islands or terrain uplift that touch or are clipped by a finite logical world boundary.
 
 ## Development rule
 
