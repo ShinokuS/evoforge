@@ -4,7 +4,7 @@ package io.github.evoforge.simulation.world.geophysics;
 public final class MacroGeophysics {
     private MacroGeophysics() {}
 
-    public static MacroGeophysicalField create(
+    public static MacroGeophysicalModel create(
             long seed,
             long revision,
             MacroGeophysicsDefinition definition) {
