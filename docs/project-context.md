@@ -24,6 +24,8 @@ visualizer / diagnostics
 
 The renderer is an observer. Camera/render state never decides what is physically true.
 
+A finite EvoForge world also has one permanent geographic boundary law: **the logical world is surrounded by ocean.** Continents, islands and all exposed Genesis land exist inside that ocean; they never terminate because the rectangular coordinate domain ended.
+
 ## Repository map
 
 ```text
@@ -50,7 +52,8 @@ Current laws include:
 - pages/chunks/caches are representation, not world truth;
 - camera/visibility cannot change simulation truth;
 - deterministic results cannot depend on rendering, query order, cache history or incidental thread scheduling;
-- performance optimization must preserve semantic results rather than replace unseen parts of the world with different rules.
+- performance optimization must preserve semantic results rather than replace unseen parts of the world with different rules;
+- finite Genesis geography must preserve the surrounding-ocean boundary condition through every later terrain refinement/materialization stage.
 
 See [Architecture](architecture.md) and ADR-026 for the full laws.
 
@@ -63,7 +66,7 @@ simulation
 ├── genesis/           global initial-world composition only
 ├── world/             objective semantic owners
 │   ├── continuum/      neutral large-world addressing/materialization
-│   ├── geophysics/     macro-geophysical causes
+│   ├── geophysics/     macro-geophysical causes + finite-world ocean boundary
 │   ├── material/
 │   ├── object/
 │   ├── space/
@@ -95,11 +98,13 @@ PR #136 attempted Stage 6 as a noise/refinement-driven continuous heightfield pl
 
 ### Immediate work before replacement Stage 6
 
-The accepted Stage 5 macro elevation remains valid, but future structure-first Terrain needs more geophysical cause than one scalar `elevationAt(x,y)`.
+The accepted Stage 5 intrinsic macro elevation remains valid, but future structure-first Terrain needs more geophysical cause than one scalar `elevationAt(x,y)`.
 
-A separate Stage 5 follow-up PR is therefore allowed to expand `world/geophysics` with bounded deterministic structural context while preserving accepted macro elevation. Intended facts include continental/deep-ocean support, macro-margin influence, structural-region identity and local boundary orientation/regime/strength.
+A separate Stage 5 follow-up PR therefore expands `world/geophysics` with bounded deterministic structural context and the finite-world surrounding-ocean constraint. Intended facts include continental/deep-ocean support, macro-margin influence, structural-region identity, local boundary orientation/regime/strength and boundary-ocean influence.
 
-This preparation must not generate Terrain, mountains, rivers or lakes.
+The boundary model is not a renderer mask: a non-zero hard belt around all four logical edges is always ocean, with a broader smooth transition toward the unaffected intrinsic macro field. Later Stage 6+ terrain receives this fact and must not raise the hard belt above sea datum.
+
+This preparation does not generate Terrain, mountains, rivers or lakes.
 
 ### Replacement Stage 6
 
@@ -108,7 +113,7 @@ Stage 6 remains `Continuous Surface Evolution Prototype`, but its implementation
 The new pipeline is:
 
 ```text
-Stage 5 geophysical causes
+Stage 5 geophysical causes + surrounding-ocean constraint
         ↓
 regional geomorphic structures
         ↓
@@ -120,6 +125,8 @@ continuous world/terrain surface
 ```
 
 The useful local ideas from old V12 are deliberately reused as algorithmic lineage: balanced hills/depressions, rolling relief, physical cell-scale feature sizes and explicit prevention of one-block Z chatter. The old dense architecture and global V-number generator lineage are not restored.
+
+Stage 6 must preserve the hard Stage 5 boundary ocean. Whole-world acceptance therefore requires visible ocean on every side and no landmass/mountain system clipped by the finite world rectangle.
 
 Stage 7 drainage and all later river/lake work remain blocked until this replacement Stage 6 is manually accepted.
 
@@ -146,6 +153,8 @@ Some concepts may genuinely be fields/aggregates by ontology (for example grass 
 Definitions describe immutable authored semantic meaning. Root definition infrastructure is neutral; domain-specific definition types/compilers belong with the owner/mechanic that consumes them.
 
 Human-facing semantic controls normally use normalized meaning where appropriate. Solver coefficients/thresholds/tuning constants remain hidden implementation policy unless they are genuinely authored semantic content.
+
+The surrounding-ocean rule is not a Definition slider. It is a world invariant shared by every finite-world profile.
 
 ## Performance policy
 
