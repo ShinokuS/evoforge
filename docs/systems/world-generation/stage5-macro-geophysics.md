@@ -2,220 +2,220 @@
 
 ## Status
 
-**Complete and manually accepted in PR #135. Stage 6 is the next allowed checkpoint and has not started.**
+**Original Stage 5 macro elevation was complete and manually accepted in PR #135.**
+
+A separate Stage 5 follow-up prepares later structure-first terrain generation by adding a deterministic structural geophysical read capability while preserving the accepted macro-elevation output.
+
+Stage 6 terrain, drainage, rivers/lakes and runtime physics remain out of scope for this follow-up.
 
 ## Goal
 
-Stage 5 creates the first real large-scale geography in the Continuum line.
+Stage 5 creates the first real world-scale geophysical cause.
 
-For fixed seed, model revision, authored macro-geophysics definition and coordinates, the world exposes one continuous macro-geophysical elevation fact. A shared sea datum divides that same fact into ocean and land. Large ocean basins, continental-scale support and broad geophysical structure therefore have one causal source instead of being painted independently.
+For fixed seed, model revision, authored macro-geophysics definition and coordinates, the world exposes:
 
-This is a configurable macro skeleton, not final terrain height.
+1. the already-accepted signed macro elevation used for broad land/ocean support;
+2. a new macro structural context describing broad continental support, margin influence and the local relationship of stable structural regions.
+
+These are geophysical causes, not final Terrain height.
 
 ## Semantic ownership
 
-The independent world concept is:
+The independent concept remains:
 
 ```text
 world/geophysics
 ```
 
-It owns the meaning, authored macro-world character and replaceable algorithm for the macro-geophysical skeleton.
-
-It does **not** belong to `world/continuum`: Continuum remains neutral addressing, bounded materialization, multi-resolution sampling and map infrastructure.
-
-It also does **not** extend the existing `world/geology` vocabulary. Current Geology code represents authored geological profile/unit/material semantics. Macro crustal support can exist and be queried without those authored profiles, so it is a separate concept under ADR-026's consumer-independence rule.
+Continuum remains neutral addressing/materialization/cache/map infrastructure and does not own natural geography.
 
 Dependency direction remains one-way:
 
 ```text
-Geophysics -> Continuum scalar contract
+Geophysics -> neutral Continuum adapters where needed
 Continuum  -X-> Geophysics
 ```
 
-The adapter is read-only. Map/cache/camera state never feeds back into geophysical truth.
+Camera/cache/render state never feeds back into geophysical truth.
 
-## Authoritative contract
+## Public contracts
 
-`MacroGeophysicalField` exposes signed dimensionless macro elevation in `[-1, 1]`.
+### Accepted macro elevation
 
-The sea datum is zero at this stage:
+`MacroGeophysicalField` remains the narrow elevation capability:
 
 ```text
-elevation < 0  -> ocean
-elevation >= 0 -> land
+double elevationAt(long x, long y)
 ```
 
-Ocean is therefore a derived classification of the same macro elevation fact. There is no separate `oceanNoise`, coastline painter or ocean raster.
+The value is signed and dimensionless in `[-1, 1]` around the shared sea datum `0`:
 
-The value is intentionally dimensionless. Converting this macro support into continuous evolved surface height belongs to Stage 6 and later refinement. Converting that surface to exact integer XYZ material belongs to Stage 10.
+```text
+elevation < 0  -> macro ocean side
+elevation >= 0 -> macro land side
+```
+
+This remains unchanged by the structural-preparation follow-up.
+
+### Structural geophysical context
+
+`MacroGeophysicalStructureField` adds:
+
+```text
+MacroGeophysicalStructure structureAt(long x, long y)
+```
+
+`MacroGeophysicalModel` combines both read capabilities and is returned by `MacroGeophysics.create(...)`.
+
+The structural sample contains:
+
+- `continentalSupport` — broad stabilized continental/deep-ocean support before later Terrain shaping;
+- `marginInfluence` — how strongly the coordinate lies in the macro continental-margin transition;
+- `primaryRegion` / `secondaryRegion` — stable opaque identities of the nearest two natural macro structural regions;
+- `boundaryInfluence` — proximity/influence of their shared structural boundary;
+- `boundaryRegime` — `INTERIOR`, `CONVERGENT`, `DIVERGENT` or `TRANSFORM` based on deterministic relative macro motion;
+- `boundaryStrength` — normalized strength of the active relative-motion component;
+- `boundaryNormalX/Y` — unit normal from the primary toward the secondary structural region.
+
+These values are consumer-neutral geophysical facts. They do not mention Terrain mountains, rivers, rendering or another current consumer.
+
+## Why this preparation exists
+
+The accepted Stage 5 API originally handed Stage 6 only one scalar macro elevation. That is enough to classify broad land/ocean tendency, but not enough to answer structure-first questions such as:
+
+- is this coordinate deep continental interior or near a macro margin?
+- are neighboring macro structural regions moving toward or away from one another?
+- what orientation does their shared boundary have?
+- can two independently requested areas recognize that they are observing the same structural region/boundary?
+
+Without such cause, later terrain tends to invent mountain systems from unrelated noise. The structural capability exists specifically to prevent that architectural gap.
+
+## Structural reconstruction model
+
+The current hidden implementation uses locally reconstructable jittered macro structural sites.
+
+For one query:
+
+1. coordinates are warped by the same very broad accepted Stage 5 deformation used by the macro model;
+2. a fixed `5 x 5` neighborhood of candidate structural sites is reconstructed from seed/revision/definition and macro lattice address;
+3. the nearest and second-nearest sites identify the local natural structural regions;
+4. the distance difference determines bounded shared-boundary influence;
+5. each region has a deterministic broad motion vector;
+6. relative motion decomposed along/across the shared boundary determines convergent/divergent/transform character.
+
+The exact site spacing, jitter, salts, thresholds and motion equations are replaceable solver policy. They are not authored Definition fields.
+
+No full-world plate/region raster or adjacency graph is allocated. One structural sample performs fixed local work independent of logical world area.
+
+The structural regions are **causes**, not final visible polygon geography. Stage 6 may derive/refine natural mountain/coast/basin structures from the context without drawing the hidden reconstruction lattice directly.
 
 ## Authored macro-world controls
 
-`MacroGeophysicsDefinition` is the stable semantic input to Stage 5. It exposes normalized `0..1` controls whose meaning survives replacement of the current algorithm:
+`MacroGeophysicsDefinition` remains unchanged and continues to expose:
 
-- `oceanPrevalence` — tendency toward more ocean versus more exposed land;
-- `continentalScale` — characteristic scale of the broadest land/ocean structures;
-- `landmassCohesion` — resistance of broad land/ocean support to being broken near the sea datum;
-- `fragmentation` — tendency for coherent regional structures to split broad masses into island groups, straits and separated regions;
-- `macroVariation` — strength of large regional variation/deformation.
+- `oceanPrevalence`;
+- `continentalScale`;
+- `landmassCohesion`;
+- `fragmentation`;
+- `macroVariation`.
 
-These are authored world semantics. They are intentionally different from solver details such as lattice spans, hash salts, interpolation equations and blend coefficients, which remain private implementation policy.
+The follow-up does not add solver-specific public sliders. Existing settings also influence hidden structural scale/motion where their semantic meaning already applies.
 
-`MacroGeophysicsPreset` supplies convenience profiles (`SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO`, `OCEANIC`) over the same definition contract. Presets are not a second configuration system: arbitrary custom definitions remain valid.
+`MacroGeophysicsPreset` remains only a convenience layer over the same definition contract.
 
-`ARCHIPELAGO` and `OCEANIC` intentionally describe different world character. Archipelago uses high fragmentation to produce many coherent island groups and chains. Oceanic uses very high ocean prevalence with low fragmentation, producing large open-ocean regions and comparatively few isolated landmasses.
+## Accepted macro-elevation algorithm remains unchanged
 
-No setting promises an exact global topology such as "exactly four continents". Such a guarantee would require whole-world connectivity analysis and would conflict with the current local addressable generation model. Stage 5 controls world character rather than globally optimizing a finished raster.
+The PR #135 macro-elevation implementation remains the same:
 
-## Current deterministic model
+1. broad gradient support establishes continent/ocean-basin scale tendency;
+2. secondary/tertiary still-macro fields break simple symmetry;
+3. very broad deterministic warp bends those structures;
+4. landmass cohesion stabilizes broad interiors;
+5. regional influence is concentrated around the macro margin;
+6. high fragmentation may create coherent macro island-chain support;
+7. ocean prevalence biases the same shared result around sea datum zero.
 
-The current implementation is hidden behind `MacroGeophysics.create(...) -> MacroGeophysicalField` and may be replaced without changing consumers.
+The preparation PR does not use structural boundaries to change that accepted elevation. This isolates the new contract from the previously accepted visual result.
 
-The implementation is deliberately low-frequency and separates macro shape from later terrain detail:
+## Determinism and invariants
 
-1. a broad gradient field establishes continent/ocean-basin scale support;
-2. two progressively smaller, still macro-scale gradient octaves break simple blob symmetry without introducing fine coastline noise;
-3. very broad deterministic domain warping bends those structures so the hidden sampling lattice does not become visible geography;
-4. landmass cohesion stabilizes broad interiors away from the sea datum;
-5. regional support is strongest only in a broad coastal transition band, so fragmentation can create bays, straits and islands without perforating deep continental interiors or deep ocean basins;
-6. at high fragmentation, narrow zero-crossing ridges of a separate regional field may be lifted into coherent island chains/arcs inside that same transition band;
-7. ocean prevalence shifts the one shared result relative to the fixed sea datum;
-8. sea datum derives ocean versus land.
-
-A high fragmentation value is **not permission for high-frequency noise**. Every structural layer has a macro-scale lower bound, and regional influence is spatially constrained to the coastal transition. An archipelago profile should read as groups of substantial islands and channels, not as sample-scale speckle or checkerboard perforation.
-
-This model aims for plausible large-scale geography, not final geomorphology. Detailed coastlines, erosion, mountain systems, drainage and surface evolution remain later causal stages; they must refine this macro skeleton rather than reveal hidden high-frequency Stage 5 noise.
-
-## Continuum reuse
-
-Stage 5 reuses the accepted Continuum foundation instead of creating another world representation:
-
-- `ContinuumScalarField` is the neutral coordinate-addressed scalar view;
-- `ContinuumMaterializer` materializes only requested bounded windows;
-- multi-resolution pages sample the same field directly at their requested lattice;
-- `ContinuumScalarMapTileGenerator` reads the same field for the map;
-- existing bounded async map/cache/parent-fallback behavior remains presentation infrastructure only.
-
-`MacroGeophysicalContinuumField` is the narrow read-only adapter from signed macro elevation to the normalized `[0, 1]` scalar range expected by the existing map pipeline.
-
-No global Stage 5 raster is stored.
-
-## Determinism and seams
-
-Required invariant:
+Macro elevation retains the accepted invariant:
 
 ```text
-same seed + model revision + definition + coordinates = same macro elevation
+same seed + revision + definition + coordinates
+= same elevation
 ```
 
-independent of:
+Structural context adds:
+
+```text
+same seed + revision + definition + coordinates
+= same structural sample / region identities / boundary regime
+```
+
+Both are independent of:
 
 - query order;
 - unrelated queries;
-- page/window boundaries;
-- resolution level at shared coordinates;
 - cache residency/eviction;
+- Continuum page/window boundaries;
 - camera position;
-- thread scheduling in map preparation.
+- rendering;
+- thread scheduling.
 
-The field is evaluated directly from coordinates. Page and map boundaries therefore cannot be physical boundaries of the geography.
+Public structural invariants include:
 
-Both horizontal and vertical overlapping-window tests prove the world field itself is continuous across representation boundaries. The map presentation must preserve the same row/column orientation when converting a tile to a GPU texture; a tile-local flip is a presentation bug, not geography.
-
-The archipelago quality regression compares coastline transition density across observation resolutions. Refining the observation lattice must expose coherent boundaries rather than reveal a hidden checkerboard of tiny alternating land/ocean samples.
-
-A second profile regression requires Archipelago and Oceanic to remain structurally distinct at the same seed: Archipelago must expose substantially more macro coastline while Oceanic remains more strongly dominated by open ocean.
+- `continentalSupport` in `[-1,1]`;
+- influences/strength in `[0,1]`;
+- primary/secondary region ids differ;
+- boundary normal is unit length;
+- `INTERIOR` is used only below the active boundary-influence threshold;
+- active boundary regimes are used only where boundary influence is meaningful.
 
 ## Boundedness and scale
 
-One sample performs a fixed amount of local mathematical work. It does not enumerate continents, pages or the logical world.
+`elevationAt` keeps the accepted fixed local work and scale profile from PR #135.
 
-The Stage 5 scale profile materializes the same `128 x 128` requested sample window in logical worlds with sides:
+`structureAt` reconstructs exactly a fixed local candidate neighborhood. Its cost therefore does not grow with total logical world area and does not allocate a world-sized region graph.
 
-- `16,000,000`;
-- `1,000,000,000`;
-- `1,000,000,000,000`.
+Later consumers may cache derived structures through Continuum or owner-local projections, but cache/page identity never becomes structural-region identity.
 
-Each case must perform exactly `16,384` field samples. Logical world area is therefore not part of the work count.
+## F2 inspection
 
-Timings are diagnostic evidence with a deliberately generous safety gate; the architectural invariant is the constant requested-work count.
+The accepted Stage 5 map remains a view of macro elevation. The structural preparation is intentionally not allowed to alter its colors/coastline as proof that elevation compatibility was preserved.
 
-## F2 manual inspection and settings UI
-
-The existing Continuum map viewer renders the real Stage 5 field. The standard inspection domain is `16,000,000 x 16,000,000` logical units so `Home` shows several macro-scale structures.
-
-A dedicated **WORLD GENERATION** panel is separate from the technical map HUD. It contains:
-
-- the active profile name;
-- an editable world seed field with explicit `Apply` action;
-- a `Random seed` action which chooses and immediately applies a new seed;
-- buttons for Supercontinent, Balanced, Archipelago and Oceanic presets;
-- sliders for all five `MacroGeophysicsDefinition` controls;
-- an explicit `Apply custom` action.
-
-Decimal signed `long` seeds and `0x...` hexadecimal seeds are accepted. The selected seed is always displayed, so a randomly generated world can be reproduced exactly later.
-
-Preset buttons apply immediately. Moving sliders only edits the pending custom values; the world source is regenerated when `Apply custom` is pressed, avoiding a burst of expensive tile regeneration while a slider is being dragged.
-
-Changing either the definition or the seed invalidates the derived map source and GPU textures while preserving the current map center and zoom. Changing definition does not change world identity; changing seed changes world identity while preserving the active profile/settings. Neither operation turns camera state into generation input.
-
-Keyboard shortcuts `1` through `4` remain optional fast preset selection.
-
-Map controls:
-
-```text
-Left mouse drag  pan
-Mouse wheel      zoom around cursor
-Home             whole logical world
-1..4             quick preset selection
-G                tile/cache diagnostics
-Esc              back
-```
-
-Visual meaning:
-
-- blue = ocean-side macro elevation;
-- green through brown = land-side macro elevation;
-- orange tile border with diagnostics = temporary coarser parent fallback;
-- green tile border with diagnostics = requested map detail is ready.
-
-The colors and the settings panel are presentation only. They expose/select authored inputs but never derive authoritative geography from the camera or screen.
-
-With diagnostics hidden and `temporary coarse = 0`, tile boundaries must be visually indistinguishable from any other sample boundary. Large straight horizontal/vertical discontinuities are a failed visual check even when the underlying field tests are green.
+A diagnostic structural overlay may be added as presentation-only evidence where useful, but it must be off by default and must not feed camera state back into geophysical truth.
 
 ## Explicit Stage 5 boundary
 
-Stage 5 does **not** implement:
+Stage 5 still does **not** implement:
 
-- continuous surface evolution or erosion;
-- detailed mountain/valley morphology;
+- continuous Terrain surface evolution;
+- mountain belts/ridges;
+- plateaus/basins as Terrain structures;
+- detailed coastline evolution;
 - drainage topology;
-- rivers;
+- river channels;
 - lakes;
+- Genesis erosion/valley shaping;
+- runtime erosion/landslides;
 - climate;
-- sediment transport;
-- soil;
-- exact XYZ terrain materialization;
-- runtime mutable surface processes.
+- sediment/soil;
+- exact XYZ Terrain materialization.
 
-Those remain in their fixed later stages.
+Those remain later stages/owners.
 
-## Acceptance result
+## Follow-up acceptance requirements
 
-All Stage 5 gates passed on the accepted PR head:
+The Stage 5 structural-preparation PR is complete when:
 
-- focused geophysics correctness/determinism tests;
-- semantic world-character controls and profile distinction tests;
-- Archipelago/Oceanic separation and anti-noise regression;
-- shared-coordinate multi-resolution and horizontal/vertical overlap/seam tests;
-- map texture orientation regression;
-- seed/custom-definition inspection workflow;
-- architecture fitness and ArchUnit;
-- full Gradle tests and JaCoCo coverage;
-- Continuum scale profile;
-- Docs Site.
+- all original PR #135 macro-elevation regression values remain unchanged;
+- original profile/coast/scale tests remain green;
+- structural samples are deterministic and query-order independent;
+- seed/revision participate in structural identity;
+- representative sampling exposes stable interiors and multiple active boundary regimes;
+- structural ranges/unit normals/regime semantics are property-tested;
+- architecture/JaCoCo/Docs/scale gates remain green;
+- canonical roadmap/ADR identifies Stage 6 as the first Terrain consumer of this new cause.
 
-The user manually inspected the F2 macro map across profiles, custom settings and multiple seeds and explicitly accepted the resulting Stage 5 geography.
-
-**Stage 5 is complete. Stage 6 may begin; Stage 7 remains blocked until Stage 6 is separately accepted.**
+After this preparation is accepted, Stage 6 may use the richer geophysical context without reopening Stage 5 macro elevation semantics.
