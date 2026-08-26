@@ -246,10 +246,12 @@ public final class ContinuumMapInspectorModel implements AutoCloseable {
     }
 
     private ContinuumScalarMapTileGenerator generatorFor(MacroGeophysicsDefinition sourceDefinition) {
-        ContinuumScalarField field = new MacroGeophysicalContinuumField(MacroGeophysics.create(
+        ContinuumScalarField field = new MacroGeophysicalContinuumField(MacroGeophysics.createFinite(
                 worldSeed,
                 GEOPHYSICS_REVISION,
-                sourceDefinition));
+                sourceDefinition,
+                domain.width(),
+                domain.height()));
         return new ContinuumScalarMapTileGenerator(domain, field, TILE_SAMPLE_SIDE);
     }
 
