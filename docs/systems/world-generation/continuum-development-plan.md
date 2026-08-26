@@ -22,6 +22,7 @@ This is the canonical executable roadmap for EvoForge Continuum/world generation
 14. No V16/V17/V18 whole-generator lineage.
 15. A living/individual simulation object follows the same laws regardless of camera visibility. Optimization may change data layout/scheduling, never world semantics by observation distance.
 16. A mathematical erosion/relaxation solver used during Genesis is not runtime physical history. Runtime erosion/landslide/digging mechanics are later independent work.
+17. **Every finite world is surrounded by ocean.** Stage 5 establishes a non-zero hard ocean belt at every logical edge plus a smooth inward transition. Every later Genesis stage must preserve the hard belt below sea datum; natural land may never be truncated by the coordinate boundary.
 
 ## Mandatory gate for every stage
 
@@ -30,6 +31,8 @@ A stage is complete only after the **applicable** correctness, property, determi
 Tests and performance evidence are part of implementation, not later cleanup.
 
 The long-term `F2` Inspector is a real world-generation development instrument. Once landscape exists, it must support a continuous inspection path from world scale to projected cells, with switchable causal/diagnostic layers. Expensive world generation must not block the render thread and incomplete technical LOD state must not be exposed as geography.
+
+Whole-world inspection must make the finite-world boundary condition obvious: all four logical edges are ocean for every representative seed/profile and no continent appears clipped by the viewport/world rectangle.
 
 ## Canonical Stage 0–20 sequence
 
@@ -65,7 +68,7 @@ The long-term `F2` Inspector is a real world-generation development instrument. 
 - **Stage 3 — complete and manually accepted.** Multi-resolution Continuum; PR #121. Revalidated after Stage 1/2 integration.
 - **Stage 4 — complete and manually accepted.** Map / Zoom Performance Proof; PR #125 merged. Revalidated during the architecture reset.
 - **Stage 5 — complete and manually accepted.** Macro Ocean + Geophysical Skeleton; PR #135.
-- **Stage 5 structural preparation — allowed as a follow-up PR before Stage 6.** It may expand Stage 5's consumer-neutral geophysical read contract while preserving accepted macro elevation; it must not generate terrain/rivers/lakes.
+- **Stage 5 structural preparation — allowed as a follow-up PR before Stage 6.** It expands Stage 5's consumer-neutral geophysical read contract and restores the finite-world surrounding-ocean invariant; it must not generate terrain/rivers/lakes.
 - **Stage 6 — next terrain checkpoint.** PR #136's implementation was rejected and is not a valid base.
 - **Stage 7+ — blocked until replacement Stage 6 is explicitly accepted.**
 
@@ -97,8 +100,8 @@ Create the first real world-scale geophysical cause: one deterministic macro-ele
 
 ## Accepted facts
 
-- `MacroGeophysicalField.elevationAt(x,y)` returns signed dimensionless macro elevation;
-- fixed seed/revision/definition/coordinates reproduce the same value;
+- `MacroGeophysicalField.elevationAt(x,y)` returns signed dimensionless intrinsic macro elevation;
+- fixed seed/revision/definition/coordinates reproduce the same intrinsic value;
 - broad continental/ocean support is low-frequency and bounded-work;
 - authored controls describe ocean prevalence, continental scale, cohesion, fragmentation and macro variation;
 - no final terrain height, mountains, drainage, rivers/lakes or exact XYZ exist here.
@@ -107,24 +110,48 @@ Create the first real world-scale geophysical cause: one deterministic macro-ele
 
 The scalar macro-elevation contract is accepted but insufficient as the **only** cause available to structure-first Stage 6.
 
-A dedicated Stage 5 follow-up PR may add a consumer-neutral structural geophysical read capability while preserving accepted `elevationAt` output. The target information is macro cause, not terrain result:
+A dedicated Stage 5 follow-up adds consumer-neutral structural geophysical context plus the required finite-domain ocean boundary. The target information is macro cause, not terrain result:
 
 - broad continental/deep-ocean support before local terrain shaping;
 - macro-margin influence;
 - deterministic structural-region identity;
 - local shared-boundary orientation;
-- boundary regime/strength suitable for later interpretation as convergent/divergent/transform-like context.
+- boundary regime/strength suitable for later interpretation as convergent/divergent/transform-like context;
+- deterministic boundary-ocean influence for the finite logical domain.
+
+### Finite-world ocean boundary
+
+The public Stage 5 model is domain-aware. The intrinsic PR #135 macro field remains unchanged in the unaffected interior, but finite-world composition applies:
+
+```text
+logical edge
+    ↓
+non-zero hard ocean belt
+    ↓
+smooth transition toward intrinsic macro field
+    ↓
+unaffected interior
+```
 
 Requirements:
 
+- every point on all four logical edges is below sea datum;
+- a non-zero outer belt is unconditionally ocean;
+- the transition is smooth, so continental support is pushed inward rather than clipped by a rectangular mask;
+- the boundary condition is not an authored profile or visual effect;
+- Stage 6+ receives the boundary influence explicitly and must preserve the hard belt;
+- cost is constant arithmetic per query, not a stored boundary raster.
+
+General structural-preparation requirements:
+
 - bounded fixed local work; no whole-world plate raster/graph is required;
-- deterministic by seed/revision/definition/coordinates;
+- deterministic by seed/revision/definition/domain/coordinates as applicable;
 - exact order/cache/thread independence;
 - no camera input;
 - no mountain/rift/river/lake painting in Stage 5;
-- existing accepted macro elevation remains unchanged unless a separately reviewed Stage 5 semantic change is explicitly justified.
+- original intrinsic Stage 5 elevation remains unchanged away from the intentionally added finite-boundary composition.
 
-This preparation exists so Stage 6 can consume a geophysical cause instead of inventing mountain placement from decorative noise.
+This preparation exists so Stage 6 can consume geophysical causes instead of inventing mountain placement from decorative noise, and so no later stage can accidentally produce a continent that ends only because the finite map ended.
 
 ---
 
@@ -136,7 +163,7 @@ Produce a convincing continuous Terrain surface from Stage 5 causes while remain
 
 The required visual target is simultaneous quality at three scales:
 
-1. **country/continental** — coherent land/ocean shape, broad plains/plateaus/basins and readable major mountain systems;
+1. **country/continental** — coherent land/ocean shape, broad plains/plateaus/basins and readable major mountain systems, all contained inside surrounding ocean rather than clipped by world bounds;
 2. **regional** — several Songs-of-Syx-scale landscape regions with believable relationships between coast, plains, mountains and uplands;
 3. **local/cell-near** — balanced irregular terrain with no one-block Z chatter and enough detail to inspect the future cell projection.
 
@@ -153,6 +180,8 @@ Stage 6 first converts Stage 5 geophysical causes into explicit geomorphic struc
 
 Major mountains are **not** independent circular/elliptical spots and are not created by thresholding a global ridged-noise field.
 
+All regional structures are constrained by Stage 5's hard outer-ocean belt. A belt, plateau, coast refinement or other feature may approach the outer transition where appropriate, but its resulting surface contribution cannot expose land inside the hard boundary ocean.
+
 ## Build 6B — local morphology, informed by accepted V12 strengths
 
 The retired dense V12 architecture remains retired, but its successful local terrain ideas are deliberately reused as hidden algorithms/policies:
@@ -166,7 +195,7 @@ The retired dense V12 architecture remains retired, but its successful local ter
 
 Useful V13 elongated/asymmetric profile mathematics may inform individual ridge children, but V13-style independent mountain spots do not define global mountain geography.
 
-The local synthesizer receives the regional structure as context. It does **not** decide where the world's mountain belts, plateaus or basins are.
+The local synthesizer receives the regional structure as context. It does **not** decide where the world's mountain belts, plateaus or basins are, and it cannot override the hard Stage 5 boundary-ocean constraint.
 
 ## Continuous truth
 
@@ -180,6 +209,14 @@ The same coordinate has one Stage 6 surface value independent of:
 - render zoom;
 - camera position;
 - thread scheduling.
+
+Additional finite-world invariant:
+
+```text
+Stage5.boundaryOceanInfluenceAt(x,y) == 1
+        =>
+Stage6.terrainZ(x,y) < seaDatum
+```
 
 ## Anti-one-block requirement
 
@@ -203,6 +240,7 @@ F2 must be developed together with Stage 6, not after it.
 Required layers include:
 
 - Stage 5 macro support;
+- Stage 5 boundary-ocean influence;
 - Stage 5 structural context;
 - Stage 6 mountain belts / plateaus / basins;
 - ridge/local-landform causes;
@@ -213,6 +251,8 @@ Normal pan/zoom must not expose incomplete technical LOD as geography. The rende
 
 ## Acceptance
 
+- all four finite world edges and the hard outer belt remain ocean across representative seeds/profiles;
+- no landmass or mountain system is clipped by the logical world rectangle;
 - deterministic/seam/property gates green;
 - requested work bounded by requested area/detail, not total logical world;
 - multiple fixed seeds inspected at macro/regional/local scales;
@@ -236,7 +276,9 @@ Analyze the accepted Stage 6 surface and create deterministic **topology**, not 
 - depression detection;
 - nested depression hierarchy;
 - saddles/spill points and outflow relationships;
-- connection toward ocean/outlet where applicable.
+- connection toward the guaranteed surrounding ocean/outlet where applicable.
+
+The hard Stage 5 ocean belt provides a stable terminal receiving boundary. Stage 7 must not need an artificial map-edge sink that would make rivers disappear into a cut continent.
 
 A method such as D-infinity-style flow direction, Priority-Flood/depression hierarchy or another replaceable solver may be used behind the semantic contract.
 
@@ -268,6 +310,8 @@ Turn Stage 7 topology into coherent initial-world river/lake geometry and reconc
 - river-to-lake and river-to-ocean connectivity;
 - bounded valley/channel/lake-basin shaping of the Stage 6 surface;
 - a small fixed number of deterministic reconciliation passes if drainage must be recalculated after surface adjustment.
+
+Stage 8 surface reconciliation also preserves the hard outer-ocean constraint.
 
 ## Abstract geomorphic solvers are allowed
 
@@ -306,6 +350,7 @@ Prove that the accepted Stage 5–8 world can be reconstructed/refined locally a
 - eviction/rematerialization reproduces the same natural world;
 - work/memory scale with requested area/detail and active cache, not total logical world;
 - natural features own continuity; technical pages never become geography;
+- finite boundary-ocean truth is reproduced identically after eviction/rematerialization;
 - representative worlds large enough to contain hundreds of regional landscape areas remain browsable/materializable with bounded working set.
 
 ---
@@ -322,6 +367,7 @@ Convert the accepted continuous Terrain surface into exact integer XYZ Terrain f
 - deterministic projection/materialization from the accepted Stage 8/9 surface;
 - projected Stage 6 cell diagnostics and exact Stage 10 cells agree where the projection contract says they should;
 - no one-block generator chatter introduced by quantization;
+- hard outer-ocean cells cannot be rounded/materialized into exposed land;
 - exact cells are materialized only for requested/active physical regions;
 - eviction of rebuildable Genesis materialization does not destroy world truth;
 - later runtime mutation can distinguish reconstructable Genesis cells from authoritative changed cells.
@@ -362,14 +408,14 @@ A concept may be a field/aggregate by its actual ontology (for example grass bio
 
 # Stage discipline
 
-The rejected PR #136 is archive-only. Replacement work starts from accepted Stage 5 plus the separately reviewed Stage 5 structural-preparation contract.
+The rejected PR #136 is archive-only. Replacement work starts from accepted Stage 5 plus the separately reviewed Stage 5 structural/boundary preparation contract.
 
 The immediate order is:
 
 ```text
 Roadmap/ADR reconciliation
         ↓
-Stage 5 structural-geophysics preparation PR
+Stage 5 structural geophysics + finite-world ocean boundary PR
         ↓
 Stage 6 regional structures
         ↓
