@@ -1,349 +1,222 @@
 # Stage 6 — Hierarchical Geomorphic Geography Prototype
 
-This document is the replacement implementation plan after rejection of PR #136.
+This is the replacement implementation plan after rejection of PR #136.
 
-The user-facing target is concrete: a large EvoForge world should look like a coherent geographic world map in the spirit of Songs of Syx, but at a scale large enough to contain **hundreds of Songs-of-Syx-scale landscape regions**. The engine must still materialize only what simulation objects or the renderer request.
+The target is concrete: EvoForge must show convincing landforms at country/continental, regional and cell-near scales while materializing only requested terrain. Stage 6 contains no rivers, lakes, forests, climate, settlements or runtime erosion physics.
 
-No forest, river, climate, settlement or ecological painting is part of this prototype. The required visual content is land/ocean shape, plains/uplands/plateaus/basins and convincing mountain systems.
-
-## Core idea
-
-Use a **tiny sparse global blueprint + lazy deterministic regional refinement**.
-
-This is deliberately different from both a giant full-world raster and an infinite stack of coordinate noise.
-
-The sparse blueprint is cheap enough to build once for a finite world because it contains only structural descriptors: tens/hundreds of plate/crust regions and major boundary features, not millions/billions of terrain cells. Dense height samples are still generated only for requested areas.
-
-A representative country/continental world may contain, for example, dozens of root crust/plate sites and hundreds of derived major structural segments while logically containing millions of local terrain cells. Exact descriptor counts are algorithm details, not public semantic controls.
-
-## World representation
+## Core pipeline
 
 ```text
-World seed + authored definitions
-            |
-            v
-Sparse Geophysical Blueprint
-  - crust/plate regions
-  - continental families
-  - oceanic basins
-  - plate motion/orientation
-  - shared region boundaries
-            |
-            +--------------------+
-            |                    |
-            v                    v
-Major structural causes      Coast/shelf geometry
-  - convergent belts          - continental margin
-  - rifts/basins              - recursive boundary refinement
-  - plateaus/uplands
-            |                    |
-            +----------+---------+
-                       v
-          Lazy hierarchical refinement
-          - ridge families
-          - passes / foothills
-          - regional relief forms
-          - local child structures
-                       |
-                       v
-        Continuous requested terrain surface
-                       |
-                +------+------+
-                |             |
-                v             v
-        simulation query   map observation
+Stage 5 macro elevation + structural geophysical context
+        ↓
+regional geomorphic structures
+        ↓
+mountain belts / plateaus / basins / uplands / plains
+        ↓
+child ridges / foothills / coast refinement
+        ↓
+V12-informed local terrain synthesis
+        ↓
+continuous world/terrain surface Z
 ```
 
-The hierarchy is the generated fact. A raster is only an observation/materialization.
+The two middle roles are intentionally different:
 
-## Milestone 6A — Stable renderer before new terrain
+- **regional structure** decides where/why a major landform exists and its orientation/extent;
+- **local synthesis** decides how the nearby surface varies inside that structure.
 
-Do this first so generator quality can be judged without presentation bugs.
+No global dense heightmap is created.
 
-### Remove from the experiment
+## Input contract from Stage 5
 
-Do not reuse PR #136's viewport-atomic coarse-parent promotion or its per-drag LOD repair logic.
+Stage 6 consumes the accepted macro elevation plus the structural geophysical context introduced by the separate Stage 5 preparation PR.
 
-### New invariant
+Useful input facts include:
 
-**Pan at constant zoom never changes semantic detail level.**
+- broad continental versus deep-ocean support;
+- macro-margin influence;
+- stable structural-region identity;
+- local boundary orientation;
+- boundary regime/strength.
 
-LOD/detail selection is a function of zoom scale only. A mouse drag can change requested world bounds, but it cannot promote/demote resolution.
+Stage 6 does not infer all mountain placement from a decorative noise field when a structural cause is available.
 
-### Stable viewport snapshot
-
-Introduce a render-side `StableMapSnapshot` concept:
-
-- one detail level for the whole snapshot;
-- coverage larger than the visible viewport (overscan);
-- immutable set of ready map pages/surfaces;
-- front snapshot remains displayable while replacement work happens;
-- new coverage is generated asynchronously;
-- same-LOD pages may extend coverage without changing visual scale;
-- a zoom-level replacement is shown only when the new visible coverage is complete.
-
-The technical cache may remain page/tile based. The screen must not expose independent tile LOD decisions.
-
-### Scheduling
-
-- generation/raster work runs only on worker threads;
-- GL texture upload is budgeted on the render thread;
-- user input never waits for terrain generation;
-- camera motion cancels obsolete queued work, but already-complete cache entries remain reusable;
-- zoom requests are debounced/hysteretic so wheel noise cannot thrash detail levels;
-- ordinary pan prefetches toward the motion direction while preserving current LOD.
-
-### 6A acceptance
-
-Use the accepted Stage 5 macro field as temporary source and prove:
-
-- selected level is bit-for-bit unchanged during long pan-only stress;
-- no coarse/fine flashing during pan;
-- no blank checkerboard on ordinary drag;
-- render-thread frame pacing remains smooth while background requests are active;
-- cache and outstanding jobs stay bounded.
-
-Only after this is true should the new geography be judged visually.
-
-## Milestone 6B — Sparse geophysical blueprint
-
-Introduce a new structure source under the existing `world/geophysics` semantic owner rather than a generic `world/geography` umbrella.
-
-Suggested public boundary:
-
-```text
-GeophysicalBlueprint.create(seed, revision, definition, domain)
-GeophysicalBlueprint.query(bounds, structuralDepth)
-```
-
-The exact names may change, but callers must not construct the hidden algorithm directly.
-
-### Root regions
-
-Generate a small deterministic set of root sites in normalized finite-world space using a stable blue-noise / best-candidate placement algorithm.
-
-Build a deterministic neighborhood graph (Voronoi/Delaunay or equivalent). The graph is sparse metadata, not a raster.
-
-Each root region receives structural properties:
-
-- crust class / continentality;
-- base elevation tendency;
-- orientation;
-- motion vector;
-- age/strength-like internal parameters where they causally affect later structure.
-
-### Continental families
-
-Do **not** classify every root region independently as land/ocean.
-
-Place a smaller set of continental-family seeds and perform deterministic graph growth so several neighboring crust regions belong to one coherent continental block. This produces large connected masses with internal tectonic structure instead of thresholded noise blobs.
-
-Some root regions remain oceanic and form large basins between continental families.
-
-### Shared boundaries
-
-Every neighboring pair owns one stable shared boundary id. Both sides reference the same geometry.
-
-Boundary type is derived from the relative motion and crust context:
-
-- convergence;
-- divergence;
-- transform/neutral.
-
-This makes later mountains/rifts consequences of the same structural graph.
-
-## Milestone 6C — Coast and mountain morphology
-
-This milestone must already look meaningfully closer to the visual target before local microdetail exists.
-
-### Coastlines
-
-Continental/oceanic transition creates a shelf/margin corridor.
-
-The root coast is a boundary curve. Finer detail uses deterministic recursive curve subdivision:
-
-1. take one stable parent segment;
-2. split by stable child id;
-3. offset the midpoint primarily along the local normal;
-4. bound the offset as a fraction of parent segment length;
-5. preserve endpoints exactly;
-6. recurse only to the requested structural depth.
-
-This gives bays, headlands and peninsulas as **refined geometry of one coast**, not additive sign-changing height noise.
-
-Shared parent endpoints make the refinement seam-free and query-order independent.
+## Regional structures
 
 ### Mountain belts
 
-Convergent structural boundaries create explicit `OrogenicBelt` descriptors.
+A major mountain system begins as a finite connected belt/corridor rather than an independent peak.
 
-Each belt contains a centerline polycurve plus slowly varying width/uplift/asymmetry. A belt is expected to be substantially longer than it is wide.
+A belt owns stable geometry such as:
 
-At medium structural depth a belt deterministically creates several child ridge families:
+- identity;
+- centerline/path;
+- length;
+- varying width;
+- orientation;
+- uplift support;
+- asymmetry;
+- foothill envelope.
 
-- 2–5 roughly parallel/branching ridges;
-- variable offsets from centerline;
-- varying ridge width and height;
-- passes represented as smooth reductions of uplift along arc length;
-- foothill envelopes wider than the main ridge core;
-- occasional branching at stable structural nodes.
+Convergent-like Stage 5 structural boundaries are a primary cause for major belts. Stage 6 may also support explicitly justified interior uplifts, but they remain regional structures rather than random spots.
 
-At closer depth each ridge can add local peaks/spurs, but those children remain subordinate to the long-range ridge geometry.
+A belt deterministically produces subordinate children:
 
-The default world must not be populated by independent circular mountain bumps.
-
-### Plateaus, uplands and basins
-
-Generate sparse regional structures tied to crust regions rather than painting the whole land with local noise.
-
-- plateaus: broad bounded areas with flatter interior and explicit escarpment transition;
-- uplands: broad low-amplitude regional elevation support;
-- basins: broad depressions, later useful to drainage Stage 7;
-- plains: the absence of strong structural relief is a valid and common terrain state.
-
-### Minor relief
-
-Minor rolling relief may use band-limited procedural functions only as a subordinate texture after the structural morphology is already readable.
-
-It cannot determine continent shape or major mountain geography.
-
-## Milestone 6D — Continuous lazy terrain observation
-
-Create the continuous terrain owner under `world/terrain` as a derived evaluator over geophysical structures.
-
-Suggested request contract:
-
-```text
-TerrainRegionRequest(bounds, structuralDepth, sampleSpacing)
- -> immutable requested height samples
-```
-
-The source remains coordinate-addressable so simulation can ask for an individual point without creating a permanent region raster.
-
-### Evaluation at one point
-
-A point query evaluates only nearby/intersecting structures using a spatial index over the sparse blueprint:
-
-1. base crust/ocean-basin elevation;
-2. shelf/coast transition;
-3. nearby mountain/rift/plateau/basin contributions;
-4. child structures up to requested physical depth;
-5. subordinate minor relief where appropriate.
-
-### Hierarchical detail
-
-Far map:
-
-- root continental blocks;
-- ocean basins;
-- major coast geometry;
-- major mountain belts / plateaus.
-
-Medium map:
-
-- refined coast;
-- ridge families;
+- main ridge family;
+- secondary/branch ridges;
+- passes/saddles;
 - foothills;
-- regional basins/uplands.
+- local peak/spur opportunities.
 
-Close map:
+Useful V13 elongated/asymmetric profile mathematics may be reused for individual child ridges. V13's old global placement of independent mountain spots is not reused.
 
-- local ridge children;
-- hills/depressions;
-- other Stage-6-local terrain details.
+### Plateaus, uplands, lowlands and basins
 
-The same stable feature ids cause all views. Coarse observation simply stops at a shallower structural depth.
+These are explicit broad structures with bounded influence. Calm plains are a normal terrain state; every land coordinate is not required to receive visible noise.
 
-## Map rendering of Stage 6 terrain
+Plateau interiors remain relatively calm and transition through an escarpment/edge profile. Basins are broad depressions that later Stage 7 can analyze hydrologically.
 
-The default F2 map should stop looking like a quantized elevation diagnostic.
+### Coast
 
-Render from continuous floating observations into normal map colors:
+Stage 5 defines only macro ocean/land support. Stage 6 may refine the margin at regional/local scales, but it must preserve hierarchical coherence:
 
-- ocean depth uses a smooth restrained blue gradient;
-- lowlands/uplands/highlands use continuous hypsometric tint;
-- hillshade is a separate multiplicative lighting term;
-- mountain hue must come from elevation/material presentation, not shadow alone;
-- coastline is anti-aliased in screen space;
-- no contour-band staircase by default;
-- diagnostics remain behind `G` or another explicit toggle.
+- far view keeps the parent coastline shape;
+- finer requests add bounded child bays/headlands/peninsulas/islands;
+- small forms do not become uniform high-frequency chatter along the entire coast;
+- overlapping requests reproduce exactly the same refined boundary.
 
-No forest, river or settlement symbols are allowed to hide weak terrain morphology.
+## V12-informed local synthesis
 
-## Concrete scale model
+The retired dense V12 generator is not restored, but its local terrain behavior is an explicit algorithmic reference because it already passed visual acceptance at close scale.
 
-Do not equate one technical page with one natural region.
+The new local synthesizer should preserve these ideas:
 
-For design/testing, think in nested geographic scales instead:
+1. **Explicit balanced landforms** — sparse hills and depressions rather than a uniform field of bumps.
+2. **Rolling relief** — a smooth subordinate local component.
+3. **Physical feature sizes** — characteristic sizes expressed in world/cell units, so a larger world contains more features rather than stretched versions of the same feature.
+4. **Context conditioning** — a plain, plateau, foothill and ridge use different local morphology policies.
+5. **No one-block Z chatter** — local gradient/curvature remains bounded before eventual integer XYZ materialization.
+
+If a local slope-relaxation pass is needed, it must be request-local with deterministic halo/overlap rules. Whole-world relaxation is forbidden.
+
+## Continuous Terrain owner
+
+The Stage 6 output belongs to `world/terrain` and is a continuous/high-precision physical surface before exact XYZ.
+
+Required invariants:
 
 ```text
-country / continental view
-    contains dozens to hundreds of
-landscape regions comparable to one Songs-of-Syx world-map area
-    each contains many
-local terrain neighborhoods
-    each later materializes exact XYZ only when needed
+same world identity + definitions + coordinates
+= same Stage 6 surface value
 ```
 
-The actual coordinate sizes remain content/definition choices. The architecture must not depend on one hard-coded number.
+independent of:
 
-## Required visual test sheet
+- request order;
+- page boundaries;
+- cache eviction/rematerialization;
+- camera position;
+- render scale;
+- worker scheduling.
 
-For every candidate algorithm revision, F2 must be able to capture the same fixed seed at three prescribed camera scales and positions.
+A bounded area request may materialize a temporary sample window, but the window is not authoritative geography.
 
-The review sheet must show:
+## Anti-one-block proof
+
+Automated properties must cover representative rugged settings and boundaries:
+
+- bounded adjacent slope;
+- bounded second difference/curvature where the model requires it;
+- low density of alternating integer-height crossings after diagnostic quantization;
+- no isolated single-cell peak/pit generated by the surface model;
+- no checkerboard/corner-supported Z pattern;
+- exact agreement across overlapping request halos.
+
+The visualizer must be able to show the projected future integer heights before Stage 10 so these failures are obvious during development.
+
+## F2 development inspector
+
+F2 is part of Stage 6 implementation, not a later polish pass.
+
+Required inspection layers:
+
+1. Stage 5 macro elevation;
+2. Stage 5 structural regions/boundaries;
+3. Stage 6 major mountain belts / plateaus / basins;
+4. ridge children / foothills / local V12-style landforms;
+5. final continuous Terrain Z;
+6. projected integer-cell Z diagnostic.
+
+Required presentation behavior:
+
+- world scale to cell-near zoom in one viewer;
+- normal pan/zoom never blocks on terrain generation;
+- expensive sampling/materialization stays off the render thread;
+- no visible checkerboard or mixed incomplete LOD state;
+- zoom reveals actual additional natural structures, not only a magnified texture;
+- nearby levels/coverage are prefetched so ordinary interaction does not expose loading transitions;
+- diagnostic selection can identify the structural cause of suspicious terrain.
+
+A clipmap-like nested-resident representation is a strong candidate, but presentation implementation is not terrain truth and may be replaced if profiling shows a better solution.
+
+## Scale model
+
+The logical world may contain hundreds of regional landscape areas comparable in information density to a Songs-of-Syx world map.
+
+This does **not** imply pre-generating all of them.
+
+A request evaluates/refines only the geophysical/geomorphic structures intersecting the requested area and the physical detail needed by the consumer. Rebuild after cache eviction must reproduce the same result.
+
+Technical pages/tiles remain bounded caches only.
+
+## Visual acceptance sheet
+
+Every serious candidate revision is reviewed at the same fixed seeds/positions at three scales:
 
 1. **macro** — whole country/continental area;
-2. **regional** — multiple landscape regions with a full mountain belt/coast/plain relationship visible;
-3. **local** — one landscape region showing child ridges and local relief.
+2. **regional** — several landscape regions with complete coast/plain/mountain relationships;
+3. **local** — one region close enough to judge the V12-informed surface and projected cell heights.
 
-A revision that improves one screenshot while breaking another is rejected.
+At least ten deterministic seeds must be inspected before final acceptance. A lucky single seed is insufficient.
 
-At least ten deterministic seeds should be inspected before acceptance. Hand-selecting one lucky seed is not sufficient.
+## Automated failure-mode gates
 
-## Automated quality properties
+Where practical, test:
 
-Exact subjective beauty cannot be unit-tested, but obvious failure modes can.
+- mountain belt length/width ratio and connectedness;
+- child ridges remain associated with their owner belt;
+- representative windows do not contain a high density of isolated circular high-elevation components;
+- coast child refinement remains bounded and overlap-stable;
+- local feature sizes remain in physical world units rather than scaling with total world size;
+- overlapping regional queries return identical structures/heights;
+- requested work is bounded by request area/detail, not total logical world area;
+- generation is absent from the render thread hot path.
 
-Add property checks for:
+## Explicit boundary
 
-- mountain belt length/width ratio above a minimum range-like threshold;
-- ridge children remain inside/near their owning belt corridor;
-- no high density of isolated near-circular high-elevation components in representative windows;
-- coastline child refinement preserves parent endpoints and remains displacement-bounded;
-- overlapping structural queries return identical feature ids and geometry;
-- pan-only renderer stress never changes detail level;
-- all visible pages in one rendered snapshot use one semantic detail level;
-- requested structural work is bounded by intersecting feature count and requested depth;
-- no expensive geography evaluation occurs on the render thread.
+Stage 6 does not implement:
 
-## What is deliberately postponed
-
-This prototype does not need to solve everything at once.
-
-Postpone until their owning stages:
-
-- drainage topology and valley incision;
-- rivers and lakes;
-- erosion/sediment transport beyond what is strictly necessary to shape the Stage 6 prototype;
+- drainage topology;
+- river channels;
+- lakes;
+- real/runtime erosion history;
+- sediment transport;
 - climate;
-- geology/material types beyond minimal geophysical causes;
 - soil;
-- forests/vegetation;
-- settlements/roads;
-- exact integer XYZ materialization.
+- vegetation;
+- settlements;
+- exact XYZ Terrain.
 
-The terrain must already look convincing without those layers.
+Stage 7 analyzes drainage/depressions. Stage 8 creates Genesis river/lake geometry and may use a bounded abstract erosion-like solver only to shape the initial terrain. Runtime erosion/landslides/digging are later independent mechanics.
 
 ## Done when
 
-Stage 6 is complete only when:
-
-- PR #136 remains rejected and no rejected heightfield algorithm is resurrected by incremental tuning;
-- stable renderer milestone passes pan/zoom stress;
-- continental shapes no longer read as noise blobs;
-- mountains consistently read as connected belts/ranges rather than lesions/bumps;
-- zoom demonstrably reveals deterministic child geographic structures;
-- country-scale world browsing remains lazy and bounded;
-- correctness/architecture/scale gates are green;
-- the three-scale multi-seed F2 result is manually accepted.
+- PR #136 remains rejected;
+- Stage 5 structural preparation is available;
+- major geography is structure-driven;
+- local terrain recovers the accepted strengths of V12 without restoring dense world generation;
+- macro/regional/local views are simultaneously convincing;
+- projected cell terrain has no one-block noise;
+- deterministic/seam/scale gates are green;
+- F2 is smooth enough to inspect continuously from world scale to cells;
+- the user explicitly accepts Stage 6 before Stage 7 starts.
