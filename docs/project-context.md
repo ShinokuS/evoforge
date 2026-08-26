@@ -38,42 +38,23 @@ Only `simulation`, `core` and `lwjgl3` are code/Gradle modules under the current
 
 ## Architecture reset accepted
 
-PR #132 establishes [ADR-026: Semantic capability architecture](decisions/026-semantic-capability-architecture.md) as the authoritative repository architecture. The rejected horizontal `foundation` / `world` / `generation` split and the superseded exclusive owner-first taxonomy are historical only.
+PR #132 establishes [ADR-026: Semantic capability architecture](decisions/026-semantic-capability-architecture.md) as the authoritative repository architecture. PR #133 completed the final post-reset semantic cleanup and ArchUnit enforcement.
 
-Current laws:
+Current laws include:
 
 - one authoritative source per mutable fact;
 - the primary unit is an independent semantic concept, not a technical layer or first consumer;
-- reusable capabilities live with the concept they express and never inside Movement/Agent/another consumer merely because that consumer appeared first;
-- mechanics/workflows coordinate independent semantic capabilities and own only workflow-specific process/policy state;
-- authority, capability, algorithm, projection, process and Genesis are orthogonal roles within/around semantic modules;
-- Kernel is domain-neutral execution infrastructure;
-- public semantic surfaces are narrow, consumer-neutral and acyclic; foreign `internal` access is forbidden;
-- mechanically decidable architecture laws, determinism, coverage and representative scale gates are enforced by tests/CI;
-- package placement must pass the reuse test in root `AGENTS.md`.
+- reusable capabilities live with the concept they express;
+- mechanics/workflows coordinate independent semantic capabilities;
+- public semantic surfaces are narrow, consumer-neutral and acyclic;
+- pages/chunks/caches are representation, not world truth;
+- camera/visibility cannot change simulation truth;
+- deterministic results cannot depend on rendering, query order, cache history or incidental thread scheduling;
+- performance optimization must preserve semantic results rather than replace unseen parts of the world with different rules.
 
-PR #133 completed the final post-reset semantic cleanup: ArchUnit enforces production bytecode dependency direction and top-level world-module cycle freedom; the ambiguous `world/spatial`, umbrella `world/landscape`, generic `world/surface`, and consumer-owned `world/object/placement` boundaries are retired. The architecture gate is complete.
-
-## Global simulation laws
-
-These must survive every stage:
-
-1. **one authoritative owner per mutable fact**;
-2. **narrow typed read/mutation capabilities across owners**;
-3. **observer/camera independence**;
-4. **deterministic replay from authoritative inputs + compatible revision**;
-5. **Definitions are immutable authored meaning, not runtime objects**;
-6. **pages/chunks/caches/indexes are representation/projection, never natural truth**;
-7. **abstraction at real semantic seams, simple concrete internals elsewhere**;
-8. **no universal framework/context/service locator without an explicit future architecture decision**;
-9. **package/file structure mirrors semantic ownership**;
-10. **Genesis creates initial facts and hands them to ordinary owners**;
-11. **performance optimization preserves semantics and is backed by representative evidence**;
-12. **normative documentation changes with the contract it describes**.
+See [Architecture](architecture.md) and ADR-026 for the full laws.
 
 ## Current architecture map
-
-The canonical semantic map is:
 
 ```text
 simulation
@@ -82,53 +63,93 @@ simulation
 ├── genesis/           global initial-world composition only
 ├── world/             objective semantic owners
 │   ├── continuum/      neutral large-world addressing/materialization
-│   ├── geophysics/     continuous macro-geophysical skeleton
+│   ├── geophysics/     macro-geophysical causes
 │   ├── material/
 │   ├── object/
-│   ├── space/          position, orientation, occupancy, placement, measurement
+│   ├── space/
 │   ├── geometry/
 │   ├── navigation/
-│   ├── geology/        authored geological profile/unit/material semantics
+│   ├── geology/
 │   ├── terrain/
 │   ├── liquid/
 │   ├── soil/
 │   ├── atmosphere/
 │   ├── sky/
 │   └── interaction/
-├── mechanics/         true cross-concept workflows: Movement, Hydrology, TerrainMutation
+├── mechanics/         true cross-concept workflows
 ├── agents/            autonomous cognition/needs/perception/decision
-└── composition/       only if/where a real composition area is justified
+└── composition/       only where a real composition area is justified
 ```
 
-Do not create empty packages merely to match this diagram. A package exists only when a real owner/responsibility exists.
+Do not create empty packages merely to match this diagram.
 
-## Continuum status
+## Continuum/world-generation status
 
-The dense V12–V15 world-generation line remains retired. Continuum remains the canonical large-world foundation.
+The dense V12–V15 whole-world architecture remains retired. Continuum remains the canonical large-world foundation.
 
-Accepted work before the architecture reset includes deterministic addressable sampling, bounded page/cache work, scale/performance instrumentation and multi-resolution/local query/map work recorded in the Continuum system pages and development history.
+Accepted Continuum work includes deterministic addressable sampling, bounded local/shared region work, infinite-time foundations, multi-resolution reads, bounded map/cache infrastructure and representative scale evidence.
 
-Continuum remains neutral infrastructure: coordinates/pages/caches/materialization are technical representation, not Terrain/Liquid/Geology/Geophysics truth.
+Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.** `world/geophysics` owns the macro-geophysical cause; ocean/land is derived from the same signed macro elevation relative to the shared sea datum.
 
-Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.** The independent `world/geophysics` concept owns the continuous macro-elevation skeleton; ocean/land is derived from that same field relative to the shared sea datum. Existing Continuum infrastructure only samples/materializes/projects it.
+PR #136 attempted Stage 6 as a noise/refinement-driven continuous heightfield plus tile-LOD repair. Manual visual inspection rejected that implementation. The PR is closed and archive-only.
 
-Stage 5 exposes authored `MacroGeophysicsDefinition` controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation. These are normalized semantic world-generation inputs rather than exposed solver coefficients. Contrasting `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` presets exist for quick inspection, while custom definitions remain the actual contract. The F2 world-generation panel also supports explicit/reproducible world seeds and random seed generation.
+### Immediate work before replacement Stage 6
 
-**Stage 6 — Continuous Surface Evolution Prototype is the next allowed checkpoint and has not started.** It must build from the accepted Stage 5 geophysical cause while preserving Continuum boundedness, determinism and observer independence. Stage 7 drainage topology and all later river/lake/climate/materialization work remain blocked until Stage 6 is independently accepted.
+The accepted Stage 5 macro elevation remains valid, but future structure-first Terrain needs more geophysical cause than one scalar `elevationAt(x,y)`.
 
-See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
+A separate Stage 5 follow-up PR is therefore allowed to expand `world/geophysics` with bounded deterministic structural context while preserving accepted macro elevation. Intended facts include continental/deep-ocean support, macro-margin influence, structural-region identity and local boundary orientation/regime/strength.
+
+This preparation must not generate Terrain, mountains, rivers or lakes.
+
+### Replacement Stage 6
+
+Stage 6 remains `Continuous Surface Evolution Prototype`, but its implementation direction is reset by [ADR-027](decisions/027-hierarchical-geomorphic-geography.md).
+
+The new pipeline is:
+
+```text
+Stage 5 geophysical causes
+        ↓
+regional geomorphic structures
+        ↓
+mountain belts / plateaus / basins / plains
+        ↓
+V12-informed local morphology
+        ↓
+continuous world/terrain surface
+```
+
+The useful local ideas from old V12 are deliberately reused as algorithmic lineage: balanced hills/depressions, rolling relief, physical cell-scale feature sizes and explicit prevention of one-block Z chatter. The old dense architecture and global V-number generator lineage are not restored.
+
+Stage 7 drainage and all later river/lake work remain blocked until this replacement Stage 6 is manually accepted.
+
+See the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md) and [Stage 6 replacement plan](systems/world-generation/stage6-hierarchical-geomorphic-geography.md).
+
+## Genesis versus Runtime terrain
+
+Genesis generation and later mutable Terrain are separate concerns.
+
+Stages 7–8 may use erosion-like/relaxation mathematics as **finite Genesis construction solvers** to create coherent channel/lake geometry. This does not mean simulating years of runtime erosion or water history.
+
+Future runtime terrain changes such as digging, construction, landslides or real water erosion belong to later mechanics. Conceptually, current Terrain then becomes reconstructable Genesis terrain plus authoritative sparse persistent changes. The exact storage representation is postponed until those mechanics/persistence stages require it.
+
+## Simulation-scale observer independence
+
+An individual living simulation entity does not become a different kind of simulation because it is far from the camera.
+
+Future large-object-count optimization may use data-oriented storage, event/wake scheduling, exact elapsed-time advancement where mathematically valid, batching and sparse indexes. It may not replace an existing distant individual animal with a statistically different surrogate solely because it is unobserved.
+
+Some concepts may genuinely be fields/aggregates by ontology (for example grass biomass rather than every blade as an object). That is a semantic modeling decision, not camera LOD.
 
 ## Definitions policy
 
 Definitions describe immutable authored semantic meaning. Root definition infrastructure is neutral; domain-specific definition types/compilers belong with the owner/mechanic that consumes them.
 
-Human-facing semantic controls normally use normalized meaning (`0..1` or `-1..1`) where appropriate. Solver coefficients/thresholds/tuning constants remain implementation/model policy unless they are genuinely authored semantic content.
-
-Stage 5 is the reference world-generation example: `MacroGeophysicsDefinition` exposes meaningful world character, while lattice spans, salts, interpolation exponents and blend coefficients remain hidden inside the replaceable geophysical algorithm.
+Human-facing semantic controls normally use normalized meaning where appropriate. Solver coefficients/thresholds/tuning constants remain hidden implementation policy unless they are genuinely authored semantic content.
 
 ## Performance policy
 
-For an unbounded/persistent world, performance is architectural:
+For a persistent enormous world, performance is architectural:
 
 ```text
 representative workload
@@ -141,10 +162,10 @@ optimize hidden implementation
       ↓
 prove same semantic result
       ↓
-retain regression profile when material
+retain regression evidence
 ```
 
-Camera distance or visibility may not select cheaper authoritative rules. Sparse/data-oriented/ECS/packed/page representations are internal techniques, not semantic architecture.
+Visibility/camera distance may optimize presentation/cache only. It may not select cheaper authoritative world rules.
 
 ## Fast recovery path
 
@@ -156,6 +177,7 @@ docs/project-context.md
 docs/architecture.md
 docs/roadmap.md
 docs/decisions/026-semantic-capability-architecture.md
+docs/decisions/027-hierarchical-geomorphic-geography.md
 relevant docs/systems/** page
 ```
 
