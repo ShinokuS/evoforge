@@ -2,127 +2,203 @@
 
 The Roadmap answers two questions: **what is currently accepted, and what is the next work that is allowed to begin?** Exact mechanics belong in `systems/`; global laws belong in `architecture.md`.
 
-## Current checkpoint — Stage 6 architecture reset
+## Current architecture checkpoint
 
-PR #132 established the repository-wide ADR-026 architecture and PR #133 completed its final semantic cleanup, removing residual ambiguous/umbrella boundaries and adding bytecode-level dependency/cycle enforcement.
-
-Accepted reset guarantees:
+PR #132 established ADR-026 semantic-capability architecture and PR #133 completed the final semantic cleanup. Current repository laws remain unchanged:
 
 - `:simulation`, `:core` and `:lwjgl3` are the only code/Gradle modules;
-- reusable capabilities such as Occupancy, Navigation, Pathfinding and Geometry are independent semantic units rather than Movement/Agent internals;
-- mechanics contain workflow-specific orchestration only;
-- lower-level world semantics do not depend on mechanics or agents;
-- legacy `world/mechanics` plus retired `world/spatial`, `world/landscape` and generic `world/surface` roots are mechanically rejected;
-- object Position is the explicit `world/space/position` authority/capability; generic placement is `world/space/placement`; authored material identity is `world/material`; cross-concept terrain mutation is `mechanics/terrainmutation`; sky exposure is `world/sky`;
-- ArchUnit checks production bytecode for world-module cycles and forbidden dependency direction;
-- the mandatory reuse test for new concepts lives in root `AGENTS.md`;
-- architecture fitness tests, deterministic tests, measured JaCoCo coverage floors and representative scale profiles are CI gates;
-- canonical documentation points at ADR-026 and the final package ownership;
-- temporary migration/refactor workflows are removed before merge.
+- world truth belongs to independent semantic concepts rather than presentation, stages or first consumers;
+- pages/chunks/tiles/caches are representation only;
+- one mutable fact has one authoritative owner;
+- camera/visibility never changes simulation truth;
+- deterministic results do not depend on query order, cache history, rendering, thread scheduling or whether a location is being observed;
+- performance optimization must preserve semantics rather than replace distant simulation with a different world model.
 
-## Current world-generation work
+## World-generation checkpoint
 
-Canonical Continuum Stages 0–5 are complete. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.**
+Continuum Stages 0–5 are accepted. **Stage 5 — Macro Ocean + Geophysical Skeleton was manually accepted in PR #135.** `world/geophysics` owns the macro-geophysical cause; Continuum remains neutral addressing/materialization/cache infrastructure.
 
-The Stage 5 semantic owner is the independent `world/geophysics` concept. It exposes a deterministic continuous macro-elevation skeleton; ocean/land is derived from the same elevation relative to a shared sea datum. Continuum remains neutral addressing/materialization/map infrastructure and does not own geography.
+PR #136 attempted Stage 6 as a noise/refinement-driven continuous heightfield plus tile-level LOD repairs. Manual inspection rejected that implementation. It is closed and must not be revived by tuning amplitudes, coastline noise, color bands or tile thresholds.
 
-Stage 5 includes semantic authored controls for ocean prevalence, continental scale, landmass cohesion, fragmentation and macro variation; reproducible/custom world seeds; and `SUPERCONTINENT`, `BALANCED`, `ARCHIPELAGO` and `OCEANIC` inspection profiles over the same stable definition contract.
+The replacement direction is recorded by ADR-027 and the canonical Continuum Development Plan.
 
-### Rejected Stage 6 experiment
+### Stage 5 preparation before Stage 6
 
-PR #136 attempted to build Stage 6 primarily as a noise/refinement-driven continuous heightfield with coastline warps and tile-level LOD repair. Manual inspection rejected that direction.
+The accepted Stage 5 visual macro-elevation remains valid, but its current public contract exposes future stages only to one scalar `elevationAt(x,y)`. That is insufficient for structure-first Stage 6: a later terrain algorithm would otherwise have to invent continental margins and regional structural causes independently.
 
-The experiment failed the actual visual/product target:
+A **separate Stage 5 follow-up PR** may therefore expand `world/geophysics` with a bounded deterministic structural read capability while preserving the already accepted macro-elevation values and Stage 5 visual result.
 
-- landmasses read as scalar-field blobs rather than convincing continental geography;
-- mountains read as isolated bumps/mottled lesions rather than coherent ranges;
-- zoom mostly enlarged or resampled the same morphology rather than revealing new geographic structure;
-- map pan/zoom visibly oscillated between coarse/fine representations, pixelated, blurred and stalled;
-- further tuning of noise amplitudes, coastline warps, palette and tile thresholds would optimize the wrong representation.
+That preparation may expose consumer-neutral geophysical facts such as:
 
-PR #136 is closed and must not be merged. Its branch is archive-only.
+- broad continental support versus deep ocean support;
+- macro-margin influence;
+- stable macro structural-region identity;
+- local shared-boundary orientation;
+- convergent/divergent/transform-like boundary regime and strength.
 
-### Replacement Stage 6 direction
+It must **not** generate mountains, rivers, lakes, detailed terrain or runtime physics. Those remain later owners/stages.
 
-**Stage 6 remains the next checkpoint, but its implementation direction is reset by [ADR-027 — Hierarchical Geomorphic Geography](decisions/027-hierarchical-geomorphic-geography.md).**
+### Replacement Stage 6 — structural terrain + proven local morphology
 
-The required product target is a country/continental-scale world capable of containing hundreds of Songs-of-Syx-scale landscape regions while computing/materializing only requested areas.
+Stage 6 remains the next terrain checkpoint. Its final surface is built in two distinct roles:
 
-The replacement architecture is structure-first rather than texture-first:
+```text
+Stage 5 geophysical causes
+        ↓
+large/regional geomorphic structure
+        ↓
+mountain belts / plateaus / basins / regional relief
+        ↓
+local surface synthesis
+        ↓
+continuous Terrain Z
+```
 
-- sparse deterministic continental/crustal blocks and ocean basins establish large geography;
-- explicit boundary geometry creates shelves/coasts and later allows tectonic relationships;
-- mountain geography is represented as long belt/ridge structures with width, orientation, passes, foothills and child ridges, not isolated radial bumps;
-- plateaus, broad uplands and basins are sparse regional structures;
-- each structural feature has stable identity and deterministic hierarchical children;
-- a local bounding-box query refines only intersecting structures to the requested physical/detail level;
-- coarse map views observe parent geography; closer views add deterministic child structures, so zoom reveals new geography rather than larger pixels;
-- technical tiles/pages remain bounded cache infrastructure only;
-- the map renderer is reset around a stable overscanned front/back surface: pan at constant zoom cannot change LOD, replacement coverage is built off-thread and swapped atomically, and checkerboard parent fallback is forbidden.
+The large-scale structure is new. It determines **where** mountain systems, plateaus, basins, uplands and plains belong and how they are oriented.
 
-Stage 6 does **not** need to preserve the rejected PR #136 terrain algorithm. Only genuinely representation-neutral foundations may be reused: deterministic addressing, bounded caches, async primitives and diagnostics.
+The local surface synthesis deliberately reuses the successful ideas from the retired V12 terrain line without restoring its dense architecture or version lineage:
 
-Stage 7 drainage and later rivers/lakes/climate remain blocked until the replacement Stage 6 geography and renderer are manually accepted.
+- explicit balanced hills and depressions rather than uniform noise everywhere;
+- rolling local relief as a subordinate layer;
+- physical feature scales expressed in terrain-cell/world units, so a larger world contains more landforms instead of stretching the same form;
+- bounded slope/curvature policy preventing one-block Z chatter;
+- calm plains are a valid terrain state;
+- local morphology is conditioned by its owning regional structure.
 
-See [Stage 5 — Macro Ocean + Geophysical Skeleton](systems/world-generation/stage5-macro-geophysics.md), [ADR-027](decisions/027-hierarchical-geomorphic-geography.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
+V13's useful elongated/asymmetric mountain profiles may inform the profile of individual ridge children, but isolated V13-style mountain spots are not the global mountain model. Major mountains are explicit connected belts/ridge families first.
 
-## Accepted Continuum foundation before reset
+Stage 6 acceptance requires simultaneous quality at three scales:
 
-The previous dense V12–V15 world-generation line remains retired. Continuum is the canonical large-world direction.
+1. country/continental view — coherent landmasses, broad plains/plateaus/basins and readable mountain systems;
+2. regional view — several Songs-of-Syx-scale landscape regions with believable mountain/coast/plain relationships;
+3. cell-near view — balanced local terrain comparable to the accepted strengths of V12, with no one-block Z noise.
 
-Accepted foundations include the staged work already present in `develop` around:
+Later rivers, forests or attractive materials must not be used to hide weak Stage 6 morphology.
 
-- deterministic addressable large-world sampling;
-- bounded technical paging/cache behavior;
-- cache/request/scale diagnostics;
-- representative 10k/100k/1M-style scale evidence where implemented;
-- multi-resolution/local-query/map foundations already merged before the reset.
+### Stage 7 — Genesis drainage and depression topology only
 
-The architecture reset may move these files, but must not silently change their accepted semantics.
+Stage 7 **analyzes** the Stage 6 surface. It does not run real runtime erosion or water physics.
 
-## Continuum guardrails after reset
+It determines deterministic Genesis topology such as:
 
-Later work must not reintroduce:
+- drainage direction/graph;
+- watershed hierarchy;
+- accumulated upstream support;
+- depressions and nested depression hierarchy;
+- saddles/spill points;
+- connectivity toward ocean/outflow.
+
+The output is topology and causal information for later river/lake generation.
+
+### Stage 8 — coupled Genesis rivers, lakes and surface adjustment
+
+Stage 8 converts Stage 7 topology into initial-world geometry:
+
+- river-channel centerlines and channel hierarchy;
+- lake/depression basins and spill relationships;
+- connection of river systems to the ocean;
+- bounded valley/channel/lake-basin adjustment of the generated surface.
+
+A solver may use erosion-like, stream-power-like or relaxation mathematics **only as a Genesis construction algorithm**. It does not represent simulated historical years and does not introduce runtime erosion physics.
+
+Real later-time erosion, landslides, water-driven terrain mutation and direct digging/construction are separate Runtime mechanics. When they eventually exist, current Terrain truth is conceptually:
+
+```text
+immutable/reconstructable Genesis terrain
+        +
+authoritative sparse persistent Terrain changes
+```
+
+Storage cost therefore follows the amount of changed world rather than total potential world area. The exact persistence representation belongs to the later runtime/persistence stages.
+
+### Stages 9–10
+
+Stage 9 proves hierarchical regional refinement, overlapping-request identity and seam-free lazy realization. A requested area may be rebuilt after cache eviction and must reproduce exactly the same natural structures.
+
+Stage 10 materializes exact integer XYZ Terrain from the accepted continuous surface. This is where the visualizer stops showing only a projected future grid and can inspect authoritative exact cells.
+
+## Simulation-scale law for later ecology/agents
+
+Large object counts must not be optimized by changing reality outside the camera.
+
+If an animal/object exists as an individual simulation entity, it remains that entity and follows the same laws anywhere in the world. Observation is irrelevant. Future performance work may use:
+
+- data-oriented storage;
+- exact elapsed-time advancement where mathematically valid;
+- event/wake scheduling;
+- batched algorithms;
+- sparse indexes and persistence;
+
+but not a camera-driven replacement of distant living individuals by a statistically different simulation.
+
+Concepts that are genuinely fields/aggregates by ontology (for example a grass-cover biomass field rather than every blade as an object) may of course use field/aggregate authorities. That decision is semantic, not visibility-based.
+
+## Visualization is part of world-generation development
+
+The long-term F2 Inspector is a first-class acceptance instrument, not a decorative final viewer.
+
+It must eventually support one continuous inspection path from world scale to cells and expose generation causes/layers explicitly:
+
+```text
+macro geophysics
+structural regions/boundaries
+coast/landmass support
+mountain belts / plateaus / basins
+ridge children / local landforms
+continuous Terrain Z
+later: drainage / watersheds / river channels / lake basins
+later: exact XYZ
+later: runtime Terrain changes
+```
+
+Presentation requirements:
+
+- ordinary pan cannot change simulation truth or semantic detail;
+- no visible incomplete checkerboard/fallback state;
+- expensive generation never blocks the render thread;
+- nearby detail must already be prefetched/available enough that normal pan/zoom feels continuous;
+- zoom reveals real additional world structure, not a stretched raster;
+- close inspection can expose projected cell heights before Stage 10 and exact cells after Stage 10;
+- diagnostics must explain which generator/structure contributed to suspicious terrain.
+
+The exact rendering implementation remains presentation infrastructure and may use clipmaps, bounded pages, overscan and asynchronous preparation as appropriate.
+
+## Continuum guardrails
+
+Do not reintroduce:
 
 - giant full-world authoritative rasters;
 - camera-driven authoritative fidelity;
-- chunks/pages/tiles as natural geography or second truth;
-- independent feature painters that create contradictory geography;
-- V16/V17/V18 whole-generator lineages instead of replaceable owner-local algorithms;
-- arbitrary solver constants masquerading as semantic Definitions;
-- universal mutable `WorldCell` / `WorldFact` truth stores;
-- global `generation/<domain>` or `physics/<domain>` trees that scatter semantic owners.
-
-The new hierarchy is allowed to generate sparse structural descriptors at very large scales. That is not a full-world raster: descriptors remain semantic causes and child structure is refined/materialized only for requested areas.
-
-## Stable foundations that the reset must preserve
-
-Existing accepted simulation work includes deterministic time/scheduling, authored Definitions, objective geometry/terrain foundations, movement/navigation/pathfinding/occupancy behavior, autonomous agents, finite Liquid/Water/Soil mechanics, environmental water processes and observer-only diagnostics.
-
-The reset is allowed to change package/type ownership and remove obsolete facades. It is not allowed to change accepted behavior accidentally.
+- chunks/pages/tiles as natural geography;
+- independent feature painters that can contradict one another;
+- V16/V17/V18 whole-generator lineages;
+- arbitrary solver constants as authored Definitions;
+- universal mutable `WorldCell` / `WorldFact` stores;
+- real runtime erosion/water history merely to construct Genesis rivers;
+- distant-living-object semantic downgrades driven by observation.
 
 ## Development rule
 
-Every future stage is a green checkpoint:
+Every stage remains a green checkpoint:
 
 ```text
 owner + invariant
       ↓
 small coherent implementation
       ↓
-focused correctness evidence
+focused correctness / determinism / seam evidence
       ↓
 architecture checks
       ↓
-representative scale/performance evidence where relevant
+representative scale/performance evidence
+      ↓
+world-to-cell visualization where applicable
       ↓
 documentation reconciliation
       ↓
-explicit acceptance
+explicit manual acceptance
 ```
 
-For replacement Stage 6, “small coherent implementation” means a vertical slice that proves the new representation: convincing continental geometry + explicit mountain belts + stable multi-scale rendering. It does **not** mean incrementally tuning the rejected heightfield until it looks less bad.
+A stage is not complete if its semantics, ownership, performance model or current status still require chat history to reconstruct.
 
-A stage is not complete if its semantics, ownership, algorithms or current status still require chat history to reconstruct.
-
-See [Project Context](project-context.md), [Architecture](architecture.md), [ADR-026](decisions/026-semantic-capability-architecture.md), [ADR-027](decisions/027-hierarchical-geomorphic-geography.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
+See [Project Context](project-context.md), [Architecture](architecture.md), [ADR-026](decisions/026-semantic-capability-architecture.md), [ADR-027](decisions/027-hierarchical-geomorphic-geography.md), [Stage 5](systems/world-generation/stage5-macro-geophysics.md) and the [Continuum Development Plan](systems/world-generation/continuum-development-plan.md).
