@@ -10,6 +10,8 @@ The product target is a country/continental-scale logical world containing hundr
 
 The retired V12/V13 line contains one important positive result: **V12 local terrain morphology was visually successful at cell-near scale.** Its balanced hills/depressions, rolling relief, physical feature sizes and explicit slope relaxation produced irregular but readable terrain without one-block Z chatter. V13 also contains useful elongated/asymmetric hill-profile mathematics. Their dense full-world architecture and global placement strategy remain retired.
 
+A second legacy property is retained as a permanent finite-world law: **the logical world is surrounded by ocean.** Continents and islands exist inside that ocean; they never continue through or terminate against the rectangular coordinate boundary.
+
 ## Decision
 
 EvoForge terrain generation becomes **structure first, local morphology second**.
@@ -34,11 +36,35 @@ later exact XYZ and Runtime mutation
 
 ### 1. Stage 5 supplies causes, not only one elevation number
 
-The accepted Stage 5 macro elevation remains valid. A separate Stage 5 preparation PR may expand `world/geophysics` with consumer-neutral structural context while preserving accepted elevation output.
+The accepted Stage 5 intrinsic macro elevation remains valid. A separate Stage 5 preparation PR expands `world/geophysics` with consumer-neutral structural context and a finite-domain boundary condition.
 
-The intended facts are broad continental/ocean support, macro-margin influence, stable structural-region identity and local boundary regime/orientation/strength. Stage 5 does not create Terrain mountains/rivers/lakes.
+The intended structural facts are broad continental/ocean support, macro-margin influence, stable structural-region identity and local boundary regime/orientation/strength. Stage 5 does not create Terrain mountains/rivers/lakes.
 
-### 2. Major geography is explicit structure
+The finite-domain geophysical model additionally supplies **boundary-ocean influence**. A non-zero hard belt around every logical world edge is guaranteed ocean, with a broader smooth inward transition so continental support is pushed away from the map boundary rather than visually clipped by it.
+
+This boundary is geophysical truth, not a rendering mask and not an authored style parameter.
+
+### 2. The surrounding ocean is inherited by every later Genesis stage
+
+The hard Stage 5 boundary-ocean belt is a permanent constraint:
+
+```text
+boundaryOceanInfluence == 1
+        =>
+Genesis Terrain remains below sea datum
+```
+
+Therefore:
+
+- no continent or island may touch the logical coordinate boundary;
+- no mountain, plateau, local hill or later terrain refinement may lift the hard belt into land;
+- natural coastlines are generated/refined inward of the boundary rather than being cut by it;
+- exact XYZ materialization must preserve the same ocean-side result;
+- later drainage can treat the surrounding ocean as a stable terminal receiving boundary.
+
+Runtime mechanics may eventually modify terrain according to their own accepted laws, but Genesis can never begin with land clipped by the finite world edge.
+
+### 3. Major geography is explicit structure
 
 Stage 6 represents major terrain as natural structures rather than thresholded decorative fields:
 
@@ -51,7 +77,7 @@ Stage 6 represents major terrain as natural structures rather than thresholded d
 
 Technical pages/tiles never own these structures.
 
-### 3. Local terrain reuses the successful V12 principles
+### 4. Local terrain reuses the successful V12 principles
 
 The old implementation is not restored, but the local algorithmic lineage is intentionally reused:
 
@@ -64,7 +90,7 @@ The old implementation is not restored, but the local algorithmic lineage is int
 
 Regional structures answer **where/why** terrain exists; the local synthesizer answers **what the nearby surface looks like**.
 
-### 4. Mountains are belts first, peaks last
+### 5. Mountains are belts first, peaks last
 
 Ordinary major mountain geography is not a set of independent circular or elliptical bumps.
 
@@ -72,21 +98,21 @@ A belt has stable identity and finite geometry such as centerline, length, varyi
 
 Useful V13 elongated/asymmetric profiles may shape child ridges/landforms, but V13-style independent mountain spots are not the global mountain model.
 
-### 5. Hierarchical refinement is natural, not camera truth
+### 6. Hierarchical refinement is natural, not camera truth
 
 A coarse observation may stop at parent structures. A finer request may deterministically reveal child ridges, local hills or finer coast geometry. Those children are derived from stable feature identities and exist independently of which consumer requested them first.
 
 Camera zoom selects a presentation/request depth only. It never changes generated truth.
 
-### 6. Drainage and rivers are later Genesis solvers, not runtime history
+### 7. Drainage and rivers are later Genesis solvers, not runtime history
 
-Stage 7 analyzes the accepted surface to produce drainage/watershed/depression/spill topology.
+Stage 7 analyzes the accepted surface to produce drainage/watershed/depression/spill topology. The surrounding Stage 5 ocean is a deterministic terminal boundary for outward drainage.
 
 Stage 8 creates river channels, lake basins and bounded surface adjustment. It may use erosion-like or stream-power-like mathematics as a finite **Genesis construction solver**. Those iterations are not simulated years and do not introduce runtime erosion physics.
 
 Real later-time erosion, landslides, digging/construction and water-driven Terrain mutation are later Runtime mechanics.
 
-### 7. Runtime Terrain eventually uses reconstructable Genesis + sparse changes
+### 8. Runtime Terrain eventually uses reconstructable Genesis + sparse changes
 
 Genesis terrain remains reconstructable from world identity and algorithms. Future authoritative runtime changes are stored separately and persist independently of caches/presentation.
 
@@ -98,12 +124,13 @@ Genesis terrain + persistent authoritative changes = current Terrain truth
 
 The exact sparse representation is postponed until runtime mutation/persistence work actually needs it.
 
-### 8. Visualization is an acceptance tool
+### 9. Visualization is an acceptance tool
 
 F2 must allow inspection from world scale toward cells and expose causal layers. It must not hide generator quality behind rivers/forests/materials that belong to later stages.
 
 Presentation may use clipmap-like nested resident levels, overscan, asynchronous preparation and bounded caches. However:
 
+- whole-world inspection must visibly show ocean around all four logical edges;
 - expensive generation does not block the render thread;
 - ordinary pan does not alter simulation truth/detail semantics;
 - incomplete technical LOD is not shown as checkerboard geography;
@@ -112,8 +139,10 @@ Presentation may use clipmap-like nested resident levels, overscan, asynchronous
 
 ## Required acceptance
 
-Across multiple fixed seeds:
+Across multiple fixed seeds and relevant world-generation profiles:
 
+- every logical world edge and a non-zero outer belt remain ocean;
+- no landmass is visually or physically clipped by the finite coordinate boundary;
 - land/ocean morphology is coherent at country/continental scale;
 - mountain systems read as connected ranges rather than spots/lesions;
 - broad plains/plateaus/basins remain readable;
@@ -128,6 +157,6 @@ Across multiple fixed seeds:
 
 PR #136 remains rejected and is not an implementation base.
 
-Reusable foundations survive only where representation-neutral: Continuum addressing/materialization/cache infrastructure, deterministic generation utilities, accepted Stage 5 macro elevation, and the algorithmic ideas from V12/V13 explicitly identified above.
+Reusable foundations survive only where representation-neutral: Continuum addressing/materialization/cache infrastructure, deterministic generation utilities, accepted Stage 5 intrinsic macro elevation, the Stage 5 finite-world ocean constraint, and the algorithmic ideas from V12/V13 explicitly identified above.
 
 No new V-number whole-generator lineage is introduced.
