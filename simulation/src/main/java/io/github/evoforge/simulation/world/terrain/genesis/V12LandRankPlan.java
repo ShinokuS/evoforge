@@ -241,13 +241,14 @@ public final class V12LandRankPlan {
         int potential = (int) (((long) coherent * (LegacyV12Noise.PPM - calibration.fragmentationPpm())
                 + (long) fragmented * calibration.fragmentationPpm()) / LegacyV12Noise.PPM);
         if (silhouette == null) return potential;
-        if (!silhouette.supports(localX, localY)) return -1;
 
+        int silhouettePpm = silhouette.potentialPpmAt(localX, localY);
+        if (silhouettePpm <= 0) return -1;
         int basePpm = LegacyV12Noise.sampleToPpm(potential);
         int influencePpm = V14LandmassPlan.SILHOUETTE_INFLUENCE_PPM;
         int blendedPpm = Math.toIntExact(
                 ((long) basePpm * (LegacyV12Noise.PPM - influencePpm)
-                        + (long) silhouette.potentialPpmAt(localX, localY) * influencePpm)
+                        + (long) silhouettePpm * influencePpm)
                         / LegacyV12Noise.PPM);
         return LegacyV12Noise.ppmToSample(blendedPpm);
     }
