@@ -13,32 +13,30 @@ final class V14ContinuumBaseTerrainPlanTest {
 
     @Test
     void composesAcceptedLandmassRankReliefAndBoundedSlopePages() {
-        ContinuumWorldDomain domain = new ContinuumWorldDomain(16, 16);
-        V14ContinuumBaseTerrainPlan first = V14ContinuumBaseTerrainPlan.prepare(
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(64, 64);
+        V14ContinuumBaseTerrainPlan plan = V14ContinuumBaseTerrainPlan.prepare(
                 domain, 71_337L, V15TerrainDefinition.balanced(), 24);
-        V14ContinuumBaseTerrainPlan second = V14ContinuumBaseTerrainPlan.prepare(
-                domain, 71_337L, V15TerrainDefinition.balanced(), 24);
-        ContinuumSampleWindow window = new ContinuumSampleWindow(0, 0, 16, 16, 1);
-        ContinuumScalarPage firstPage = first.elevationPages().materialize(window);
-        ContinuumScalarPage secondPage = second.elevationPages().materialize(window);
+        ContinuumSampleWindow window = new ContinuumSampleWindow(0, 0, 64, 64, 1);
+        ContinuumScalarPage firstPage = plan.elevationPages().materialize(window);
+        ContinuumScalarPage repeatedPage = plan.elevationPages().materialize(window);
 
         long land = 0L;
-        for (int y = 0; y < 16; y++) {
-            for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) {
                 long value = (long) firstPage.sample(x, y);
-                assertEquals(value, (long) secondPage.sample(x, y));
-                assertEquals(first.landRank().isLand(x, y), value > 0L);
+                assertEquals(value, (long) repeatedPage.sample(x, y));
+                assertEquals(plan.landRank().isLand(x, y), value > 0L);
                 if (value > 0L) land++;
             }
         }
-        assertEquals(first.landRank().landCount(), land);
+        assertEquals(plan.landRank().landCount(), land);
         assertTrue(land > 0L);
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 64; i++) {
             assertTrue(firstPage.sample(i, 0) < 0d);
-            assertTrue(firstPage.sample(i, 15) < 0d);
+            assertTrue(firstPage.sample(i, 63) < 0d);
             assertTrue(firstPage.sample(0, i) < 0d);
-            assertTrue(firstPage.sample(15, i) < 0d);
+            assertTrue(firstPage.sample(63, i) < 0d);
         }
     }
 }
