@@ -4,6 +4,7 @@ import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.field.BoundedExactTerrainSnapshotPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15ExactInlandLakeBasePageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15InlandLakeDomainPlan;
 
@@ -43,30 +44,39 @@ public final class V15ContinuumLakeBasePlan {
                 seed,
                 placementDefinition,
                 HISTORICAL_V12_BASE_CEILING_CELLS);
+        ContinuumScalarPageSource placementPages = BoundedExactTerrainSnapshotPageSource.captureIfBounded(
+                placement.elevationPages());
         V15InlandLakeDomainPlan lakeDomain = V15InlandLakeDomainPlan.prepare(
                 domain,
-                placement.elevationPages(),
+                placementPages,
                 maximumZCells,
                 recipe);
 
         V15TerrainDefinition exactDefinition = lakeDomain.lakeCellCount() == 0
                 ? definition
                 : compensatedLandDefinition(domain, definition, lakeDomain.lakeCellCount());
-        V14ContinuumBaseTerrainPlan authoritative = sameLandCoverage(placementDefinition, exactDefinition)
-                ? placement
-                : V14ContinuumBaseTerrainPlan.prepare(
-                        domain,
-                        seed,
-                        exactDefinition,
-                        HISTORICAL_V12_BASE_CEILING_CELLS);
+        V14ContinuumBaseTerrainPlan authoritative;
+        ContinuumScalarPageSource authoritativePages;
+        if (sameLandCoverage(placementDefinition, exactDefinition)) {
+            authoritative = placement;
+            authoritativePages = placementPages;
+        } else {
+            authoritative = V14ContinuumBaseTerrainPlan.prepare(
+                    domain,
+                    seed,
+                    exactDefinition,
+                    HISTORICAL_V12_BASE_CEILING_CELLS);
+            authoritativePages = BoundedExactTerrainSnapshotPageSource.captureIfBounded(
+                    authoritative.elevationPages());
+        }
 
-        lakeDomain.verifyDrySupport(authoritative.elevationPages());
+        lakeDomain.verifyDrySupport(authoritativePages);
         V12LandRankPlan lakeAwareLandRank = authoritative.landRank().excluding(
                 lakeDomain.lakeCellCount(),
                 lakeDomain::isLake);
         V15ExactInlandLakeBasePageSource elevationPages = new V15ExactInlandLakeBasePageSource(
                 domain,
-                authoritative.elevationPages(),
+                authoritativePages,
                 lakeDomain);
         return new V15ContinuumLakeBasePlan(
                 authoritative, lakeDomain, lakeAwareLandRank, elevationPages);
