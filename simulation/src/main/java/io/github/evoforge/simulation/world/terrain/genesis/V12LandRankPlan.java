@@ -7,13 +7,14 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  *
  * <p>The accepted V12 potential is only 16-bit. A fixed 65,536-bin histogram therefore reproduces
  * the same descending potential order, while one second streaming pass reproduces the old stable
- * row-major tie break. Memory is independent of logical world area.</p>
+ * row-major tie break. Optional V14 constraint uses the exact old 900k silhouette blend.</p>
  */
 public final class V12LandRankPlan {
     private final V15TerrainCoordinateFrame frame;
     private final LegacyV15Random random;
     private final V12TerrainCalibration calibration;
     private final V12TerrainRecipe recipe;
+    private final V14LandmassPlan silhouette;
     private final int thresholdPotential;
     private final long thresholdLastCellIndex;
     private final long landCount;
@@ -23,6 +24,7 @@ public final class V12LandRankPlan {
             LegacyV15Random random,
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette,
             int thresholdPotential,
             long thresholdLastCellIndex,
             long landCount) {
@@ -30,6 +32,7 @@ public final class V12LandRankPlan {
         this.random = random;
         this.calibration = calibration;
         this.recipe = recipe;
+        this.silhouette = silhouette;
         this.thresholdPotential = thresholdPotential;
         this.thresholdLastCellIndex = thresholdLastCellIndex;
         this.landCount = landCount;
@@ -40,6 +43,30 @@ public final class V12LandRankPlan {
             long seed,
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe) {
+        return prepare(domain, seed, calibration, recipe, null);
+    }
+
+    public static V12LandRankPlan prepareConstrained(
+            ContinuumWorldDomain domain,
+            long seed,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette) {
+        if (silhouette == null) {
+            throw new IllegalArgumentException("V14 silhouette must not be null");
+        }
+        if (!domain.equals(silhouette.domain())) {
+            throw new IllegalArgumentException("V14 silhouette must match the V12 Continuum domain");
+        }
+        return prepare(domain, seed, calibration, recipe, silhouette);
+    }
+
+    private static V12LandRankPlan prepare(
+            ContinuumWorldDomain domain,
+            long seed,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette) {
         if (domain == null || calibration == null || recipe == null) {
             throw new IllegalArgumentException("V12 land-rank inputs must not be null");
         }
@@ -47,13 +74,16 @@ public final class V12LandRankPlan {
             throw new IllegalArgumentException("V12 calibration must match its Continuum domain");
         }
         V15TerrainCoordinateFrame frame = V15TerrainCoordinateFrame.centered(domain);
-        long landCount = calibration.landCount();
+        long landCount = silhouette == null
+                ? calibration.landCount()
+                : Math.min(calibration.landCount(), silhouette.supportCellCount());
         if (landCount <= 0L) {
             return new V12LandRankPlan(
                     frame,
                     new LegacyV15Random(seed),
                     calibration,
                     recipe,
+                    silhouette,
                     LegacyV12Noise.SAMPLE_MAX + 1,
                     -1L,
                     0L);
@@ -64,12 +94,16 @@ public final class V12LandRankPlan {
         for (long y = 0L; y < domain.height(); y++) {
             long legacyY = frame.legacyY(y);
             for (long x = 0L; x < domain.width(); x++) {
-                histogram[potentialAt(
+                int potential = potentialAt(
                         random,
                         calibration,
                         recipe,
+                        silhouette,
+                        x,
+                        y,
                         frame.legacyX(x),
-                        legacyY)]++;
+                        legacyY);
+                if (potential >= 0) histogram[potential]++;
             }
         }
 
@@ -96,14 +130,16 @@ public final class V12LandRankPlan {
         for (long y = 0L; y < domain.height(); y++) {
             long legacyY = frame.legacyY(y);
             for (long x = 0L; x < domain.width(); x++, cellIndex++) {
-                if (potentialAt(
+                int potential = potentialAt(
                         random,
                         calibration,
                         recipe,
+                        silhouette,
+                        x,
+                        y,
                         frame.legacyX(x),
-                        legacyY) != threshold) {
-                    continue;
-                }
+                        legacyY);
+                if (potential != threshold) continue;
                 seenAtThreshold++;
                 if (seenAtThreshold == selectedAtThreshold) {
                     thresholdLastIndex = cellIndex;
@@ -120,6 +156,7 @@ public final class V12LandRankPlan {
                 random,
                 calibration,
                 recipe,
+                silhouette,
                 threshold,
                 thresholdLastIndex,
                 landCount);
@@ -140,8 +177,12 @@ public final class V12LandRankPlan {
                 random,
                 calibration,
                 recipe,
+                silhouette,
+                x,
+                y,
                 frame.legacyX(x),
                 frame.legacyY(y));
+        if (potential < 0) return false;
         if (potential > thresholdPotential) return true;
         if (potential < thresholdPotential) return false;
         return frame.cellIndex(x, y) <= thresholdLastCellIndex;
@@ -153,6 +194,9 @@ public final class V12LandRankPlan {
                 random,
                 calibration,
                 recipe,
+                silhouette,
+                x,
+                y,
                 frame.legacyX(x),
                 frame.legacyY(y));
     }
@@ -175,23 +219,36 @@ public final class V12LandRankPlan {
             LegacyV15Random random,
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe,
-            long x,
-            long y) {
+            V14LandmassPlan silhouette,
+            long localX,
+            long localY,
+            long legacyX,
+            long legacyY) {
         int coherent = LegacyV12Noise.organicValueNoise(
                 random,
                 LegacyV12Noise.LANDMASS,
-                x,
-                y,
+                legacyX,
+                legacyY,
                 calibration.coherentLandmassScale(),
                 recipe);
         int fragmented = LegacyV12Noise.organicValueNoise(
                 random,
                 LegacyV12Noise.FRAGMENT,
-                x,
-                y,
+                legacyX,
+                legacyY,
                 calibration.fragmentedLandmassScale(),
                 recipe);
-        return (int) (((long) coherent * (LegacyV12Noise.PPM - calibration.fragmentationPpm())
+        int potential = (int) (((long) coherent * (LegacyV12Noise.PPM - calibration.fragmentationPpm())
                 + (long) fragmented * calibration.fragmentationPpm()) / LegacyV12Noise.PPM);
+        if (silhouette == null) return potential;
+        if (!silhouette.supports(localX, localY)) return -1;
+
+        int basePpm = LegacyV12Noise.sampleToPpm(potential);
+        int influencePpm = V14LandmassPlan.SILHOUETTE_INFLUENCE_PPM;
+        int blendedPpm = Math.toIntExact(
+                ((long) basePpm * (LegacyV12Noise.PPM - influencePpm)
+                        + (long) silhouette.potentialPpmAt(localX, localY) * influencePpm)
+                        / LegacyV12Noise.PPM);
+        return LegacyV12Noise.ppmToSample(blendedPpm);
     }
 }
