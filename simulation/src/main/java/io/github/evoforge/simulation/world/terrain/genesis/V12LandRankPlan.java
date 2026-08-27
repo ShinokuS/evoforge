@@ -10,6 +10,11 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  * row-major tie break. Optional V14 constraint uses the exact old 900k silhouette blend.</p>
  */
 public final class V12LandRankPlan {
+    @FunctionalInterface
+    public interface CoordinateExclusion {
+        boolean excludes(long x, long y);
+    }
+
     private final V15TerrainCoordinateFrame frame;
     private final LegacyV15Random random;
     private final V12TerrainCalibration calibration;
@@ -18,6 +23,7 @@ public final class V12LandRankPlan {
     private final int thresholdPotential;
     private final long thresholdLastCellIndex;
     private final long landCount;
+    private final CoordinateExclusion exclusion;
 
     private V12LandRankPlan(
             V15TerrainCoordinateFrame frame,
@@ -28,6 +34,28 @@ public final class V12LandRankPlan {
             int thresholdPotential,
             long thresholdLastCellIndex,
             long landCount) {
+        this(
+                frame,
+                random,
+                calibration,
+                recipe,
+                silhouette,
+                thresholdPotential,
+                thresholdLastCellIndex,
+                landCount,
+                null);
+    }
+
+    private V12LandRankPlan(
+            V15TerrainCoordinateFrame frame,
+            LegacyV15Random random,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette,
+            int thresholdPotential,
+            long thresholdLastCellIndex,
+            long landCount,
+            CoordinateExclusion exclusion) {
         this.frame = frame;
         this.random = random;
         this.calibration = calibration;
@@ -36,6 +64,7 @@ public final class V12LandRankPlan {
         this.thresholdPotential = thresholdPotential;
         this.thresholdLastCellIndex = thresholdLastCellIndex;
         this.landCount = landCount;
+        this.exclusion = exclusion;
     }
 
     public static V12LandRankPlan prepareUnconstrained(
@@ -162,6 +191,33 @@ public final class V12LandRankPlan {
                 landCount);
     }
 
+    /**
+     * Returns the same accepted rank decision with an already-proven subset removed from dry land.
+     * V15 uses this only after verifying that every excluded lake cell belongs to the compensated
+     * continental rank, so V13 sees exactly the historical lake-aware dry-land mask.
+     */
+    public V12LandRankPlan excluding(long excludedLandCount, CoordinateExclusion excludedCoordinates) {
+        if (excludedCoordinates == null) {
+            throw new IllegalArgumentException("excludedCoordinates must not be null");
+        }
+        if (excludedLandCount < 0L || excludedLandCount > landCount) {
+            throw new IllegalArgumentException("excludedLandCount must fit the accepted land rank");
+        }
+        if (exclusion != null) {
+            throw new IllegalStateException("land-rank exclusion is already configured");
+        }
+        return new V12LandRankPlan(
+                frame,
+                random,
+                calibration,
+                recipe,
+                silhouette,
+                thresholdPotential,
+                thresholdLastCellIndex,
+                landCount - excludedLandCount,
+                excludedCoordinates);
+    }
+
     public long landCount() {
         return landCount;
     }
@@ -182,10 +238,17 @@ public final class V12LandRankPlan {
                 y,
                 frame.legacyX(x),
                 frame.legacyY(y));
-        if (potential < 0) return false;
-        if (potential > thresholdPotential) return true;
-        if (potential < thresholdPotential) return false;
-        return frame.cellIndex(x, y) <= thresholdLastCellIndex;
+        boolean selected;
+        if (potential < 0) {
+            selected = false;
+        } else if (potential > thresholdPotential) {
+            selected = true;
+        } else if (potential < thresholdPotential) {
+            selected = false;
+        } else {
+            selected = frame.cellIndex(x, y) <= thresholdLastCellIndex;
+        }
+        return selected && (exclusion == null || !exclusion.excludes(x, y));
     }
 
     public int potentialAt(long x, long y) {
