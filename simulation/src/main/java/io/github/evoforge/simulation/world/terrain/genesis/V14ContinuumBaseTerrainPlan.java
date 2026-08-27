@@ -3,7 +3,7 @@ package io.github.evoforge.simulation.world.terrain.genesis;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
-import io.github.evoforge.simulation.world.terrain.field.V12SlopeLimitedPageSource;
+import io.github.evoforge.simulation.world.terrain.field.V12HistoricalSlopePageSource;
 import io.github.evoforge.simulation.world.terrain.field.V12UnrelaxedLandElevationField;
 
 /**
@@ -11,8 +11,8 @@ import io.github.evoforge.simulation.world.terrain.field.V12UnrelaxedLandElevati
  *
  * <p>Preparation keeps only compact deterministic global facts: V12 calibration, V14 control graph
  * and cutoffs, and V12 rank threshold/tie boundary. Elevation itself remains non-resident. Requested
- * pages are synthesized from the exact accepted V12 relief primitives and a bounded Continuum slope
- * projection.</p>
+ * pages are synthesized from the exact accepted V12 relief primitives and the historical V12
+ * directional slope sweeps evaluated inside a bounded validated migration halo.</p>
  */
 public final class V14ContinuumBaseTerrainPlan {
     private final ContinuumWorldDomain domain;
@@ -24,7 +24,7 @@ public final class V14ContinuumBaseTerrainPlan {
     private final V12LandRankPlan landRank;
     private final V12UnrelaxedLandElevationField unrelaxedElevation;
     private final V12ContinuumSlopeCalibration slope;
-    private final V12SlopeLimitedPageSource elevationPages;
+    private final V12HistoricalSlopePageSource elevationPages;
 
     private V14ContinuumBaseTerrainPlan(
             ContinuumWorldDomain domain,
@@ -36,7 +36,7 @@ public final class V14ContinuumBaseTerrainPlan {
             V12LandRankPlan landRank,
             V12UnrelaxedLandElevationField unrelaxedElevation,
             V12ContinuumSlopeCalibration slope,
-            V12SlopeLimitedPageSource elevationPages) {
+            V12HistoricalSlopePageSource elevationPages) {
         this.domain = domain;
         this.seed = seed;
         this.definition = definition;
@@ -75,8 +75,8 @@ public final class V14ContinuumBaseTerrainPlan {
                 maximumLandHeightCells);
         V12ContinuumSlopeCalibration slope = V12ContinuumSlopeCalibration.compile(
                 terrain, recipe, maximumLandHeightCells);
-        V12SlopeLimitedPageSource elevationPages = new V12SlopeLimitedPageSource(
-                domain, unrelaxed, slope);
+        V12HistoricalSlopePageSource elevationPages = new V12HistoricalSlopePageSource(
+                domain, unrelaxed, slope, recipe);
 
         return new V14ContinuumBaseTerrainPlan(
                 domain,
