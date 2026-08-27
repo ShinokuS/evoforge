@@ -4,6 +4,7 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSo
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.field.BoundedExactTerrainSnapshotPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V13ExactMountainPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V14ExactCoastalBathymetryPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V14ExactDeepBathymetryPageSource;
@@ -13,16 +14,16 @@ import io.github.evoforge.simulation.world.terrain.field.V15ExactInlandLakeBathy
 public final class V15ContinuumTerrainPlan {
     private final V15ContinuumLakeBasePlan lakeBase;
     private final V13ExactMountainPageSource mountains;
-    private final V14ExactCoastalBathymetryPageSource coastalBathymetry;
-    private final V14ExactDeepBathymetryPageSource deepBathymetry;
-    private final V15ExactInlandLakeBathymetryPageSource elevationPages;
+    private final ContinuumScalarPageSource coastalBathymetry;
+    private final ContinuumScalarPageSource deepBathymetry;
+    private final ContinuumScalarPageSource elevationPages;
 
     private V15ContinuumTerrainPlan(
             V15ContinuumLakeBasePlan lakeBase,
             V13ExactMountainPageSource mountains,
-            V14ExactCoastalBathymetryPageSource coastalBathymetry,
-            V14ExactDeepBathymetryPageSource deepBathymetry,
-            V15ExactInlandLakeBathymetryPageSource elevationPages) {
+            ContinuumScalarPageSource coastalBathymetry,
+            ContinuumScalarPageSource deepBathymetry,
+            ContinuumScalarPageSource elevationPages) {
         this.lakeBase = lakeBase;
         this.mountains = mountains;
         this.coastalBathymetry = coastalBathymetry;
@@ -65,23 +66,31 @@ public final class V15ContinuumTerrainPlan {
                 domain,
                 minimumZCells,
                 bathymetryRecipe);
-        V14ExactCoastalBathymetryPageSource coastal = new V14ExactCoastalBathymetryPageSource(
+        V14ExactCoastalBathymetryPageSource rawCoastal = new V14ExactCoastalBathymetryPageSource(
                 domain,
                 mountains,
                 bathymetryCalibration,
                 bathymetryRecipe);
-        V14ExactDeepBathymetryPageSource deep = new V14ExactDeepBathymetryPageSource(
+        ContinuumScalarPageSource coastal =
+                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawCoastal);
+
+        V14ExactDeepBathymetryPageSource rawDeep = new V14ExactDeepBathymetryPageSource(
                 domain,
                 coastal,
                 bathymetryCalibration,
                 bathymetryRecipe);
-        V15ExactInlandLakeBathymetryPageSource elevationPages =
+        ContinuumScalarPageSource deep =
+                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawDeep);
+
+        V15ExactInlandLakeBathymetryPageSource rawElevationPages =
                 new V15ExactInlandLakeBathymetryPageSource(
                         domain,
                         seed,
                         deep,
                         minimumZCells,
                         V15InlandLakeBathymetryRecipe.balanced());
+        ContinuumScalarPageSource elevationPages =
+                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawElevationPages);
         return new V15ContinuumTerrainPlan(lakeBase, mountains, coastal, deep, elevationPages);
     }
 
