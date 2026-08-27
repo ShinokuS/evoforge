@@ -2,20 +2,10 @@ package io.github.evoforge.simulation.world.terrain.genesis;
 
 import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
 
-/**
- * Compact calibrated V12 slope facts shared by Continuum terrain projections.
- *
- * <p>The accepted historical V12 algorithm uses {@link #maximumStepSubunits()} and
- * {@link #maximumLandHeightSubunits()} while its bounded Continuum materializer owns a separately
- * validated migration halo. {@link #exactHaloCells()} is retained only for the alternate symmetric
- * Lipschitz projection: for that mathematical projection the finite height range gives an exact
- * theoretical influence radius. It must not be interpreted as the historical directional-sweep
- * migration radius.</p>
- */
+/** Compact calibrated slope facts used by the accepted historical V12 relief pass. */
 public record V12ContinuumSlopeCalibration(
         long maximumStepSubunits,
-        long maximumLandHeightSubunits,
-        int exactHaloCells) {
+        long maximumLandHeightSubunits) {
 
     private static final int PPM = 1_000_000;
 
@@ -25,9 +15,6 @@ public record V12ContinuumSlopeCalibration(
         }
         if (maximumLandHeightSubunits <= 0L) {
             throw new IllegalArgumentException("maximumLandHeightSubunits must be > 0");
-        }
-        if (exactHaloCells < 0) {
-            throw new IllegalArgumentException("exactHaloCells must be >= 0");
         }
     }
 
@@ -51,12 +38,9 @@ public record V12ContinuumSlopeCalibration(
         long maximumLandHeightSubunits = Math.multiplyExact(
                 (long) maximumLandHeightCells,
                 TerrainElevationField.SUBUNITS_PER_CELL);
-        long verticalRange = maximumLandHeightSubunits - 1L;
-        int exactHaloCells = Math.toIntExact(verticalRange / maximumStepSubunits);
 
         return new V12ContinuumSlopeCalibration(
                 maximumStepSubunits,
-                maximumLandHeightSubunits,
-                exactHaloCells);
+                maximumLandHeightSubunits);
     }
 }
