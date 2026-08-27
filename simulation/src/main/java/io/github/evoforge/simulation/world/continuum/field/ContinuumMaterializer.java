@@ -2,8 +2,8 @@ package io.github.evoforge.simulation.world.continuum.field;
 
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 
-/** Materializes only the requested bounded samples from an authoritative field. */
-public final class ContinuumMaterializer {
+/** Materializes only the requested bounded samples from an authoritative point-addressable field. */
+public final class ContinuumMaterializer implements ContinuumScalarPageSource {
     private final ContinuumWorldDomain domain;
     private final ContinuumScalarField field;
 
@@ -15,10 +15,12 @@ public final class ContinuumMaterializer {
         this.field = field;
     }
 
+    @Override
     public ContinuumWorldDomain domain() {
         return domain;
     }
 
+    @Override
     public ContinuumScalarPage materialize(ContinuumSampleWindow window) {
         if (window == null) {
             throw new IllegalArgumentException("window must not be null");
