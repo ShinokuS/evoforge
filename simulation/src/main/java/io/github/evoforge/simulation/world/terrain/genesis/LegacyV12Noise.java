@@ -1,25 +1,25 @@
 package io.github.evoforge.simulation.world.terrain.genesis;
 
 /** Exact fixed-point noise and feature primitives from the accepted V12 terrain implementation. */
-final class LegacyV12Noise {
-    static final int PPM = 1_000_000;
-    static final int SAMPLE_MAX = 65_535;
+public final class LegacyV12Noise {
+    public static final int PPM = 1_000_000;
+    public static final int SAMPLE_MAX = 65_535;
 
-    static final String LANDMASS = "world:landmass";
-    static final String FRAGMENT = "world:fragment";
-    static final String UPLIFT = "world:v12-uplift";
-    static final String RIDGE_A = "world:v12-ridge-a";
-    static final String RIDGE_B = "world:v12-ridge-b";
-    static final String ROLLING = "world:v12-rolling";
-    static final String ROLLING_DETAIL = "world:v12-rolling-detail";
-    static final String LANDFORM_FEATURE = "world:v12-landform-feature";
-    static final String LANDFORM_PATTERN = "world:v12-landform-pattern";
-    static final String WARP_X = "world:v12-warp-x";
-    static final String WARP_Y = "world:v12-warp-y";
+    public static final String LANDMASS = "world:landmass";
+    public static final String FRAGMENT = "world:fragment";
+    public static final String UPLIFT = "world:v12-uplift";
+    public static final String RIDGE_A = "world:v12-ridge-a";
+    public static final String RIDGE_B = "world:v12-ridge-b";
+    public static final String ROLLING = "world:v12-rolling";
+    public static final String ROLLING_DETAIL = "world:v12-rolling-detail";
+    public static final String LANDFORM_FEATURE = "world:v12-landform-feature";
+    public static final String LANDFORM_PATTERN = "world:v12-landform-pattern";
+    public static final String WARP_X = "world:v12-warp-x";
+    public static final String WARP_Y = "world:v12-warp-y";
 
     private LegacyV12Noise() {}
 
-    static int organicValueNoise(
+    public static int organicValueNoise(
             LegacyV15Random random,
             String purpose,
             long x,
@@ -35,7 +35,7 @@ final class LegacyV12Noise {
         return smoothValueNoise(random, purpose, warpedX, warpedY, scale);
     }
 
-    static int smoothValueNoise(
+    public static int smoothValueNoise(
             LegacyV15Random random,
             String purpose,
             long x,
@@ -54,7 +54,7 @@ final class LegacyV12Noise {
         return smoothInterpolate(lower, upper, offsetY, scale);
     }
 
-    static int randomPpm(
+    public static int randomPpm(
             LegacyV15Random random,
             String purpose,
             long x,
@@ -64,7 +64,7 @@ final class LegacyV12Noise {
         return sampleToPpm(sample);
     }
 
-    static int centeredRandomPpm(
+    public static int centeredRandomPpm(
             LegacyV15Random random,
             String purpose,
             long x,
@@ -73,19 +73,19 @@ final class LegacyV12Noise {
         return randomPpm(random, purpose, x, y, ordinal) * 2 - PPM;
     }
 
-    static long centeredPpm(int sample) {
+    public static long centeredPpm(int sample) {
         return (long) sampleToPpm(sample) * 2L - PPM;
     }
 
-    static int sampleToPpm(int sample) {
+    public static int sampleToPpm(int sample) {
         return (int) ((long) sample * PPM / SAMPLE_MAX);
     }
 
-    static int ppmToSample(int ppm) {
+    public static int ppmToSample(int ppm) {
         return (int) ((long) clampPpm(ppm) * SAMPLE_MAX / PPM);
     }
 
-    static int smoothStepPpm(long coordinatePpm) {
+    public static int smoothStepPpm(long coordinatePpm) {
         long coordinate = Math.max(0L, Math.min((long) PPM, coordinatePpm));
         long coordinateSquared = coordinate * coordinate;
         return (int) (coordinateSquared
@@ -93,11 +93,11 @@ final class LegacyV12Noise {
                 / ((long) PPM * PPM));
     }
 
-    static int clampPpm(long value) {
+    public static int clampPpm(long value) {
         return (int) Math.max(0L, Math.min((long) PPM, value));
     }
 
-    static long clampCenteredPpm(long value) {
+    public static long clampCenteredPpm(long value) {
         return Math.max(-(long) PPM, Math.min((long) PPM, value));
     }
 
