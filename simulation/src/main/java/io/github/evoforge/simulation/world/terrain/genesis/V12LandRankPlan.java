@@ -10,7 +10,7 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  * row-major tie break. Memory is independent of logical world area.</p>
  */
 public final class V12LandRankPlan {
-    private final ContinuumWorldDomain domain;
+    private final V15TerrainCoordinateFrame frame;
     private final LegacyV15Random random;
     private final V12TerrainCalibration calibration;
     private final V12TerrainRecipe recipe;
@@ -19,14 +19,14 @@ public final class V12LandRankPlan {
     private final long landCount;
 
     private V12LandRankPlan(
-            ContinuumWorldDomain domain,
+            V15TerrainCoordinateFrame frame,
             LegacyV15Random random,
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe,
             int thresholdPotential,
             long thresholdLastCellIndex,
             long landCount) {
-        this.domain = domain;
+        this.frame = frame;
         this.random = random;
         this.calibration = calibration;
         this.recipe = recipe;
@@ -46,10 +46,11 @@ public final class V12LandRankPlan {
         if (domain.width() != calibration.width() || domain.height() != calibration.height()) {
             throw new IllegalArgumentException("V12 calibration must match its Continuum domain");
         }
+        V15TerrainCoordinateFrame frame = V15TerrainCoordinateFrame.centered(domain);
         long landCount = calibration.landCount();
         if (landCount <= 0L) {
             return new V12LandRankPlan(
-                    domain,
+                    frame,
                     new LegacyV15Random(seed),
                     calibration,
                     recipe,
@@ -61,8 +62,14 @@ public final class V12LandRankPlan {
         LegacyV15Random random = new LegacyV15Random(seed);
         long[] histogram = new long[LegacyV12Noise.SAMPLE_MAX + 1];
         for (long y = 0L; y < domain.height(); y++) {
+            long legacyY = frame.legacyY(y);
             for (long x = 0L; x < domain.width(); x++) {
-                histogram[potentialAt(random, calibration, recipe, x, y)]++;
+                histogram[potentialAt(
+                        random,
+                        calibration,
+                        recipe,
+                        frame.legacyX(x),
+                        legacyY)]++;
             }
         }
 
@@ -87,8 +94,16 @@ public final class V12LandRankPlan {
         long cellIndex = 0L;
         outer:
         for (long y = 0L; y < domain.height(); y++) {
+            long legacyY = frame.legacyY(y);
             for (long x = 0L; x < domain.width(); x++, cellIndex++) {
-                if (potentialAt(random, calibration, recipe, x, y) != threshold) continue;
+                if (potentialAt(
+                        random,
+                        calibration,
+                        recipe,
+                        frame.legacyX(x),
+                        legacyY) != threshold) {
+                    continue;
+                }
                 seenAtThreshold++;
                 if (seenAtThreshold == selectedAtThreshold) {
                     thresholdLastIndex = cellIndex;
@@ -101,7 +116,7 @@ public final class V12LandRankPlan {
         }
 
         return new V12LandRankPlan(
-                domain,
+                frame,
                 random,
                 calibration,
                 recipe,
@@ -121,23 +136,37 @@ public final class V12LandRankPlan {
     public boolean isLand(long x, long y) {
         requireCoordinate(x, y);
         if (landCount == 0L) return false;
-        int potential = potentialAt(random, calibration, recipe, x, y);
+        int potential = potentialAt(
+                random,
+                calibration,
+                recipe,
+                frame.legacyX(x),
+                frame.legacyY(y));
         if (potential > thresholdPotential) return true;
         if (potential < thresholdPotential) return false;
-        return cellIndex(x, y) <= thresholdLastCellIndex;
+        return frame.cellIndex(x, y) <= thresholdLastCellIndex;
     }
 
     public int potentialAt(long x, long y) {
         requireCoordinate(x, y);
-        return potentialAt(random, calibration, recipe, x, y);
+        return potentialAt(
+                random,
+                calibration,
+                recipe,
+                frame.legacyX(x),
+                frame.legacyY(y));
     }
 
-    private long cellIndex(long x, long y) {
-        return Math.addExact(Math.multiplyExact(y, domain.width()), x);
+    public long legacyX(long x) {
+        return frame.legacyX(x);
+    }
+
+    public long legacyY(long y) {
+        return frame.legacyY(y);
     }
 
     private void requireCoordinate(long x, long y) {
-        if (!domain.contains(x, y)) {
+        if (!frame.domain().contains(x, y)) {
             throw new IllegalArgumentException("coordinate lies outside the V12 land-rank domain");
         }
     }
