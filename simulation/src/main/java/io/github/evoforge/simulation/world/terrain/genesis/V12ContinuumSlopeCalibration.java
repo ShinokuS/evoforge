@@ -3,12 +3,14 @@ package io.github.evoforge.simulation.world.terrain.genesis;
 import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
 
 /**
- * Compact operating facts for the Continuum replacement of legacy V12 directional slope sweeps.
+ * Compact calibrated V12 slope facts shared by Continuum terrain projections.
  *
- * <p>The old implementation used four in-place whole-raster scan passes. That traversal is
- * intentionally not reproduced because one pass can propagate a correction across an arbitrarily
- * large connected land component. The Continuum implementation preserves the authored maximum
- * cardinal slope through a bounded Lipschitz projection instead.</p>
+ * <p>The accepted historical V12 algorithm uses {@link #maximumStepSubunits()} and
+ * {@link #maximumLandHeightSubunits()} while its bounded Continuum materializer owns a separately
+ * validated migration halo. {@link #exactHaloCells()} is retained only for the alternate symmetric
+ * Lipschitz projection: for that mathematical projection the finite height range gives an exact
+ * theoretical influence radius. It must not be interpreted as the historical directional-sweep
+ * migration radius.</p>
  */
 public record V12ContinuumSlopeCalibration(
         long maximumStepSubunits,
