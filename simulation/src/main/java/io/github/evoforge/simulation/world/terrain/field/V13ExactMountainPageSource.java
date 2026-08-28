@@ -35,6 +35,7 @@ public final class V13ExactMountainPageSource implements ContinuumScalarPageSour
     private final LegacyV15Random random;
     private final List<MountainSystem> systems;
     private final long maximumRawUplift;
+    private final int[] boundedCoastalDistance;
 
     public V13ExactMountainPageSource(
             ContinuumWorldDomain domain,
@@ -58,6 +59,7 @@ public final class V13ExactMountainPageSource implements ContinuumScalarPageSour
         this.random = new LegacyV15Random(seed);
         this.systems = List.copyOf(createSystems());
         this.maximumRawUplift = findMaximumRawUplift();
+        this.boundedCoastalDistance = captureBoundedCoastalDistance();
     }
 
     @Override
@@ -229,11 +231,39 @@ public final class V13ExactMountainPageSource implements ContinuumScalarPageSour
                 plateau);
     }
 
+    /**
+     * Finds the same global maximum as the historical dense rasterizer without evaluating every
+     * mountain system at every world cell. Each system can contribute only inside its finite
+     * support box, so the maximum of the composed max-field is the maximum contribution encountered
+     * while visiting those boxes.
+     */
     private long findMaximumRawUplift() {
+        if (systems.isEmpty()) return 0L;
+        long minimumLegacyX = frame.legacyMinX();
+        long minimumLegacyY = frame.legacyMinY();
+        long maximumLegacyX = Math.addExact(minimumLegacyX, domain.width() - 1L);
+        long maximumLegacyY = Math.addExact(minimumLegacyY, domain.height() - 1L);
         long maximum = 0L;
-        for (long y = 0L; y < domain.height(); y++) {
-            for (long x = 0L; x < domain.width(); x++) {
-                maximum = Math.max(maximum, rawUpliftAt(x, y));
+        for (MountainSystem system : systems) {
+            double support = Math.max(
+                    Math.max(system.negativeLongAxis(), system.positiveLongAxis()),
+                    Math.max(system.leftWidth(), system.rightWidth()));
+            long minX = Math.max(minimumLegacyX, (long) StrictMath.floor(system.centerX() - support));
+            long maxX = Math.min(maximumLegacyX, (long) StrictMath.ceil(system.centerX() + support));
+            long minY = Math.max(minimumLegacyY, (long) StrictMath.floor(system.centerY() - support));
+            long maxY = Math.min(maximumLegacyY, (long) StrictMath.ceil(system.centerY() + support));
+            if (minX > maxX || minY > maxY) continue;
+
+            for (long legacyY = minY; legacyY <= maxY; legacyY++) {
+                long y = legacyY - minimumLegacyY;
+                for (long legacyX = minX; legacyX <= maxX; legacyX++) {
+                    long x = legacyX - minimumLegacyX;
+                    if (!land.isLand(x, y)) continue;
+                    double profile = elongatedHillProfile(system, legacyX, legacyY);
+                    if (profile <= 0.0) continue;
+                    long uplift = Math.max(0L, Math.round(system.upliftSubunits() * profile));
+                    if (uplift > maximum) maximum = uplift;
+                }
             }
         }
         return maximum;
@@ -318,6 +348,11 @@ public final class V13ExactMountainPageSource implements ContinuumScalarPageSour
     }
 
     private int coastalDistanceAt(long x, long y) {
+        if (boundedCoastalDistance != null) {
+            int width = Math.toIntExact(domain.width());
+            return boundedCoastalDistance[Math.toIntExact(y) * width + Math.toIntExact(x)];
+        }
+
         int cap = Math.max(1, calibration.coastalTransitionCells() + 1);
         long boundaryDistance = Math.min(
                 Math.min(x + 1L, domain.width() - x),
@@ -336,6 +371,61 @@ public final class V13ExactMountainPageSource implements ContinuumScalarPageSour
             }
         }
         return best;
+    }
+
+    /**
+     * Small finite parity/inspection worlds get the exact historical two-pass cardinal distance
+     * field once. The cache has the same hard 512^2 ceiling as bounded exact terrain snapshots, so
+     * it cannot grow with the Continuum address space; larger worlds retain bounded point queries.
+     */
+    private int[] captureBoundedCoastalDistance() {
+        long widthLong = domain.width();
+        long heightLong = domain.height();
+        if (widthLong > BoundedExactTerrainSnapshotPageSource.MAX_SNAPSHOT_CELLS
+                || heightLong > BoundedExactTerrainSnapshotPageSource.MAX_SNAPSHOT_CELLS) {
+            return null;
+        }
+        long areaLong = Math.multiplyExact(widthLong, heightLong);
+        if (areaLong > BoundedExactTerrainSnapshotPageSource.MAX_SNAPSHOT_CELLS) return null;
+
+        int width = Math.toIntExact(widthLong);
+        int height = Math.toIntExact(heightLong);
+        int cap = Math.max(1, calibration.coastalTransitionCells() + 1);
+        int[] distance = new int[Math.toIntExact(areaLong)];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int cell = y * width + x;
+                if (!land.isLand(x, y)) {
+                    distance[cell] = 0;
+                } else if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
+                    distance[cell] = 1;
+                } else {
+                    distance[cell] = cap;
+                }
+            }
+        }
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int cell = y * width + x;
+                if (!land.isLand(x, y)) continue;
+                int best = distance[cell];
+                if (x > 0) best = Math.min(best, distance[cell - 1] + 1);
+                if (y > 0) best = Math.min(best, distance[cell - width] + 1);
+                distance[cell] = Math.min(cap, best);
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int cell = y * width + x;
+                if (!land.isLand(x, y)) continue;
+                int best = distance[cell];
+                if (x + 1 < width) best = Math.min(best, distance[cell + 1] + 1);
+                if (y + 1 < height) best = Math.min(best, distance[cell + width] + 1);
+                distance[cell] = Math.min(cap, best);
+            }
+        }
+        return distance;
     }
 
     private int samplePpm(String purpose, long x, long y, long ordinal) {
