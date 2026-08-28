@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.terrain.shape;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import java.util.Optional;
 
 /** One geometry candidate and its optional runtime Shape representation. */

@@ -2,7 +2,7 @@ package io.github.evoforge.simulation.world.terrain.shape;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.List;
 

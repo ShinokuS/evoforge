@@ -9,10 +9,10 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
-import io.github.evoforge.simulation.world.mechanics.geometry.CellFace;
-import io.github.evoforge.simulation.world.mechanics.geometry.FullShape;
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
-import io.github.evoforge.simulation.world.mechanics.geometry.SurfaceBoundaryContinuity;
+import io.github.evoforge.simulation.world.geometry.CellFace;
+import io.github.evoforge.simulation.world.geometry.FullShape;
+import io.github.evoforge.simulation.world.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.SurfaceBoundaryContinuity;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeField;
 import io.github.evoforge.visualizer.VisualizerCamera;
@@ -228,9 +228,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             TerrainShapeField terrainShapes,
             VisualizerCamera.VisibleRange visible,
             boolean oceanVisible) {
-        // Keep ordinary cells and overrides in separate passes. Full terrain and ramp art live in
-        // different atlases; grouping them prevents alternating texture switches from flushing the
-        // SpriteBatch on every neighbouring ramp.
         drawTerrainBaseCells(batch, elevation, terrainShapes, visible, oceanVisible);
         drawTerrainOverrides(batch, elevation, terrainShapes, visible, oceanVisible);
     }
@@ -244,8 +241,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         for (int x = visible.minX(); x <= visible.maxX(); x++) {
             for (int y = visible.minY(); y <= visible.maxY(); y++) {
                 long height = elevation.elevationSubunitsAt(x, y);
-                // Water tiles are opaque. When the ocean layer is visible there is no reason to
-                // shade, topology-resolve and submit terrain that will be completely covered later.
                 if (oceanVisible && height < 0L) continue;
                 if (terrainShapes.shapeOverrideAt(x, y) != null) continue;
                 drawTerrainCell(batch, elevation, terrainShapes, x, y, height, FullShape.INSTANCE);

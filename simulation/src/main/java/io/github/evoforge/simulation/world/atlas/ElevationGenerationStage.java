@@ -64,7 +64,7 @@ public final class ElevationGenerationStage {
                 bounds.minZ(),
                 bounds.maxZ());
         ContinuumScalarPage page = plan.elevationPages().materialize(
-                new ContinuumSampleWindow(0L, 0L, widthLong, lengthLong, 1L));
+                new ContinuumSampleWindow(0L, 0L, width, length, 1L));
         return new ContinuumElevationField(bounds, width, page);
     }
 

@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.terrain.shape;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.RampShape;
+import io.github.evoforge.simulation.world.geometry.RampShape;
 import java.util.List;
 
 /** Ordered geometry vocabulary available to generated Terrain. The first template is the fallback. */

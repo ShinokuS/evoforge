@@ -1,6 +1,6 @@
 package io.github.evoforge.simulation.world.terrain.shape;
 
-import io.github.evoforge.simulation.world.mechanics.geometry.Shape;
+import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
 /** Immutable generated surface-geometry representation for one horizontal world footprint. */
