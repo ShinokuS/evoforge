@@ -17,10 +17,6 @@ import io.github.evoforge.simulation.world.genesis.WorldSpec;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 /** Full-world cell-for-cell proof against the accepted historical V15 dense generator. */
@@ -31,8 +27,7 @@ final class V15HistoricalOracleParityTest {
     private static final long SEED = 4_859_186_304_997_574_751L;
 
     @Test
-    void exactContinuumV15MatchesHistoricalDenseGeneratorCellForCellWithActiveInlandLake()
-            throws ExecutionException, InterruptedException {
+    void exactContinuumV15MatchesHistoricalDenseGeneratorCellForCellWithActiveInlandLake() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(SIDE, SIDE);
         V15TerrainCoordinateFrame frame = V15TerrainCoordinateFrame.centered(domain);
         WorldBounds bounds = historicalBounds(frame, domain);
@@ -52,6 +47,7 @@ final class V15HistoricalOracleParityTest {
                 GenerationRevision.V15,
                 RngRevision.V1,
                 intent);
+        ElevationField historical = V15InlandLakeTerrainGenerator.standard().generate(genesis);
 
         V15TerrainDefinition terrainDefinition = new V15TerrainDefinition(
                 intent.landCoverage(),
@@ -61,47 +57,31 @@ final class V15HistoricalOracleParityTest {
                 intent.localRelief(),
                 intent.landformScale(),
                 intent.ruggedness());
+        V15ContinuumTerrainPlan continuum = V15ContinuumTerrainPlan.prepare(
+                domain,
+                SEED,
+                terrainDefinition,
+                V13MountainDefinition.balanced(),
+                MIN_Z_CELLS,
+                MAX_Z_CELLS);
+        assertTrue(
+                continuum.lakeBase().lakeDomain().lakeCellCount() > 0,
+                "full V15 oracle fixture must exercise the inland-lake path");
+        ContinuumScalarPage page = continuum.elevationPages().materialize(
+                new ContinuumSampleWindow(0L, 0L, SIDE, SIDE, 1L));
 
-        /*
-         * The dense historical oracle and Continuum implementation are independent pure generation
-         * paths for this immutable fixture. Building them concurrently changes neither side's
-         * inputs, iteration order nor comparison semantics, but avoids charging CI their runtimes
-         * serially before the same full 90,000-cell equality proof.
-         */
-        ExecutorService historicalExecutor = Executors.newSingleThreadExecutor();
-        try {
-            Future<ElevationField> historicalFuture = historicalExecutor.submit(
-                    () -> V15InlandLakeTerrainGenerator.standard().generate(genesis));
-
-            V15ContinuumTerrainPlan continuum = V15ContinuumTerrainPlan.prepare(
-                    domain,
-                    SEED,
-                    terrainDefinition,
-                    V13MountainDefinition.balanced(),
-                    MIN_Z_CELLS,
-                    MAX_Z_CELLS);
-            assertTrue(
-                    continuum.lakeBase().lakeDomain().lakeCellCount() > 0,
-                    "full V15 oracle fixture must exercise the inland-lake path");
-            ContinuumScalarPage page = continuum.elevationPages().materialize(
-                    new ContinuumSampleWindow(0L, 0L, SIDE, SIDE, 1L));
-            ElevationField historical = historicalFuture.get();
-
-            for (int y = 0; y < SIDE; y++) {
-                int legacyY = Math.toIntExact(frame.legacyY(y));
-                for (int x = 0; x < SIDE; x++) {
-                    int legacyX = Math.toIntExact(frame.legacyX(x));
-                    assertEquals(
-                            historical.elevationSubunitsAt(legacyX, legacyY),
-                            Math.round(page.sample(x, y)),
-                            "V15 parity failed at x=" + x
-                                    + " y=" + y
-                                    + " legacyX=" + legacyX
-                                    + " legacyY=" + legacyY);
-                }
+        for (int y = 0; y < SIDE; y++) {
+            int legacyY = Math.toIntExact(frame.legacyY(y));
+            for (int x = 0; x < SIDE; x++) {
+                int legacyX = Math.toIntExact(frame.legacyX(x));
+                assertEquals(
+                        historical.elevationSubunitsAt(legacyX, legacyY),
+                        Math.round(page.sample(x, y)),
+                        "V15 parity failed at x=" + x
+                                + " y=" + y
+                                + " legacyX=" + legacyX
+                                + " legacyY=" + legacyY);
             }
-        } finally {
-            historicalExecutor.shutdownNow();
         }
     }
 

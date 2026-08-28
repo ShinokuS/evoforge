@@ -84,6 +84,7 @@ public final class V14LandmassPlan {
     private final double cutoff;
     private final double maximumInterior;
     private final long supportCellCount;
+    private final RelaxedRowCache relaxedRows;
 
     private V14LandmassPlan(
             ContinuumWorldDomain domain,
@@ -104,6 +105,7 @@ public final class V14LandmassPlan {
         this.cutoff = cutoff;
         this.maximumInterior = maximumInterior;
         this.supportCellCount = supportCellCount;
+        this.relaxedRows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
     }
 
     public static V14LandmassPlan prepare(
@@ -203,8 +205,7 @@ public final class V14LandmassPlan {
     }
 
     double relaxedCoastScoreAt(int x, int y) {
-        return new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain)
-                .row(COAST_RELAXATION_PASSES, y)[x];
+        return relaxedRows.row(COAST_RELAXATION_PASSES, y)[x];
     }
 
     private void requireCoordinate(long x, long y) {
@@ -773,7 +774,7 @@ public final class V14LandmassPlan {
             this.height = Math.toIntExact(domain.height());
         }
 
-        private double[] row(int pass, int y) {
+        private synchronized double[] row(int pass, int y) {
             if (y < 0 || y >= height) throw new IllegalArgumentException("row outside V14 domain");
             RowKey key = new RowKey(pass, y);
             double[] existing = cache.get(key);
