@@ -8,14 +8,10 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 /**
  * Exposes a bounded V15 planning field over a larger Continuum domain.
  *
- * <p>The planning field contains the accepted V15 morphology (continents, mountains, bathymetry and
- * inland lakes) at a bounded control resolution. The declared simulation-world dimensions only
- * define the coordinate transform into that morphology; they do not trigger a dense world-sized
- * raster. Requested output samples are reconstructed by deterministic bilinear interpolation from
- * the bounded planning field.</p>
- *
- * <p>This class is deliberately representation-only. It does not author terrain features and does
- * not introduce another world generator.</p>
+ * <p>This source scales only the bounded global planning field. It deliberately preserves the
+ * categorical land/water class of the nearest V15 planning sample and interpolates magnitude only
+ * between samples of that same class. Ordinary bilinear interpolation across sea level would invent
+ * broad near-zero shelves and visibly flatten coastlines on large worlds.</p>
  */
 public final class V15ContinuumScaledPageSource implements ContinuumScalarPageSource {
     private final ContinuumWorldDomain domain;
@@ -82,12 +78,49 @@ public final class V15ContinuumScaledPageSource implements ContinuumScalarPageSo
                 double b = planning.sample(x1 - minimumPlanningX, y0 - minimumPlanningY);
                 double c = planning.sample(x0 - minimumPlanningX, y1 - minimumPlanningY);
                 double d = planning.sample(x1 - minimumPlanningX, y1 - minimumPlanningY);
-                double top = a + (b - a) * tx;
-                double bottom = c + (d - c) * tx;
-                output[cursor++] = top + (bottom - top) * ty;
+                int nearestX = tx < 0.5d ? x0 : x1;
+                int nearestY = ty < 0.5d ? y0 : y1;
+                double nearest = planning.sample(
+                        nearestX - minimumPlanningX,
+                        nearestY - minimumPlanningY);
+                output[cursor++] = interpolateWithinClass(a, b, c, d, tx, ty, nearest);
             }
         }
         return new ContinuumScalarPage(window, output);
+    }
+
+    private static double interpolateWithinClass(
+            double a,
+            double b,
+            double c,
+            double d,
+            double tx,
+            double ty,
+            double nearest) {
+        int selectedClass = elevationClass(nearest);
+        if (selectedClass == 0) return 0d;
+
+        double[] values = {a, b, c, d};
+        double[] weights = {
+                (1d - tx) * (1d - ty),
+                tx * (1d - ty),
+                (1d - tx) * ty,
+                tx * ty
+        };
+        double weighted = 0d;
+        double support = 0d;
+        for (int index = 0; index < values.length; index++) {
+            if (elevationClass(values[index]) != selectedClass) continue;
+            weighted += values[index] * weights[index];
+            support += weights[index];
+        }
+        return support > 0d ? weighted / support : nearest;
+    }
+
+    private static int elevationClass(double value) {
+        if (value > 0d) return 1;
+        if (value < 0d) return -1;
+        return 0;
     }
 
     private double planningX(long worldX) {
