@@ -10,22 +10,20 @@ import io.github.evoforge.simulation.world.terrain.field.V14ExactCoastalBathymet
 import io.github.evoforge.simulation.world.terrain.field.V14ExactDeepBathymetryPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15ContinuumScaledPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15ExactInlandLakeBathymetryPageSource;
+import io.github.evoforge.simulation.world.terrain.field.V15LargeWorldCompositePageSource;
+import io.github.evoforge.simulation.world.terrain.field.V15NativeMountainPageSource;
+import io.github.evoforge.simulation.world.terrain.field.V15NativeReliefPageSource;
 
 /**
  * Accepted V15 terrain composition exposed through a bounded Continuum execution model.
  *
- * <p>Domains up to {@link #MAX_EXACT_PLANNING_AXIS} retain the historical cell-for-cell execution.
- * Larger declared worlds reuse the same V15 composition on a bounded, aspect-preserving planning
- * domain and expose that morphology through a lazy scaled page source. Declaring a larger world
- * therefore does not ask V12-V15 to rasterize every simulation cell during preparation.</p>
+ * <p>Domains up to {@link #MAX_EXACT_PLANNING_AXIS} retain historical cell-for-cell execution.
+ * Larger domains keep only V15's genuinely global decisions on a bounded planning domain. Local
+ * V12 relief and V13 mountains are evaluated in the declared world's real coordinates, so their
+ * authored cell scales do not stretch as the world becomes larger.</p>
  */
 public final class V15ContinuumTerrainPlan {
-    /**
-     * The largest axis for which production executes the old finite raster semantics directly.
-     *
-     * <p>300 deliberately covers the live 300 x 300 historical V15 oracle. Larger worlds keep V15 as
-     * their morphology authority but decouple simulation resolution from global planning resolution.
-     */
+    /** Exact historical-oracle ceiling; 300 covers the live 300 x 300 V15 reference world. */
     public static final int MAX_EXACT_PLANNING_AXIS = 300;
     private static final int MIN_PLANNING_AXIS = 8;
 
@@ -82,14 +80,47 @@ public final class V15ContinuumTerrainPlan {
                 mountainDefinition,
                 minimumZCells,
                 maximumZCells);
+
+        ContinuumScalarPageSource membership = scaled(domain, planning.lakeBase.elevationPages());
+        V13MountainRecipe mountainRecipe = V13MountainRecipe.balanced();
+        ContinuumScalarPageSource nativeRelief = new V15NativeReliefPageSource(
+                domain,
+                seed,
+                terrainDefinition,
+                membership,
+                mountainRecipe.baseTerrainCeilingCells(),
+                maximumZCells);
+        ContinuumScalarPageSource nativeMountains = new V15NativeMountainPageSource(
+                domain,
+                seed,
+                terrainDefinition,
+                mountainDefinition,
+                nativeRelief,
+                maximumZCells);
+
+        ContinuumScalarPageSource coastal = new V15LargeWorldCompositePageSource(
+                domain,
+                membership,
+                nativeMountains,
+                scaled(domain, planning.coastalBathymetry));
+        ContinuumScalarPageSource deep = new V15LargeWorldCompositePageSource(
+                domain,
+                membership,
+                nativeMountains,
+                scaled(domain, planning.deepBathymetry));
+        ContinuumScalarPageSource elevation = new V15LargeWorldCompositePageSource(
+                domain,
+                membership,
+                nativeMountains,
+                scaled(domain, planning.elevationPages));
         return new V15ContinuumTerrainPlan(
                 domain,
                 planningDomain,
                 planning.lakeBase,
-                scaled(domain, planning.mountains),
-                scaled(domain, planning.coastalBathymetry),
-                scaled(domain, planning.deepBathymetry),
-                scaled(domain, planning.elevationPages));
+                nativeMountains,
+                coastal,
+                deep,
+                elevation);
     }
 
     private static V15ContinuumTerrainPlan prepareExact(
@@ -163,7 +194,6 @@ public final class V15ContinuumTerrainPlan {
         return domain;
     }
 
-    /** Bounded V15 domain that owns global morphology decisions. */
     public ContinuumWorldDomain planningDomain() {
         return planningDomain;
     }
@@ -172,10 +202,7 @@ public final class V15ContinuumTerrainPlan {
         return !domain.equals(planningDomain);
     }
 
-    /**
-     * Exact V15 planning internals. On a scaled world these belong to {@link #planningDomain()}, not
-     * the larger presentation/simulation domain.
-     */
+    /** Exact V15 planning internals; on large worlds these belong to {@link #planningDomain()}. */
     public V15ContinuumLakeBasePlan lakeBase() {
         return lakeBase;
     }
