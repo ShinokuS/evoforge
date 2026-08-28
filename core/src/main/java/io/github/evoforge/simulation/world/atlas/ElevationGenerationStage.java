@@ -24,12 +24,9 @@ import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateF
  * large world no longer materializes {@code width * height} elevation samples up front.</p>
  */
 public final class ElevationGenerationStage {
-    /**
-     * Small pages matter for the old preview: its 3D mesh and overview range sample sparse points
-     * across the whole world. A 64x64 page turned each such point into 4,096 generated samples.
-     */
-    private static final int PAGE_SIDE = 8;
-    /** Holds one complete 160x160 sparse preview working set within the same 16 MiB payload budget. */
+    private static final int SMALL_WORLD_PAGE_SIDE = 64;
+    private static final int MEDIUM_WORLD_PAGE_SIDE = 16;
+    private static final int LARGE_WORLD_PAGE_SIDE = 4;
     private static final int MAX_RESIDENT_PAGES = 32_768;
     private static final long MAX_RESIDENT_PAGE_BYTES = 16L * 1024L * 1024L;
 
@@ -91,6 +88,13 @@ public final class ElevationGenerationStage {
         }
     }
 
+    private static int pageSideFor(ContinuumWorldDomain domain) {
+        long maximumSide = Math.max(domain.width(), domain.height());
+        if (maximumSide <= 512L) return SMALL_WORLD_PAGE_SIDE;
+        if (maximumSide <= 2_048L) return MEDIUM_WORLD_PAGE_SIDE;
+        return LARGE_WORLD_PAGE_SIDE;
+    }
+
     private static final class ContinuumElevationField implements ElevationField {
         private final WorldBounds bounds;
         private final ContinuumPageLayout layout;
@@ -100,7 +104,8 @@ public final class ElevationGenerationStage {
                 WorldBounds bounds,
                 ContinuumScalarPageSource source) {
             this.bounds = bounds;
-            this.layout = new ContinuumPageLayout(source.domain(), PAGE_SIDE, PAGE_SIDE);
+            int pageSide = pageSideFor(source.domain());
+            this.layout = new ContinuumPageLayout(source.domain(), pageSide, pageSide);
             this.pages = new ContinuumScalarPageCache(
                     layout,
                     source,
