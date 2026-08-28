@@ -8,8 +8,16 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  * <p>The accepted V12 potential is only 16-bit. A fixed 65,536-bin histogram therefore reproduces
  * the same descending potential order, while one second streaming pass reproduces the old stable
  * row-major tie break. Optional V14 constraint uses the exact old 900k silhouette blend.</p>
+ *
+ * <p>For genuinely small finite domains, the first mandatory histogram pass also retains the exact
+ * derived potential in a hard-bounded cache. This avoids re-running the expensive V14 coastline
+ * evaluation during the stable-rank pass and later V12 slope/materialization queries. The cache is
+ * capped at 512 x 512 cells (1 MiB of {@code int}s), cannot scale with the Continuum address space,
+ * and is immutable execution metadata rather than authoritative terrain output.</p>
  */
 public final class V12LandRankPlan {
+    private static final int MAX_BOUNDED_POTENTIAL_CELLS = 512 * 512;
+
     @FunctionalInterface
     public interface CoordinateExclusion {
         boolean excludes(long x, long y);
@@ -24,6 +32,7 @@ public final class V12LandRankPlan {
     private final long thresholdLastCellIndex;
     private final long landCount;
     private final CoordinateExclusion exclusion;
+    private final int[] boundedPotential;
 
     private V12LandRankPlan(
             V15TerrainCoordinateFrame frame,
@@ -33,7 +42,8 @@ public final class V12LandRankPlan {
             V14LandmassPlan silhouette,
             int thresholdPotential,
             long thresholdLastCellIndex,
-            long landCount) {
+            long landCount,
+            int[] boundedPotential) {
         this(
                 frame,
                 random,
@@ -43,7 +53,8 @@ public final class V12LandRankPlan {
                 thresholdPotential,
                 thresholdLastCellIndex,
                 landCount,
-                null);
+                null,
+                boundedPotential);
     }
 
     private V12LandRankPlan(
@@ -55,7 +66,8 @@ public final class V12LandRankPlan {
             int thresholdPotential,
             long thresholdLastCellIndex,
             long landCount,
-            CoordinateExclusion exclusion) {
+            CoordinateExclusion exclusion,
+            int[] boundedPotential) {
         this.frame = frame;
         this.random = random;
         this.calibration = calibration;
@@ -65,6 +77,7 @@ public final class V12LandRankPlan {
         this.thresholdLastCellIndex = thresholdLastCellIndex;
         this.landCount = landCount;
         this.exclusion = exclusion;
+        this.boundedPotential = boundedPotential;
     }
 
     public static V12LandRankPlan prepareUnconstrained(
@@ -106,6 +119,7 @@ public final class V12LandRankPlan {
         long landCount = silhouette == null
                 ? calibration.landCount()
                 : Math.min(calibration.landCount(), silhouette.supportCellCount());
+        int[] boundedPotential = boundedPotentialCache(domain);
         if (landCount <= 0L) {
             return new V12LandRankPlan(
                     frame,
@@ -115,14 +129,16 @@ public final class V12LandRankPlan {
                     silhouette,
                     LegacyV12Noise.SAMPLE_MAX + 1,
                     -1L,
-                    0L);
+                    0L,
+                    boundedPotential);
         }
 
         LegacyV15Random random = new LegacyV15Random(seed);
         long[] histogram = new long[LegacyV12Noise.SAMPLE_MAX + 1];
+        long cellIndex = 0L;
         for (long y = 0L; y < domain.height(); y++) {
             long legacyY = frame.legacyY(y);
-            for (long x = 0L; x < domain.width(); x++) {
+            for (long x = 0L; x < domain.width(); x++, cellIndex++) {
                 int potential = potentialAt(
                         random,
                         calibration,
@@ -132,6 +148,9 @@ public final class V12LandRankPlan {
                         y,
                         frame.legacyX(x),
                         legacyY);
+                if (boundedPotential != null) {
+                    boundedPotential[Math.toIntExact(cellIndex)] = potential;
+                }
                 if (potential >= 0) histogram[potential]++;
             }
         }
@@ -154,20 +173,22 @@ public final class V12LandRankPlan {
 
         long thresholdLastIndex = -1L;
         long seenAtThreshold = 0L;
-        long cellIndex = 0L;
+        cellIndex = 0L;
         outer:
         for (long y = 0L; y < domain.height(); y++) {
             long legacyY = frame.legacyY(y);
             for (long x = 0L; x < domain.width(); x++, cellIndex++) {
-                int potential = potentialAt(
-                        random,
-                        calibration,
-                        recipe,
-                        silhouette,
-                        x,
-                        y,
-                        frame.legacyX(x),
-                        legacyY);
+                int potential = boundedPotential != null
+                        ? boundedPotential[Math.toIntExact(cellIndex)]
+                        : potentialAt(
+                                random,
+                                calibration,
+                                recipe,
+                                silhouette,
+                                x,
+                                y,
+                                frame.legacyX(x),
+                                legacyY);
                 if (potential != threshold) continue;
                 seenAtThreshold++;
                 if (seenAtThreshold == selectedAtThreshold) {
@@ -188,7 +209,8 @@ public final class V12LandRankPlan {
                 silhouette,
                 threshold,
                 thresholdLastIndex,
-                landCount);
+                landCount,
+                boundedPotential);
     }
 
     /**
@@ -215,7 +237,8 @@ public final class V12LandRankPlan {
                 thresholdPotential,
                 thresholdLastCellIndex,
                 landCount - excludedLandCount,
-                excludedCoordinates);
+                excludedCoordinates,
+                boundedPotential);
     }
 
     public long landCount() {
@@ -229,15 +252,7 @@ public final class V12LandRankPlan {
     public boolean isLand(long x, long y) {
         requireCoordinate(x, y);
         if (landCount == 0L) return false;
-        int potential = potentialAt(
-                random,
-                calibration,
-                recipe,
-                silhouette,
-                x,
-                y,
-                frame.legacyX(x),
-                frame.legacyY(y));
+        int potential = potentialAt(x, y);
         boolean selected;
         if (potential < 0) {
             selected = false;
@@ -253,6 +268,9 @@ public final class V12LandRankPlan {
 
     public int potentialAt(long x, long y) {
         requireCoordinate(x, y);
+        if (boundedPotential != null) {
+            return boundedPotential[Math.toIntExact(frame.cellIndex(x, y))];
+        }
         return potentialAt(
                 random,
                 calibration,
@@ -276,6 +294,15 @@ public final class V12LandRankPlan {
         if (!frame.domain().contains(x, y)) {
             throw new IllegalArgumentException("coordinate lies outside the V12 land-rank domain");
         }
+    }
+
+    private static int[] boundedPotentialCache(ContinuumWorldDomain domain) {
+        long width = domain.width();
+        long height = domain.height();
+        if (width > MAX_BOUNDED_POTENTIAL_CELLS || height > MAX_BOUNDED_POTENTIAL_CELLS) return null;
+        long area = Math.multiplyExact(width, height);
+        if (area > MAX_BOUNDED_POTENTIAL_CELLS) return null;
+        return new int[Math.toIntExact(area)];
     }
 
     private static int potentialAt(
