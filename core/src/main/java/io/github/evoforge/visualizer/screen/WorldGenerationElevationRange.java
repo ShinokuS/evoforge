@@ -3,11 +3,14 @@ package io.github.evoforge.visualizer.screen;
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 
-/** Actual generated land-height and submerged-depth ranges used only by preview color normalization. */
+/** Actual/representative generated elevation ranges used only by preview color normalization. */
 record WorldGenerationElevationRange(
         long minimumSubunits,
         long maximumSubunits,
         long minimumWaterSubunits) {
+    private static final long MAX_EXACT_RANGE_CELLS = 512L * 512L;
+    private static final int MAX_SAMPLED_AXIS = 160;
+
     WorldGenerationElevationRange {
         if (maximumSubunits < minimumSubunits) {
             throw new IllegalArgumentException("maximum land elevation must be >= minimum land elevation");
@@ -24,6 +27,16 @@ record WorldGenerationElevationRange(
     static WorldGenerationElevationRange from(ElevationField elevation) {
         if (elevation == null) throw new IllegalArgumentException("elevation must not be null");
         WorldBounds bounds = elevation.bounds();
+        long width = (long) bounds.maxX() - bounds.minX() + 1L;
+        long length = (long) bounds.maxY() - bounds.minY() + 1L;
+        long area = Math.multiplyExact(width, length);
+        if (area <= MAX_EXACT_RANGE_CELLS) {
+            return exact(elevation, bounds);
+        }
+        return sampled(elevation, bounds, width, length);
+    }
+
+    private static WorldGenerationElevationRange exact(ElevationField elevation, WorldBounds bounds) {
         long minimumLand = Long.MAX_VALUE;
         long maximumLand = Long.MIN_VALUE;
         long minimumWater = 0L;
@@ -38,6 +51,46 @@ record WorldGenerationElevationRange(
                 maximumLand = Math.max(maximumLand, value);
             }
         }
+        return finish(minimumLand, maximumLand, minimumWater);
+    }
+
+    private static WorldGenerationElevationRange sampled(
+            ElevationField elevation,
+            WorldBounds bounds,
+            long width,
+            long length) {
+        int samplesX = Math.toIntExact(Math.min((long) MAX_SAMPLED_AXIS, width));
+        int samplesY = Math.toIntExact(Math.min((long) MAX_SAMPLED_AXIS, length));
+        long minimumLand = Long.MAX_VALUE;
+        long maximumLand = Long.MIN_VALUE;
+        long minimumWater = 0L;
+        for (int sampleX = 0; sampleX < samplesX; sampleX++) {
+            int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, samplesX);
+            for (int sampleY = 0; sampleY < samplesY; sampleY++) {
+                int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, samplesY);
+                long value = elevation.elevationSubunitsAt(x, y);
+                if (value < 0L) {
+                    minimumWater = Math.min(minimumWater, value);
+                    continue;
+                }
+                minimumLand = Math.min(minimumLand, value);
+                maximumLand = Math.max(maximumLand, value);
+            }
+        }
+        return finish(minimumLand, maximumLand, minimumWater);
+    }
+
+    private static int sampleCoordinate(int minimum, int maximum, int sample, int sampleCount) {
+        if (sampleCount <= 1 || minimum == maximum) return minimum;
+        long span = (long) maximum - minimum;
+        long offset = Math.round(span * sample / (double) (sampleCount - 1));
+        return Math.toIntExact(minimum + offset);
+    }
+
+    private static WorldGenerationElevationRange finish(
+            long minimumLand,
+            long maximumLand,
+            long minimumWater) {
         if (minimumLand == Long.MAX_VALUE) {
             minimumLand = 0L;
             maximumLand = 0L;
