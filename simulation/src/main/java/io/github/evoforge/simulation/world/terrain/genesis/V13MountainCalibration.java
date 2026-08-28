@@ -8,7 +8,7 @@ import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
 public record V13MountainCalibration(
         int width,
         int height,
-        int area,
+        long area,
         int candidateSpacingCells,
         int targetCoveragePpm,
         int typicalHalfWidthCells,
@@ -42,7 +42,7 @@ public record V13MountainCalibration(
 
         int width = Math.toIntExact(domain.width());
         int height = Math.toIntExact(domain.height());
-        int area = Math.toIntExact(Math.multiplyExact(domain.width(), domain.height()));
+        long area = Math.multiplyExact(domain.width(), domain.height());
         int limitingHorizontalSpan = Math.min(width, height);
 
         long baseCeiling = Math.multiplyExact(
