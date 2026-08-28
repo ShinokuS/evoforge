@@ -2,84 +2,119 @@ package io.github.evoforge.visualizer.continuum;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
-import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
+import io.github.evoforge.simulation.definition.NormalizedValue;
+import io.github.evoforge.simulation.world.continuum.map.ContinuumScalarMapTileGenerator;
+import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
+import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class ContinuumMapInspectorModelTest {
 
     @Test
-    void standardViewerUsesBalancedMacroProfileAndDefaultSeed() {
-        try (ContinuumMapInspectorModel model = ContinuumMapInspectorModel.standard(1600, 900)) {
-            assertEquals(MacroGeophysicsPreset.BALANCED, model.preset());
-            assertEquals(MacroGeophysicsPreset.BALANCED.definition(), model.definition());
+    void inspectorUsesAcceptedV15DefinitionAndDefaultSeed() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(256L, 256L);
+        AtomicInteger builds = new AtomicInteger();
+        try (ContinuumMapInspectorModel model = model(domain, builds)) {
+            assertEquals(V15TerrainDefinition.balanced(), model.definition());
             assertEquals("balanced", model.profileName());
             assertEquals(ContinuumMapInspectorModel.DEFAULT_WORLD_SEED, model.seed());
+            assertEquals(1, builds.get());
         }
     }
 
     @Test
-    void viewerCanStartFromExplicitSeed() {
-        long seed = 987_654_321L;
-        try (ContinuumMapInspectorModel model = ContinuumMapInspectorModel.standard(
-                1600,
-                900,
-                MacroGeophysicsPreset.ARCHIPELAGO,
-                seed)) {
-            assertEquals(MacroGeophysicsPreset.ARCHIPELAGO, model.preset());
-            assertEquals(MacroGeophysicsPreset.ARCHIPELAGO.definition(), model.definition());
-            assertEquals(seed, model.seed());
-        }
-    }
-
-    @Test
-    void customDefinitionRebuildsMapSourceWithoutMovingCameraOrChangingSeed() {
-        try (ContinuumMapInspectorModel model = ContinuumMapInspectorModel.standard(1600, 900)) {
-            model.panPixels(-173d, 91d);
-            model.zoomAt(1.22d, 710d, 390d);
+    void customV15DefinitionRebuildsMapSourceWithoutMovingCameraOrChangingSeed() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(256L, 256L);
+        AtomicInteger builds = new AtomicInteger();
+        try (ContinuumMapInspectorModel model = model(domain, builds)) {
+            model.panPixels(-73d, 41d);
+            model.zoomAt(1.22d, 210d, 190d);
             double centerX = model.centerX();
             double centerY = model.centerY();
             double scale = model.pixelsPerWorldUnit();
             long seed = model.seed();
-            MacroGeophysicsDefinition custom = MacroGeophysicsDefinition.of(0.78d, 0.52d, 0.44d, 0.63d, 0.31d);
+            V15TerrainDefinition custom = new V15TerrainDefinition(
+                    NormalizedValue.of(0.72d),
+                    NormalizedValue.of(0.61d),
+                    NormalizedValue.of(0.39d),
+                    NormalizedValue.of(0.68d),
+                    NormalizedValue.of(0.52d),
+                    NormalizedValue.of(0.57d),
+                    NormalizedValue.of(0.43d));
 
             assertTrue(model.applyDefinition(custom));
 
             assertEquals(custom, model.definition());
-            assertNull(model.preset());
             assertEquals("custom", model.profileName());
             assertEquals(centerX, model.centerX());
             assertEquals(centerY, model.centerY());
             assertEquals(scale, model.pixelsPerWorldUnit());
             assertEquals(seed, model.seed());
+            assertEquals(2, builds.get());
+            assertFalse(model.applyDefinition(custom));
+            assertEquals(2, builds.get());
         }
     }
 
     @Test
-    void changingSeedRebuildsMapSourceWithoutMovingCameraOrChangingProfile() {
-        try (ContinuumMapInspectorModel model = ContinuumMapInspectorModel.standard(
-                1600,
-                900,
-                MacroGeophysicsPreset.ARCHIPELAGO)) {
-            model.panPixels(127d, -64d);
-            model.zoomAt(1.22d, 800d, 450d);
+    void changingSeedRebuildsExactTerrainWithoutMovingCameraOrChangingDefinition() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(256L, 256L);
+        AtomicInteger builds = new AtomicInteger();
+        try (ContinuumMapInspectorModel model = model(domain, builds)) {
+            model.panPixels(57d, -34d);
+            model.zoomAt(1.22d, 200d, 160d);
             double centerX = model.centerX();
             double centerY = model.centerY();
             double scale = model.pixelsPerWorldUnit();
-            MacroGeophysicsDefinition definition = model.definition();
+            V15TerrainDefinition definition = model.definition();
 
             assertTrue(model.applySeed(42L));
 
             assertEquals(42L, model.seed());
-            assertEquals(MacroGeophysicsPreset.ARCHIPELAGO, model.preset());
             assertEquals(definition, model.definition());
             assertEquals(centerX, model.centerX());
             assertEquals(centerY, model.centerY());
             assertEquals(scale, model.pixelsPerWorldUnit());
+            assertEquals(2, builds.get());
             assertFalse(model.applySeed(42L));
+            assertEquals(2, builds.get());
         }
+    }
+
+    @Test
+    void signedTerrainPresentationKeepsOceanAndLandOnOppositePaletteHalves() {
+        long subunit = TerrainElevationField.SUBUNITS_PER_CELL;
+        assertEquals(0d, ContinuumMapInspectorModel.normalizeTerrainElevation(-96L * subunit));
+        assertEquals(1d, ContinuumMapInspectorModel.normalizeTerrainElevation(96L * subunit));
+        assertEquals(127, quantized(ContinuumMapInspectorModel.normalizeTerrainElevation(-1L)));
+        assertEquals(128, quantized(ContinuumMapInspectorModel.normalizeTerrainElevation(0L)));
+    }
+
+    private static int quantized(double value) {
+        return (int) (value * 255d + 0.5d);
+    }
+
+    private static ContinuumMapInspectorModel model(
+            ContinuumWorldDomain domain,
+            AtomicInteger builds) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ContinuumMapInspectorModel.TerrainGeneratorFactory factory = (definition, seed) -> {
+            builds.incrementAndGet();
+            return new ContinuumScalarMapTileGenerator(domain, (x, y) -> 0.5d, 128);
+        };
+        return new ContinuumMapInspectorModel(
+                domain,
+                executor,
+                640,
+                480,
+                V15TerrainDefinition.balanced(),
+                ContinuumMapInspectorModel.DEFAULT_WORLD_SEED,
+                factory);
     }
 }
