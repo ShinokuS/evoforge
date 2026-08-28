@@ -12,54 +12,49 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
 import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateFrame;
 
 /**
- * Restores the accepted V12/V15 terrestrial relief frequencies after large-world macro planning.
+ * Native-coordinate execution of the accepted V12 terrestrial height law for large V15 worlds.
  *
- * <p>Only global morphology is allowed to come from the bounded planning field. Historical V12
- * uplift, landforms, ridges and rolling detail have authored scales measured in real terrain cells
- * (mostly tens of cells), so scaling a finished 300-cell raster across a 10k-cell domain is wrong.
- * This source evaluates those accepted local laws directly in the declared world's coordinates and
- * adds their zero-centered relief to the macro V15 land elevation. Water is left untouched for the
- * V15 lake/bathymetry branch.
+ * <p>The bounded V15 planning field is used only as the macro land/lake/water membership authority.
+ * Dry-land height is rebuilt from the historical V12 coast baseline plus uplift, landforms, ridges
+ * and rolling detail in the declared world's real cell coordinates. This is the key distinction
+ * between scaling a continent and incorrectly scaling an already-finished terrain raster.</p>
  */
 public final class V15NativeReliefPageSource implements ContinuumScalarPageSource {
     private static final int PPM = 1_000_000;
+    private static final long MAX_DENSE_COAST_HALO_SAMPLES = 1_000_000L;
 
     private final ContinuumWorldDomain domain;
-    private final ContinuumScalarPageSource macroBase;
+    private final ContinuumScalarPageSource membership;
     private final LegacyV15Random random;
     private final V15TerrainCoordinateFrame frame;
     private final V12TerrainCalibration calibration;
     private final V12TerrainRecipe recipe;
     private final long baseTerrainAmplitude;
-    private final long maximumLandElevation;
 
     public V15NativeReliefPageSource(
             ContinuumWorldDomain domain,
             long seed,
             V15TerrainDefinition definition,
-            ContinuumScalarPageSource macroBase,
+            ContinuumScalarPageSource membership,
             int baseTerrainCeilingCells,
             int maximumZCells) {
-        if (domain == null || definition == null || macroBase == null) {
+        if (domain == null || definition == null || membership == null) {
             throw new IllegalArgumentException("native V15 relief inputs must not be null");
         }
-        if (!domain.equals(macroBase.domain())) {
-            throw new IllegalArgumentException("native V15 relief base must match its domain");
+        if (!domain.equals(membership.domain())) {
+            throw new IllegalArgumentException("native V15 relief membership must match its domain");
         }
-        if (baseTerrainCeilingCells <= 0 || maximumZCells <= 0) {
-            throw new IllegalArgumentException("V15 relief height bounds must be positive");
+        if (baseTerrainCeilingCells <= 0 || maximumZCells < baseTerrainCeilingCells) {
+            throw new IllegalArgumentException("V15 relief height bounds are inconsistent");
         }
         this.domain = domain;
-        this.macroBase = macroBase;
+        this.membership = membership;
         this.random = new LegacyV15Random(seed);
         this.frame = V15TerrainCoordinateFrame.centered(domain);
         this.recipe = V12TerrainRecipe.balanced();
         this.calibration = V12TerrainCalibration.compile(domain, definition, recipe);
         this.baseTerrainAmplitude = Math.multiplyExact(
                 (long) baseTerrainCeilingCells,
-                TerrainElevationField.SUBUNITS_PER_CELL);
-        this.maximumLandElevation = Math.multiplyExact(
-                (long) maximumZCells,
                 TerrainElevationField.SUBUNITS_PER_CELL);
     }
 
@@ -71,30 +66,97 @@ public final class V15NativeReliefPageSource implements ContinuumScalarPageSourc
     @Override
     public ContinuumScalarPage materialize(ContinuumSampleWindow window) {
         validateWindow(window);
-        ContinuumScalarPage macro = macroBase.materialize(window);
+        ContinuumScalarPage membershipPage = membership.materialize(window);
+        ContinuumScalarPage coastHalo = coastHalo(window);
         double[] output = new double[Math.multiplyExact(window.width(), window.height())];
         int cursor = 0;
         for (int sampleY = 0; sampleY < window.height(); sampleY++) {
             long y = window.yAt(sampleY);
             for (int sampleX = 0; sampleX < window.width(); sampleX++) {
                 long x = window.xAt(sampleX);
-                long macroHeight = Math.round(macro.sample(sampleX, sampleY));
-                if (macroHeight <= 0L) {
-                    output[cursor++] = macroHeight;
+                long membershipHeight = Math.round(membershipPage.sample(sampleX, sampleY));
+                if (membershipHeight <= 0L) {
+                    output[cursor++] = membershipHeight;
                     continue;
                 }
 
+                int interiorityPpm = coastHalo != null
+                        ? coastalInteriorityPpm(x, y, coastHalo)
+                        : inferredInteriorityPpm(membershipHeight);
                 long reliefPpm = reliefSignalPpm(frame.legacyX(x), frame.legacyY(y));
-                int coastGatePpm = inferredCoastGatePpm(macroHeight);
+                int coastGatePpm = recipe.coastMinimumReliefGatePpm()
+                        + (int) ((long) interiorityPpm
+                                * (PPM - recipe.coastMinimumReliefGatePpm()) / PPM);
                 reliefPpm = reliefPpm * coastGatePpm / PPM;
-                long delta = reliefPpm * baseTerrainAmplitude / PPM;
-                long detailed = Math.max(
-                        1L,
-                        Math.min(maximumLandElevation, Math.addExact(macroHeight, delta)));
-                output[cursor++] = detailed;
+
+                long baseHeightPpm = recipe.coastBaseHeightPpm()
+                        + (long) interiorityPpm * recipe.coastInteriorHeightPpm() / PPM;
+                int heightPpm = LegacyV12Noise.clampPpm(baseHeightPpm + reliefPpm);
+                output[cursor++] = positiveNormalizedHeight(heightPpm, baseTerrainAmplitude);
             }
         }
         return new ContinuumScalarPage(window, output);
+    }
+
+    private ContinuumScalarPage coastHalo(ContinuumSampleWindow window) {
+        int transition = recipe.coastTransitionCells();
+        long requestedMaxX = window.xAt(window.width() - 1);
+        long requestedMaxY = window.yAt(window.height() - 1);
+        long minimumX = Math.max(0L, window.minX() - transition);
+        long minimumY = Math.max(0L, window.minY() - transition);
+        long maximumX = Math.min(domain.width() - 1L, requestedMaxX + transition);
+        long maximumY = Math.min(domain.height() - 1L, requestedMaxY + transition);
+        long width = maximumX - minimumX + 1L;
+        long height = maximumY - minimumY + 1L;
+        if (width <= 0L || height <= 0L
+                || width > Integer.MAX_VALUE
+                || height > Integer.MAX_VALUE
+                || width > MAX_DENSE_COAST_HALO_SAMPLES / height) {
+            return null;
+        }
+        return membership.materialize(new ContinuumSampleWindow(
+                minimumX,
+                minimumY,
+                Math.toIntExact(width),
+                Math.toIntExact(height),
+                1L));
+    }
+
+    private int coastalInteriorityPpm(long x, long y, ContinuumScalarPage halo) {
+        int transition = recipe.coastTransitionCells();
+        for (int distance = 1; distance <= transition; distance++) {
+            for (int dx = -distance; dx <= distance; dx++) {
+                int dy = distance - Math.abs(dx);
+                long nx = x + dx;
+                long firstY = y + dy;
+                if (domain.contains(nx, firstY) && !isLand(halo, nx, firstY)) {
+                    return LegacyV12Noise.smoothStepPpm((long) distance * PPM / transition);
+                }
+                if (dy != 0) {
+                    long secondY = y - dy;
+                    if (domain.contains(nx, secondY) && !isLand(halo, nx, secondY)) {
+                        return LegacyV12Noise.smoothStepPpm((long) distance * PPM / transition);
+                    }
+                }
+            }
+        }
+        return PPM;
+    }
+
+    private static boolean isLand(ContinuumScalarPage halo, long x, long y) {
+        int localX = Math.toIntExact(x - halo.window().minX());
+        int localY = Math.toIntExact(y - halo.window().minY());
+        return halo.sample(localX, localY) > 0d;
+    }
+
+    private int inferredInteriorityPpm(long membershipHeight) {
+        long basePpm = Math.max(
+                0L,
+                Math.min((long) PPM, membershipHeight * PPM / Math.max(1L, baseTerrainAmplitude)));
+        long numerator = (basePpm - recipe.coastBaseHeightPpm()) * PPM;
+        return recipe.coastInteriorHeightPpm() <= 0
+                ? PPM
+                : LegacyV12Noise.clampPpm(numerator / recipe.coastInteriorHeightPpm());
     }
 
     private long reliefSignalPpm(long legacyX, long legacyY) {
@@ -123,25 +185,6 @@ public final class V15NativeReliefPageSource implements ContinuumScalarPageSourc
             reliefSignalPpm = reliefSignalPpm * recipe.negativeReliefCompressionPpm() / PPM;
         }
         return reliefSignalPpm;
-    }
-
-    /**
-     * The historical coast gate depends on distance to the exact land mask. Large-world macro
-     * planning already encoded that coast profile in its positive base height, so infer the same
-     * transition coordinate from the V12 coast base/interior band without scanning neighboring
-     * simulation cells.
-     */
-    private int inferredCoastGatePpm(long macroHeight) {
-        long basePpm = Math.max(
-                0L,
-                Math.min((long) PPM, macroHeight * PPM / Math.max(1L, baseTerrainAmplitude)));
-        long numerator = (basePpm - recipe.coastBaseHeightPpm()) * PPM;
-        int interiorityPpm = recipe.coastInteriorHeightPpm() <= 0
-                ? PPM
-                : LegacyV12Noise.clampPpm(numerator / recipe.coastInteriorHeightPpm());
-        return recipe.coastMinimumReliefGatePpm()
-                + (int) ((long) interiorityPpm
-                        * (PPM - recipe.coastMinimumReliefGatePpm()) / PPM);
     }
 
     private long landformFieldPpm(long x, long y) {
@@ -232,6 +275,11 @@ public final class V15NativeReliefPageSource implements ContinuumScalarPageSourc
 
     private static long weightedCentered(long centeredPpm, int weightPpm) {
         return centeredPpm * weightPpm / PPM;
+    }
+
+    private static long positiveNormalizedHeight(int heightPpm, long amplitude) {
+        if (amplitude <= 1L) return Math.max(1L, amplitude);
+        return 1L + ((amplitude - 1L) * heightPpm) / PPM;
     }
 
     private void validateWindow(ContinuumSampleWindow window) {
