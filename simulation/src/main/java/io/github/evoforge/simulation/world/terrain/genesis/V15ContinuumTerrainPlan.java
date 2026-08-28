@@ -13,6 +13,8 @@ import io.github.evoforge.simulation.world.terrain.field.V15ExactInlandLakeBathy
 import io.github.evoforge.simulation.world.terrain.field.V15LargeWorldCompositePageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15NativeMountainPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15NativeReliefPageSource;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Accepted V15 terrain composition exposed through a bounded Continuum execution model.
@@ -26,6 +28,15 @@ public final class V15ContinuumTerrainPlan {
     /** Exact historical-oracle ceiling; 300 covers the live 300 x 300 V15 reference world. */
     public static final int MAX_EXACT_PLANNING_AXIS = 300;
     private static final int MIN_PLANNING_AXIS = 8;
+    private static final int MAX_CACHED_PLANNING_PLANS = 3;
+    private static final Map<PlanningCacheKey, V15ContinuumTerrainPlan> PLANNING_CACHE =
+            new LinkedHashMap<>(4, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(
+                        Map.Entry<PlanningCacheKey, V15ContinuumTerrainPlan> eldest) {
+                    return size() > MAX_CACHED_PLANNING_PLANS;
+                }
+            };
 
     private final ContinuumWorldDomain domain;
     private final ContinuumWorldDomain planningDomain;
@@ -73,7 +84,7 @@ public final class V15ContinuumTerrainPlan {
         }
 
         ContinuumWorldDomain planningDomain = boundedPlanningDomain(domain);
-        V15ContinuumTerrainPlan planning = prepareExact(
+        V15ContinuumTerrainPlan planning = cachedExactPlanning(
                 planningDomain,
                 seed,
                 terrainDefinition,
@@ -121,6 +132,41 @@ public final class V15ContinuumTerrainPlan {
                 coastal,
                 deep,
                 elevation);
+    }
+
+    private static V15ContinuumTerrainPlan cachedExactPlanning(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition terrainDefinition,
+            V13MountainDefinition mountainDefinition,
+            int minimumZCells,
+            int maximumZCells) {
+        PlanningCacheKey key = new PlanningCacheKey(
+                domain.width(),
+                domain.height(),
+                seed,
+                terrainDefinition,
+                mountainDefinition,
+                minimumZCells,
+                maximumZCells);
+        synchronized (PLANNING_CACHE) {
+            V15ContinuumTerrainPlan cached = PLANNING_CACHE.get(key);
+            if (cached != null) return cached;
+        }
+
+        V15ContinuumTerrainPlan prepared = prepareExact(
+                domain,
+                seed,
+                terrainDefinition,
+                mountainDefinition,
+                minimumZCells,
+                maximumZCells);
+        synchronized (PLANNING_CACHE) {
+            V15ContinuumTerrainPlan existing = PLANNING_CACHE.get(key);
+            if (existing != null) return existing;
+            PLANNING_CACHE.put(key, prepared);
+            return prepared;
+        }
     }
 
     private static V15ContinuumTerrainPlan prepareExact(
@@ -244,4 +290,13 @@ public final class V15ContinuumTerrainPlan {
                         Math.round(domain.height() * scale)));
         return new ContinuumWorldDomain(width, height);
     }
+
+    private record PlanningCacheKey(
+            long width,
+            long height,
+            long seed,
+            V15TerrainDefinition terrainDefinition,
+            V13MountainDefinition mountainDefinition,
+            int minimumZCells,
+            int maximumZCells) {}
 }
