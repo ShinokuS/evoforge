@@ -4,16 +4,25 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Fits generated elevation targets to the available material-agnostic surface templates.
  *
  * <p>The algorithm never branches on a concrete Shape. It compares only surface geometry; the
  * selected template carries an opaque runtime Shape override for later materialization. Abrupt or
- * poorly represented terrain falls back to ordinary full-cell geometry instead of forcing access.</p>
+ * poorly represented terrain falls back to ordinary full-cell geometry instead of forcing access.
+ *
+ * <p>Small finite worlds retain the historical dense presentation field. Larger Continuum worlds
+ * fit only requested columns and keep a bounded LRU of presentation decisions; declared world area
+ * therefore no longer creates a world-sized {@code byte[]} during preview generation.</p>
  */
 public final class TerrainShapeGenerationStage implements TerrainShapeGenerator {
+    private static final long MAX_DENSE_SHAPE_CELLS = 512L * 512L;
+    private static final int MAX_LAZY_SHAPE_CACHE = 65_536;
+
     private final TerrainShapePalette palette;
     private final TerrainShapeCalibration calibration;
     private final TerrainSurfaceTargetSampler targetSampler;
@@ -68,11 +77,14 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         WorldBounds bounds = elevation.bounds();
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int length = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
-        int area = Math.toIntExact(Math.multiplyExact((long) width, length));
-        List<TerrainShapeTemplate> templates = palette.templates();
-        byte[] selected = new byte[area];
-        long overrides = 0L;
+        long area = Math.multiplyExact((long) width, length);
+        if (area > MAX_DENSE_SHAPE_CELLS) {
+            return new LazyTerrainShapeField(bounds, elevation, palette.templates());
+        }
 
+        List<TerrainShapeTemplate> templates = palette.templates();
+        byte[] selected = new byte[Math.toIntExact(area)];
+        long overrides = 0L;
         int index = 0;
         for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
@@ -135,6 +147,69 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         return Math.abs(difference);
     }
 
+    private final class LazyTerrainShapeField implements TerrainShapeField {
+        private final WorldBounds bounds;
+        private final ElevationField elevation;
+        private final List<TerrainShapeTemplate> templates;
+        private final Map<Long, Byte> selected = new LinkedHashMap<>(256, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Long, Byte> eldest) {
+                return size() > MAX_LAZY_SHAPE_CACHE;
+            }
+        };
+        private Long overrideCount;
+
+        private LazyTerrainShapeField(
+                WorldBounds bounds,
+                ElevationField elevation,
+                List<TerrainShapeTemplate> templates) {
+            this.bounds = bounds;
+            this.elevation = elevation;
+            this.templates = templates;
+        }
+
+        @Override public WorldBounds bounds() { return bounds; }
+
+        @Override
+        public TerrainSurfacePatch surfaceAt(int x, int y) {
+            return templateAt(x, y).surface();
+        }
+
+        @Override
+        public Shape shapeOverrideAt(int x, int y) {
+            return templateAt(x, y).shapeOverride().orElse(null);
+        }
+
+        @Override
+        public long overrideCount() {
+            Long known = overrideCount;
+            if (known != null) return known;
+            long count = 0L;
+            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                    if (templateAt(x, y).shapeOverride().isPresent()) count++;
+                }
+            }
+            overrideCount = count;
+            return count;
+        }
+
+        private TerrainShapeTemplate templateAt(int x, int y) {
+            requireCoordinate(bounds, x, y);
+            long key = (((long) x) << 32) ^ (y & 0xffff_ffffL);
+            int selectedIndex;
+            synchronized (selected) {
+                Byte existing = selected.get(key);
+                if (existing != null) return templates.get(Byte.toUnsignedInt(existing));
+            }
+            selectedIndex = bestTemplate(targetSampler.sample(elevation, x, y), templates);
+            synchronized (selected) {
+                selected.put(key, (byte) selectedIndex);
+            }
+            return templates.get(selectedIndex);
+        }
+    }
+
     private static final class DenseTerrainShapeField implements TerrainShapeField {
         private final WorldBounds bounds;
         private final int width;
@@ -170,13 +245,16 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         @Override public long overrideCount() { return overrideCount; }
 
         private TerrainShapeTemplate templateAt(int x, int y) {
-            if (x < bounds.minX() || x > bounds.maxX()
-                    || y < bounds.minY() || y > bounds.maxY()) {
-                throw new IllegalArgumentException(
-                        "terrain shape coordinate outside world bounds: (" + x + ", " + y + ")");
-            }
+            requireCoordinate(bounds, x, y);
             int cell = (y - bounds.minY()) * width + (x - bounds.minX());
             return templates.get(Byte.toUnsignedInt(selected[cell]));
+        }
+    }
+
+    private static void requireCoordinate(WorldBounds bounds, int x, int y) {
+        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
+            throw new IllegalArgumentException(
+                    "terrain shape coordinate outside world bounds: (" + x + ", " + y + ")");
         }
     }
 }
