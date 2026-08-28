@@ -84,7 +84,6 @@ public final class V14LandmassPlan {
     private final double cutoff;
     private final double maximumInterior;
     private final long supportCellCount;
-    private final RelaxedRowCache relaxedRows;
 
     private V14LandmassPlan(
             ContinuumWorldDomain domain,
@@ -105,7 +104,6 @@ public final class V14LandmassPlan {
         this.cutoff = cutoff;
         this.maximumInterior = maximumInterior;
         this.supportCellCount = supportCellCount;
-        this.relaxedRows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
     }
 
     public static V14LandmassPlan prepare(
@@ -205,7 +203,72 @@ public final class V14LandmassPlan {
     }
 
     double relaxedCoastScoreAt(int x, int y) {
-        return relaxedRows.row(COAST_RELAXATION_PASSES, y)[x];
+        return relaxedCoastScoreAt(
+                random,
+                graph,
+                phase,
+                guaranteedMargin,
+                Math.toIntExact(domain.width()),
+                Math.toIntExact(domain.height()),
+                COAST_RELAXATION_PASSES,
+                x,
+                y);
+    }
+
+    private static double relaxedCoastScoreAt(
+            LegacyV15Random random,
+            ControlGraph graph,
+            boolean[] phase,
+            int guaranteedMargin,
+            int width,
+            int height,
+            int pass,
+            int x,
+            int y) {
+        if (pass == 0) {
+            return rawCoastScoreAt(random, graph, phase, guaranteedMargin, width, height, x, y);
+        }
+
+        double center = relaxedCoastScoreAt(
+                random, graph, phase, guaranteedMargin, width, height, pass - 1, x, y);
+        if (edgeDistance(x, y, width, height) < guaranteedMargin) return center;
+
+        double bandWidth = Math.max(
+                1.5d,
+                graph.spacingCells() * COAST_RELAXATION_BAND_WIDTH_SPACING_PPM / (double) PPM);
+        if (!Double.isFinite(center) || StrictMath.abs(center) > bandWidth) return center;
+
+        double weighted = center * COAST_RELAXATION_SELF_WEIGHT_PPM;
+        long totalWeight = COAST_RELAXATION_SELF_WEIGHT_PPM;
+        for (int oy = -1; oy <= 1; oy++) {
+            int ny = y + oy;
+            if (ny < 0 || ny >= height) continue;
+            for (int ox = -1; ox <= 1; ox++) {
+                if (ox == 0 && oy == 0) continue;
+                int nx = x + ox;
+                if (nx < 0 || nx >= width) continue;
+                double neighbor = relaxedCoastScoreAt(
+                        random,
+                        graph,
+                        phase,
+                        guaranteedMargin,
+                        width,
+                        height,
+                        pass - 1,
+                        nx,
+                        ny);
+                if (!Double.isFinite(neighbor)) continue;
+                int weight = ox == 0 || oy == 0
+                        ? COAST_RELAXATION_ORTHOGONAL_WEIGHT_PPM
+                        : COAST_RELAXATION_DIAGONAL_WEIGHT_PPM;
+                weighted += neighbor * weight;
+                totalWeight += weight;
+            }
+        }
+        double target = weighted / totalWeight;
+        double maximumShift = COAST_RELAXATION_MAX_SHIFT_PPM / (double) PPM;
+        double shift = Math.max(-maximumShift, Math.min(maximumShift, target - center));
+        return center + shift;
     }
 
     private void requireCoordinate(long x, long y) {
