@@ -5,7 +5,8 @@ import java.util.function.LongSupplier;
 /** Mutable draft settings edited by the world-generation development UI. */
 final class WorldGenerationPreviewSettings {
     static final int MIN_HORIZONTAL_DIMENSION = 32;
-    static final int MAX_HORIZONTAL_DIMENSION = 2_048;
+    /** Declared Continuum extent, not a dense-raster allocation limit. */
+    static final int MAX_HORIZONTAL_DIMENSION = 1_000_000;
 
     private int width = 64;
     private int length = 64;
