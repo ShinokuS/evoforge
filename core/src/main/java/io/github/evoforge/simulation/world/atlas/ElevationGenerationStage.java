@@ -24,8 +24,13 @@ import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateF
  * large world no longer materializes {@code width * height} elevation samples up front.</p>
  */
 public final class ElevationGenerationStage {
-    private static final int PAGE_SIDE = 64;
-    private static final int MAX_RESIDENT_PAGES = 256;
+    /**
+     * Small pages matter for the old preview: its 3D mesh and overview range sample sparse points
+     * across the whole world. A 64x64 page turned each such point into 4,096 generated samples.
+     */
+    private static final int PAGE_SIDE = 8;
+    /** Holds one complete 160x160 sparse preview working set within the same 16 MiB payload budget. */
+    private static final int MAX_RESIDENT_PAGES = 32_768;
     private static final long MAX_RESIDENT_PAGE_BYTES = 16L * 1024L * 1024L;
 
     public ElevationField generate(WorldGenesis genesis) {
