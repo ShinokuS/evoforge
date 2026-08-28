@@ -9,9 +9,9 @@ import com.badlogic.gdx.graphics.GL20;
 import io.github.evoforge.logging.Slf4jApplicationLogger;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
-import io.github.evoforge.visualizer.screen.ContinuumMapInspectorScreen;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
+import io.github.evoforge.visualizer.screen.WorldGenerationPreviewScreen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,8 +59,8 @@ public final class Main extends Game {
         Gdx.app.postRunnable(() -> showScenarioNow(scenario));
     }
 
-    private void requestContinuumInspector() {
-        Gdx.app.postRunnable(this::showContinuumInspectorNow);
+    private void requestWorldGenerationPreview() {
+        Gdx.app.postRunnable(this::showWorldGenerationPreviewNow);
     }
 
     private void requestExit() {
@@ -71,7 +71,7 @@ public final class Main extends Game {
         replaceScreen(new ScenarioMenuScreen(
                 scenarios,
                 this::requestScenario,
-                this::requestContinuumInspector,
+                this::requestWorldGenerationPreview,
                 this::requestExit));
     }
 
@@ -82,8 +82,8 @@ public final class Main extends Game {
                 this::requestScenarioMenu));
     }
 
-    private void showContinuumInspectorNow() {
-        replaceScreen(new ContinuumMapInspectorScreen(this::requestScenarioMenu));
+    private void showWorldGenerationPreviewNow() {
+        replaceScreen(new WorldGenerationPreviewScreen(this::requestScenarioMenu));
     }
 
     private void replaceScreen(Screen next) {
