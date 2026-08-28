@@ -52,15 +52,11 @@ final class V15ContinuumLargeDomainTest {
     @Test
     void hundredThousandSquareDomainDoesNotOverflowMountainCalibrationArea() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(100_000, 100_000);
-        V15ContinuumTerrainPlan plan = V15ContinuumTerrainPlan.prepare(
+        V13MountainCalibration calibration = V13MountainCalibration.compile(
                 domain,
-                4_203L,
-                V15TerrainDefinition.balanced(),
                 V13MountainDefinition.balanced(),
-                -96,
+                V13MountainRecipe.balanced(),
                 96);
-        assertEquals(10_000_000_000L, Math.multiplyExact(domain.width(), domain.height()));
-        assertEquals(domain, plan.domain());
-        assertTrue(plan.usesScaledPlanning());
+        assertEquals(10_000_000_000L, calibration.area());
     }
 }
