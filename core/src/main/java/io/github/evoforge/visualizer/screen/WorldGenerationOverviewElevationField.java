@@ -218,12 +218,16 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                 visible,
                 source.bounds(),
                 stride);
+        SampleGrid overview = SampleGrid.materialize(source, overviewVisible, stride);
+        if (stride == 1) {
+            return new WorldGenerationOverviewElevationField(source, overview, SampleGrid.empty());
+        }
+
         int contourStride = Math.multiplyExact(stride, 2);
         VisualizerCamera.VisibleRange contourVisible = WorldGeneration2DLod.alignVisibleRange(
                 visible,
                 source.bounds(),
                 contourStride);
-        SampleGrid overview = SampleGrid.materialize(source, overviewVisible, stride);
         SampleGrid contours = SampleGrid.materialize(source, contourVisible, contourStride);
         return new WorldGenerationOverviewElevationField(source, overview, contours);
     }
@@ -363,6 +367,10 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             this.xCoordinates = xCoordinates;
             this.yCoordinates = yCoordinates;
             this.values = values;
+        }
+
+        static SampleGrid empty() {
+            return new SampleGrid(new int[0], new int[0], new long[0]);
         }
 
         static SampleGrid materialize(
