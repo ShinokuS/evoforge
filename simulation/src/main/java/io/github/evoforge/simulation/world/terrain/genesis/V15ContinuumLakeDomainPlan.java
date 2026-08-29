@@ -1,48 +1,59 @@
 package io.github.evoforge.simulation.world.terrain.genesis;
 
-import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Fixed-budget large-domain approximation of the accepted V15 inland-lowland lake selection.
+ * Fixed-budget large-domain execution of the accepted V15 inland-lowland selection vocabulary.
  *
- * <p>The finite historical algorithm globally smooths every dry cell and ranks connected lowland
- * components. That cannot have area-independent startup. This Continuum plan keeps the same V15
- * target coverage, source-height ceiling, scale-aware minimum span and maximum body count, but finds
- * body anchors from a fixed stratified set of real world coordinates. Footprints are deterministic
- * world-space lowland ellipses with bounded edge variation. No reduced terrain raster is generated.
+ * <p>The historical finite algorithm globally smooths every dry cell, resolves a low-elevation
+ * support threshold, regularizes connected support, then keeps at most six broad lowland components.
+ * An unbounded Continuum domain cannot reproduce those global passes without O(area) startup. This
+ * plan therefore samples a fixed real-coordinate lattice to resolve only the global support threshold
+ * and candidate component envelopes. Final membership is <em>not</em> a scaled sampled mask: every
+ * {@link #isLake} call re-evaluates the actual V12/V14 land elevation/interiority at that world
+ * coordinate and uses the sampled component only as a bounded basin envelope.</p>
  *
- * <p>This class is intentionally separate from {@link io.github.evoforge.simulation.world.terrain.field.V15InlandLakeDomainPlan};
- * the latter remains the exact finite-world oracle.</p>
+ * <p>The exact {@code V15InlandLakeDomainPlan} remains the finite-world oracle.</p>
  */
 public final class V15ContinuumLakeDomainPlan {
     private static final int PPM = 1_000_000;
-    private static final int SAMPLE_SIDE = 32;
+    private static final int SAMPLE_SIDE = 64;
     private static final int MINIMUM_INTERIOR_POTENTIAL_PPM = 180_000;
-    private static final String SAMPLE = "world:v15-continuum-lake-sample";
-    private static final String SHAPE = "world:v15-continuum-lake-shape";
+    private static final int MAX_MEMBERSHIP_CACHE = 65_536;
 
-    private final ContinuumWorldDomain domain;
-    private final long seed;
+    private final io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain domain;
+    private final V14ContinuumBaseTerrainPlan continental;
     private final List<LakeBody> bodies;
     private final long targetLakeCells;
+    private final long maximumSourceElevationSubunits;
+    private final Map<Long, Boolean> membershipCache = new LinkedHashMap<>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Long, Boolean> eldest) {
+            return size() > MAX_MEMBERSHIP_CACHE;
+        }
+    };
 
     private V15ContinuumLakeDomainPlan(
-            ContinuumWorldDomain domain,
-            long seed,
+            io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain domain,
+            V14ContinuumBaseTerrainPlan continental,
             List<LakeBody> bodies,
-            long targetLakeCells) {
+            long targetLakeCells,
+            long maximumSourceElevationSubunits) {
         this.domain = domain;
-        this.seed = seed;
+        this.continental = continental;
         this.bodies = List.copyOf(bodies);
         this.targetLakeCells = targetLakeCells;
+        this.maximumSourceElevationSubunits = maximumSourceElevationSubunits;
     }
 
     public static V15ContinuumLakeDomainPlan prepare(
-            ContinuumWorldDomain domain,
+            io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain domain,
             long seed,
             V14ContinuumBaseTerrainPlan continental,
             int maximumZCells) {
@@ -52,14 +63,21 @@ public final class V15ContinuumLakeDomainPlan {
         V15InlandLakeDomainRecipe recipe = V15InlandLakeDomainRecipe.balanced();
         long dryLandCells = continental.landRank().landCount();
         long targetLakeCells = dryLandCells * recipe.targetDryLandCoveragePpm() / PPM;
-        if (targetLakeCells <= 0L) {
-            return new V15ContinuumLakeDomainPlan(domain, seed, List.of(), 0L);
+        long maximumSourceElevation = Math.max(
+                1L,
+                (long) Math.max(1, maximumZCells)
+                        * TerrainElevationField.SUBUNITS_PER_CELL
+                        * recipe.maximumSourceElevationPpm()
+                        / PPM);
+        if (targetLakeCells <= 0L || dryLandCells <= 0L) {
+            return new V15ContinuumLakeDomainPlan(
+                    domain, continental, List.of(), Math.max(0L, targetLakeCells), maximumSourceElevation);
         }
 
-        int limitingSpan = Math.toIntExact(Math.min(domain.width(), domain.height()));
+        long limitingSpan = Math.min(domain.width(), domain.height());
         int minimumSpan = Math.max(
                 recipe.minimumComponentSpanCells(),
-                limitingSpan / recipe.componentSpanWorldDivisor());
+                Math.toIntExact(Math.min(Integer.MAX_VALUE, limitingSpan / recipe.componentSpanWorldDivisor())));
         long minimumComponentCells = Math.max(4L, (long) minimumSpan * minimumSpan / 2L);
         int maximumBodies = Math.min(
                 recipe.maximumLakeBodies(),
@@ -67,73 +85,128 @@ public final class V15ContinuumLakeDomainPlan {
                         recipe.maximumLakeBodies(),
                         targetLakeCells / Math.max(1L, minimumComponentCells)))));
         if (maximumBodies <= 0) {
-            return new V15ContinuumLakeDomainPlan(domain, seed, List.of(), targetLakeCells);
+            return new V15ContinuumLakeDomainPlan(
+                    domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
         }
 
-        long maximumSourceElevation = Math.max(
-                1L,
-                (long) Math.max(1, maximumZCells)
-                        * TerrainElevationField.SUBUNITS_PER_CELL
-                        * recipe.maximumSourceElevationPpm()
-                        / PPM);
-        LegacyV15Random random = new LegacyV15Random(seed);
-        List<Candidate> candidates = new ArrayList<>();
-        int sampleColumns = Math.min(SAMPLE_SIDE, Math.toIntExact(domain.width()));
-        int sampleRows = Math.min(SAMPLE_SIDE, Math.toIntExact(domain.height()));
-        for (int sy = 0; sy < sampleRows; sy++) {
-            long y = sampledCoordinate(random, sy, sampleRows, domain.height(), 1L);
-            for (int sx = 0; sx < sampleColumns; sx++) {
-                long x = sampledCoordinate(
-                        random,
-                        sx,
-                        sampleColumns,
-                        domain.width(),
-                        ((long) sy << 32) ^ 0x71a3L);
-                if (!continental.landRank().isLand(x, y)) continue;
-                int interior = continental.landmass().potentialPpmAt(x, y);
-                if (interior < MINIMUM_INTERIOR_POTENTIAL_PPM) continue;
+        int columns = Math.toIntExact(Math.min(SAMPLE_SIDE, domain.width()));
+        int rows = Math.toIntExact(Math.min(SAMPLE_SIDE, domain.height()));
+        int sampleCount = Math.multiplyExact(columns, rows);
+        Sample[] samples = new Sample[sampleCount];
+        int drySamples = 0;
+        int eligibleSamples = 0;
+        long[] eligibleElevations = new long[sampleCount];
+        for (int sy = 0; sy < rows; sy++) {
+            long y = sampledCoordinate(domain.height(), sy, rows);
+            for (int sx = 0; sx < columns; sx++) {
+                long x = sampledCoordinate(domain.width(), sx, columns);
                 long elevation = continental.unrelaxedElevation().elevationSubunitsAt(x, y);
-                if (elevation <= 0L || elevation > maximumSourceElevation) continue;
-                long score = elevation * 4L
-                        - (long) interior * TerrainElevationField.SUBUNITS_PER_CELL / PPM;
-                candidates.add(new Candidate(x, y, score));
+                boolean dry = elevation > 0L;
+                if (dry) drySamples++;
+                int interior = dry ? continental.landmass().potentialPpmAt(x, y) : 0;
+                boolean eligible = dry
+                        && interior >= MINIMUM_INTERIOR_POTENTIAL_PPM
+                        && elevation <= maximumSourceElevation;
+                if (eligible) eligibleElevations[eligibleSamples++] = elevation;
+                samples[sy * columns + sx] = new Sample(x, y, elevation, interior, eligible);
             }
         }
-        if (candidates.isEmpty()) {
-            return new V15ContinuumLakeDomainPlan(domain, seed, List.of(), targetLakeCells);
+        if (drySamples == 0 || eligibleSamples == 0) {
+            return new V15ContinuumLakeDomainPlan(
+                    domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
         }
-        candidates.sort(Comparator
-                .comparingLong(Candidate::score)
-                .thenComparingLong(Candidate::y)
-                .thenComparingLong(Candidate::x));
 
-        int bodyCount = Math.min(maximumBodies, candidates.size());
-        double nominalArea = targetLakeCells / (double) bodyCount;
-        double nominalRadius = Math.max(minimumSpan / 2.0, StrictMath.sqrt(nominalArea / StrictMath.PI));
-        List<LakeBody> bodies = new ArrayList<>(bodyCount);
-        double minimumSeparation = nominalRadius * 2.4;
-        double minimumSeparationSquared = minimumSeparation * minimumSeparation;
-        for (Candidate candidate : candidates) {
-            if (bodies.size() >= bodyCount) break;
-            boolean tooClose = false;
-            for (LakeBody existing : bodies) {
-                double dx = candidate.x() - existing.centerX();
-                double dy = candidate.y() - existing.centerY();
-                if (dx * dx + dy * dy < minimumSeparationSquared) {
-                    tooClose = true;
-                    break;
-                }
-            }
-            if (tooClose) continue;
-            bodies.add(createBody(random, candidate, nominalRadius, bodies.size()));
+        double eligibleFractionOfDry = eligibleSamples / (double) drySamples;
+        double estimatedEligibleCells = dryLandCells * eligibleFractionOfDry;
+        long interiorCapacity = Math.max(
+                0L,
+                Math.round(estimatedEligibleCells * recipe.maximumInteriorOccupancyPpm() / PPM));
+        long desiredLakeCells = Math.min(targetLakeCells, interiorCapacity);
+        if (desiredLakeCells < minimumComponentCells) {
+            return new V15ContinuumLakeDomainPlan(
+                    domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
         }
-        if (bodies.isEmpty()) {
-            bodies.add(createBody(random, candidates.get(0), nominalRadius, 0));
+
+        double supportTarget = Math.min(
+                estimatedEligibleCells,
+                Math.max(desiredLakeCells, desiredLakeCells * 3.0));
+        double supportFraction = Math.min(1.0, supportTarget / Math.max(1.0, estimatedEligibleCells));
+        Arrays.sort(eligibleElevations, 0, eligibleSamples);
+        int thresholdIndex = Math.max(
+                0,
+                Math.min(
+                        eligibleSamples - 1,
+                        (int) StrictMath.ceil(supportFraction * eligibleSamples) - 1));
+        long supportThreshold = eligibleElevations[thresholdIndex];
+
+        boolean[] support = new boolean[sampleCount];
+        for (int index = 0; index < sampleCount; index++) {
+            Sample sample = samples[index];
+            support[index] = sample.eligible() && sample.elevationSubunits() <= supportThreshold;
         }
-        return new V15ContinuumLakeDomainPlan(domain, seed, bodies, targetLakeCells);
+
+        double representedCellsPerSample = domain.width() * (double) domain.height() / sampleCount;
+        List<Component> components = collectComponents(
+                samples,
+                support,
+                columns,
+                rows,
+                representedCellsPerSample,
+                minimumSpan,
+                minimumComponentCells);
+        if (components.isEmpty()) {
+            return new V15ContinuumLakeDomainPlan(
+                    domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
+        }
+        components.sort(Comparator
+                .comparingDouble(Component::meanElevation)
+                .thenComparing(Comparator.comparingDouble(Component::estimatedCells).reversed())
+                .thenComparingLong(Component::minimumCell));
+
+        List<Component> selected = new ArrayList<>();
+        double selectedCells = 0d;
+        for (Component component : components) {
+            if (selected.size() >= maximumBodies) break;
+            if (selectedCells >= desiredLakeCells && !selected.isEmpty()) break;
+            selected.add(component);
+            selectedCells += component.estimatedCells();
+        }
+        if (selected.isEmpty()) selected.add(components.get(0));
+
+        long nominalBucketX = Math.max(1L, divideCeil(domain.width(), columns));
+        long nominalBucketY = Math.max(1L, divideCeil(domain.height(), rows));
+        List<LakeBody> bodies = new ArrayList<>(selected.size());
+        for (Component component : selected) {
+            long marginX = Math.max(1L, nominalBucketX / 2L);
+            long marginY = Math.max(1L, nominalBucketY / 2L);
+            long minX = Math.max(0L, component.minX() - marginX);
+            long maxX = Math.min(domain.width() - 1L, component.maxX() + marginX);
+            long minY = Math.max(0L, component.minY() - marginY);
+            long maxY = Math.min(domain.height() - 1L, component.maxY() + marginY);
+            double centerX = (minX + maxX) * 0.5;
+            double centerY = (minY + maxY) * 0.5;
+            double radiusX = Math.max(minimumSpan / 2.0, (maxX - minX + 1L) * 0.56);
+            double radiusY = Math.max(minimumSpan / 2.0, (maxY - minY + 1L) * 0.56);
+            bodies.add(new LakeBody(
+                    minX,
+                    maxX,
+                    minY,
+                    maxY,
+                    centerX,
+                    centerY,
+                    radiusX,
+                    radiusY,
+                    Math.min(supportThreshold, component.maximumElevation())));
+        }
+        return new V15ContinuumLakeDomainPlan(
+                domain,
+                continental,
+                bodies,
+                targetLakeCells,
+                maximumSourceElevation);
     }
 
-    public ContinuumWorldDomain domain() {
+    public io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain domain() {
         return domain;
     }
 
@@ -149,95 +222,173 @@ public final class V15ContinuumLakeDomainPlan {
         if (!domain.contains(x, y)) {
             throw new IllegalArgumentException("coordinate lies outside Continuum lake domain");
         }
-        for (LakeBody body : bodies) {
-            if (body.contains(x, y, seed)) return true;
+        if (bodies.isEmpty()) return false;
+        long key = Math.addExact(Math.multiplyExact(y, domain.width()), x);
+        synchronized (membershipCache) {
+            Boolean cached = membershipCache.get(key);
+            if (cached != null) return cached;
         }
-        return false;
+        boolean lake = computeMembership(x, y);
+        synchronized (membershipCache) {
+            membershipCache.put(key, lake);
+        }
+        return lake;
     }
 
     public double normalizedRadius(long x, long y) {
         double best = Double.POSITIVE_INFINITY;
         for (LakeBody body : bodies) {
-            double radius = body.normalizedRadius(x, y);
-            if (radius < best) best = radius;
+            if (!body.inEnvelope(x, y)) continue;
+            best = Math.min(best, body.normalizedRadius(x, y));
         }
         return best;
     }
 
-    private static LakeBody createBody(
-            LegacyV15Random random,
-            Candidate candidate,
-            double nominalRadius,
-            int ordinal) {
-        int aspectSample = samplePpm(random, SHAPE, candidate.x(), candidate.y(), ordinal * 3L);
-        double aspect = 0.72 + aspectSample / (double) PPM * 0.56;
-        double radiusX = nominalRadius * StrictMath.sqrt(aspect);
-        double radiusY = nominalRadius / StrictMath.sqrt(aspect);
-        int angleSample = samplePpm(random, SHAPE, candidate.x(), candidate.y(), ordinal * 3L + 1L);
-        double angle = angleSample / (double) PPM * StrictMath.PI;
-        double edgePhase = samplePpm(random, SHAPE, candidate.x(), candidate.y(), ordinal * 3L + 2L)
-                / (double) PPM * StrictMath.PI * 2.0;
-        return new LakeBody(
-                candidate.x(),
-                candidate.y(),
-                radiusX,
-                radiusY,
-                StrictMath.cos(angle),
-                StrictMath.sin(angle),
-                edgePhase);
+    private boolean computeMembership(long x, long y) {
+        LakeBody candidate = null;
+        for (LakeBody body : bodies) {
+            if (!body.inEnvelope(x, y)) continue;
+            if (body.normalizedRadius(x, y) > 1.18) continue;
+            candidate = body;
+            break;
+        }
+        if (candidate == null) return false;
+        long elevation = continental.unrelaxedElevation().elevationSubunitsAt(x, y);
+        if (elevation <= 0L
+                || elevation > maximumSourceElevationSubunits
+                || elevation > candidate.maximumElevationSubunits()) {
+            return false;
+        }
+        return continental.landmass().potentialPpmAt(x, y) >= MINIMUM_INTERIOR_POTENTIAL_PPM;
     }
 
-    private static long sampledCoordinate(
-            LegacyV15Random random,
-            int bucket,
-            int buckets,
-            long extent,
-            long ordinal) {
-        long start = bucket * extent / buckets;
-        long endExclusive = (bucket + 1L) * extent / buckets;
-        long span = Math.max(1L, endExclusive - start);
-        int sample = samplePpm(random, SAMPLE, bucket, buckets, ordinal);
-        long offset = Math.min(span - 1L, (long) sample * span / PPM);
-        return Math.min(extent - 1L, start + offset);
+    private static List<Component> collectComponents(
+            Sample[] samples,
+            boolean[] support,
+            int width,
+            int height,
+            double representedCellsPerSample,
+            int minimumSpan,
+            long minimumComponentCells) {
+        boolean[] visited = new boolean[support.length];
+        int[] queue = new int[support.length];
+        List<Component> result = new ArrayList<>();
+        for (int start = 0; start < support.length; start++) {
+            if (!support[start] || visited[start]) continue;
+            int head = 0;
+            int tail = 0;
+            queue[tail++] = start;
+            visited[start] = true;
+            int count = 0;
+            long elevationSum = 0L;
+            long maximumElevation = 0L;
+            long minimumCell = Long.MAX_VALUE;
+            long minX = Long.MAX_VALUE;
+            long maxX = Long.MIN_VALUE;
+            long minY = Long.MAX_VALUE;
+            long maxY = Long.MIN_VALUE;
+            while (head < tail) {
+                int cell = queue[head++];
+                int sx = cell % width;
+                int sy = cell / width;
+                Sample sample = samples[cell];
+                count++;
+                elevationSum += sample.elevationSubunits();
+                maximumElevation = Math.max(maximumElevation, sample.elevationSubunits());
+                long rowMajor = Math.addExact(Math.multiplyExact(sample.y(), Long.MAX_VALUE / Math.max(1, height)), sample.x());
+                minimumCell = Math.min(minimumCell, rowMajor);
+                minX = Math.min(minX, sample.x());
+                maxX = Math.max(maxX, sample.x());
+                minY = Math.min(minY, sample.y());
+                maxY = Math.max(maxY, sample.y());
+                if (sx > 0) tail = enqueue(support, visited, queue, tail, cell - 1);
+                if (sx + 1 < width) tail = enqueue(support, visited, queue, tail, cell + 1);
+                if (sy > 0) tail = enqueue(support, visited, queue, tail, cell - width);
+                if (sy + 1 < height) tail = enqueue(support, visited, queue, tail, cell + width);
+            }
+            long spanX = maxX - minX + 1L;
+            long spanY = maxY - minY + 1L;
+            double estimatedCells = count * representedCellsPerSample;
+            if (spanX < minimumSpan
+                    || spanY < minimumSpan
+                    || estimatedCells < minimumComponentCells) {
+                continue;
+            }
+            result.add(new Component(
+                    count,
+                    elevationSum,
+                    maximumElevation,
+                    minimumCell,
+                    minX,
+                    maxX,
+                    minY,
+                    maxY,
+                    estimatedCells));
+        }
+        return result;
     }
 
-    private static int samplePpm(
-            LegacyV15Random random,
-            String purpose,
+    private static int enqueue(
+            boolean[] support,
+            boolean[] visited,
+            int[] queue,
+            int tail,
+            int cell) {
+        if (!support[cell] || visited[cell]) return tail;
+        visited[cell] = true;
+        queue[tail] = cell;
+        return tail + 1;
+    }
+
+    private static long sampledCoordinate(long extent, int bucket, int buckets) {
+        if (buckets == extent) return bucket;
+        long start = (long) bucket * extent / buckets;
+        long endExclusive = (long) (bucket + 1) * extent / buckets;
+        return Math.min(extent - 1L, start + Math.max(0L, (endExclusive - start - 1L) / 2L));
+    }
+
+    private static long divideCeil(long value, long divisor) {
+        return Math.floorDiv(value - 1L, divisor) + 1L;
+    }
+
+    private record Sample(
             long x,
             long y,
-            long ordinal) {
-        int high = (int) ((random.sampleElevation(purpose, x, y, ordinal) >>> 48) & 0xffffL);
-        return Math.toIntExact((long) high * PPM / 65_535L);
+            long elevationSubunits,
+            int interiorPotentialPpm,
+            boolean eligible) {}
+
+    private record Component(
+            int samples,
+            long elevationSum,
+            long maximumElevation,
+            long minimumCell,
+            long minX,
+            long maxX,
+            long minY,
+            long maxY,
+            double estimatedCells) {
+        double meanElevation() {
+            return elevationSum / (double) samples;
+        }
     }
 
-    private record Candidate(long x, long y, long score) {}
-
     private record LakeBody(
+            long minX,
+            long maxX,
+            long minY,
+            long maxY,
             double centerX,
             double centerY,
             double radiusX,
             double radiusY,
-            double axisX,
-            double axisY,
-            double edgePhase) {
-        double normalizedRadius(long x, long y) {
-            double dx = x - centerX;
-            double dy = y - centerY;
-            double along = dx * axisX + dy * axisY;
-            double across = -dx * axisY + dy * axisX;
-            return StrictMath.hypot(along / radiusX, across / radiusY);
+            long maximumElevationSubunits) {
+        boolean inEnvelope(long x, long y) {
+            return x >= minX && x <= maxX && y >= minY && y <= maxY;
         }
 
-        boolean contains(long x, long y, long seed) {
-            double radius = normalizedRadius(x, y);
-            if (radius > 1.16) return false;
-            if (radius < 0.84) return true;
-            double angle = StrictMath.atan2(y - centerY, x - centerX);
-            double modulation = 1.0
-                    + 0.075 * StrictMath.sin(angle * 3.0 + edgePhase)
-                    + 0.040 * StrictMath.sin(angle * 5.0 - edgePhase * 0.7);
-            return radius <= modulation;
+        double normalizedRadius(long x, long y) {
+            return StrictMath.hypot((x - centerX) / radiusX, (y - centerY) / radiusY);
         }
     }
 }
