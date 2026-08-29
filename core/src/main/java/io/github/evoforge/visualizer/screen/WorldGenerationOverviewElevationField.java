@@ -6,6 +6,9 @@ import io.github.evoforge.visualizer.VisualizerCamera;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Read-through field for 2D overview rendering.
@@ -16,23 +19,47 @@ import java.util.WeakHashMap;
  * coordinates without triggering duplicate terrain page materializations for surface, water and
  * contour passes.
  *
- * <p>Large previews may register an already prepared bounded presentation field for the exact
- * elevation object. Overview materialization then reads that field instead of reopening the
- * authoritative terrain pipeline on the render thread. The mapping is weak and presentation-only;
- * detailed {@code LOD x1} renderer reads never pass through this class and remain authoritative.</p>
+ * <p>Large previews register an already prepared bounded presentation field for the authoritative
+ * elevation object. A camera move or LOD change is rendered immediately from that field, then the
+ * same viewport is refined from authoritative V15 terrain on one low-priority background worker.
+ * The render thread therefore never waits for production terrain materialization merely because the
+ * user pans or zooms. Only the newest queued refinement is retained; obsolete camera work is dropped.
  *
- * <p>The most recent stable viewport/LOD result is retained across frames. A stationary overview
- * therefore performs no terrain work after the first materialization; pan, zoom, LOD change or a new
- * elevation field invalidates the entry by identity/value key. Only one viewport is retained, so
- * preview memory stays bounded.</p>
+ * <p>The bounded fallback is presentation-only. Once a refinement completes, the exact sampled
+ * lattice replaces it for that viewport. No fallback value is written back into terrain state.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
     private static final Map<ElevationField, ElevationField> FALLBACKS = new WeakHashMap<>();
+    private static final ThreadPoolExecutor REFINER = new ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1),
+            runnable -> {
+                Thread thread = new Thread(runnable, "evoforge-world-preview-refinement");
+                thread.setDaemon(true);
+                thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
+                return thread;
+            },
+            new ThreadPoolExecutor.DiscardOldestPolicy());
 
     private static ElevationField cachedDelegate;
     private static VisualizerCamera.VisibleRange cachedVisible;
     private static int cachedStride;
     private static WorldGenerationOverviewElevationField cachedField;
+
+    private static ElevationField refinedDelegate;
+    private static VisualizerCamera.VisibleRange refinedVisible;
+    private static int refinedStride;
+    private static WorldGenerationOverviewElevationField refinedField;
+
+    private static ElevationField pendingDelegate;
+    private static VisualizerCamera.VisibleRange pendingVisible;
+    private static int pendingStride;
+    private static long pendingToken;
+    private static long refinementSequence;
+    private static boolean refinementEnabled = true;
 
     private final ElevationField delegate;
     private final SampleGrid overview;
@@ -57,9 +84,9 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             throw new IllegalArgumentException("overview fallback must share authoritative bounds");
         }
         FALLBACKS.put(authoritative, fallback);
-        if (cachedDelegate == authoritative) {
-            clearCache();
-        }
+        if (cachedDelegate == authoritative) clearCache();
+        if (refinedDelegate == authoritative) clearRefinement();
+        if (pendingDelegate == authoritative) cancelPending();
     }
 
     static synchronized ElevationField preload(
@@ -69,31 +96,42 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         if (elevation == null || visible == null || overviewStride <= 1) {
             throw new IllegalArgumentException("overview preload requires elevation/range and stride > 1");
         }
+        if (matches(refinedDelegate, refinedVisible, refinedStride, elevation, visible, overviewStride)
+                && refinedField != null) {
+            cache(elevation, visible, overviewStride, refinedField);
+            return refinedField;
+        }
+
+        ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
         if (cachedField != null
-                && cachedDelegate == elevation
-                && cachedStride == overviewStride
-                && visible.equals(cachedVisible)) {
+                && matches(cachedDelegate, cachedVisible, cachedStride, elevation, visible, overviewStride)) {
+            if (presentationSource != elevation) {
+                scheduleRefinement(elevation, visible, overviewStride);
+            }
             return cachedField;
         }
-        ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
-        SampleGrid overview = SampleGrid.materialize(presentationSource, visible, overviewStride);
-        int contourStride = Math.multiplyExact(overviewStride, 2);
-        SampleGrid contours = SampleGrid.materialize(presentationSource, visible, contourStride);
-        WorldGenerationOverviewElevationField prepared = new WorldGenerationOverviewElevationField(
-                presentationSource, overview, contours);
-        cachedDelegate = elevation;
-        cachedVisible = visible;
-        cachedStride = overviewStride;
-        cachedField = prepared;
+
+        WorldGenerationOverviewElevationField prepared = materialize(
+                presentationSource, visible, overviewStride);
+        cache(elevation, visible, overviewStride, prepared);
+        if (presentationSource != elevation) {
+            scheduleRefinement(elevation, visible, overviewStride);
+        }
         return prepared;
     }
 
     static synchronized void invalidate(ElevationField elevation) {
         if (elevation == null) return;
         FALLBACKS.remove(elevation);
-        if (cachedDelegate == elevation) {
-            clearCache();
-        }
+        if (cachedDelegate == elevation) clearCache();
+        if (refinedDelegate == elevation) clearRefinement();
+        if (pendingDelegate == elevation) cancelPending();
+    }
+
+    /** Package-private deterministic switch for tests which assert synchronous fallback reads. */
+    static synchronized void refinementEnabledForTests(boolean enabled) {
+        refinementEnabled = enabled;
+        if (!enabled) cancelPending();
     }
 
     @Override
@@ -125,11 +163,112 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         delegate.fillElevationSubunits(minX, minY, sampleWidth, sampleHeight, step, target);
     }
 
+    private static WorldGenerationOverviewElevationField materialize(
+            ElevationField source,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        SampleGrid overview = SampleGrid.materialize(source, visible, stride);
+        SampleGrid contours = SampleGrid.materialize(source, visible, Math.multiplyExact(stride, 2));
+        return new WorldGenerationOverviewElevationField(source, overview, contours);
+    }
+
+    private static synchronized void scheduleRefinement(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        if (!refinementEnabled) return;
+        if (matches(refinedDelegate, refinedVisible, refinedStride, authoritative, visible, stride)) return;
+        if (matches(pendingDelegate, pendingVisible, pendingStride, authoritative, visible, stride)) return;
+
+        long token = ++refinementSequence;
+        pendingDelegate = authoritative;
+        pendingVisible = visible;
+        pendingStride = stride;
+        pendingToken = token;
+        REFINER.execute(() -> refine(authoritative, visible, stride, token));
+    }
+
+    private static void refine(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible,
+            int stride,
+            long token) {
+        WorldGenerationOverviewElevationField prepared;
+        try {
+            prepared = materialize(authoritative, visible, stride);
+        } catch (RuntimeException ignored) {
+            synchronized (WorldGenerationOverviewElevationField.class) {
+                if (pendingToken == token) cancelPending();
+            }
+            return;
+        }
+
+        synchronized (WorldGenerationOverviewElevationField.class) {
+            if (pendingToken != token
+                    || pendingDelegate != authoritative
+                    || !visible.equals(pendingVisible)
+                    || pendingStride != stride
+                    || !FALLBACKS.containsKey(authoritative)) {
+                return;
+            }
+            refinedDelegate = authoritative;
+            refinedVisible = visible;
+            refinedStride = stride;
+            refinedField = prepared;
+            if (matches(cachedDelegate, cachedVisible, cachedStride, authoritative, visible, stride)) {
+                cachedField = prepared;
+            }
+            pendingDelegate = null;
+            pendingVisible = null;
+            pendingStride = 0;
+            pendingToken = 0L;
+        }
+    }
+
+    private static boolean matches(
+            ElevationField storedDelegate,
+            VisualizerCamera.VisibleRange storedVisible,
+            int storedStride,
+            ElevationField requestedDelegate,
+            VisualizerCamera.VisibleRange requestedVisible,
+            int requestedStride) {
+        return storedDelegate == requestedDelegate
+                && storedStride == requestedStride
+                && requestedVisible.equals(storedVisible);
+    }
+
+    private static void cache(
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            int stride,
+            WorldGenerationOverviewElevationField field) {
+        cachedDelegate = elevation;
+        cachedVisible = visible;
+        cachedStride = stride;
+        cachedField = field;
+    }
+
     private static void clearCache() {
         cachedDelegate = null;
         cachedVisible = null;
         cachedStride = 0;
         cachedField = null;
+    }
+
+    private static void clearRefinement() {
+        refinedDelegate = null;
+        refinedVisible = null;
+        refinedStride = 0;
+        refinedField = null;
+    }
+
+    private static void cancelPending() {
+        refinementSequence++;
+        pendingDelegate = null;
+        pendingVisible = null;
+        pendingStride = 0;
+        pendingToken = 0L;
+        REFINER.getQueue().clear();
     }
 
     private static boolean sameBounds(WorldBounds left, WorldBounds right) {
