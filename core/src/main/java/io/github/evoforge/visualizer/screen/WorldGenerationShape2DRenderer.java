@@ -32,6 +32,8 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
     private static final int VISIBLE_RANGE_ROUNDING_CELLS = 4;
+    private static final int DETAIL_CACHE_BLOCK_CELLS = 16;
+    private static final int DETAIL_NEIGHBOUR_HALO_CELLS = 1;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -184,28 +186,67 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         lastRenderedSamples = WorldGeneration2DLod.sampledCells(renderedWidth, renderedLength, stride);
         lastLodStride = stride;
 
-        ElevationField presentationElevation = stride > 1 && (showSurface || showOcean)
-                ? WorldGenerationOverviewElevationField.preload(elevation, lodVisible, stride)
-                : elevation;
+        boolean boundedLargeWorldDetail = stride == 1
+                && WorldGenerationOverviewElevationField.hasFallback(elevation);
+        VisualizerCamera.VisibleRange detailVisible = boundedLargeWorldDetail
+                ? detailPresentationRange(visible)
+                : visible;
+
+        ElevationField presentationElevation = elevation;
+        TerrainShapeField presentationShapes = terrainShapes;
+        if (stride > 1 && (showSurface || showOcean)) {
+            presentationElevation = WorldGenerationOverviewElevationField.preload(
+                    elevation,
+                    lodVisible,
+                    stride);
+            WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
+        } else if (boundedLargeWorldDetail && (showSurface || showOcean)) {
+            presentationElevation = WorldGenerationOverviewElevationField.preload(
+                    elevation,
+                    detailVisible,
+                    1);
+            if (showSurface) {
+                boolean exactElevationReady = WorldGenerationOverviewElevationField.isRefined(
+                        elevation,
+                        detailVisible,
+                        1);
+                presentationShapes = WorldGenerationDetailTerrainShapeField.preload(
+                        terrainShapes,
+                        detailVisible,
+                        exactElevationReady);
+            } else {
+                WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
+            }
+        }
 
         batch.setProjectionMatrix(camera.projection());
         batch.begin();
         if (showSurface) {
             elevationShader.apply(batch);
             if (stride == 1) {
-                drawTerrainDetailed(batch, elevation, terrainShapes, visible, showOcean);
+                drawTerrainDetailed(
+                        batch,
+                        presentationElevation,
+                        presentationShapes,
+                        visible,
+                        showOcean);
             } else {
                 drawTerrainOverview(batch, presentationElevation, lodVisible, stride, showOcean);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
             if (stride == 1) {
-                drawRelief(batch, elevation, terrainShapes, visible, showOcean);
+                drawRelief(
+                        batch,
+                        presentationElevation,
+                        presentationShapes,
+                        visible,
+                        showOcean);
             }
         }
         if (showOcean) {
             if (stride == 1) {
-                drawOceanDetailed(batch, elevation, visible);
+                drawOceanDetailed(batch, presentationElevation, visible);
             } else {
                 drawOceanOverview(batch, presentationElevation, lodVisible, stride);
             }
@@ -222,7 +263,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             drawOverviewContours(presentationElevation, contourVisible, stride * 2);
         }
         if (showSurface && showShapeDirections && stride == 1) {
-            drawShapeDirections(terrainShapes, visible);
+            drawShapeDirections(presentationShapes, visible);
         }
 
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -596,6 +637,18 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (!Float.isFinite(cameraSpan) || cameraSpan <= 0f || worldSpan <= 0) return 1;
         long rounded = (long) StrictMath.ceil(cameraSpan) + VISIBLE_RANGE_ROUNDING_CELLS;
         return Math.toIntExact(Math.min((long) worldSpan, Math.max(1L, rounded)));
+    }
+
+    private VisualizerCamera.VisibleRange detailPresentationRange(
+            VisualizerCamera.VisibleRange visible) {
+        VisualizerCamera.VisibleRange anchored = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                bounds,
+                DETAIL_CACHE_BLOCK_CELLS);
+        return WorldGeneration2DLod.expandVisibleRange(
+                anchored,
+                bounds,
+                DETAIL_NEIGHBOUR_HALO_CELLS);
     }
 
     private VisualizerCamera.VisibleRange clipped(VisualizerCamera.VisibleRange visible) {
