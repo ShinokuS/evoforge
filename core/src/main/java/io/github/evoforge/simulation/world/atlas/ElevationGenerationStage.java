@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.atlas;
 
+import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
@@ -119,6 +120,7 @@ public final class ElevationGenerationStage {
 
     private static final class ContinuumElevationField implements ElevationField {
         private final WorldBounds bounds;
+        private final ContinuumScalarPageSource source;
         private final ContinuumPageLayout layout;
         private final ContinuumScalarPageCache pages;
 
@@ -126,6 +128,7 @@ public final class ElevationGenerationStage {
                 WorldBounds bounds,
                 ContinuumScalarPageSource source) {
             this.bounds = bounds;
+            this.source = source;
             int pageSide = pageSideFor(source.domain());
             this.layout = new ContinuumPageLayout(source.domain(), pageSide, pageSide);
             this.pages = new ContinuumScalarPageCache(
@@ -158,6 +161,38 @@ public final class ElevationGenerationStage {
             int sampleX = Math.toIntExact(localX - page.window().minX());
             int sampleY = Math.toIntExact(localY - page.window().minY());
             return Math.round(page.sample(sampleX, sampleY));
+        }
+
+        @Override
+        public void fillElevationSubunits(
+                int minX,
+                int minY,
+                int sampleWidth,
+                int sampleHeight,
+                long step,
+                long[] target) {
+            if (sampleWidth <= 0 || sampleHeight <= 0 || step <= 0L || target == null
+                    || target.length < Math.multiplyExact(sampleWidth, sampleHeight)) {
+                throw new IllegalArgumentException("elevation sample grid dimensions/output are invalid");
+            }
+            long localMinX = (long) minX - bounds.minX();
+            long localMinY = (long) minY - bounds.minY();
+            ContinuumSampleWindow window = new ContinuumSampleWindow(
+                    localMinX, localMinY, sampleWidth, sampleHeight, step);
+            long localMaxX = window.xAt(sampleWidth - 1);
+            long localMaxY = window.yAt(sampleHeight - 1);
+            if (!source.domain().contains(localMinX, localMinY)
+                    || !source.domain().contains(localMaxX, localMaxY)) {
+                throw new IllegalArgumentException("elevation sample grid lies outside field bounds");
+            }
+
+            ContinuumScalarPage page = source.materialize(window);
+            int cursor = 0;
+            for (int y = 0; y < sampleHeight; y++) {
+                for (int x = 0; x < sampleWidth; x++, cursor++) {
+                    target[cursor] = Math.round(page.sample(x, y));
+                }
+            }
         }
     }
 }
