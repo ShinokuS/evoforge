@@ -10,7 +10,6 @@ import io.github.evoforge.simulation.world.terrain.shape.TerrainSurfacePatch;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,18 +19,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * World-anchored immutable cell-detail tiles for the legacy V15 inspector.
+ * World-anchored immutable cell-detail tiles for the V15 inspector.
  *
- * <p>Entering {@code LOD x1} must never make the render thread issue thousands of tiny Continuum
- * requests, and camera movement must never change the authored result at a coordinate. Detail is
- * therefore prepared as immutable 64x64 world tiles. A requested tile group is sampled from the
- * authoritative elevation field in one bounded unit-resolution bulk request; each tile then fits
- * V15 terrain shapes from the same local elevation snapshot with the full sparse-transition halo.
- * Elevation and shape data become visible together only after every tile needed by the viewport is
- * ready.
+ * <p>Exact detail is authored in 64x64 world tiles, never in camera-relative rectangles. Elevation
+ * and terrain shapes for one tile come from the same unit-resolution elevation snapshot and become
+ * visible together. A one-tile prefetch ring is included in every published frame, so small pans and
+ * micro-zooms continue to read the exact same tile objects instead of replacing an already visible
+ * place with another presentation approximation.
  *
- * <p>The cache is presentation-only. Tiles are rebuildable snapshots keyed exclusively by world
- * coordinates and source identity; camera state never enters terrain generation semantics.</p>
+ * <p>Tile generation is presentation work only. It is bounded by the requested viewport and does not
+ * change authoritative terrain or make camera state part of Genesis.</p>
  */
 final class WorldGenerationExactDetailTiles {
     static final int TILE_SIDE = 64;
@@ -53,7 +50,6 @@ final class WorldGenerationExactDetailTiles {
             return size() > MAX_READY_TILES;
         }
     };
-    private static final Map<ElevationField, Boolean> KNOWN_SOURCES = new IdentityHashMap<>();
 
     private static ElevationField source;
     private static Set<TileKey> required = Set.of();
@@ -66,44 +62,30 @@ final class WorldGenerationExactDetailTiles {
     private WorldGenerationExactDetailTiles() {
     }
 
-    /** Returns one atomic exact detail frame, or {@code null} while the requested tiles are loading. */
+    /** Returns an exact immutable frame when the visible tiles are covered, otherwise {@code null}. */
     static synchronized DetailFrame request(
             ElevationField authoritative,
             VisualizerCamera.VisibleRange visible) {
         requireRequest(authoritative, visible);
         selectSource(authoritative);
-        VisualizerCamera.VisibleRange renderSupport = WorldGeneration2DLod.expandVisibleRange(
-                visible,
-                authoritative.bounds(),
-                RENDER_NEIGHBOUR_HALO_CELLS);
-        required = tileKeys(renderSupport, authoritative.bounds());
-        VisualizerCamera.VisibleRange prefetchSupport = WorldGeneration2DLod.expandVisibleRange(
-                renderSupport,
-                authoritative.bounds(),
-                PREFETCH_RING_CELLS);
-        desired = tileKeys(prefetchSupport, authoritative.bounds());
-        cachedFrame = null;
-        cachedFrameKeys = Set.of();
+        updateTargets(authoritative, visible);
+
+        if (cachedFrame != null && cachedFrameKeys.containsAll(required)) {
+            startWorkerIfNeeded();
+            return cachedFrame;
+        }
         startWorkerIfNeeded();
-        return frameIfReady(authoritative, required);
+        if (!allReady(desired)) return null;
+        return buildFrame(authoritative, desired);
     }
 
-    /** Starts exactly the same tile work before the renderer crosses from x2 to x1. */
+    /** Starts the same exact tile work before x1 becomes the selected presentation level. */
     static synchronized void prewarm(
             ElevationField authoritative,
             VisualizerCamera.VisibleRange visible) {
         requireRequest(authoritative, visible);
         selectSource(authoritative);
-        VisualizerCamera.VisibleRange renderSupport = WorldGeneration2DLod.expandVisibleRange(
-                visible,
-                authoritative.bounds(),
-                RENDER_NEIGHBOUR_HALO_CELLS);
-        required = tileKeys(renderSupport, authoritative.bounds());
-        VisualizerCamera.VisibleRange prefetchSupport = WorldGeneration2DLod.expandVisibleRange(
-                renderSupport,
-                authoritative.bounds(),
-                PREFETCH_RING_CELLS);
-        desired = tileKeys(prefetchSupport, authoritative.bounds());
+        updateTargets(authoritative, visible);
         startWorkerIfNeeded();
     }
 
@@ -111,24 +93,18 @@ final class WorldGenerationExactDetailTiles {
             ElevationField authoritative,
             VisualizerCamera.VisibleRange visible) {
         if (authoritative == null || visible == null || source != authoritative) return false;
-        VisualizerCamera.VisibleRange support = WorldGeneration2DLod.expandVisibleRange(
-                visible,
-                authoritative.bounds(),
-                RENDER_NEIGHBOUR_HALO_CELLS);
-        return allReady(tileKeys(support, authoritative.bounds()));
+        Set<TileKey> visibleKeys = requiredKeys(authoritative, visible);
+        return (cachedFrame != null && cachedFrameKeys.containsAll(visibleKeys))
+                || allReady(visibleKeys);
     }
 
     static TerrainShapeField shapesFor(ElevationField detailElevation) {
-        if (detailElevation instanceof DetailElevationField detail) {
-            return detail.shapes;
-        }
+        if (detailElevation instanceof DetailElevationField detail) return detail.shapes;
         return null;
     }
 
     static synchronized void invalidate(ElevationField authoritative) {
-        if (authoritative == null) return;
-        KNOWN_SOURCES.remove(authoritative);
-        if (source != authoritative) return;
+        if (authoritative == null || source != authoritative) return;
         source = null;
         required = Set.of();
         desired = Set.of();
@@ -167,7 +143,6 @@ final class WorldGenerationExactDetailTiles {
     private static void selectSource(ElevationField authoritative) {
         if (source == authoritative) return;
         source = authoritative;
-        KNOWN_SOURCES.put(authoritative, Boolean.TRUE);
         required = Set.of();
         desired = Set.of();
         READY.clear();
@@ -175,12 +150,34 @@ final class WorldGenerationExactDetailTiles {
         cachedFrameKeys = Set.of();
     }
 
-    private static DetailFrame frameIfReady(
+    private static void updateTargets(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible) {
+        required = requiredKeys(authoritative, visible);
+        VisualizerCamera.VisibleRange renderSupport = WorldGeneration2DLod.expandVisibleRange(
+                visible,
+                authoritative.bounds(),
+                RENDER_NEIGHBOUR_HALO_CELLS);
+        VisualizerCamera.VisibleRange prefetchSupport = WorldGeneration2DLod.expandVisibleRange(
+                renderSupport,
+                authoritative.bounds(),
+                PREFETCH_RING_CELLS);
+        desired = tileKeys(prefetchSupport, authoritative.bounds());
+    }
+
+    private static Set<TileKey> requiredKeys(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible) {
+        VisualizerCamera.VisibleRange support = WorldGeneration2DLod.expandVisibleRange(
+                visible,
+                authoritative.bounds(),
+                RENDER_NEIGHBOUR_HALO_CELLS);
+        return tileKeys(support, authoritative.bounds());
+    }
+
+    private static DetailFrame buildFrame(
             ElevationField authoritative,
             Set<TileKey> keys) {
-        if (!allReady(keys)) return null;
-        if (cachedFrame != null && cachedFrameKeys.equals(keys)) return cachedFrame;
-
         Map<TileKey, Tile> tiles = new LinkedHashMap<>();
         for (TileKey key : keys) {
             Tile tile = READY.get(key);
@@ -191,7 +188,7 @@ final class WorldGenerationExactDetailTiles {
         DetailShapeField shapes = new DetailShapeField(authoritative.bounds(), immutable);
         DetailElevationField elevation = new DetailElevationField(authoritative.bounds(), immutable, shapes);
         cachedFrame = new DetailFrame(elevation, shapes);
-        cachedFrameKeys = Set.copyOf(keys);
+        cachedFrameKeys = orderedCopy(keys);
         return cachedFrame;
     }
 
@@ -205,7 +202,7 @@ final class WorldGenerationExactDetailTiles {
 
     private static void startWorkerIfNeeded() {
         if (!enabled || workerRunning || source == null) return;
-        if (nextMissingBatch() == null) return;
+        if (missingDesired().isEmpty()) return;
         workerRunning = true;
         WORKER.execute(WorldGenerationExactDetailTiles::drain);
     }
@@ -216,8 +213,8 @@ final class WorldGenerationExactDetailTiles {
             List<TileKey> batch;
             synchronized (WorldGenerationExactDetailTiles.class) {
                 capturedSource = source;
-                batch = nextMissingBatch();
-                if (!enabled || capturedSource == null || batch == null) {
+                batch = missingDesired();
+                if (!enabled || capturedSource == null || batch.isEmpty()) {
                     workerRunning = false;
                     return;
                 }
@@ -228,36 +225,25 @@ final class WorldGenerationExactDetailTiles {
                 built = buildBatch(capturedSource, batch);
             } catch (RuntimeException ignored) {
                 synchronized (WorldGenerationExactDetailTiles.class) {
-                    if (source == capturedSource) {
-                        for (TileKey key : batch) {
-                            desired = without(desired, key);
-                            required = without(required, key);
-                        }
-                    }
+                    workerRunning = false;
                 }
-                continue;
+                return;
             }
 
             synchronized (WorldGenerationExactDetailTiles.class) {
                 if (source != capturedSource) continue;
                 READY.putAll(built);
-                cachedFrame = null;
-                cachedFrameKeys = Set.of();
             }
         }
     }
 
-    /** Required viewport tiles are one bulk job; the prefetch ring is deliberately one tile/job. */
-    private static List<TileKey> nextMissingBatch() {
-        List<TileKey> missingRequired = new ArrayList<>();
-        for (TileKey key : required) {
-            if (!READY.containsKey(key)) missingRequired.add(key);
-        }
-        if (!missingRequired.isEmpty()) return missingRequired;
+    /** One viewport/prefetch generation is one bounded elevation materialization, not N page probes. */
+    private static List<TileKey> missingDesired() {
+        List<TileKey> missing = new ArrayList<>();
         for (TileKey key : desired) {
-            if (!READY.containsKey(key)) return List.of(key);
+            if (!READY.containsKey(key)) missing.add(key);
         }
-        return null;
+        return missing;
     }
 
     private static Map<TileKey, Tile> buildBatch(
@@ -292,7 +278,7 @@ final class WorldGenerationExactDetailTiles {
                     if (shapes.shapeOverrideAt(x, y) != null) overrides++;
                 }
             }
-            built.put(key, new Tile(interior, tileElevation, shapes, overrides));
+            built.put(key, new Tile(tileElevation, shapes, overrides));
         }
         return built;
     }
@@ -304,13 +290,17 @@ final class WorldGenerationExactDetailTiles {
         int firstY = tileStart(bounds.minY(), visible.minY());
         int lastX = tileStart(bounds.minX(), visible.maxX());
         int lastY = tileStart(bounds.minY(), visible.maxY());
-        Set<TileKey> keys = new LinkedHashSet<>();
+        LinkedHashSet<TileKey> keys = new LinkedHashSet<>();
         for (long y = firstY; y <= lastY; y += TILE_SIDE) {
             for (long x = firstX; x <= lastX; x += TILE_SIDE) {
                 keys.add(new TileKey(Math.toIntExact(x), Math.toIntExact(y)));
             }
         }
-        return Set.copyOf(keys);
+        return Collections.unmodifiableSet(keys);
+    }
+
+    private static Set<TileKey> orderedCopy(Set<TileKey> keys) {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(keys));
     }
 
     private static int tileStart(int worldMinimum, int coordinate) {
@@ -340,13 +330,6 @@ final class WorldGenerationExactDetailTiles {
                 Math.max(left.maxY(), right.maxY()));
     }
 
-    private static Set<TileKey> without(Set<TileKey> source, TileKey key) {
-        if (!source.contains(key)) return source;
-        Set<TileKey> copy = new LinkedHashSet<>(source);
-        copy.remove(key);
-        return Set.copyOf(copy);
-    }
-
     record DetailFrame(ElevationField elevation, TerrainShapeField shapes) {
         DetailFrame {
             if (elevation == null || shapes == null) {
@@ -355,15 +338,12 @@ final class WorldGenerationExactDetailTiles {
         }
     }
 
-    private record TileKey(int minX, int minY) {
-    }
+    private record TileKey(int minX, int minY) {}
 
     private record Tile(
-            VisualizerCamera.VisibleRange interior,
             SnapshotElevationField elevation,
             TerrainShapeField shapes,
-            long overrides) {
-    }
+            long overrides) {}
 
     private static final class DetailElevationField implements ElevationField {
         private final WorldBounds bounds;
@@ -413,14 +393,12 @@ final class WorldGenerationExactDetailTiles {
 
         @Override
         public TerrainSurfacePatch surfaceAt(int x, int y) {
-            Tile tile = tileAt(x, y);
-            return tile.shapes().surfaceAt(x, y);
+            return tileAt(x, y).shapes().surfaceAt(x, y);
         }
 
         @Override
         public Shape shapeOverrideAt(int x, int y) {
-            Tile tile = tileAt(x, y);
-            return tile.shapes().shapeOverrideAt(x, y);
+            return tileAt(x, y).shapes().shapeOverrideAt(x, y);
         }
 
         @Override public long overrideCount() { return overrides; }
@@ -455,11 +433,13 @@ final class WorldGenerationExactDetailTiles {
             source.fillElevationSubunits(
                     visible.minX(), visible.minY(), width, height, 1L, values);
             WorldBounds sourceBounds = source.bounds();
-            WorldBounds localBounds = new WorldBounds(
-                    visible.minX(), visible.maxX(),
-                    visible.minY(), visible.maxY(),
-                    sourceBounds.minZ(), sourceBounds.maxZ());
-            return new SnapshotElevationField(localBounds, width, values);
+            return new SnapshotElevationField(
+                    new WorldBounds(
+                            visible.minX(), visible.maxX(),
+                            visible.minY(), visible.maxY(),
+                            sourceBounds.minZ(), sourceBounds.maxZ()),
+                    width,
+                    values);
         }
 
         SnapshotElevationField copy(VisualizerCamera.VisibleRange visible) {
