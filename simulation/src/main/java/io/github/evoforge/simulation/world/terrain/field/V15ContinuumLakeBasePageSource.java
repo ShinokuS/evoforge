@@ -41,7 +41,7 @@ public final class V15ContinuumLakeBasePageSource implements ContinuumScalarPage
             for (int sampleX = 0; sampleX < window.width(); sampleX++, cursor++) {
                 long x = window.xAt(sampleX);
                 double value = base.sample(sampleX, sampleY);
-                output[cursor] = value > 0d && lakes.isLake(x, y, Math.round(value)) ? 0d : value;
+                output[cursor] = value > 0d && lakes.isLake(x, y) ? 0d : value;
             }
         }
         return new ContinuumScalarPage(window, output);
