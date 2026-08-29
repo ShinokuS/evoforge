@@ -8,6 +8,7 @@ import io.github.evoforge.simulation.world.terrain.genesis.V15InlandLakeDomainCa
 import io.github.evoforge.simulation.world.terrain.genesis.V15InlandLakeDomainRecipe;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -183,8 +184,6 @@ public final class V15InlandLakeDomainPlan {
         TemporaryTerrainWorkspace.ByteGrid eligible = workspace.byteGrid(area);
 
         int eligibleCount = 0;
-        long minimumEligibleHeight = Long.MAX_VALUE;
-        long maximumEligibleHeight = Long.MIN_VALUE;
         for (int cell = 0; cell < area; cell++) {
             if (!dry.getBoolean(cell)
                     || coastDistance.get(cell)
@@ -193,9 +192,6 @@ public final class V15InlandLakeDomainPlan {
                 continue;
             }
             eligible.setBoolean(cell, true);
-            long heightValue = broadElevation.get(cell);
-            minimumEligibleHeight = Math.min(minimumEligibleHeight, heightValue);
-            maximumEligibleHeight = Math.max(maximumEligibleHeight, heightValue);
             eligibleCount++;
         }
         if (eligibleCount == 0) return empty(domain, calibration);
@@ -210,13 +206,7 @@ public final class V15InlandLakeDomainPlan {
         int supportTarget = Math.min(
                 eligibleCount,
                 Math.max(desiredLakeCells, Math.multiplyExact(desiredLakeCells, 3)));
-        long threshold = kthValueThreshold(
-                eligible,
-                broadElevation,
-                supportTarget,
-                minimumEligibleHeight,
-                maximumEligibleHeight,
-                area);
+        long threshold = kthValueThreshold(eligible, broadElevation, supportTarget, area);
         TemporaryTerrainWorkspace.ByteGrid support = workspace.byteGrid(area);
         for (int cell = 0; cell < area; cell++) {
             support.setBoolean(
@@ -367,28 +357,43 @@ public final class V15InlandLakeDomainPlan {
         return tail + 1;
     }
 
+    /** Exact signed-long kth selection in four fixed 16-bit streaming radix passes. */
     private static long kthValueThreshold(
             TemporaryTerrainWorkspace.ByteGrid eligible,
             TemporaryTerrainWorkspace.LongGrid broadElevation,
             int rank,
-            long minimum,
-            long maximum,
             int area) {
-        long low = minimum;
-        long high = maximum;
-        while (low < high) {
-            long middle = low + (high - low) / 2L;
-            int count = 0;
+        if (rank <= 0) throw new IllegalArgumentException("lake threshold rank must be positive");
+        long remainingRank = rank - 1L;
+        long prefix = 0L;
+        long mask = 0L;
+        long[] histogram = new long[1 << 16];
+        for (int shift = 48; shift >= 0; shift -= 16) {
+            Arrays.fill(histogram, 0L);
             for (int cell = 0; cell < area; cell++) {
-                if (eligible.getBoolean(cell) && broadElevation.get(cell) <= middle) count++;
+                if (!eligible.getBoolean(cell)) continue;
+                long sortable = broadElevation.get(cell) ^ Long.MIN_VALUE;
+                if ((sortable & mask) != prefix) continue;
+                histogram[(int) ((sortable >>> shift) & 0xffffL)]++;
             }
-            if (count >= rank) {
-                high = middle;
-            } else {
-                low = middle + 1L;
+            int selected = -1;
+            long before = 0L;
+            for (int bucket = 0; bucket < histogram.length; bucket++) {
+                long count = histogram[bucket];
+                if (remainingRank < before + count) {
+                    selected = bucket;
+                    remainingRank -= before;
+                    break;
+                }
+                before += count;
             }
+            if (selected < 0) {
+                throw new IllegalStateException("unable to resolve exact V15 lake elevation threshold");
+            }
+            prefix |= (long) selected << shift;
+            mask |= 0xffffL << shift;
         }
-        return low;
+        return prefix ^ Long.MIN_VALUE;
     }
 
     private static TemporaryTerrainWorkspace.LongGrid broadDryElevation(
