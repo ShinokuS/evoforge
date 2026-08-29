@@ -11,6 +11,7 @@ import io.github.evoforge.simulation.world.terrain.genesis.V13MountainCalibratio
 import io.github.evoforge.simulation.world.terrain.genesis.V13MountainRecipe;
 import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateFrame;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -18,9 +19,9 @@ import java.util.List;
  *
  * <p>The finite V13 oracle globally sorts candidate systems. The Continuum path keeps the accepted
  * candidate lattice, RNG purposes, center jitter, orientation, asymmetric widths, plateau profile,
- * gradient-bound uplift and world-space support, but replaces the global candidate-count sort with a
- * deterministic activation probability calibrated to the same requested coverage. Candidate centers
- * are tested against the actual V12/V14 Continuum land field, never a scaled membership raster.</p>
+ * gradient-bound uplift and world-space support, but replaces the unbounded global candidate sort
+ * with a fixed-budget empirical priority quantile. Candidate centers are tested against the actual
+ * V12/V14 Continuum land field, never a scaled membership raster.</p>
  */
 public final class V13ContinuumMountainPageSource implements ContinuumScalarPageSource {
     private static final String STAGE = "world:mountains";
@@ -33,7 +34,7 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     private static final int PPM = 1_000_000;
     private static final double TWO_PI = StrictMath.PI * 2.0;
     private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
-    private static final int CANDIDATE_CALIBRATION_SIDE = 16;
+    private static final int CANDIDATE_CALIBRATION_SIDE = 64;
 
     private final ContinuumWorldDomain domain;
     private final ContinuumScalarPageSource base;
@@ -245,19 +246,16 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
                 * MEAN_VISIBLE_FOOTPRINT_FRACTION;
         if (!(targetCells > 0d) || !(nominalFootprint > 0d)) return 0;
         double desiredSources = StrictMath.ceil(targetCells / nominalFootprint);
-        double expectedLandCandidates = estimatedEligibleCandidateCount();
-        if (!(expectedLandCandidates > 0d)) return 0;
-        return (int) Math.max(
-                0L,
-                Math.min((long) PPM, Math.round(desiredSources / expectedLandCandidates * PPM)));
+        return sampledPriorityCutoff(desiredSources);
     }
 
     /**
-     * Estimates the denominator used by the historical global candidate sort from a fixed 16x16
-     * stratified sample of the actual V13 lattice. This preserves area-independent preparation while
-     * accounting for the fact that candidate centers are not distributed like arbitrary world cells.
+     * Estimates the historical global k-th ACTIVE priority with a fixed candidate budget. If the
+     * lattice itself fits inside 64x64, every lattice coordinate is inspected and the priority
+     * quantile is exact for the Continuum membership field. Larger worlds remain capped at 4096
+     * stratified candidate inspections.
      */
-    private double estimatedEligibleCandidateCount() {
+    private int sampledPriorityCutoff(double desiredSources) {
         int spacing = calibration.candidateSpacingCells();
         long minLegacyX = frame.legacyMinX();
         long minLegacyY = frame.legacyMinY();
@@ -269,24 +267,36 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
         long maxLatticeY = Math.floorDiv(maxLegacyY, spacing) + 1L;
         long latticeWidth = maxLatticeX - minLatticeX + 1L;
         long latticeHeight = maxLatticeY - minLatticeY + 1L;
+        long latticePopulation = Math.multiplyExact(latticeWidth, latticeHeight);
         int sampleColumns = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeWidth));
         int sampleRows = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeHeight));
-        int samples = 0;
+        int[] priorities = new int[Math.multiplyExact(sampleColumns, sampleRows)];
         int eligible = 0;
+        int inspected = 0;
         for (int sy = 0; sy < sampleRows; sy++) {
             long latticeY = stratifiedCoordinate(minLatticeY, latticeHeight, sy, sampleRows);
             for (int sx = 0; sx < sampleColumns; sx++) {
                 long latticeX = stratifiedCoordinate(minLatticeX, latticeWidth, sx, sampleColumns);
                 MountainSystem system = createSystem(latticeX, latticeY);
-                if (system.upliftSubunits() > 0L && centerIsLand(system)) eligible++;
-                samples++;
+                inspected++;
+                if (!centerIsLand(system)) continue;
+                priorities[eligible++] = samplePpm(ACTIVE, latticeX, latticeY, 0L);
             }
         }
-        if (eligible == 0 || samples == 0) return 0d;
-        return latticeWidth * (double) latticeHeight * eligible / samples;
+        if (eligible == 0 || inspected == 0) return 0;
+
+        double estimatedEligible = latticePopulation * (eligible / (double) inspected);
+        double selectionFraction = Math.min(1.0, desiredSources / Math.max(1.0, estimatedEligible));
+        int selectedSamples = Math.max(
+                1,
+                Math.min(eligible, (int) StrictMath.ceil(selectionFraction * eligible)));
+        Arrays.sort(priorities, 0, eligible);
+        int selectedPriority = priorities[selectedSamples - 1];
+        return selectedPriority >= PPM - 1 ? PPM : selectedPriority + 1;
     }
 
     private static long stratifiedCoordinate(long minimum, long extent, int bucket, int buckets) {
+        if (buckets == extent) return minimum + bucket;
         long start = (long) bucket * extent / buckets;
         long endExclusive = (long) (bucket + 1) * extent / buckets;
         long offset = Math.max(0L, (endExclusive - start - 1L) / 2L);
