@@ -33,16 +33,17 @@ record WorldGenerationElevationRange(
         if (area <= MAX_EXACT_RANGE_CELLS) {
             return exact(elevation, bounds);
         }
-        return sampled(elevation);
+        return from(WorldGenerationElevationGrid.sample(elevation, MAX_SAMPLED_AXIS));
     }
 
-    private static WorldGenerationElevationRange exact(ElevationField elevation, WorldBounds bounds) {
+    static WorldGenerationElevationRange from(WorldGenerationElevationGrid grid) {
+        if (grid == null) throw new IllegalArgumentException("elevation grid must not be null");
         long minimumLand = Long.MAX_VALUE;
         long maximumLand = Long.MIN_VALUE;
         long minimumWater = 0L;
-        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-                long value = elevation.elevationSubunitsAt(x, y);
+        for (int y = 0; y < grid.height(); y++) {
+            for (int x = 0; x < grid.width(); x++) {
+                long value = grid.elevationSubunitsAt(x, y);
                 if (value < 0L) {
                     minimumWater = Math.min(minimumWater, value);
                     continue;
@@ -54,15 +55,13 @@ record WorldGenerationElevationRange(
         return finish(minimumLand, maximumLand, minimumWater);
     }
 
-    private static WorldGenerationElevationRange sampled(ElevationField elevation) {
-        WorldGenerationElevationGrid grid = WorldGenerationElevationGrid.sample(
-                elevation, MAX_SAMPLED_AXIS);
+    private static WorldGenerationElevationRange exact(ElevationField elevation, WorldBounds bounds) {
         long minimumLand = Long.MAX_VALUE;
         long maximumLand = Long.MIN_VALUE;
         long minimumWater = 0L;
-        for (int y = 0; y < grid.height(); y++) {
-            for (int x = 0; x < grid.width(); x++) {
-                long value = grid.elevationSubunitsAt(x, y);
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                long value = elevation.elevationSubunitsAt(x, y);
                 if (value < 0L) {
                     minimumWater = Math.min(minimumWater, value);
                     continue;
