@@ -19,6 +19,7 @@ final class V15ExactPipelineScaleProfileTest {
         System.setProperty(V15GenerationProfiler.ENABLE_PROPERTY, "true");
         try {
             profile(320);
+            profile(500);
             if ("large".equalsIgnoreCase(System.getProperty("evoforge.scale.profile", "medium"))) {
                 profile(600);
                 profile(1_000);
