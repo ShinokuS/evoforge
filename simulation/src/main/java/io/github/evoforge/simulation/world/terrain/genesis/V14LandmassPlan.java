@@ -401,35 +401,6 @@ public final class V14LandmassPlan {
         return center + shift;
     }
 
-    private static void relaxWindowPass(
-            double[] source,
-            int sourceMinX,
-            int sourceMinY,
-            int sourceWidth,
-            int sourceHeight,
-            double[] target,
-            int targetMinX,
-            int targetMinY,
-            int targetWidth,
-            int targetHeight,
-            int worldWidth,
-            int worldHeight) {
-        int cursor = 0;
-        double bandWidth = Double.NaN;
-        for (int localY = 0; localY < targetHeight; localY++) {
-            int y = targetMinY + localY;
-            for (int localX = 0; localX < targetWidth; localX++, cursor++) {
-                int x = targetMinX + localX;
-                int sourceX = x - sourceMinX;
-                int sourceY = y - sourceMinY;
-                double center = source[sourceY * sourceWidth + sourceX];
-                target[cursor] = center;
-            }
-        }
-        // The actual historical pass depends on graph spacing and is applied by the instance helper.
-        // This placeholder is overwritten by the instance overload below.
-    }
-
     private void relaxWindowPass(
             double[] source,
             int sourceMinX,
@@ -572,7 +543,7 @@ public final class V14LandmassPlan {
         for (int sy = 0; sy < sampleRows; sy++) {
             int y = sampledCoordinate(random, sy, sampleRows, height, 1L);
             for (int sx = 0; sx < sampleColumns; sx++) {
-                int x = sampledCoordinate(random, sx, sampleColumns, width, 0L ^ ((long) sy << 32));
+                int x = sampledCoordinate(random, sx, sampleColumns, width, ((long) sy << 32));
                 double value = relaxedCoastScoreAt(
                         random,
                         graph,
