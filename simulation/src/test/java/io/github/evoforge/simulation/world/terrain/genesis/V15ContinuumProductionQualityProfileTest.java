@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.terrain.genesis;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
@@ -18,6 +20,17 @@ final class V15ContinuumProductionQualityProfileTest {
     private static final int SIDE = 500;
     private static final int SAMPLE_STEP = 5;
     private static final int SAMPLE_SIDE = (SIDE - 1) / SAMPLE_STEP + 1;
+
+    /* Regression gates deliberately sit below the accepted current profile, but above variants that
+     * were visually rejected during the Continuum migration. They are morphology gates, not a claim
+     * of cell-exact production equivalence to the finite historical oracle. */
+    private static final double MIN_LAND_IOU = 0.98;
+    private static final double MIN_COAST_EDGE_IOU = 0.80;
+    private static final double MIN_LAKE_IOU = 0.60;
+    private static final double MIN_MOUNTAIN_IOU = 0.90;
+    private static final double MAX_LAND_FRACTION_DRIFT = 0.03;
+    private static final double MAX_LAKE_FRACTION_DRIFT = 0.005;
+    private static final double MAX_MOUNTAIN_FRACTION_DRIFT = 0.04;
 
     @Test
     void profileGlobalMorphologyAgainstExact500Oracle() {
@@ -135,6 +148,18 @@ final class V15ContinuumProductionQualityProfileTest {
         EdgeAgreement edges = edgeAgreement(exactLandMask, productionLandMask);
         ComponentSummary exactLakeComponents = componentSummary(exactLakeMask);
         ComponentSummary productionLakeComponents = componentSummary(productionLakeMask);
+
+        double landIou = ratio(landIntersection, landUnion);
+        double coastEdgeIou = ratio(edges.intersection(), edges.union());
+        double lakeIou = ratio(lakeIntersection, lakeUnion);
+        double mountainIou = ratio(mountainIntersection, mountainUnion);
+        double exactLandFraction = ratio(exactLand, samples);
+        double productionLandFraction = ratio(productionLand, samples);
+        double exactLakeFraction = ratio(exactLake, samples);
+        double productionLakeFraction = ratio(productionLake, samples);
+        double exactMountainFraction = ratio(exactMountain, samples);
+        double productionMountainFraction = ratio(productionMountain, samples);
+
         System.out.printf(
                 Locale.ROOT,
                 "v15-continuum-quality-profile side=%d step=%d samples=%d "
@@ -154,21 +179,21 @@ final class V15ContinuumProductionQualityProfileTest {
                 (productionReady - exactReady) / 1_000_000d,
                 (sampled - productionReady) / 1_000_000d,
                 ratio(landAgreement, samples),
-                ratio(landIntersection, landUnion),
-                ratio(exactLand, samples),
-                ratio(productionLand, samples),
+                landIou,
+                exactLandFraction,
+                productionLandFraction,
                 ratio(edges.agreement(), edges.total()),
-                ratio(edges.intersection(), edges.union()),
-                ratio(lakeIntersection, lakeUnion),
-                ratio(exactLake, samples),
-                ratio(productionLake, samples),
+                coastEdgeIou,
+                lakeIou,
+                exactLakeFraction,
+                productionLakeFraction,
                 exactLakeComponents.components(),
                 productionLakeComponents.components(),
                 ratio(exactLakeComponents.largestCells(), samples),
                 ratio(productionLakeComponents.largestCells(), samples),
-                ratio(mountainIntersection, mountainUnion),
-                ratio(exactMountain, samples),
-                ratio(productionMountain, samples),
+                mountainIou,
+                exactMountainFraction,
+                productionMountainFraction,
                 dryComparable == 0L ? 0d : dryAbsError / dryComparable / subunitsPerCell,
                 waterComparable == 0L ? 0d : waterAbsError / waterComparable / subunitsPerCell,
                 waterComparable == 0L ? 0d : coastalAbsError / waterComparable / subunitsPerCell,
@@ -179,6 +204,26 @@ final class V15ContinuumProductionQualityProfileTest {
                 quantile(productionWaterDepths, waterDepthCount, 0.50),
                 quantile(exactWaterDepths, waterDepthCount, 0.90),
                 quantile(productionWaterDepths, waterDepthCount, 0.90));
+
+        assertAtLeast("land IoU", landIou, MIN_LAND_IOU);
+        assertAtLeast("coast-edge IoU", coastEdgeIou, MIN_COAST_EDGE_IOU);
+        assertAtLeast("lake IoU", lakeIou, MIN_LAKE_IOU);
+        assertAtLeast("mountain IoU", mountainIou, MIN_MOUNTAIN_IOU);
+        assertWithin(
+                "land fraction",
+                productionLandFraction,
+                exactLandFraction,
+                MAX_LAND_FRACTION_DRIFT);
+        assertWithin(
+                "lake fraction",
+                productionLakeFraction,
+                exactLakeFraction,
+                MAX_LAKE_FRACTION_DRIFT);
+        assertWithin(
+                "mountain fraction",
+                productionMountainFraction,
+                exactMountainFraction,
+                MAX_MOUNTAIN_FRACTION_DRIFT);
     }
 
     private static EdgeAgreement edgeAgreement(boolean[][] exact, boolean[][] production) {
@@ -257,6 +302,24 @@ final class V15ContinuumProductionQualityProfileTest {
         queueX[tail] = x;
         queueY[tail] = y;
         return tail + 1;
+    }
+
+    private static void assertAtLeast(String name, double actual, double minimum) {
+        assertTrue(
+                actual >= minimum,
+                () -> name + " regressed below accepted production floor: "
+                        + actual + " < " + minimum);
+    }
+
+    private static void assertWithin(
+            String name,
+            double actual,
+            double reference,
+            double maximumAbsoluteDrift) {
+        assertTrue(
+                Math.abs(actual - reference) <= maximumAbsoluteDrift,
+                () -> name + " drifted too far from exact oracle: production="
+                        + actual + " exact=" + reference + " allowed=" + maximumAbsoluteDrift);
     }
 
     private static double ratio(long numerator, long denominator) {
