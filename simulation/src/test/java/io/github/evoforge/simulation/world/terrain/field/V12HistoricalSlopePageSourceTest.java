@@ -61,6 +61,34 @@ final class V12HistoricalSlopePageSourceTest {
     }
 
     @Test
+    void sparseCoarseSamplesMatchIndependentValidatedHaloQueries() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(600, 600);
+        V15TerrainDefinition definition = V15TerrainDefinition.balanced();
+        V12TerrainRecipe recipe = V12TerrainRecipe.balanced();
+        V12TerrainCalibration terrain = V12TerrainCalibration.compile(domain, definition, recipe);
+        V12ContinuumSlopeCalibration slope = V12ContinuumSlopeCalibration.compile(
+                terrain, recipe, 96);
+        TerrainElevationField synthetic = (x, y) -> {
+            long pattern = Math.floorMod(x * 17L + y * 31L, 50L);
+            return 1_000_000L + pattern * 100_000L;
+        };
+        V12HistoricalSlopePageSource source = new V12HistoricalSlopePageSource(
+                domain, synthetic, slope, recipe);
+        ContinuumSampleWindow sparseWindow = new ContinuumSampleWindow(60, 70, 4, 4, 150);
+        ContinuumScalarPage sparse = source.materialize(sparseWindow);
+
+        for (int y = 0; y < sparseWindow.height(); y++) {
+            for (int x = 0; x < sparseWindow.width(); x++) {
+                long worldX = sparseWindow.xAt(x);
+                long worldY = sparseWindow.yAt(y);
+                ContinuumScalarPage independent = source.materialize(
+                        new ContinuumSampleWindow(worldX, worldY, 1, 1, 1));
+                assertEquals(independent.sample(0, 0), sparse.sample(x, y), 0.0d);
+            }
+        }
+    }
+
+    @Test
     void materializationPreservesHistoricalLandWaterMembership() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(64, 64);
         V15TerrainDefinition definition = V15TerrainDefinition.balanced();
