@@ -14,13 +14,18 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  * alternating forward/reverse in-place cardinal sweeps and the original asymmetric integer split of
  * every excess step. The only Continuum adaptation is representation: a request materializes a
  * finite unit-resolution working raster around the requested window, performs the old sweeps, crops
- * the requested samples, then discards the working raster.</p>
+ * the requested samples, then discards the working raster.
+ *
+ * <p>When the accepted V12 unrelaxed source is available directly, the halo is filled through its
+ * bounded batch path. That preserves every authored value while reusing local land-membership
+ * decisions across neighboring cells instead of repeatedly evaluating the same coast/rank queries.
+ * Synthetic migration fixtures continue to use the generic point-source path unchanged.
  *
  * <p>The historical sweep is not mathematically finite-range for arbitrary adversarial rasters.
  * For the accepted V12 relief field, migration profiling across balanced and full-land oracle worlds
  * found that 48 cells reproduced the old whole-world result bit-for-bit in every tested window. The
  * value is therefore deliberately named a validated migration halo rather than an exact theoretical
- * radius.</p>
+ * radius.
  */
 public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSource {
     public static final int VALIDATED_HALO_CELLS = 48;
@@ -79,19 +84,20 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
         int haloArea = Math.multiplyExact(haloWidth, haloHeight);
 
         long[] elevations = new long[haloArea];
+        if (source instanceof V12UnrelaxedLandElevationField acceptedV12) {
+            acceptedV12.fillWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
+        } else {
+            fillFromPointSource(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
+        }
+
         boolean[] land = new boolean[haloArea];
-        int cursor = 0;
-        for (int y = 0; y < haloHeight; y++) {
-            long worldY = haloMinY + y;
-            for (int x = 0; x < haloWidth; x++, cursor++) {
-                long value = source.elevationSubunitsAt(haloMinX + x, worldY);
-                if (value > calibration.maximumLandHeightSubunits()) {
-                    throw new IllegalStateException(
-                            "V12 source height exceeds calibrated land-height bound");
-                }
-                elevations[cursor] = value;
-                land[cursor] = value > 0L;
+        for (int cell = 0; cell < haloArea; cell++) {
+            long value = elevations[cell];
+            if (value > calibration.maximumLandHeightSubunits()) {
+                throw new IllegalStateException(
+                        "V12 source height exceeds calibrated land-height bound");
             }
+            land[cell] = value > 0L;
         }
 
         historicalDirectionalRelax(
@@ -113,6 +119,21 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
             }
         }
         return new ContinuumScalarPage(window, output);
+    }
+
+    private void fillFromPointSource(
+            long minX,
+            long minY,
+            int width,
+            int height,
+            long[] elevations) {
+        int cursor = 0;
+        for (int y = 0; y < height; y++) {
+            long worldY = minY + y;
+            for (int x = 0; x < width; x++, cursor++) {
+                elevations[cursor] = source.elevationSubunitsAt(minX + x, worldY);
+            }
+        }
     }
 
     private static void historicalDirectionalRelax(
