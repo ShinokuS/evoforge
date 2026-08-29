@@ -13,11 +13,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * Read-through field for 2D overview rendering.
  *
- * <p>The regular block-centre lattice is materialized through the elevation bulk contract once. A
- * possible truncated edge block is filled with O(axis) point reads. The contour lattice is preloaded
- * the same way. Existing renderer code can then keep asking for the historical block-centre
- * coordinates without triggering duplicate terrain page materializations for surface, water and
- * contour passes.
+ * <p>The regular block-centre lattice and truncated edge strips are materialized through the
+ * elevation bulk contract. Existing renderer code can then keep asking for the historical
+ * block-centre coordinates without triggering duplicate terrain page materializations for surface,
+ * water and contour passes.
  *
  * <p>Large previews register an already prepared bounded presentation field for the authoritative
  * elevation object. A camera move or LOD change is rendered immediately from that field, then the
@@ -321,32 +320,56 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                 }
             }
 
-            if (xAxis.hasBoundarySample()) {
+            if (xAxis.hasBoundarySample() && yAxis.regularCount() > 0) {
                 int boundaryX = width - 1;
-                int worldX = xAxis.coordinates()[boundaryX];
+                long[] boundaryColumn = new long[yAxis.regularCount()];
+                elevation.fillElevationSubunits(
+                        xAxis.coordinates()[boundaryX],
+                        yAxis.coordinates()[0],
+                        1,
+                        yAxis.regularCount(),
+                        stride,
+                        boundaryColumn);
                 for (int y = 0; y < yAxis.regularCount(); y++) {
-                    values[y * width + boundaryX] = elevation.elevationSubunitsAt(
-                            worldX, yAxis.coordinates()[y]);
+                    values[y * width + boundaryX] = boundaryColumn[y];
                 }
             }
-            if (yAxis.hasBoundarySample()) {
+            if (yAxis.hasBoundarySample() && xAxis.regularCount() > 0) {
                 int boundaryY = height - 1;
-                int worldY = yAxis.coordinates()[boundaryY];
-                for (int x = 0; x < xAxis.regularCount(); x++) {
-                    values[boundaryY * width + x] = elevation.elevationSubunitsAt(
-                            xAxis.coordinates()[x], worldY);
-                }
+                long[] boundaryRow = new long[xAxis.regularCount()];
+                elevation.fillElevationSubunits(
+                        xAxis.coordinates()[0],
+                        yAxis.coordinates()[boundaryY],
+                        xAxis.regularCount(),
+                        1,
+                        stride,
+                        boundaryRow);
+                System.arraycopy(boundaryRow, 0, values, boundaryY * width, xAxis.regularCount());
             }
             if (xAxis.hasBoundarySample() && yAxis.hasBoundarySample()) {
-                values[(height - 1) * width + width - 1] = elevation.elevationSubunitsAt(
-                        xAxis.coordinates()[width - 1], yAxis.coordinates()[height - 1]);
+                long[] corner = new long[1];
+                elevation.fillElevationSubunits(
+                        xAxis.coordinates()[width - 1],
+                        yAxis.coordinates()[height - 1],
+                        1,
+                        1,
+                        1L,
+                        corner);
+                values[(height - 1) * width + width - 1] = corner[0];
             }
 
             if (xAxis.regularCount() == 0 || yAxis.regularCount() == 0) {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
-                        values[y * width + x] = elevation.elevationSubunitsAt(
-                                xAxis.coordinates()[x], yAxis.coordinates()[y]);
+                        long[] sample = new long[1];
+                        elevation.fillElevationSubunits(
+                                xAxis.coordinates()[x],
+                                yAxis.coordinates()[y],
+                                1,
+                                1,
+                                1L,
+                                sample);
+                        values[y * width + x] = sample[0];
                     }
                 }
             }
