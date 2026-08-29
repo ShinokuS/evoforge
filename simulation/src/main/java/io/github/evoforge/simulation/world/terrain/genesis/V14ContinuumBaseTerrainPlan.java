@@ -63,11 +63,18 @@ public final class V14ContinuumBaseTerrainPlan {
             throw new IllegalArgumentException("maximumLandHeightCells must be > 0");
         }
 
+        long logicalCells = Math.multiplyExact(domain.width(), domain.height());
         V12TerrainRecipe recipe = V12TerrainRecipe.balanced();
         V12TerrainCalibration terrain = V12TerrainCalibration.compile(domain, definition, recipe);
-        V14LandmassPlan landmass = V14LandmassPlan.prepare(domain, seed, definition, terrain);
-        V12LandRankPlan landRank = V12LandRankPlan.prepareConstrained(
-                domain, seed, terrain, recipe, landmass);
+        V14LandmassPlan landmass = V15GenerationProfiler.measure(
+                "v14-landmass-cutoff",
+                logicalCells,
+                () -> V14LandmassPlan.prepare(domain, seed, definition, terrain));
+        V12LandRankPlan landRank = V15GenerationProfiler.measure(
+                "v12-land-rank",
+                logicalCells,
+                () -> V12LandRankPlan.prepareConstrained(
+                        domain, seed, terrain, recipe, landmass));
         V12UnrelaxedLandElevationField unrelaxed = new V12UnrelaxedLandElevationField(
                 domain,
                 seed,
