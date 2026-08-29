@@ -22,9 +22,11 @@ import java.util.Map;
  *
  * <p>The calibration lattice is a fixed 64 x 64 maximum. Cheap land/interior tests run before the
  * substantially more expensive authored V12 elevation evaluation, so rejected samples never pay for
- * relief/coast evaluation. Component span tests use the world envelope represented by the samples,
- * not merely the distance between sample centres; this keeps the V15 scale-aware minimum-span policy
- * meaningful when the same fixed lattice addresses 500, 1000, 10000 or larger worlds.</p>
+ * relief/coast evaluation. Component selection first requires the same world-coordinate center span
+ * used by the earlier high-fidelity migration profile. Only when that strict pass finds no basin at
+ * all do we account for each sample's represented bucket footprint. This fallback prevents coarse
+ * large-world sampling from silently rejecting every otherwise broad basin without letting small
+ * three-sample artifacts displace the better-resolved lowlands on reference-sized worlds.</p>
  *
  * <p>The exact {@code V15InlandLakeDomainPlan} remains the finite-world oracle.</p>
  */
@@ -160,10 +162,22 @@ public final class V15ContinuumLakeDomainPlan {
                 columns,
                 rows,
                 representedCellsPerSample,
-                nominalBucketX,
-                nominalBucketY,
+                1L,
+                1L,
                 minimumSpan,
                 minimumComponentCells);
+        if (components.isEmpty()) {
+            components = collectComponents(
+                    samples,
+                    support,
+                    columns,
+                    rows,
+                    representedCellsPerSample,
+                    nominalBucketX,
+                    nominalBucketY,
+                    minimumSpan,
+                    minimumComponentCells);
+        }
         if (components.isEmpty()) {
             return new V15ContinuumLakeDomainPlan(
                     domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
@@ -244,8 +258,8 @@ public final class V15ContinuumLakeDomainPlan {
         return lake;
     }
 
-    /** Uses a caller-materialized V12/V14 source elevation and avoids recomputing it for lake carving. */
-    public boolean isLake(long x, long y, long sourceElevationSubunits) {
+    /** Uses caller-materialized unrelaxed V12 elevation and preserves the lake threshold layer. */
+    public boolean isLake(long x, long y, long unrelaxedElevationSubunits) {
         if (!domain.contains(x, y)) {
             throw new IllegalArgumentException("coordinate lies outside Continuum lake domain");
         }
@@ -255,7 +269,7 @@ public final class V15ContinuumLakeDomainPlan {
             Boolean cached = membershipCache.get(key);
             if (cached != null) return cached;
         }
-        boolean lake = computeMembership(x, y, sourceElevationSubunits);
+        boolean lake = computeMembership(x, y, unrelaxedElevationSubunits);
         synchronized (membershipCache) {
             membershipCache.put(key, lake);
         }
@@ -294,8 +308,8 @@ public final class V15ContinuumLakeDomainPlan {
             int width,
             int height,
             double representedCellsPerSample,
-            long nominalBucketX,
-            long nominalBucketY,
+            long spanFootprintX,
+            long spanFootprintY,
             long minimumSpan,
             long minimumComponentCells) {
         boolean[] visited = new boolean[support.length];
@@ -333,11 +347,11 @@ public final class V15ContinuumLakeDomainPlan {
                 if (sy > 0) tail = enqueue(support, visited, queue, tail, cell - width);
                 if (sy + 1 < height) tail = enqueue(support, visited, queue, tail, cell + width);
             }
-            long representedSpanX = maxX - minX + nominalBucketX;
-            long representedSpanY = maxY - minY + nominalBucketY;
+            long spanX = maxX - minX + spanFootprintX;
+            long spanY = maxY - minY + spanFootprintY;
             double estimatedCells = count * representedCellsPerSample;
-            if (representedSpanX < minimumSpan
-                    || representedSpanY < minimumSpan
+            if (spanX < minimumSpan
+                    || spanY < minimumSpan
                     || estimatedCells < minimumComponentCells) {
                 continue;
             }
