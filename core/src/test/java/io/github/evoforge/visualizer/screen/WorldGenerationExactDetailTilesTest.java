@@ -36,7 +36,7 @@ final class WorldGenerationExactDetailTilesTest {
             WorldGenerationExactDetailTiles.DetailFrame firstFrame =
                     WorldGenerationExactDetailTiles.request(source, first);
             assertNotNull(firstFrame);
-            assertMatches(source, canonical, firstFrame, first);
+            assertMatches(canonical, firstFrame, first);
             long firstChecksum = checksum(firstFrame, first);
 
             WorldGenerationExactDetailTiles.request(source, moved);
@@ -44,7 +44,7 @@ final class WorldGenerationExactDetailTilesTest {
             WorldGenerationExactDetailTiles.DetailFrame movedFrame =
                     WorldGenerationExactDetailTiles.request(source, moved);
             assertNotNull(movedFrame);
-            assertMatches(source, canonical, movedFrame, moved);
+            assertMatches(canonical, movedFrame, moved);
 
             WorldGenerationExactDetailTiles.DetailFrame returned =
                     WorldGenerationExactDetailTiles.request(source, first);
@@ -63,13 +63,12 @@ final class WorldGenerationExactDetailTilesTest {
     }
 
     private static void assertMatches(
-            ElevationField source,
             TerrainShapeField canonical,
             WorldGenerationExactDetailTiles.DetailFrame frame,
             VisualizerCamera.VisibleRange visible) {
         for (int y = visible.minY(); y <= visible.maxY(); y += 11) {
             for (int x = visible.minX(); x <= visible.maxX(); x += 13) {
-                assertEquals(source.elevationSubunitsAt(x, y), frame.elevation().elevationSubunitsAt(x, y));
+                assertEquals(expectedValue(x, y), frame.elevation().elevationSubunitsAt(x, y));
                 assertEquals(canonical.surfaceAt(x, y), frame.shapes().surfaceAt(x, y));
                 Shape expected = canonical.shapeOverrideAt(x, y);
                 Shape actual = frame.shapes().shapeOverrideAt(x, y);
@@ -110,7 +109,7 @@ final class WorldGenerationExactDetailTilesTest {
             @Override
             public long elevationSubunitsAt(int x, int y) {
                 pointCalls.incrementAndGet();
-                return value(x, y);
+                return expectedValue(x, y);
             }
 
             @Override
@@ -127,16 +126,16 @@ final class WorldGenerationExactDetailTilesTest {
                     int y = Math.toIntExact((long) minY + sy * step);
                     for (int sx = 0; sx < sampleWidth; sx++, cursor++) {
                         int x = Math.toIntExact((long) minX + sx * step);
-                        target[cursor] = value(x, y);
+                        target[cursor] = expectedValue(x, y);
                     }
                 }
             }
-
-            private long value(int x, int y) {
-                double broad = 4.0 * StrictMath.sin(x * 0.055) + 3.0 * StrictMath.cos(y * 0.047);
-                double ridge = 0.7 * StrictMath.sin((x + y) * 0.19);
-                return Math.round((8.0 + broad + ridge) * SUBUNITS_PER_CELL);
-            }
         };
+    }
+
+    private static long expectedValue(int x, int y) {
+        double broad = 4.0 * StrictMath.sin(x * 0.055) + 3.0 * StrictMath.cos(y * 0.047);
+        double ridge = 0.7 * StrictMath.sin((x + y) * 0.19);
+        return Math.round((8.0 + broad + ridge) * ElevationField.SUBUNITS_PER_CELL);
     }
 }
