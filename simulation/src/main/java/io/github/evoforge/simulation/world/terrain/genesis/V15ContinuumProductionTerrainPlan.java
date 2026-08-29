@@ -96,6 +96,7 @@ public final class V15ContinuumProductionTerrainPlan {
                 seed,
                 mountains,
                 lakes,
+                lakeAwareLand,
                 minimumZCells);
 
         return new V15ContinuumProductionTerrainPlan(
