@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationElevationGridTest {
 
     @Test
-    void largePreviewUsesOneBulkInteriorAndOnlyPointSamplesBoundaryStrips() {
+    void largePreviewUsesBulkRequestsForInteriorAndBoundaryStrips() {
         AtomicInteger bulkCalls = new AtomicInteger();
         AtomicInteger pointCalls = new AtomicInteger();
         ElevationField elevation = new ElevationField() {
@@ -60,8 +60,8 @@ final class WorldGenerationElevationGridTest {
 
         assertEquals(144, grid.width());
         assertEquals(144, grid.height());
-        assertEquals(1, bulkCalls.get());
-        assertEquals(287, pointCalls.get());
+        assertEquals(4, bulkCalls.get());
+        assertEquals(0, pointCalls.get());
         assertEquals(0, grid.xAt(0));
         assertEquals(994, grid.xAt(142));
         assertEquals(999, grid.xAt(143));
