@@ -12,6 +12,11 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  *
  * <p>Water returns a one-subunit negative membership sentinel because V14 later re-authors standing
  * water bathymetry. No whole-world elevation or land mask is retained.</p>
+ *
+ * <p>Contiguous bounded consumers can materialize a local window through {@link #fillWindow}. That
+ * path builds only a request-local land-membership mask plus the historical coast-interiority halo,
+ * so neighboring cells reuse the same exact rank decisions instead of asking the V12/V14 membership
+ * field hundreds of times each. The authored height formula and coast-search order are unchanged.</p>
  */
 public final class V12UnrelaxedLandElevationField implements TerrainElevationField {
     private static final int PPM = 1_000_000;
@@ -48,10 +53,72 @@ public final class V12UnrelaxedLandElevationField implements TerrainElevationFie
     public long elevationSubunitsAt(long x, long y) {
         requireCoordinate(x, y);
         if (!land.isLand(x, y)) return -1L;
+        return authoredLandHeight(x, y, coastalInteriorityPpm(x, y));
+    }
 
+    /**
+     * Fills one unit-resolution rectangular request exactly while reusing local membership decisions.
+     * The retained working set is bounded by the request plus {@code coastTransitionCells} on each
+     * side and is discarded by the caller with the output buffer.
+     */
+    void fillWindow(long minX, long minY, int width, int height, long[] target) {
+        if (width <= 0 || height <= 0 || target == null
+                || target.length < Math.multiplyExact(width, height)) {
+            throw new IllegalArgumentException("V12 unrelaxed window dimensions/output are invalid");
+        }
+        long maxX = Math.addExact(minX, width - 1L);
+        long maxY = Math.addExact(minY, height - 1L);
+        if (!domain.contains(minX, minY) || !domain.contains(maxX, maxY)) {
+            throw new IllegalArgumentException("V12 unrelaxed window lies outside the domain");
+        }
+
+        int transition = recipe.coastTransitionCells();
+        long membershipMinX = Math.max(0L, minX - transition);
+        long membershipMinY = Math.max(0L, minY - transition);
+        long membershipMaxX = Math.min(domain.width() - 1L, maxX + transition);
+        long membershipMaxY = Math.min(domain.height() - 1L, maxY + transition);
+        int membershipWidth = Math.toIntExact(membershipMaxX - membershipMinX + 1L);
+        int membershipHeight = Math.toIntExact(membershipMaxY - membershipMinY + 1L);
+        boolean[] membership = new boolean[Math.multiplyExact(membershipWidth, membershipHeight)];
+
+        int membershipCursor = 0;
+        for (int localY = 0; localY < membershipHeight; localY++) {
+            long worldY = membershipMinY + localY;
+            for (int localX = 0; localX < membershipWidth; localX++, membershipCursor++) {
+                membership[membershipCursor] = land.isLand(membershipMinX + localX, worldY);
+            }
+        }
+
+        int cursor = 0;
+        for (int localY = 0; localY < height; localY++) {
+            long worldY = minY + localY;
+            for (int localX = 0; localX < width; localX++, cursor++) {
+                long worldX = minX + localX;
+                if (!membershipAt(
+                        membership,
+                        membershipWidth,
+                        membershipMinX,
+                        membershipMinY,
+                        worldX,
+                        worldY)) {
+                    target[cursor] = -1L;
+                    continue;
+                }
+                int interiority = coastalInteriorityPpm(
+                        worldX,
+                        worldY,
+                        membership,
+                        membershipWidth,
+                        membershipMinX,
+                        membershipMinY);
+                target[cursor] = authoredLandHeight(worldX, worldY, interiority);
+            }
+        }
+    }
+
+    private long authoredLandHeight(long x, long y, int interiorityPpm) {
         long legacyX = land.legacyX(x);
         long legacyY = land.legacyY(y);
-        int interiorityPpm = coastalInteriorityPpm(x, y);
 
         long upliftPpm = LegacyV12Noise.centeredPpm(LegacyV12Noise.organicValueNoise(
                 random,
@@ -107,6 +174,59 @@ public final class V12UnrelaxedLandElevationField implements TerrainElevationFie
             }
         }
         return PPM;
+    }
+
+    private int coastalInteriorityPpm(
+            long x,
+            long y,
+            boolean[] membership,
+            int membershipWidth,
+            long membershipMinX,
+            long membershipMinY) {
+        int transition = recipe.coastTransitionCells();
+        for (int distance = 1; distance <= transition; distance++) {
+            for (int dx = -distance; dx <= distance; dx++) {
+                int dy = distance - Math.abs(dx);
+                long nx = x + dx;
+                long firstY = y + dy;
+                if (inside(nx, firstY)
+                        && !membershipAt(
+                                membership,
+                                membershipWidth,
+                                membershipMinX,
+                                membershipMinY,
+                                nx,
+                                firstY)) {
+                    return LegacyV12Noise.smoothStepPpm((long) distance * PPM / transition);
+                }
+                if (dy != 0) {
+                    long secondY = y - dy;
+                    if (inside(nx, secondY)
+                            && !membershipAt(
+                                    membership,
+                                    membershipWidth,
+                                    membershipMinX,
+                                    membershipMinY,
+                                    nx,
+                                    secondY)) {
+                        return LegacyV12Noise.smoothStepPpm((long) distance * PPM / transition);
+                    }
+                }
+            }
+        }
+        return PPM;
+    }
+
+    private static boolean membershipAt(
+            boolean[] membership,
+            int membershipWidth,
+            long membershipMinX,
+            long membershipMinY,
+            long x,
+            long y) {
+        int localX = Math.toIntExact(x - membershipMinX);
+        int localY = Math.toIntExact(y - membershipMinY);
+        return membership[Math.addExact(Math.multiplyExact(localY, membershipWidth), localX)];
     }
 
     private long landformFieldPpm(long x, long y) {
