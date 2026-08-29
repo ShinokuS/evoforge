@@ -6,6 +6,7 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
 import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
+import java.util.Arrays;
 import java.util.Locale;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ final class V15ContinuumProductionQualityProfileTest {
         ContinuumSampleWindow sample = new ContinuumSampleWindow(
                 0L, 0L, SAMPLE_SIDE, SAMPLE_SIDE, SAMPLE_STEP);
         ContinuumScalarPage exactFinal = exact.elevationPages().materialize(sample);
+        ContinuumScalarPage exactCoastal = exact.coastalBathymetryPages().materialize(sample);
+        ContinuumScalarPage exactDeep = exact.deepBathymetryPages().materialize(sample);
         ContinuumScalarPage productionFinal = production.elevationPages().materialize(sample);
         ContinuumScalarPage exactLakeBase = exact.lakeBase().elevationPages().materialize(sample);
         ContinuumScalarPage productionLakeBase = production.lakeBasePages().materialize(sample);
@@ -57,10 +60,18 @@ final class V15ContinuumProductionQualityProfileTest {
         double dryAbsError = 0d;
         long dryComparable = 0L;
         double waterAbsError = 0d;
+        double coastalAbsError = 0d;
+        double deepStructureMagnitude = 0d;
+        double exactWaterDepthSum = 0d;
+        double productionWaterDepthSum = 0d;
         long waterComparable = 0L;
+        double[] exactWaterDepths = new double[Math.toIntExact(samples)];
+        double[] productionWaterDepths = new double[Math.toIntExact(samples)];
+        int waterDepthCount = 0;
 
         boolean[][] exactLandMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
         boolean[][] productionLandMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
+        double subunitsPerCell = TerrainElevationField.SUBUNITS_PER_CELL;
         for (int y = 0; y < SAMPLE_SIDE; y++) {
             long worldY = sample.yAt(y);
             for (int x = 0; x < SAMPLE_SIDE; x++) {
@@ -97,15 +108,27 @@ final class V15ContinuumProductionQualityProfileTest {
                 if (exactDry && productionDry) {
                     dryAbsError += Math.abs(exactValue - productionValue);
                     dryComparable++;
-                } else if (!exactDry && !productionDry) {
+                } else if (!exactDry && !productionDry && !exactLakeCell && !productionLakeCell) {
+                    double exactCoastalValue = exactCoastal.sample(x, y);
+                    double exactDeepValue = exactDeep.sample(x, y);
                     waterAbsError += Math.abs(exactValue - productionValue);
+                    coastalAbsError += Math.abs(exactCoastalValue - productionValue);
+                    deepStructureMagnitude += Math.abs(exactDeepValue - exactCoastalValue);
+                    double exactDepth = -exactValue / subunitsPerCell;
+                    double productionDepth = -productionValue / subunitsPerCell;
+                    exactWaterDepthSum += exactDepth;
+                    productionWaterDepthSum += productionDepth;
+                    exactWaterDepths[waterDepthCount] = exactDepth;
+                    productionWaterDepths[waterDepthCount] = productionDepth;
+                    waterDepthCount++;
                     waterComparable++;
                 }
             }
         }
 
+        Arrays.sort(exactWaterDepths, 0, waterDepthCount);
+        Arrays.sort(productionWaterDepths, 0, waterDepthCount);
         EdgeAgreement edges = edgeAgreement(exactLandMask, productionLandMask);
-        double subunitsPerCell = TerrainElevationField.SUBUNITS_PER_CELL;
         System.out.printf(
                 Locale.ROOT,
                 "v15-continuum-quality-profile side=%d step=%d samples=%d "
@@ -114,7 +137,9 @@ final class V15ContinuumProductionQualityProfileTest {
                         + "coastEdgeAgreement=%.6f coastEdgeIoU=%.6f "
                         + "lakeIoU=%.6f exactLakeFraction=%.6f productionLakeFraction=%.6f "
                         + "mountainIoU=%.6f exactMountainFraction=%.6f productionMountainFraction=%.6f "
-                        + "dryMaeCells=%.6f waterMaeCells=%.6f%n",
+                        + "dryMaeCells=%.6f waterMaeCells=%.6f coastalOnlyMaeCells=%.6f "
+                        + "exactDeepAdjustmentCells=%.6f exactWaterMeanDepthCells=%.6f productionWaterMeanDepthCells=%.6f "
+                        + "exactWaterP50=%.6f productionWaterP50=%.6f exactWaterP90=%.6f productionWaterP90=%.6f%n",
                 SIDE,
                 SAMPLE_STEP,
                 samples,
@@ -134,7 +159,15 @@ final class V15ContinuumProductionQualityProfileTest {
                 ratio(exactMountain, samples),
                 ratio(productionMountain, samples),
                 dryComparable == 0L ? 0d : dryAbsError / dryComparable / subunitsPerCell,
-                waterComparable == 0L ? 0d : waterAbsError / waterComparable / subunitsPerCell);
+                waterComparable == 0L ? 0d : waterAbsError / waterComparable / subunitsPerCell,
+                waterComparable == 0L ? 0d : coastalAbsError / waterComparable / subunitsPerCell,
+                waterComparable == 0L ? 0d : deepStructureMagnitude / waterComparable / subunitsPerCell,
+                waterComparable == 0L ? 0d : exactWaterDepthSum / waterComparable,
+                waterComparable == 0L ? 0d : productionWaterDepthSum / waterComparable,
+                quantile(exactWaterDepths, waterDepthCount, 0.50),
+                quantile(productionWaterDepths, waterDepthCount, 0.50),
+                quantile(exactWaterDepths, waterDepthCount, 0.90),
+                quantile(productionWaterDepths, waterDepthCount, 0.90));
     }
 
     private static EdgeAgreement edgeAgreement(boolean[][] exact, boolean[][] production) {
@@ -169,6 +202,12 @@ final class V15ContinuumProductionQualityProfileTest {
 
     private static double ratio(long numerator, long denominator) {
         return denominator == 0L ? 1d : numerator / (double) denominator;
+    }
+
+    private static double quantile(double[] sorted, int size, double fraction) {
+        if (size <= 0) return 0d;
+        int index = Math.max(0, Math.min(size - 1, (int) StrictMath.floor((size - 1) * fraction)));
+        return sorted[index];
     }
 
     private record EdgeAgreement(long agreement, long total, long intersection, long union) {}
