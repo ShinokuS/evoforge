@@ -9,8 +9,8 @@ import java.util.Arrays;
  *
  * <p>The regular interior uses one common world-coordinate step and therefore one bulk elevation
  * request. A final boundary column/row is appended when necessary so the preview mesh still reaches
- * the exact declared world bounds. At most {@code O(axisSamples)} point reads are needed for those
- * boundary strips; the interior is never expanded into per-column point queries.
+ * the exact declared world bounds. Boundary strips are also fetched through the bulk contract; a
+ * large preview never turns O(axis) edge samples into expensive unit-resolution page requests.
  *
  * <p>Large-world grids also register a read-only interpolated adapter as the immediate 2D overview
  * fallback for the exact elevation field they were sampled from. Interpolation is presentation-only:
@@ -71,22 +71,41 @@ final class WorldGenerationElevationGrid {
         if (xAxis.hasBoundarySample()) {
             int boundaryX = width - 1;
             int worldX = xAxis.coordinates()[boundaryX];
+            long[] boundaryColumn = new long[regularHeight];
+            elevation.fillElevationSubunits(
+                    worldX,
+                    bounds.minY(),
+                    1,
+                    regularHeight,
+                    step,
+                    boundaryColumn);
             for (int y = 0; y < regularHeight; y++) {
-                values[y * width + boundaryX] = elevation.elevationSubunitsAt(
-                        worldX, yAxis.coordinates()[y]);
+                values[y * width + boundaryX] = boundaryColumn[y];
             }
         }
         if (yAxis.hasBoundarySample()) {
             int boundaryY = height - 1;
             int worldY = yAxis.coordinates()[boundaryY];
-            for (int x = 0; x < regularWidth; x++) {
-                values[boundaryY * width + x] = elevation.elevationSubunitsAt(
-                        xAxis.coordinates()[x], worldY);
-            }
+            long[] boundaryRow = new long[regularWidth];
+            elevation.fillElevationSubunits(
+                    bounds.minX(),
+                    worldY,
+                    regularWidth,
+                    1,
+                    step,
+                    boundaryRow);
+            System.arraycopy(boundaryRow, 0, values, boundaryY * width, regularWidth);
         }
         if (xAxis.hasBoundarySample() && yAxis.hasBoundarySample()) {
-            values[(height - 1) * width + width - 1] = elevation.elevationSubunitsAt(
-                    xAxis.coordinates()[width - 1], yAxis.coordinates()[height - 1]);
+            long[] corner = new long[1];
+            elevation.fillElevationSubunits(
+                    xAxis.coordinates()[width - 1],
+                    yAxis.coordinates()[height - 1],
+                    1,
+                    1,
+                    1L,
+                    corner);
+            values[(height - 1) * width + width - 1] = corner[0];
         }
 
         WorldGenerationElevationGrid grid = new WorldGenerationElevationGrid(
