@@ -17,7 +17,9 @@ import java.util.Map;
  *
  * <p>Small finite worlds retain the historical dense presentation field. Larger Continuum worlds
  * fit only requested columns and keep a bounded LRU of presentation decisions; declared world area
- * therefore no longer creates a world-sized {@code byte[]} during preview generation.</p>
+ * therefore no longer creates a world-sized {@code byte[]} during preview generation. Telemetry on
+ * the lazy field is cache-local as well and never traverses the declared world merely to count shape
+ * overrides.</p>
  */
 public final class TerrainShapeGenerationStage implements TerrainShapeGenerator {
     private static final long MAX_DENSE_SHAPE_CELLS = 512L * 512L;
@@ -151,13 +153,17 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         private final WorldBounds bounds;
         private final ElevationField elevation;
         private final List<TerrainShapeTemplate> templates;
+        private long cachedOverrideCount;
         private final Map<Long, Byte> selected = new LinkedHashMap<>(256, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<Long, Byte> eldest) {
-                return size() > MAX_LAZY_SHAPE_CACHE;
+                boolean remove = size() > MAX_LAZY_SHAPE_CACHE;
+                if (remove && templates.get(Byte.toUnsignedInt(eldest.getValue())).shapeOverride().isPresent()) {
+                    cachedOverrideCount--;
+                }
+                return remove;
             }
         };
-        private Long overrideCount;
 
         private LazyTerrainShapeField(
                 WorldBounds bounds,
@@ -182,29 +188,30 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
 
         @Override
         public long overrideCount() {
-            Long known = overrideCount;
-            if (known != null) return known;
-            long count = 0L;
-            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-                for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                    if (templateAt(x, y).shapeOverride().isPresent()) count++;
-                }
+            synchronized (selected) {
+                return cachedOverrideCount;
             }
-            overrideCount = count;
-            return count;
+        }
+
+        @Override
+        public boolean overrideCountIsExact() {
+            return false;
         }
 
         private TerrainShapeTemplate templateAt(int x, int y) {
             requireCoordinate(bounds, x, y);
             long key = (((long) x) << 32) ^ (y & 0xffff_ffffL);
-            int selectedIndex;
             synchronized (selected) {
                 Byte existing = selected.get(key);
                 if (existing != null) return templates.get(Byte.toUnsignedInt(existing));
             }
-            selectedIndex = bestTemplate(targetSampler.sample(elevation, x, y), templates);
+
+            int selectedIndex = bestTemplate(targetSampler.sample(elevation, x, y), templates);
             synchronized (selected) {
+                Byte existing = selected.get(key);
+                if (existing != null) return templates.get(Byte.toUnsignedInt(existing));
                 selected.put(key, (byte) selectedIndex);
+                if (templates.get(selectedIndex).shapeOverride().isPresent()) cachedOverrideCount++;
             }
             return templates.get(selectedIndex);
         }
