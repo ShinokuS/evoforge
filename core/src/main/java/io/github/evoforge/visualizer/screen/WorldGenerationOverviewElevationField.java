@@ -11,18 +11,18 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Read-through field for 2D overview rendering.
+ * Read-through field for 2D overview and cell-detail presentation.
  *
- * <p>The overview lattice is anchored to world-space LOD blocks rather than to the current camera
+ * <p>The presentation lattice is anchored to world-space LOD blocks rather than to the current camera
  * edge. Small camera movements therefore reuse the same samples instead of shifting the entire
- * rendered lattice by one cell. Queries that fall between those stable sample centres are linearly
+ * rendered lattice by one cell. Queries that fall between stable coarse sample centres are linearly
  * reconstructed for presentation, so camera movement does not snap between neighbouring samples.
  *
  * <p>Large previews register an already prepared bounded presentation field for the authoritative
  * elevation object. A camera move or LOD change is rendered immediately from that field. Authoritative
  * V15 refinement is deliberately debounced until the camera has remained on the same world-anchored
- * LOD range for a short interval. This prevents zoom/pan gestures from continuously starting expensive
- * obsolete terrain work and replacing the visible representation underneath the user.
+ * range for a short interval. This applies to stride {@code 1} as well: entering cell-detail rendering
+ * must never turn the render thread into an authoritative terrain worker.
  *
  * <p>The bounded fallback and interpolation are presentation-only. Once a stable refinement completes,
  * authoritative sampled values back the same world-anchored lattice. Nothing is written into terrain
@@ -90,37 +90,75 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         if (pendingDelegate == authoritative) cancelPending();
     }
 
+    static synchronized boolean hasFallback(ElevationField elevation) {
+        return elevation != null && FALLBACKS.containsKey(elevation);
+    }
+
+    static synchronized boolean isRefined(
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        if (elevation == null || visible == null || stride < 1) return false;
+        VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                elevation.bounds(),
+                stride);
+        return refinedField != null
+                && matches(
+                        refinedDelegate,
+                        refinedVisible,
+                        refinedStride,
+                        elevation,
+                        stableVisible,
+                        stride);
+    }
+
     static synchronized ElevationField preload(
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible,
-            int overviewStride) {
-        if (elevation == null || visible == null || overviewStride <= 1) {
-            throw new IllegalArgumentException("overview preload requires elevation/range and stride > 1");
+            int presentationStride) {
+        if (elevation == null || visible == null || presentationStride < 1) {
+            throw new IllegalArgumentException(
+                    "presentation preload requires elevation/range and stride >= 1");
         }
         VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
                 visible,
                 elevation.bounds(),
-                overviewStride);
-        if (matches(refinedDelegate, refinedVisible, refinedStride, elevation, stableVisible, overviewStride)
+                presentationStride);
+        if (matches(
+                        refinedDelegate,
+                        refinedVisible,
+                        refinedStride,
+                        elevation,
+                        stableVisible,
+                        presentationStride)
                 && refinedField != null) {
-            cache(elevation, stableVisible, overviewStride, refinedField);
+            cache(elevation, stableVisible, presentationStride, refinedField);
             return refinedField;
         }
 
         ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
         if (cachedField != null
-                && matches(cachedDelegate, cachedVisible, cachedStride, elevation, stableVisible, overviewStride)) {
+                && matches(
+                        cachedDelegate,
+                        cachedVisible,
+                        cachedStride,
+                        elevation,
+                        stableVisible,
+                        presentationStride)) {
             if (presentationSource != elevation) {
-                scheduleRefinement(elevation, stableVisible, overviewStride);
+                scheduleRefinement(elevation, stableVisible, presentationStride);
             }
             return cachedField;
         }
 
         WorldGenerationOverviewElevationField prepared = materialize(
-                presentationSource, stableVisible, overviewStride);
-        cache(elevation, stableVisible, overviewStride, prepared);
+                presentationSource,
+                stableVisible,
+                presentationStride);
+        cache(elevation, stableVisible, presentationStride, prepared);
         if (presentationSource != elevation) {
-            scheduleRefinement(elevation, stableVisible, overviewStride);
+            scheduleRefinement(elevation, stableVisible, presentationStride);
         }
         return prepared;
     }
@@ -339,7 +377,8 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
 
             if (xAxis.regularCount() > 0 && yAxis.regularCount() > 0) {
                 long[] regular = new long[Math.multiplyExact(
-                        xAxis.regularCount(), yAxis.regularCount())];
+                        xAxis.regularCount(),
+                        yAxis.regularCount())];
                 elevation.fillElevationSubunits(
                         xAxis.coordinates()[0],
                         yAxis.coordinates()[0],
