@@ -13,7 +13,18 @@ public interface TerrainShapeField {
     /** Runtime Shape override, or {@code null} when ordinary full-cell geometry is sufficient. */
     Shape shapeOverrideAt(int x, int y);
 
+    /**
+     * Number of shape overrides represented by this field. Dense finite fields report the exact
+     * whole-world count. Lazy Continuum fields report only the currently materialized cache and pair
+     * this value with {@link #overrideCountIsExact()} returning {@code false}; asking for telemetry
+     * must never force traversal of an otherwise-unmaterialized world.
+     */
     long overrideCount();
+
+    /** Whether {@link #overrideCount()} is the exact whole-world count. */
+    default boolean overrideCountIsExact() {
+        return true;
+    }
 
     /** Compatibility field preserving ordinary full-cell surface geometry. */
     static TerrainShapeField baseline(WorldBounds bounds) {
