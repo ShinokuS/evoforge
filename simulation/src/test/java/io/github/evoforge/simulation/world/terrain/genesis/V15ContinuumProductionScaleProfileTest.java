@@ -39,6 +39,9 @@ final class V15ContinuumProductionScaleProfileTest {
                     p1000.overlapWindowMs(),
                     p10000.overlapWindowMs(),
                     8.0);
+            assertTrue(p500.lakeBodies() > 0, "balanced 500 world must retain inland basins");
+            assertTrue(p1000.lakeBodies() > 0, "balanced 1000 world must retain inland basins");
+            assertTrue(p10000.lakeBodies() > 0, "balanced 10000 world must not lose inland basins to coarse calibration");
         } finally {
             if (previous == null) {
                 System.clearProperty(V15GenerationProfiler.ENABLE_PROPERTY);
