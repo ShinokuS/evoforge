@@ -181,6 +181,72 @@ final class V15ContinuumProductionQualityProfileTest {
                 quantile(productionWaterDepths, waterDepthCount, 0.90));
     }
 
+    /** Temporary expensive oracle diagnostic used to resolve the large-world lake policy itself. */
+    @Test
+    void profileLakeMorphologyAgainstExact1000Oracle() {
+        int side = 1_000;
+        int step = 10;
+        int samplesPerAxis = (side - 1) / step + 1;
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(side, side);
+        V15TerrainDefinition terrain = V15TerrainDefinition.balanced();
+
+        long started = System.nanoTime();
+        V15ContinuumLakeBasePlan exact = V15ContinuumLakeBasePlan.prepare(domain, SEED, terrain, 96);
+        long exactReady = System.nanoTime();
+        V15ContinuumProductionTerrainPlan production = V15ContinuumProductionTerrainPlan.prepare(
+                domain,
+                SEED,
+                terrain,
+                V13MountainDefinition.balanced(),
+                -96,
+                96);
+        long productionReady = System.nanoTime();
+
+        boolean[][] exactMask = new boolean[samplesPerAxis][samplesPerAxis];
+        boolean[][] productionMask = new boolean[samplesPerAxis][samplesPerAxis];
+        long exactLake = 0L;
+        long productionLake = 0L;
+        long intersection = 0L;
+        long union = 0L;
+        for (int sy = 0; sy < samplesPerAxis; sy++) {
+            long y = (long) sy * step;
+            for (int sx = 0; sx < samplesPerAxis; sx++) {
+                long x = (long) sx * step;
+                boolean exactCell = exact.lakeDomain().isLake(x, y);
+                boolean productionCell = production.lakes().isLake(x, y);
+                exactMask[sy][sx] = exactCell;
+                productionMask[sy][sx] = productionCell;
+                if (exactCell) exactLake++;
+                if (productionCell) productionLake++;
+                if (exactCell && productionCell) intersection++;
+                if (exactCell || productionCell) union++;
+            }
+        }
+        ComponentSummary exactComponents = componentSummary(exactMask);
+        ComponentSummary productionComponents = componentSummary(productionMask);
+        long sampled = System.nanoTime();
+        long sampleCount = (long) samplesPerAxis * samplesPerAxis;
+        System.out.printf(
+                Locale.ROOT,
+                "v15-continuum-lake-oracle-profile side=%d step=%d exactPrepareMs=%.3f productionPrepareMs=%.3f sampleMs=%.3f "
+                        + "exactLakeCells=%d exactLakeFraction=%.6f productionLakeFraction=%.6f lakeIoU=%.6f "
+                        + "exactComponents=%d productionComponents=%d exactLargestFraction=%.6f productionLargestFraction=%.6f productionBodies=%d%n",
+                side,
+                step,
+                (exactReady - started) / 1_000_000d,
+                (productionReady - exactReady) / 1_000_000d,
+                (sampled - productionReady) / 1_000_000d,
+                exact.lakeDomain().lakeCellCount(),
+                ratio(exactLake, sampleCount),
+                ratio(productionLake, sampleCount),
+                ratio(intersection, union),
+                exactComponents.components(),
+                productionComponents.components(),
+                ratio(exactComponents.largestCells(), sampleCount),
+                ratio(productionComponents.largestCells(), sampleCount),
+                production.lakes().lakeBodyCount());
+    }
+
     private static EdgeAgreement edgeAgreement(boolean[][] exact, boolean[][] production) {
         long agreement = 0L;
         long total = 0L;
