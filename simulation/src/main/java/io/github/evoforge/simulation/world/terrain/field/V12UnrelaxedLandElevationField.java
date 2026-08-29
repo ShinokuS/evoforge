@@ -1,5 +1,6 @@
 package io.github.evoforge.simulation.world.terrain.field;
 
+import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.genesis.LegacyV12Noise;
 import io.github.evoforge.simulation.world.terrain.genesis.LegacyV15Random;
@@ -17,9 +18,14 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  * path builds only a request-local land-membership mask plus the historical coast-interiority halo,
  * so neighboring cells reuse the same exact rank decisions instead of asking the V12/V14 membership
  * field hundreds of times each. The authored height formula and coast-search order are unchanged.</p>
+ *
+ * <p>Resolution-aware consumers use {@link #fillSampleWindow}. It evaluates land membership only on
+ * the requested real-coordinate lattice plus a sampled coastal halo. It never expands a coarse
+ * overview into the hidden unit-resolution rectangle between samples.</p>
  */
 public final class V12UnrelaxedLandElevationField implements TerrainElevationField {
     private static final int PPM = 1_000_000;
+    private static final int INFINITE_SAMPLE_DISTANCE = Integer.MAX_VALUE / 4;
 
     private final ContinuumWorldDomain domain;
     private final LegacyV15Random random;
@@ -110,6 +116,124 @@ public final class V12UnrelaxedLandElevationField implements TerrainElevationFie
                         membershipMinX,
                         membershipMinY);
                 target[cursor] = authoredLandHeight(worldX, worldY, interiority);
+            }
+        }
+    }
+
+    /**
+     * Fills a regular coarse Continuum lattice without materializing the unit cells between samples.
+     *
+     * <p>Land membership is authoritative at every requested coordinate. Coastal interiority is the
+     * resolution-aware counterpart of the historical Manhattan coast search: the same smooth-step
+     * gate is driven by the nearest sampled water point, with lattice distance converted back into
+     * world-cell distance. A sampled halo large enough to cover the historical transition prevents
+     * request edges from becoming artificial coasts.</p>
+     */
+    void fillSampleWindow(ContinuumSampleWindow window, long[] target) {
+        if (window == null || target == null
+                || target.length < Math.multiplyExact(window.width(), window.height())) {
+            throw new IllegalArgumentException("V12 sampled window/output is invalid");
+        }
+        long maxX = window.xAt(window.width() - 1);
+        long maxY = window.yAt(window.height() - 1);
+        if (!domain.contains(window.minX(), window.minY()) || !domain.contains(maxX, maxY)) {
+            throw new IllegalArgumentException("V12 sampled window lies outside the domain");
+        }
+        if (window.step() == 1L) {
+            fillWindow(window.minX(), window.minY(), window.width(), window.height(), target);
+            return;
+        }
+
+        long step = window.step();
+        int transition = recipe.coastTransitionCells();
+        int haloSamples = transition <= 0
+                ? 0
+                : Math.toIntExact(Math.min(
+                        Integer.MAX_VALUE / 8L,
+                        2L + (transition - 1L) / step));
+        int left = Math.toIntExact(Math.min((long) haloSamples, window.minX() / step));
+        int bottom = Math.toIntExact(Math.min((long) haloSamples, window.minY() / step));
+        int right = Math.toIntExact(Math.min(
+                (long) haloSamples,
+                (domain.width() - 1L - maxX) / step));
+        int top = Math.toIntExact(Math.min(
+                (long) haloSamples,
+                (domain.height() - 1L - maxY) / step));
+
+        int sampleWidth = Math.addExact(window.width(), Math.addExact(left, right));
+        int sampleHeight = Math.addExact(window.height(), Math.addExact(bottom, top));
+        int sampleArea = Math.multiplyExact(sampleWidth, sampleHeight);
+        boolean[] membership = new boolean[sampleArea];
+        int[] waterDistance = new int[sampleArea];
+        long sampleMinX = window.minX() - (long) left * step;
+        long sampleMinY = window.minY() - (long) bottom * step;
+
+        int cursor = 0;
+        for (int y = 0; y < sampleHeight; y++) {
+            long worldY = sampleMinY + (long) y * step;
+            for (int x = 0; x < sampleWidth; x++, cursor++) {
+                long worldX = sampleMinX + (long) x * step;
+                boolean dry = land.isLand(worldX, worldY);
+                membership[cursor] = dry;
+                waterDistance[cursor] = dry ? INFINITE_SAMPLE_DISTANCE : 0;
+            }
+        }
+        sampledManhattanDistanceToWater(waterDistance, sampleWidth, sampleHeight);
+
+        cursor = 0;
+        for (int y = 0; y < window.height(); y++) {
+            long worldY = window.yAt(y);
+            int sampledY = y + bottom;
+            for (int x = 0; x < window.width(); x++, cursor++) {
+                int sampledX = x + left;
+                int cell = sampledY * sampleWidth + sampledX;
+                if (!membership[cell]) {
+                    target[cursor] = -1L;
+                    continue;
+                }
+                int interiority = PPM;
+                int sampledDistance = waterDistance[cell];
+                if (transition > 0 && sampledDistance < INFINITE_SAMPLE_DISTANCE) {
+                    long worldDistance = Math.multiplyExact((long) sampledDistance, step);
+                    if (worldDistance <= transition) {
+                        interiority = LegacyV12Noise.smoothStepPpm(
+                                worldDistance * PPM / transition);
+                    }
+                }
+                target[cursor] = authoredLandHeight(window.xAt(x), worldY, interiority);
+            }
+        }
+    }
+
+    private static void sampledManhattanDistanceToWater(int[] distance, int width, int height) {
+        for (int y = 0; y < height; y++) {
+            int row = y * width;
+            for (int x = 0; x < width; x++) {
+                int cell = row + x;
+                if (distance[cell] == 0) continue;
+                int best = distance[cell];
+                if (x > 0 && distance[cell - 1] < INFINITE_SAMPLE_DISTANCE) {
+                    best = Math.min(best, distance[cell - 1] + 1);
+                }
+                if (y > 0 && distance[cell - width] < INFINITE_SAMPLE_DISTANCE) {
+                    best = Math.min(best, distance[cell - width] + 1);
+                }
+                distance[cell] = best;
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            int row = y * width;
+            for (int x = width - 1; x >= 0; x--) {
+                int cell = row + x;
+                if (distance[cell] == 0) continue;
+                int best = distance[cell];
+                if (x + 1 < width && distance[cell + 1] < INFINITE_SAMPLE_DISTANCE) {
+                    best = Math.min(best, distance[cell + 1] + 1);
+                }
+                if (y + 1 < height && distance[cell + width] < INFINITE_SAMPLE_DISTANCE) {
+                    best = Math.min(best, distance[cell + width] + 1);
+                }
+                distance[cell] = best;
             }
         }
     }
