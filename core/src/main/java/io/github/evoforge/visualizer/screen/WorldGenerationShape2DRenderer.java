@@ -31,6 +31,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float FIT_PADDING = 1.08f;
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
+    private static final int VISIBLE_RANGE_ROUNDING_CELLS = 4;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -169,7 +170,11 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
         int width = visible.maxX() - visible.minX() + 1;
         int length = visible.maxY() - visible.minY() + 1;
-        int stride = WorldGeneration2DLod.stride(width, length);
+        int worldWidth = bounds.maxX() - bounds.minX() + 1;
+        int worldLength = bounds.maxY() - bounds.minY() + 1;
+        int lodWidth = stableLodSpan(camera.visibleWorldWidth(), worldWidth);
+        int lodLength = stableLodSpan(camera.visibleWorldHeight(), worldLength);
+        int stride = WorldGeneration2DLod.stride(lodWidth, lodLength);
         VisualizerCamera.VisibleRange lodVisible = stride > 1
                 ? WorldGeneration2DLod.alignVisibleRange(visible, bounds, stride)
                 : visible;
@@ -585,6 +590,12 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
     private static int discreteZ(long heightSubunits) {
         return Math.toIntExact(Math.floorDiv(heightSubunits, ElevationField.SUBUNITS_PER_CELL));
+    }
+
+    private static int stableLodSpan(float cameraSpan, int worldSpan) {
+        if (!Float.isFinite(cameraSpan) || cameraSpan <= 0f || worldSpan <= 0) return 1;
+        long rounded = (long) StrictMath.ceil(cameraSpan) + VISIBLE_RANGE_ROUNDING_CELLS;
+        return Math.toIntExact(Math.min((long) worldSpan, Math.max(1L, rounded)));
     }
 
     private VisualizerCamera.VisibleRange clipped(VisualizerCamera.VisibleRange visible) {
