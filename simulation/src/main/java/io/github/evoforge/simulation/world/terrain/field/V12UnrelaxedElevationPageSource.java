@@ -24,8 +24,8 @@ public final class V12UnrelaxedElevationPageSource implements ContinuumScalarPag
     public V12UnrelaxedElevationPageSource(
             ContinuumWorldDomain domain,
             V12UnrelaxedLandElevationField source) {
-        if (domain == null || source == null || !domain.equals(source.domain())) {
-            throw new IllegalArgumentException("unrelaxed V12 page source must share one domain");
+        if (domain == null || source == null) {
+            throw new IllegalArgumentException("unrelaxed V12 page-source inputs must not be null");
         }
         this.domain = domain;
         this.source = source;
