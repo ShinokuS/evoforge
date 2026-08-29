@@ -23,10 +23,11 @@ import java.util.Map;
  * <p>The calibration lattice is a fixed 64 x 64 maximum. Cheap land/interior tests run before the
  * substantially more expensive authored V12 elevation evaluation, so rejected samples never pay for
  * relief/coast evaluation. Component selection first requires the same world-coordinate center span
- * used by the earlier high-fidelity migration profile. Only when that strict pass finds no basin at
- * all do we account for each sample's represented bucket footprint. This fallback prevents coarse
- * large-world sampling from silently rejecting every otherwise broad basin without letting small
- * three-sample artifacts displace the better-resolved lowlands on reference-sized worlds.</p>
+ * used by the earlier high-fidelity migration profile. Only when that strict pass finds no basin do
+ * we account for each sample's represented bucket footprint. If the historical three-times support
+ * budget is still disconnected solely at this coarse calibration resolution, progressively broader
+ * lowland support thresholds are tried from the same real-coordinate samples. Reference-sized worlds
+ * that resolve a basin at the historical threshold are therefore unchanged.</p>
  *
  * <p>The exact {@code V15InlandLakeDomainPlan} remains the finite-world oracle.</p>
  */
@@ -35,6 +36,7 @@ public final class V15ContinuumLakeDomainPlan {
     private static final int SAMPLE_SIDE = 64;
     private static final int MINIMUM_INTERIOR_POTENTIAL_PPM = 180_000;
     private static final int MAX_MEMBERSHIP_CACHE = 65_536;
+    private static final int[] SUPPORT_MULTIPLIERS = {3, 4, 6, 8};
 
     private final ContinuumWorldDomain domain;
     private final V14ContinuumBaseTerrainPlan continental;
@@ -137,51 +139,27 @@ public final class V15ContinuumLakeDomainPlan {
                     domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
         }
 
-        double supportTarget = Math.min(
-                estimatedEligibleCells,
-                Math.max(desiredLakeCells, desiredLakeCells * 3.0));
-        double supportFraction = Math.min(1.0, supportTarget / Math.max(1.0, estimatedEligibleCells));
         Arrays.sort(eligibleElevations, 0, eligibleSamples);
-        int thresholdIndex = Math.max(
-                0,
-                Math.min(
-                        eligibleSamples - 1,
-                        (int) StrictMath.ceil(supportFraction * eligibleSamples) - 1));
-        long supportThreshold = eligibleElevations[thresholdIndex];
-
-        boolean[] support = new boolean[sampleCount];
-        for (int index = 0; index < sampleCount; index++) {
-            Sample sample = samples[index];
-            support[index] = sample.eligible() && sample.elevationSubunits() <= supportThreshold;
-        }
-
         double representedCellsPerSample = domain.width() * (double) domain.height() / sampleCount;
-        List<Component> components = collectComponents(
+        ComponentSelection selection = resolveComponents(
                 samples,
-                support,
+                eligibleElevations,
+                eligibleSamples,
                 columns,
                 rows,
                 representedCellsPerSample,
-                1L,
-                1L,
+                nominalBucketX,
+                nominalBucketY,
+                estimatedEligibleCells,
+                desiredLakeCells,
                 minimumSpan,
                 minimumComponentCells);
-        if (components.isEmpty()) {
-            components = collectComponents(
-                    samples,
-                    support,
-                    columns,
-                    rows,
-                    representedCellsPerSample,
-                    nominalBucketX,
-                    nominalBucketY,
-                    minimumSpan,
-                    minimumComponentCells);
-        }
-        if (components.isEmpty()) {
+        if (selection == null) {
             return new V15ContinuumLakeDomainPlan(
                     domain, continental, List.of(), targetLakeCells, maximumSourceElevation);
         }
+
+        List<Component> components = selection.components();
         components.sort(Comparator
                 .comparingDouble(Component::meanElevation)
                 .thenComparing(Comparator.comparingDouble(Component::estimatedCells).reversed())
@@ -218,7 +196,7 @@ public final class V15ContinuumLakeDomainPlan {
                     centerY,
                     radiusX,
                     radiusY,
-                    Math.min(supportThreshold, component.maximumElevation())));
+                    Math.min(selection.supportThreshold(), component.maximumElevation())));
         }
         return new V15ContinuumLakeDomainPlan(
                 domain,
@@ -300,6 +278,65 @@ public final class V15ContinuumLakeDomainPlan {
             return false;
         }
         return continental.landmass().potentialPpmAt(x, y) >= MINIMUM_INTERIOR_POTENTIAL_PPM;
+    }
+
+    private static ComponentSelection resolveComponents(
+            Sample[] samples,
+            long[] eligibleElevations,
+            int eligibleSamples,
+            int width,
+            int height,
+            double representedCellsPerSample,
+            long nominalBucketX,
+            long nominalBucketY,
+            double estimatedEligibleCells,
+            long desiredLakeCells,
+            long minimumSpan,
+            long minimumComponentCells) {
+        boolean[] support = new boolean[samples.length];
+        for (int multiplier : SUPPORT_MULTIPLIERS) {
+            double supportTarget = Math.min(
+                    estimatedEligibleCells,
+                    Math.max(desiredLakeCells, desiredLakeCells * (double) multiplier));
+            double supportFraction = Math.min(1.0, supportTarget / Math.max(1.0, estimatedEligibleCells));
+            int thresholdIndex = Math.max(
+                    0,
+                    Math.min(
+                            eligibleSamples - 1,
+                            (int) StrictMath.ceil(supportFraction * eligibleSamples) - 1));
+            long supportThreshold = eligibleElevations[thresholdIndex];
+            for (int index = 0; index < samples.length; index++) {
+                Sample sample = samples[index];
+                support[index] = sample.eligible() && sample.elevationSubunits() <= supportThreshold;
+            }
+
+            List<Component> components = collectComponents(
+                    samples,
+                    support,
+                    width,
+                    height,
+                    representedCellsPerSample,
+                    1L,
+                    1L,
+                    minimumSpan,
+                    minimumComponentCells);
+            if (components.isEmpty()) {
+                components = collectComponents(
+                        samples,
+                        support,
+                        width,
+                        height,
+                        representedCellsPerSample,
+                        nominalBucketX,
+                        nominalBucketY,
+                        minimumSpan,
+                        minimumComponentCells);
+            }
+            if (!components.isEmpty()) {
+                return new ComponentSelection(supportThreshold, components);
+            }
+        }
+        return null;
     }
 
     private static List<Component> collectComponents(
@@ -403,6 +440,10 @@ public final class V15ContinuumLakeDomainPlan {
             long y,
             long elevationSubunits,
             boolean eligible) {}
+
+    private record ComponentSelection(
+            long supportThreshold,
+            List<Component> components) {}
 
     private record Component(
             int samples,
