@@ -34,6 +34,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private static final GenerationRevision PREVIEW_REVISION = GenerationRevision.V15;
     private static final float VERTICAL_EXAGGERATION = 1.35f;
     private static final int SURFACE_CHUNK_INTERVALS = 128;
+    private static final long MAX_POINT_SAMPLED_PREVIEW_CELLS = 512L * 512L;
 
     private static final String VERTEX_SHADER = """
             attribute vec3 a_position;
@@ -71,6 +72,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private WorldBounds bounds;
     private ElevationField generatedElevation;
     private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
+    private WorldGenerationElevationGrid surfaceElevationGrid;
     private TerrainShapeField generatedShapes;
     private Mesh[] surfaceMeshes = new Mesh[0];
     private Mesh oceanMesh;
@@ -236,7 +238,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         generatedShapes = TerrainShapeGenerationStage
                 .forRevision(PREVIEW_REVISION)
                 .generate(generatedElevation);
-        elevationRange = WorldGenerationElevationRange.from(generatedElevation);
+        prepareSurfaceElevationGrid();
+        elevationRange = surfaceElevationGrid == null
+                ? WorldGenerationElevationRange.from(generatedElevation)
+                : WorldGenerationElevationRange.from(surfaceElevationGrid);
         generationMillis = (System.nanoTime() - started) / 1_000_000d;
 
         disposeMeshes();
@@ -268,14 +273,35 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private void set3DMeshAxis(int samples) {
         if (WorldGeneration3DDetail.maxAxisSamples() == samples) return;
         WorldGeneration3DDetail.maxAxisSamples(samples);
+        prepareSurfaceElevationGrid();
         rebuildSurfaceMeshes();
+    }
+
+    private void prepareSurfaceElevationGrid() {
+        if (generatedElevation == null || generatedConfig == null
+                || generatedConfig.columnCount() <= MAX_POINT_SAMPLED_PREVIEW_CELLS) {
+            surfaceElevationGrid = null;
+            return;
+        }
+        surfaceElevationGrid = WorldGenerationElevationGrid.sample(
+                generatedElevation, WorldGeneration3DDetail.maxAxisSamples());
     }
 
     private void rebuildSurfaceMeshes() {
         if (generatedElevation == null || bounds == null || generatedConfig == null) return;
+        disposeSurfaceMeshes();
+        if (surfaceElevationGrid != null) {
+            previewWidth = surfaceElevationGrid.width();
+            previewLength = surfaceElevationGrid.height();
+            surfaceMeshes = buildSurfaceMeshes(
+                    surfaceElevationGrid,
+                    elevationRange,
+                    elevationTintPpm);
+            return;
+        }
+
         previewWidth = WorldGeneration3DDetail.sampleCount(generatedConfig.width());
         previewLength = WorldGeneration3DDetail.sampleCount(generatedConfig.length());
-        disposeSurfaceMeshes();
         surfaceMeshes = buildSurfaceMeshes(
                 generatedElevation,
                 bounds,
@@ -283,6 +309,67 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 previewWidth,
                 previewLength,
                 elevationTintPpm);
+    }
+
+    private static Mesh[] buildSurfaceMeshes(
+            WorldGenerationElevationGrid grid,
+            WorldGenerationElevationRange elevationRange,
+            int elevationTintPpm) {
+        List<Mesh> meshes = new ArrayList<>();
+        for (int startY = 0; startY < grid.height() - 1; startY += SURFACE_CHUNK_INTERVALS) {
+            int endY = Math.min(grid.height() - 1, startY + SURFACE_CHUNK_INTERVALS);
+            for (int startX = 0; startX < grid.width() - 1; startX += SURFACE_CHUNK_INTERVALS) {
+                int endX = Math.min(grid.width() - 1, startX + SURFACE_CHUNK_INTERVALS);
+                meshes.add(buildSurfaceChunk(
+                        grid,
+                        elevationRange,
+                        startX,
+                        endX,
+                        startY,
+                        endY,
+                        elevationTintPpm));
+            }
+        }
+        return meshes.toArray(Mesh[]::new);
+    }
+
+    private static Mesh buildSurfaceChunk(
+            WorldGenerationElevationGrid grid,
+            WorldGenerationElevationRange elevationRange,
+            int startSampleX,
+            int endSampleX,
+            int startSampleY,
+            int endSampleY,
+            int elevationTintPpm) {
+        int sampleWidth = endSampleX - startSampleX + 1;
+        int sampleLength = endSampleY - startSampleY + 1;
+        int vertexCount = Math.multiplyExact(sampleWidth, sampleLength);
+        float[] vertices = new float[vertexCount * 7];
+        Color color = new Color();
+        int cursor = 0;
+        for (int localY = 0; localY < sampleLength; localY++) {
+            int sampleY = startSampleY + localY;
+            int y = grid.yAt(sampleY);
+            for (int localX = 0; localX < sampleWidth; localX++) {
+                int sampleX = startSampleX + localX;
+                int x = grid.xAt(sampleX);
+                long heightSubunits = grid.elevationSubunitsAt(sampleX, sampleY);
+                float h = (float) heightSubunits / ElevationField.SUBUNITS_PER_CELL;
+                WorldGenerationElevationTint.color(
+                        heightSubunits,
+                        elevationRange,
+                        elevationTintPpm,
+                        color);
+                vertices[cursor++] = x;
+                vertices[cursor++] = h * VERTICAL_EXAGGERATION;
+                vertices[cursor++] = -y;
+                vertices[cursor++] = color.r;
+                vertices[cursor++] = color.g;
+                vertices[cursor++] = color.b;
+                vertices[cursor++] = color.a;
+            }
+        }
+        return indexedSurfaceMesh(vertices, sampleWidth, sampleLength);
     }
 
     private static Mesh[] buildSurfaceMeshes(
@@ -354,7 +441,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 vertices[cursor++] = color.a;
             }
         }
+        return indexedSurfaceMesh(vertices, sampleWidth, sampleLength);
+    }
 
+    private static Mesh indexedSurfaceMesh(float[] vertices, int sampleWidth, int sampleLength) {
         short[] indices = new short[(sampleWidth - 1) * (sampleLength - 1) * 6];
         int index = 0;
         for (int y = 0; y < sampleLength - 1; y++) {
@@ -371,7 +461,7 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                 indices[index++] = (short) c;
             }
         }
-        Mesh mesh = mesh(vertexCount, indices.length);
+        Mesh mesh = mesh(Math.multiplyExact(sampleWidth, sampleLength), indices.length);
         mesh.setVertices(vertices);
         mesh.setIndices(indices);
         return mesh;
@@ -456,13 +546,17 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                         : "WORLD GENERATION / INLAND LAKES V15",
                 24f,
                 Gdx.graphics.getHeight() - 24f);
+        String shapeCountLabel = generatedShapes.overrideCountIsExact()
+                ? "shape overrides"
+                : "cached shape overrides";
         font.draw(batch, String.format(
-                "active %dx%d (%,d columns)   z %d..%d   shape overrides %,d   generation %.1f ms",
+                "active %dx%d (%,d columns)   z %d..%d   %s %,d   generation %.1f ms",
                 generatedConfig.width(),
                 generatedConfig.length(),
                 generatedConfig.columnCount(),
                 bounds.minZ(),
                 bounds.maxZ(),
+                shapeCountLabel,
                 generatedShapes.overrideCount(),
                 generationMillis),
                 24f,
