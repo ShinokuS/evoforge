@@ -4,7 +4,7 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSo
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
-import io.github.evoforge.simulation.world.terrain.field.BoundedExactTerrainSnapshotPageSource;
+import io.github.evoforge.simulation.world.terrain.field.ReusableExactTerrainSnapshotPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V13ExactMountainPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V14ExactCoastalBathymetryPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V14ExactDeepBathymetryPageSource;
@@ -18,10 +18,9 @@ import io.github.evoforge.simulation.world.terrain.field.V15ExactInlandLakeBathy
  * dimensions and coordinate frame as the historical generator. No smaller surrogate world is
  * generated and then stretched over the requested domain.</p>
  *
- * <p>This class intentionally chooses semantic correctness over the former bounded 300 x 300
- * planning shortcut. Large-world performance work must preserve these V15 decisions by changing
- * storage/execution (streaming, local stencils, bounded caches and lazy materialization), not by
- * changing the domain on which the generator operates.</p>
+ * <p>Moderate exact-oracle worlds may retain disposable file-backed stage snapshots so downstream
+ * strip/page consumers do not accidentally execute the same historical full-domain pass many times.
+ * This is execution reuse only: the historical V15 stage still authors every value.</p>
  */
 public final class V15ContinuumTerrainPlan {
     private final ContinuumWorldDomain domain;
@@ -56,12 +55,16 @@ public final class V15ContinuumTerrainPlan {
         if (domain == null || terrainDefinition == null || mountainDefinition == null) {
             throw new IllegalArgumentException("V15 Continuum terrain inputs must not be null");
         }
+        long logicalCells = Math.multiplyExact(domain.width(), domain.height());
 
-        V15ContinuumLakeBasePlan lakeBase = V15ContinuumLakeBasePlan.prepare(
-                domain,
-                seed,
-                terrainDefinition,
-                maximumZCells);
+        V15ContinuumLakeBasePlan lakeBase = V15GenerationProfiler.measure(
+                "v15-lake-base-plan",
+                logicalCells,
+                () -> V15ContinuumLakeBasePlan.prepare(
+                        domain,
+                        seed,
+                        terrainDefinition,
+                        maximumZCells));
 
         V13MountainRecipe mountainRecipe = V13MountainRecipe.balanced();
         V13MountainCalibration mountainCalibration = V13MountainCalibration.compile(
@@ -69,13 +72,20 @@ public final class V15ContinuumTerrainPlan {
                 mountainDefinition,
                 mountainRecipe,
                 maximumZCells);
-        V13ExactMountainPageSource mountains = new V13ExactMountainPageSource(
-                domain,
-                seed,
-                lakeBase.elevationPages(),
-                lakeBase.lakeAwareLandRank(),
-                mountainCalibration,
-                mountainRecipe);
+        V13ExactMountainPageSource rawMountains = V15GenerationProfiler.measure(
+                "v13-mountain-plan",
+                logicalCells,
+                () -> new V13ExactMountainPageSource(
+                        domain,
+                        seed,
+                        lakeBase.elevationPages(),
+                        lakeBase.lakeAwareLandRank(),
+                        mountainCalibration,
+                        mountainRecipe));
+        ContinuumScalarPageSource mountains =
+                ReusableExactTerrainSnapshotPageSource.captureIfPractical(
+                        "v13-mountains",
+                        rawMountains);
 
         V14BathymetryRecipe bathymetryRecipe = V14BathymetryRecipe.balanced();
         V14BathymetryCalibration bathymetryCalibration = V14BathymetryCalibration.compile(
@@ -88,7 +98,9 @@ public final class V15ContinuumTerrainPlan {
                 bathymetryCalibration,
                 bathymetryRecipe);
         ContinuumScalarPageSource coastal =
-                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawCoastal);
+                ReusableExactTerrainSnapshotPageSource.captureIfPractical(
+                        "v14-coastal-bathymetry",
+                        rawCoastal);
 
         V14ExactDeepBathymetryPageSource rawDeep = new V14ExactDeepBathymetryPageSource(
                 domain,
@@ -96,7 +108,9 @@ public final class V15ContinuumTerrainPlan {
                 bathymetryCalibration,
                 bathymetryRecipe);
         ContinuumScalarPageSource deep =
-                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawDeep);
+                ReusableExactTerrainSnapshotPageSource.captureIfPractical(
+                        "v14-deep-bathymetry",
+                        rawDeep);
 
         V15ExactInlandLakeBathymetryPageSource rawElevationPages =
                 new V15ExactInlandLakeBathymetryPageSource(
@@ -106,7 +120,9 @@ public final class V15ContinuumTerrainPlan {
                         minimumZCells,
                         V15InlandLakeBathymetryRecipe.balanced());
         ContinuumScalarPageSource elevationPages =
-                BoundedExactTerrainSnapshotPageSource.captureIfBounded(rawElevationPages);
+                ReusableExactTerrainSnapshotPageSource.captureIfPractical(
+                        "v15-inland-bathymetry",
+                        rawElevationPages);
 
         return new V15ContinuumTerrainPlan(
                 domain,
