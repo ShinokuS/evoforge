@@ -12,10 +12,11 @@ import java.util.Arrays;
  * the exact declared world bounds. At most {@code O(axisSamples)} point reads are needed for those
  * boundary strips; the interior is never expanded into per-column point queries.
  *
- * <p>Large-world grids also register a nearest-sample read-only adapter as the 2D overview fallback
- * for the exact elevation field they were sampled from. The adapter is presentation-only: detailed
- * {@code LOD x1} continues to read the authoritative terrain, while distant pan/zoom can reuse this
- * already prepared bounded grid without synchronously reopening the production terrain pipeline.</p>
+ * <p>Large-world grids also register a read-only interpolated adapter as the immediate 2D overview
+ * fallback for the exact elevation field they were sampled from. Interpolation is presentation-only:
+ * it prevents the coarse grid from turning a shoreline into large nearest-neighbour rectangles while
+ * an authoritative viewport refinement is prepared in the background. It is never fed back into
+ * simulation state and detailed authoritative sampling remains unchanged.</p>
  */
 final class WorldGenerationElevationGrid {
     private final WorldBounds bounds;
@@ -129,14 +130,10 @@ final class WorldGenerationElevationGrid {
 
             @Override
             public long elevationSubunitsAt(int x, int y) {
-                if (x < bounds.minX() || x > bounds.maxX()
-                        || y < bounds.minY() || y > bounds.maxY()) {
-                    throw new IllegalArgumentException(
-                            "coordinate lies outside preview elevation grid");
-                }
-                int sampleX = nearestCoordinateIndex(xCoordinates, x);
-                int sampleY = nearestCoordinateIndex(yCoordinates, y);
-                return elevations[sampleY * width() + sampleX];
+                requireCoordinate(x, y);
+                Bracket xBracket = bracket(xCoordinates, x);
+                Bracket yBracket = bracket(yCoordinates, y);
+                return bilinear(xBracket, yBracket, x, y);
             }
 
             @Override
@@ -162,26 +159,61 @@ final class WorldGenerationElevationGrid {
                 int cursor = 0;
                 for (int sampleY = 0; sampleY < sampleHeight; sampleY++) {
                     int worldY = Math.toIntExact(minY + sampleY * step);
-                    int yIndex = nearestCoordinateIndex(yCoordinates, worldY);
+                    Bracket yBracket = bracket(yCoordinates, worldY);
                     for (int sampleX = 0; sampleX < sampleWidth; sampleX++, cursor++) {
                         int worldX = Math.toIntExact(minX + sampleX * step);
-                        int xIndex = nearestCoordinateIndex(xCoordinates, worldX);
-                        target[cursor] = elevations[yIndex * width() + xIndex];
+                        Bracket xBracket = bracket(xCoordinates, worldX);
+                        target[cursor] = bilinear(xBracket, yBracket, worldX, worldY);
                     }
                 }
+            }
+
+            private void requireCoordinate(int x, int y) {
+                if (x < bounds.minX() || x > bounds.maxX()
+                        || y < bounds.minY() || y > bounds.maxY()) {
+                    throw new IllegalArgumentException(
+                            "coordinate lies outside preview elevation grid");
+                }
+            }
+
+            private long bilinear(
+                    Bracket xBracket,
+                    Bracket yBracket,
+                    int x,
+                    int y) {
+                int x0 = xBracket.lower();
+                int x1 = xBracket.upper();
+                int y0 = yBracket.lower();
+                int y1 = yBracket.upper();
+                long v00 = elevations[y0 * width() + x0];
+                if (x0 == x1 && y0 == y1) return v00;
+                long v10 = elevations[y0 * width() + x1];
+                long v01 = elevations[y1 * width() + x0];
+                long v11 = elevations[y1 * width() + x1];
+                double tx = interpolationFraction(xCoordinates[x0], xCoordinates[x1], x);
+                double ty = interpolationFraction(yCoordinates[y0], yCoordinates[y1], y);
+                double top = v00 + (v10 - (double) v00) * tx;
+                double bottom = v01 + (v11 - (double) v01) * tx;
+                return Math.round(top + (bottom - top) * ty);
             }
         };
     }
 
-    private static int nearestCoordinateIndex(int[] coordinates, int coordinate) {
+    private static Bracket bracket(int[] coordinates, int coordinate) {
         int exact = Arrays.binarySearch(coordinates, coordinate);
-        if (exact >= 0) return exact;
+        if (exact >= 0) return new Bracket(exact, exact);
         int insertion = -exact - 1;
-        if (insertion <= 0) return 0;
-        if (insertion >= coordinates.length) return coordinates.length - 1;
-        int lower = coordinates[insertion - 1];
-        int upper = coordinates[insertion];
-        return coordinate - lower <= upper - coordinate ? insertion - 1 : insertion;
+        if (insertion <= 0) return new Bracket(0, 0);
+        if (insertion >= coordinates.length) {
+            int last = coordinates.length - 1;
+            return new Bracket(last, last);
+        }
+        return new Bracket(insertion - 1, insertion);
+    }
+
+    private static double interpolationFraction(int lower, int upper, int coordinate) {
+        if (lower == upper) return 0d;
+        return (coordinate - (double) lower) / (upper - (double) lower);
     }
 
     private static Axis axis(int minimum, int maximum, long step) {
@@ -202,4 +234,5 @@ final class WorldGenerationElevationGrid {
     }
 
     private record Axis(int[] coordinates, int regularCount, boolean hasBoundarySample) {}
+    private record Bracket(int lower, int upper) {}
 }
