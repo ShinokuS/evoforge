@@ -167,9 +167,19 @@ public final class VisualizerCamera {
         return camera.combined;
     }
 
+    /** Continuous horizontal world span of the camera, independent of integer cell rounding/pan. */
+    public float visibleWorldWidth() {
+        return camera.viewportWidth * camera.zoom;
+    }
+
+    /** Continuous vertical world span of the camera, independent of integer cell rounding/pan. */
+    public float visibleWorldHeight() {
+        return camera.viewportHeight * camera.zoom;
+    }
+
     public VisibleRange visibleRange() {
-        float halfWidth = camera.viewportWidth * camera.zoom * 0.5f;
-        float halfHeight = camera.viewportHeight * camera.zoom * 0.5f;
+        float halfWidth = visibleWorldWidth() * 0.5f;
+        float halfHeight = visibleWorldHeight() * 0.5f;
 
         return new VisibleRange(
                 MathUtils.floor(camera.position.x - halfWidth) - 1,
@@ -199,10 +209,8 @@ public final class VisualizerCamera {
     }
 
     public float worldUnitsPerPixel() {
-        float horizontal = camera.viewportWidth * camera.zoom
-                / Math.max(1, screenWidth);
-        float vertical = camera.viewportHeight * camera.zoom
-                / Math.max(1, screenHeight);
+        float horizontal = visibleWorldWidth() / Math.max(1, screenWidth);
+        float vertical = visibleWorldHeight() / Math.max(1, screenHeight);
         return Math.max(horizontal, vertical);
     }
 
