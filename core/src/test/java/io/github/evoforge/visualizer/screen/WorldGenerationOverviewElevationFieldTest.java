@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -82,6 +83,38 @@ final class WorldGenerationOverviewElevationFieldTest {
                     4);
             panned.elevationSubunitsAt(94, 73);
 
+            assertEquals(0, bulkCalls.get());
+            assertEquals(0, pointCalls.get());
+        } finally {
+            WorldGenerationOverviewElevationField.invalidate(source);
+            WorldGenerationOverviewElevationField.refinementEnabledForTests(true);
+        }
+    }
+
+    @Test
+    void cellDetailPreloadAlsoStaysOffAuthoritativeTerrainSynchronously() {
+        AtomicInteger bulkCalls = new AtomicInteger();
+        AtomicInteger pointCalls = new AtomicInteger();
+        ElevationField source = countingField(bulkCalls, pointCalls);
+        VisualizerCamera.VisibleRange detail = new VisualizerCamera.VisibleRange(400, 449, 500, 533);
+
+        WorldGenerationOverviewElevationField.refinementEnabledForTests(false);
+        try {
+            WorldGenerationElevationGrid.sample(source, 96);
+            bulkCalls.set(0);
+            pointCalls.set(0);
+
+            ElevationField cellDetail = WorldGenerationOverviewElevationField.preload(
+                    source,
+                    detail,
+                    1);
+            for (int x = detail.minX(); x <= detail.maxX(); x++) {
+                for (int y = detail.minY(); y <= detail.maxY(); y++) {
+                    cellDetail.elevationSubunitsAt(x, y);
+                }
+            }
+
+            assertFalse(WorldGenerationOverviewElevationField.isRefined(source, detail, 1));
             assertEquals(0, bulkCalls.get());
             assertEquals(0, pointCalls.get());
         } finally {
