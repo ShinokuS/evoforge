@@ -33,6 +33,7 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     private static final int PPM = 1_000_000;
     private static final double TWO_PI = StrictMath.PI * 2.0;
     private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
+    private static final int CANDIDATE_CALIBRATION_SIDE = 16;
 
     private final ContinuumWorldDomain domain;
     private final ContinuumScalarPageSource base;
@@ -244,20 +245,52 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
                 * MEAN_VISIBLE_FOOTPRINT_FRACTION;
         if (!(targetCells > 0d) || !(nominalFootprint > 0d)) return 0;
         double desiredSources = StrictMath.ceil(targetCells / nominalFootprint);
+        double expectedLandCandidates = estimatedEligibleCandidateCount();
+        if (!(expectedLandCandidates > 0d)) return 0;
+        return (int) Math.max(
+                0L,
+                Math.min((long) PPM, Math.round(desiredSources / expectedLandCandidates * PPM)));
+    }
 
+    /**
+     * Estimates the denominator used by the historical global candidate sort from a fixed 16x16
+     * stratified sample of the actual V13 lattice. This preserves area-independent preparation while
+     * accounting for the fact that candidate centers are not distributed like arbitrary world cells.
+     */
+    private double estimatedEligibleCandidateCount() {
         int spacing = calibration.candidateSpacingCells();
         long minLegacyX = frame.legacyMinX();
         long minLegacyY = frame.legacyMinY();
         long maxLegacyX = Math.addExact(minLegacyX, domain.width() - 1L);
         long maxLegacyY = Math.addExact(minLegacyY, domain.height() - 1L);
-        long latticeWidth = Math.floorDiv(maxLegacyX, spacing) - Math.floorDiv(minLegacyX, spacing) + 3L;
-        long latticeHeight = Math.floorDiv(maxLegacyY, spacing) - Math.floorDiv(minLegacyY, spacing) + 3L;
-        double landFraction = land.landCount() / (double) Math.multiplyExact(domain.width(), domain.height());
-        double expectedLandCandidates = latticeWidth * (double) latticeHeight * landFraction;
-        if (!(expectedLandCandidates > 0d)) return 0;
-        return (int) Math.max(
-                0L,
-                Math.min((long) PPM, Math.round(desiredSources / expectedLandCandidates * PPM)));
+        long minLatticeX = Math.floorDiv(minLegacyX, spacing) - 1L;
+        long maxLatticeX = Math.floorDiv(maxLegacyX, spacing) + 1L;
+        long minLatticeY = Math.floorDiv(minLegacyY, spacing) - 1L;
+        long maxLatticeY = Math.floorDiv(maxLegacyY, spacing) + 1L;
+        long latticeWidth = maxLatticeX - minLatticeX + 1L;
+        long latticeHeight = maxLatticeY - minLatticeY + 1L;
+        int sampleColumns = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeWidth));
+        int sampleRows = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeHeight));
+        int samples = 0;
+        int eligible = 0;
+        for (int sy = 0; sy < sampleRows; sy++) {
+            long latticeY = stratifiedCoordinate(minLatticeY, latticeHeight, sy, sampleRows);
+            for (int sx = 0; sx < sampleColumns; sx++) {
+                long latticeX = stratifiedCoordinate(minLatticeX, latticeWidth, sx, sampleColumns);
+                MountainSystem system = createSystem(latticeX, latticeY);
+                if (system.upliftSubunits() > 0L && centerIsLand(system)) eligible++;
+                samples++;
+            }
+        }
+        if (eligible == 0 || samples == 0) return 0d;
+        return latticeWidth * (double) latticeHeight * eligible / samples;
+    }
+
+    private static long stratifiedCoordinate(long minimum, long extent, int bucket, int buckets) {
+        long start = (long) bucket * extent / buckets;
+        long endExclusive = (long) (bucket + 1) * extent / buckets;
+        long offset = Math.max(0L, (endExclusive - start - 1L) / 2L);
+        return minimum + start + offset;
     }
 
     private double inferredInlandFactor(long baseHeight) {
