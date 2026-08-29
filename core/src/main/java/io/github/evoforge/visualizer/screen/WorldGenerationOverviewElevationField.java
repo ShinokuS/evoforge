@@ -15,10 +15,14 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Overview LODs use a world-anchored sampled lattice and may refine that same lattice from the
  * authoritative V15 field after camera motion settles. Cell-detail ({@code stride == 1}) is different:
- * it never uses this overview interpolation as final terrain. Exact x1 elevation and V15 shapes are
+ * it never uses overview interpolation as final terrain. Exact x1 elevation and V15 shapes are
  * published atomically by {@link WorldGenerationExactDetailTiles}. Until that immutable tile frame is
  * ready, x1 reads a stable world-anchored x2 parent so the renderer cannot invent one-cell terraces
  * from an interpolated fallback.
+ *
+ * <p>When x2 approaches the configured detail budget, the exact world tiles are prewarmed in the
+ * background. Raising Detailed range can therefore expose hundreds of cells per axis without making
+ * the render thread perform the corresponding unit-resolution terrain work at the LOD transition.
  *
  * <p>All projections are presentation-only and rebuildable. Camera state never changes simulation or
  * Genesis facts.</p>
@@ -126,10 +130,21 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                     "presentation preload requires elevation/range and stride >= 1");
         }
         if (presentationStride == 1) {
+            if (!FALLBACKS.containsKey(elevation)) {
+                return elevation;
+            }
             WorldGenerationExactDetailTiles.DetailFrame exact =
                     WorldGenerationExactDetailTiles.request(elevation, visible);
             if (exact != null) return exact.elevation();
             return stableCellDetailParent(elevation, visible);
+        }
+
+        if (presentationStride == 2 && FALLBACKS.containsKey(elevation)) {
+            int width = visible.maxX() - visible.minX() + 1;
+            int height = visible.maxY() - visible.minY() + 1;
+            if (WorldGeneration2DLod.detailWarmupUseful(width, height)) {
+                WorldGenerationExactDetailTiles.prewarm(elevation, visible);
+            }
         }
 
         VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
