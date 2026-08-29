@@ -6,42 +6,43 @@ import io.github.evoforge.visualizer.VisualizerCamera;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.WeakHashMap;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Read-through field for 2D overview rendering.
  *
- * <p>The regular block-centre lattice and truncated edge strips are materialized through the
- * elevation bulk contract. Existing renderer code can then keep asking for the historical
- * block-centre coordinates without triggering duplicate terrain page materializations for surface,
- * water and contour passes.
+ * <p>The overview lattice is anchored to world-space LOD blocks rather than to the current camera
+ * edge. Small camera movements therefore reuse the same samples instead of shifting the entire
+ * rendered lattice by one cell. Queries that fall between those stable sample centres are linearly
+ * reconstructed for presentation, so camera movement does not snap between neighbouring samples.
  *
  * <p>Large previews register an already prepared bounded presentation field for the authoritative
- * elevation object. A camera move or LOD change is rendered immediately from that field, then the
- * same viewport is refined from authoritative V15 terrain on one low-priority background worker.
- * The render thread therefore never waits for production terrain materialization merely because the
- * user pans or zooms. Only the newest queued refinement is retained; obsolete camera work is dropped.
+ * elevation object. A camera move or LOD change is rendered immediately from that field. Authoritative
+ * V15 refinement is deliberately debounced until the camera has remained on the same world-anchored
+ * LOD range for a short interval. This prevents zoom/pan gestures from continuously starting expensive
+ * obsolete terrain work and replacing the visible representation underneath the user.
  *
- * <p>The bounded fallback is presentation-only. Once a refinement completes, the exact sampled
- * lattice replaces it for that viewport. No fallback value is written back into terrain state.</p>
+ * <p>The bounded fallback and interpolation are presentation-only. Once a stable refinement completes,
+ * authoritative sampled values back the same world-anchored lattice. Nothing is written into terrain
+ * state.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
+    private static final long REFINEMENT_SETTLE_MILLIS = 180L;
     private static final Map<ElevationField, ElevationField> FALLBACKS = new WeakHashMap<>();
-    private static final ThreadPoolExecutor REFINER = new ThreadPoolExecutor(
+    private static final ScheduledThreadPoolExecutor REFINER = new ScheduledThreadPoolExecutor(
             1,
-            1,
-            0L,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(1),
             runnable -> {
                 Thread thread = new Thread(runnable, "evoforge-world-preview-refinement");
                 thread.setDaemon(true);
                 thread.setPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
                 return thread;
-            },
-            new ThreadPoolExecutor.DiscardOldestPolicy());
+            });
+
+    static {
+        REFINER.setRemoveOnCancelPolicy(true);
+    }
 
     private static ElevationField cachedDelegate;
     private static VisualizerCamera.VisibleRange cachedVisible;
@@ -58,6 +59,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
     private static int pendingStride;
     private static long pendingToken;
     private static long refinementSequence;
+    private static ScheduledFuture<?> pendingFuture;
     private static boolean refinementEnabled = true;
 
     private final ElevationField delegate;
@@ -95,26 +97,30 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         if (elevation == null || visible == null || overviewStride <= 1) {
             throw new IllegalArgumentException("overview preload requires elevation/range and stride > 1");
         }
-        if (matches(refinedDelegate, refinedVisible, refinedStride, elevation, visible, overviewStride)
+        VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                elevation.bounds(),
+                overviewStride);
+        if (matches(refinedDelegate, refinedVisible, refinedStride, elevation, stableVisible, overviewStride)
                 && refinedField != null) {
-            cache(elevation, visible, overviewStride, refinedField);
+            cache(elevation, stableVisible, overviewStride, refinedField);
             return refinedField;
         }
 
         ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
         if (cachedField != null
-                && matches(cachedDelegate, cachedVisible, cachedStride, elevation, visible, overviewStride)) {
+                && matches(cachedDelegate, cachedVisible, cachedStride, elevation, stableVisible, overviewStride)) {
             if (presentationSource != elevation) {
-                scheduleRefinement(elevation, visible, overviewStride);
+                scheduleRefinement(elevation, stableVisible, overviewStride);
             }
             return cachedField;
         }
 
         WorldGenerationOverviewElevationField prepared = materialize(
-                presentationSource, visible, overviewStride);
-        cache(elevation, visible, overviewStride, prepared);
+                presentationSource, stableVisible, overviewStride);
+        cache(elevation, stableVisible, overviewStride, prepared);
         if (presentationSource != elevation) {
-            scheduleRefinement(elevation, visible, overviewStride);
+            scheduleRefinement(elevation, stableVisible, overviewStride);
         }
         return prepared;
     }
@@ -148,6 +154,10 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         Long value = overview.find(x, y);
         if (value != null) return value;
         value = contours.find(x, y);
+        if (value != null) return value;
+        value = overview.interpolate(x, y);
+        if (value != null) return value;
+        value = contours.interpolate(x, y);
         return value != null ? value : delegate.elevationSubunitsAt(x, y);
     }
 
@@ -166,8 +176,17 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             ElevationField source,
             VisualizerCamera.VisibleRange visible,
             int stride) {
-        SampleGrid overview = SampleGrid.materialize(source, visible, stride);
-        SampleGrid contours = SampleGrid.materialize(source, visible, Math.multiplyExact(stride, 2));
+        VisualizerCamera.VisibleRange overviewVisible = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                source.bounds(),
+                stride);
+        int contourStride = Math.multiplyExact(stride, 2);
+        VisualizerCamera.VisibleRange contourVisible = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                source.bounds(),
+                contourStride);
+        SampleGrid overview = SampleGrid.materialize(source, overviewVisible, stride);
+        SampleGrid contours = SampleGrid.materialize(source, contourVisible, contourStride);
         return new WorldGenerationOverviewElevationField(source, overview, contours);
     }
 
@@ -180,11 +199,15 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         if (matches(pendingDelegate, pendingVisible, pendingStride, authoritative, visible, stride)) return;
 
         long token = ++refinementSequence;
+        if (pendingFuture != null) pendingFuture.cancel(false);
         pendingDelegate = authoritative;
         pendingVisible = visible;
         pendingStride = stride;
         pendingToken = token;
-        REFINER.execute(() -> refine(authoritative, visible, stride, token));
+        pendingFuture = REFINER.schedule(
+                () -> refine(authoritative, visible, stride, token),
+                REFINEMENT_SETTLE_MILLIS,
+                TimeUnit.MILLISECONDS);
     }
 
     private static void refine(
@@ -192,6 +215,10 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             VisualizerCamera.VisibleRange visible,
             int stride,
             long token) {
+        synchronized (WorldGenerationOverviewElevationField.class) {
+            if (!pendingMatches(authoritative, visible, stride, token)) return;
+        }
+
         WorldGenerationOverviewElevationField prepared;
         try {
             prepared = materialize(authoritative, visible, stride);
@@ -203,10 +230,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         }
 
         synchronized (WorldGenerationOverviewElevationField.class) {
-            if (pendingToken != token
-                    || pendingDelegate != authoritative
-                    || !visible.equals(pendingVisible)
-                    || pendingStride != stride
+            if (!pendingMatches(authoritative, visible, stride, token)
                     || !FALLBACKS.containsKey(authoritative)) {
                 return;
             }
@@ -217,11 +241,19 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             if (matches(cachedDelegate, cachedVisible, cachedStride, authoritative, visible, stride)) {
                 cachedField = prepared;
             }
-            pendingDelegate = null;
-            pendingVisible = null;
-            pendingStride = 0;
-            pendingToken = 0L;
+            clearPendingState();
         }
+    }
+
+    private static boolean pendingMatches(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible,
+            int stride,
+            long token) {
+        return pendingToken == token
+                && pendingDelegate == authoritative
+                && visible.equals(pendingVisible)
+                && pendingStride == stride;
     }
 
     private static boolean matches(
@@ -263,11 +295,16 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
 
     private static void cancelPending() {
         refinementSequence++;
+        if (pendingFuture != null) pendingFuture.cancel(false);
+        clearPendingState();
+    }
+
+    private static void clearPendingState() {
         pendingDelegate = null;
         pendingVisible = null;
         pendingStride = 0;
         pendingToken = 0L;
-        REFINER.getQueue().clear();
+        pendingFuture = null;
     }
 
     private static boolean sameBounds(WorldBounds left, WorldBounds right) {
@@ -353,7 +390,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                         yAxis.coordinates()[height - 1],
                         1,
                         1,
-                        1L,
+                        stride,
                         corner);
                 values[(height - 1) * width + width - 1] = corner[0];
             }
@@ -367,7 +404,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                                 yAxis.coordinates()[y],
                                 1,
                                 1,
-                                1L,
+                                stride,
                                 sample);
                         values[y * width + x] = sample[0];
                     }
@@ -382,6 +419,45 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             int sampleY = Arrays.binarySearch(yCoordinates, y);
             if (sampleY < 0) return null;
             return values[sampleY * xCoordinates.length + sampleX];
+        }
+
+        Long interpolate(int x, int y) {
+            if (xCoordinates.length == 0 || yCoordinates.length == 0) return null;
+            if (x < xCoordinates[0]
+                    || x > xCoordinates[xCoordinates.length - 1]
+                    || y < yCoordinates[0]
+                    || y > yCoordinates[yCoordinates.length - 1]) {
+                return null;
+            }
+            Bracket bx = bracket(xCoordinates, x);
+            Bracket by = bracket(yCoordinates, y);
+            long v00 = values[by.lower() * xCoordinates.length + bx.lower()];
+            if (bx.lower() == bx.upper() && by.lower() == by.upper()) return v00;
+            long v10 = values[by.lower() * xCoordinates.length + bx.upper()];
+            long v01 = values[by.upper() * xCoordinates.length + bx.lower()];
+            long v11 = values[by.upper() * xCoordinates.length + bx.upper()];
+            double tx = fraction(x, xCoordinates[bx.lower()], xCoordinates[bx.upper()]);
+            double ty = fraction(y, yCoordinates[by.lower()], yCoordinates[by.upper()]);
+            double top = v00 + (v10 - (double) v00) * tx;
+            double bottom = v01 + (v11 - (double) v01) * tx;
+            return Math.round(top + (bottom - top) * ty);
+        }
+
+        private static Bracket bracket(int[] coordinates, int value) {
+            int index = Arrays.binarySearch(coordinates, value);
+            if (index >= 0) return new Bracket(index, index);
+            int insertion = -index - 1;
+            if (insertion <= 0) return new Bracket(0, 0);
+            if (insertion >= coordinates.length) {
+                int last = coordinates.length - 1;
+                return new Bracket(last, last);
+            }
+            return new Bracket(insertion - 1, insertion);
+        }
+
+        private static double fraction(int value, int lower, int upper) {
+            if (lower == upper) return 0d;
+            return (value - (double) lower) / (upper - (double) lower);
         }
 
         private static Axis axis(int minimum, int maximum, int stride) {
@@ -401,5 +477,6 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         }
 
         private record Axis(int[] coordinates, int regularCount, boolean hasBoundarySample) {}
+        private record Bracket(int lower, int upper) {}
     }
 }
