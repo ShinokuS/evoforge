@@ -56,20 +56,34 @@ public final class V14ContinuumBaseTerrainPlan {
             long seed,
             V15TerrainDefinition definition,
             int maximumLandHeightCells) {
+        return prepare(domain, seed, definition, maximumLandHeightCells, null);
+    }
+
+    static V14ContinuumBaseTerrainPlan prepare(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            int maximumLandHeightCells,
+            V14LandmassPlan reusableLandmass) {
         if (domain == null || definition == null) {
             throw new IllegalArgumentException("V14 Continuum base-terrain inputs must not be null");
         }
         if (maximumLandHeightCells <= 0) {
             throw new IllegalArgumentException("maximumLandHeightCells must be > 0");
         }
+        if (reusableLandmass != null && !domain.equals(reusableLandmass.domain())) {
+            throw new IllegalArgumentException("reusable V14 landmass must match the base-terrain domain");
+        }
 
         long logicalCells = Math.multiplyExact(domain.width(), domain.height());
         V12TerrainRecipe recipe = V12TerrainRecipe.balanced();
         V12TerrainCalibration terrain = V12TerrainCalibration.compile(domain, definition, recipe);
-        V14LandmassPlan landmass = V15GenerationProfiler.measure(
-                "v14-landmass-cutoff",
-                logicalCells,
-                () -> V14LandmassPlan.prepare(domain, seed, definition, terrain));
+        V14LandmassPlan landmass = reusableLandmass != null
+                ? reusableLandmass
+                : V15GenerationProfiler.measure(
+                        "v14-landmass-cutoff",
+                        logicalCells,
+                        () -> V14LandmassPlan.prepare(domain, seed, definition, terrain));
         V12LandRankPlan landRank = V15GenerationProfiler.measure(
                 "v12-land-rank",
                 logicalCells,
