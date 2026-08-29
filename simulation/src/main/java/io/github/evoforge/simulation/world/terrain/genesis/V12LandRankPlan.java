@@ -9,6 +9,11 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  * the same descending potential order, while one second streaming pass reproduces the old stable
  * row-major tie break. Optional V14 constraint uses the exact old 900k silhouette blend.</p>
  *
+ * <p>When V14 constrains the rank, the mandatory global passes consume its relaxed silhouette one
+ * row at a time through the same bounded V14 row cache used by coastline preparation. This preserves
+ * the exact per-cell potential while avoiding a recursive coast-stencil rebuild for every ranked
+ * cell. Only one {@code int[width]} silhouette row is retained.</p>
+ *
  * <p>For genuinely small finite domains, the first mandatory histogram pass also retains the exact
  * derived potential in a hard-bounded cache. This avoids re-running the expensive V14 coastline
  * evaluation during the stable-rank pass and later V12 slope/materialization queries. The cache is
@@ -134,20 +139,27 @@ public final class V12LandRankPlan {
         }
 
         LegacyV15Random random = new LegacyV15Random(seed);
+        int width = Math.toIntExact(domain.width());
+        int height = Math.toIntExact(domain.height());
+        int[] silhouettePotentialRow = silhouette == null ? null : new int[width];
+        V14LandmassPlan.PotentialRowCursor silhouetteRows =
+                silhouette == null ? null : silhouette.potentialRowCursor();
+
         long[] histogram = new long[LegacyV12Noise.SAMPLE_MAX + 1];
         long cellIndex = 0L;
-        for (long y = 0L; y < domain.height(); y++) {
+        for (int y = 0; y < height; y++) {
             long legacyY = frame.legacyY(y);
-            for (long x = 0L; x < domain.width(); x++, cellIndex++) {
-                int potential = potentialAt(
+            if (silhouetteRows != null) silhouetteRows.fill(y, silhouettePotentialRow);
+            for (int x = 0; x < width; x++, cellIndex++) {
+                int potential = basePotentialAt(
                         random,
                         calibration,
                         recipe,
-                        silhouette,
-                        x,
-                        y,
                         frame.legacyX(x),
                         legacyY);
+                if (silhouettePotentialRow != null) {
+                    potential = blendWithSilhouette(potential, silhouettePotentialRow[x]);
+                }
                 if (boundedPotential != null) {
                     boundedPotential[Math.toIntExact(cellIndex)] = potential;
                 }
@@ -174,21 +186,27 @@ public final class V12LandRankPlan {
         long thresholdLastIndex = -1L;
         long seenAtThreshold = 0L;
         cellIndex = 0L;
+        V14LandmassPlan.PotentialRowCursor tieSilhouetteRows =
+                boundedPotential == null && silhouette != null ? silhouette.potentialRowCursor() : null;
         outer:
-        for (long y = 0L; y < domain.height(); y++) {
+        for (int y = 0; y < height; y++) {
             long legacyY = frame.legacyY(y);
-            for (long x = 0L; x < domain.width(); x++, cellIndex++) {
-                int potential = boundedPotential != null
-                        ? boundedPotential[Math.toIntExact(cellIndex)]
-                        : potentialAt(
-                                random,
-                                calibration,
-                                recipe,
-                                silhouette,
-                                x,
-                                y,
-                                frame.legacyX(x),
-                                legacyY);
+            if (tieSilhouetteRows != null) tieSilhouetteRows.fill(y, silhouettePotentialRow);
+            for (int x = 0; x < width; x++, cellIndex++) {
+                int potential;
+                if (boundedPotential != null) {
+                    potential = boundedPotential[Math.toIntExact(cellIndex)];
+                } else {
+                    potential = basePotentialAt(
+                            random,
+                            calibration,
+                            recipe,
+                            frame.legacyX(x),
+                            legacyY);
+                    if (silhouettePotentialRow != null) {
+                        potential = blendWithSilhouette(potential, silhouettePotentialRow[x]);
+                    }
+                }
                 if (potential != threshold) continue;
                 seenAtThreshold++;
                 if (seenAtThreshold == selectedAtThreshold) {
@@ -271,15 +289,15 @@ public final class V12LandRankPlan {
         if (boundedPotential != null) {
             return boundedPotential[Math.toIntExact(frame.cellIndex(x, y))];
         }
-        return potentialAt(
+        int potential = basePotentialAt(
                 random,
                 calibration,
                 recipe,
-                silhouette,
-                x,
-                y,
                 frame.legacyX(x),
                 frame.legacyY(y));
+        return silhouette == null
+                ? potential
+                : blendWithSilhouette(potential, silhouette.potentialPpmAt(x, y));
     }
 
     public long legacyX(long x) {
@@ -305,13 +323,10 @@ public final class V12LandRankPlan {
         return new int[Math.toIntExact(area)];
     }
 
-    private static int potentialAt(
+    private static int basePotentialAt(
             LegacyV15Random random,
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe,
-            V14LandmassPlan silhouette,
-            long localX,
-            long localY,
             long legacyX,
             long legacyY) {
         int coherent = LegacyV12Noise.organicValueNoise(
@@ -328,11 +343,11 @@ public final class V12LandRankPlan {
                 legacyY,
                 calibration.fragmentedLandmassScale(),
                 recipe);
-        int potential = (int) (((long) coherent * (LegacyV12Noise.PPM - calibration.fragmentationPpm())
+        return (int) (((long) coherent * (LegacyV12Noise.PPM - calibration.fragmentationPpm())
                 + (long) fragmented * calibration.fragmentationPpm()) / LegacyV12Noise.PPM);
-        if (silhouette == null) return potential;
+    }
 
-        int silhouettePpm = silhouette.potentialPpmAt(localX, localY);
+    private static int blendWithSilhouette(int potential, int silhouettePpm) {
         if (silhouettePpm <= 0) return -1;
         int basePpm = LegacyV12Noise.sampleToPpm(potential);
         int influencePpm = V14LandmassPlan.SILHOUETTE_INFLUENCE_PPM;
