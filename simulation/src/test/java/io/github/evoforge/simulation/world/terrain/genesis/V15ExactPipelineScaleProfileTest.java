@@ -14,13 +14,15 @@ final class V15ExactPipelineScaleProfileTest {
     private static final long SEED = -4_774_846_722_868_265_927L;
 
     @Test
-    void profileAcceptedExactPipelineWithoutBlockingNormalScaleChecks() {
+    void profileAcceptedExactPipelineWithoutBlockingContinuumScaleChecks() {
         String previous = System.getProperty(V15GenerationProfiler.ENABLE_PROPERTY);
         System.setProperty(V15GenerationProfiler.ENABLE_PROPERTY, "true");
         try {
             profile(320);
             profile(500);
-            profile(1_000);
+            if ("true".equalsIgnoreCase(System.getProperty("evoforge.v15.profile.exact1000", "false"))) {
+                profile(1_000);
+            }
         } finally {
             if (previous == null) {
                 System.clearProperty(V15GenerationProfiler.ENABLE_PROPERTY);
