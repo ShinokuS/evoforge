@@ -4,20 +4,21 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
-import io.github.evoforge.simulation.world.terrain.genesis.LegacyV15Random;
-import io.github.evoforge.simulation.world.terrain.genesis.V14BathymetryCalibration;
+import io.github.evoforge.simulation.world.terrain.genesis.V12LandRankPlan;
 import io.github.evoforge.simulation.world.terrain.genesis.V14BathymetryRecipe;
+import io.github.evoforge.simulation.world.terrain.genesis.V14ContinuumBathymetryCalibration;
+import io.github.evoforge.simulation.world.terrain.genesis.V14ContinuumShorelineCalibration;
 import io.github.evoforge.simulation.world.terrain.genesis.V15ContinuumLakeDomainPlan;
 import io.github.evoforge.simulation.world.terrain.genesis.V15InlandLakeBathymetryRecipe;
 
 /**
  * Bounded large-domain V14/V15 water-depth execution.
  *
- * <p>Historical finite V14 computes water connected components and their maximum shoreline distance
- * over the entire raster. This production source keeps the accepted coastal fall limits, local land
- * relief context, world depth cap and V15 inland-lake depth policy, but evaluates them from a fixed
- * local shoreline halo. Far-ocean structure is a smooth deterministic world-space field. Thus a page
- * request never allocates or scans the declared world area.</p>
+ * <p>Unit-resolution requests compute the accepted local shoreline chamfer and coastal-relief
+ * character inside a fixed halo. When the shore lies outside that halo, a fixed-budget set of actual
+ * sampled shoreline coordinates supplies only the missing global distance/max-distance facts. Ocean
+ * depth then uses the historical V14 smoother-step baseline and causal coastal formulas rather than a
+ * synthetic deep-ocean noise field. No finished low-resolution bathymetry raster is scaled.</p>
  */
 public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPageSource {
     private static final int PPM = 1_000_000;
@@ -26,25 +27,24 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
     private static final int DIAGONAL_DISTANCE = 1_414;
     private static final int INFINITE_DISTANCE = Integer.MAX_VALUE / 4;
     private static final int MINIMUM_WATER_HALO = 48;
-    private static final String DEEP_STRUCTURE = "world:v15-continuum-deep-structure";
 
     private final ContinuumWorldDomain domain;
     private final ContinuumScalarPageSource base;
     private final V15ContinuumLakeDomainPlan lakes;
-    private final V14BathymetryCalibration calibration;
+    private final V14ContinuumBathymetryCalibration calibration;
     private final V14BathymetryRecipe recipe;
     private final V15InlandLakeBathymetryRecipe lakeRecipe;
-    private final LegacyV15Random random;
+    private final V14ContinuumShorelineCalibration shoreline;
     private final int halo;
-    private final double deepScale;
 
     public V15ContinuumBathymetryPageSource(
             ContinuumWorldDomain domain,
             long seed,
             ContinuumScalarPageSource base,
             V15ContinuumLakeDomainPlan lakes,
+            V12LandRankPlan land,
             int minimumZCells) {
-        if (domain == null || base == null || lakes == null
+        if (domain == null || base == null || lakes == null || land == null
                 || !domain.equals(base.domain())
                 || !domain.equals(lakes.domain())) {
             throw new IllegalArgumentException("Continuum bathymetry dependencies must share one domain");
@@ -53,13 +53,12 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
         this.base = base;
         this.lakes = lakes;
         this.recipe = V14BathymetryRecipe.balanced();
-        this.calibration = V14BathymetryCalibration.compile(domain, minimumZCells, recipe);
+        this.calibration = V14ContinuumBathymetryCalibration.compile(domain, minimumZCells, recipe);
         this.lakeRecipe = V15InlandLakeBathymetryRecipe.balanced();
-        this.random = new LegacyV15Random(seed);
+        this.shoreline = V14ContinuumShorelineCalibration.prepare(domain, land);
         this.halo = Math.max(
                 MINIMUM_WATER_HALO,
                 calibration.coastalContextRadiusCells() * 3 + 2);
-        this.deepScale = Math.max(48.0, Math.min(domain.width(), domain.height()) / 7.0);
     }
 
     @Override
@@ -115,15 +114,15 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
                 } else if (lakes.isLake(worldX, worldY)) {
                     output[cursor] = -lakeDepth(worldX, worldY);
                 } else {
-                    output[cursor] = -oceanDepth(
-                            worldX,
-                            worldY,
-                            distance[cell],
-                            localX,
-                            localY,
-                            elevation,
-                            width,
-                            height);
+                    int localDistance = distance[cell];
+                    int resolvedDistance = localDistance >= INFINITE_DISTANCE
+                                    || localDistance > (halo - 2) * DISTANCE_SCALE
+                            ? shoreline.distanceMilliAt(worldX, worldY)
+                            : localDistance;
+                    int coastalCharacter = localDistance >= INFINITE_DISTANCE
+                            ? 0
+                            : coastalReliefPpm(localX, localY, elevation, width, height);
+                    output[cursor] = -oceanDepth(resolvedDistance, coastalCharacter);
                 }
             }
         }
@@ -144,48 +143,71 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
                 } else if (lakes.isLake(worldX, worldY)) {
                     output[cursor] = -lakeDepth(worldX, worldY);
                 } else {
-                    output[cursor] = -deepOceanDepth(worldX, worldY);
+                    output[cursor] = -baselineOceanDepth(shoreline.distanceMilliAt(worldX, worldY));
                 }
             }
         }
         return new ContinuumScalarPage(window, output);
     }
 
-    private long oceanDepth(
-            long worldX,
-            long worldY,
+    private long oceanDepth(int shorelineDistance, int coastalCharacterPpm) {
+        int maximumDistance = shoreline.maximumShorelineDistance();
+        long bodyDepthCap = bodyDepthCap(maximumDistance);
+        long baselineDepth = baselineDepth(shorelineDistance, maximumDistance, bodyDepthCap);
+        long coastalDepth = causalCoastalDepth(
+                shorelineDistance,
+                coastalCharacterPpm,
+                baselineDepth,
+                bodyDepthCap);
+        return Math.max(1L, Math.min(bodyDepthCap, Math.max(baselineDepth, coastalDepth)));
+    }
+
+    private long baselineOceanDepth(int shorelineDistance) {
+        int maximumDistance = shoreline.maximumShorelineDistance();
+        long bodyDepthCap = bodyDepthCap(maximumDistance);
+        return baselineDepth(shorelineDistance, maximumDistance, bodyDepthCap);
+    }
+
+    private long baselineDepth(int distance, int maximumDistance, long bodyDepthCap) {
+        int coordinatePpm = (int) Math.min(PPM, (long) distance * PPM / Math.max(1, maximumDistance));
+        int profilePpm = smootherStepPpm(coordinatePpm);
+        return Math.max(1L, bodyDepthCap * profilePpm / PPM);
+    }
+
+    private long causalCoastalDepth(
             int shorelineDistance,
-            int localX,
-            int localY,
-            long[] elevation,
-            int width,
-            int height) {
-        if (shorelineDistance >= INFINITE_DISTANCE
-                || shorelineDistance > (halo - 2) * DISTANCE_SCALE) {
-            return deepOceanDepth(worldX, worldY);
-        }
-        int coastalCharacter = coastalReliefPpm(localX, localY, elevation, width, height);
+            int coastalCharacterPpm,
+            long baselineDepth,
+            long bodyDepthCap) {
+        if (coastalCharacterPpm <= 0 || shorelineDistance <= 0) return 0L;
         int reliefCoordinatePpm = (int) Math.min(
                 PPM,
-                (long) coastalCharacter * PPM / recipe.coastalReliefFullScalePpm());
-        int reliefPpm = smootherStepPpm(reliefCoordinatePpm);
+                (long) coastalCharacterPpm * PPM / recipe.coastalReliefFullScalePpm());
+        int reliefCharacterPpm = smootherStepPpm(reliefCoordinatePpm);
         long localFall = calibration.coastalMinimumFallSubunits()
                 + (calibration.coastalMaximumFallSubunits()
                                 - calibration.coastalMinimumFallSubunits())
-                        * reliefPpm / PPM;
-        localFall = Math.max(1L, localFall);
-        long geometric = (long) shorelineDistance * localFall / DISTANCE_SCALE;
-        long nearshore = Math.min(calibration.worldDepthCapSubunits(), Math.max(1L, geometric));
-        if (shorelineDistance <= calibration.coastalContextRadiusCells() * DISTANCE_SCALE) {
-            return nearshore;
-        }
-        double blend = Math.min(
-                1.0,
-                (shorelineDistance / (double) DISTANCE_SCALE - calibration.coastalContextRadiusCells())
-                        / Math.max(1.0, halo - calibration.coastalContextRadiusCells()));
-        int smooth = smootherStepPpm((int) Math.round(blend * PPM));
-        long deep = deepOceanDepth(worldX, worldY);
-        return nearshore + (deep - nearshore) * smooth / PPM;
+                        * reliefCharacterPpm
+                        / PPM;
+        if (localFall <= 0L) return 0L;
+        long geometricDepth = (long) shorelineDistance * localFall / DISTANCE_SCALE;
+        int supportedSteps = Math.max(2, calibration.coastalContextRadiusCells() / 2);
+        long requestedExtra = Math.multiplyExact(localFall, (long) supportedSteps);
+        long maximumExtra = Math.min(bodyDepthCap, requestedExtra);
+        long remainingDepth = Math.max(0L, bodyDepthCap - baselineDepth);
+        long fadedExtra = bodyDepthCap <= 0L
+                ? 0L
+                : maximumExtra * remainingDepth / bodyDepthCap;
+        long parallelDepth = Math.addExact(baselineDepth, fadedExtra);
+        return Math.min(bodyDepthCap, Math.min(geometricDepth, parallelDepth));
+    }
+
+    private long bodyDepthCap(int maximumDistance) {
+        long slopeSupported = Math.multiplyExact(
+                (long) maximumDistance,
+                calibration.maximumCardinalFallSubunits())
+                / recipe.profileGradientBoundMilli();
+        return Math.min(calibration.worldDepthCapSubunits(), Math.max(1L, slopeSupported));
     }
 
     private int coastalReliefPpm(
@@ -218,17 +240,6 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
                 Math.max(0L, average * PPM / Math.max(1L, horizontalReference)));
     }
 
-    private long deepOceanDepth(long x, long y) {
-        double structure = smoothNoise(x, y, deepScale);
-        long cap = calibration.worldDepthCapSubunits();
-        long minimum = Math.min(
-                cap,
-                4L * TerrainElevationField.SUBUNITS_PER_CELL);
-        double fraction = 0.74 + structure * 0.18;
-        long depth = Math.round(cap * Math.max(0.45, Math.min(0.96, fraction)));
-        return Math.max(1L, Math.max(minimum, Math.min(cap, depth)));
-    }
-
     private long lakeDepth(long x, long y) {
         double radius = lakes.normalizedRadius(x, y);
         if (!Double.isFinite(radius)) return TerrainElevationField.SUBUNITS_PER_CELL;
@@ -240,27 +251,6 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
         long requested = minimum + (maximum - minimum) * profile / PPM;
         long verticalCapacity = Math.negateExact(calibration.floorSubunits());
         return Math.max(1L, Math.min(verticalCapacity, requested));
-    }
-
-    private double smoothNoise(long x, long y, double scale) {
-        double gx = x / scale;
-        double gy = y / scale;
-        long x0 = (long) StrictMath.floor(gx);
-        long y0 = (long) StrictMath.floor(gy);
-        double tx = smooth(gx - x0);
-        double ty = smooth(gy - y0);
-        double a = centeredUnit(x0, y0);
-        double b = centeredUnit(x0 + 1L, y0);
-        double c = centeredUnit(x0, y0 + 1L);
-        double d = centeredUnit(x0 + 1L, y0 + 1L);
-        double top = a + (b - a) * tx;
-        double bottom = c + (d - c) * tx;
-        return top + (bottom - top) * ty;
-    }
-
-    private double centeredUnit(long x, long y) {
-        int high = (int) ((random.sampleElevation(DEEP_STRUCTURE, x, y, 0L) >>> 48) & 0xffffL);
-        return high / 65_535.0 * 2.0 - 1.0;
     }
 
     private static void chamferDistance(int[] distance, int width, int height) {
@@ -302,10 +292,6 @@ public final class V15ContinuumBathymetryPageSource implements ContinuumScalarPa
         long t4 = t3 * t / PPM;
         long t5 = t4 * t / PPM;
         return (int) Math.max(0L, Math.min((long) PPM, 6L * t5 - 15L * t4 + 10L * t3));
-    }
-
-    private static double smooth(double value) {
-        return value * value * (3.0 - 2.0 * value);
     }
 
     private void validateWindow(ContinuumSampleWindow window) {
