@@ -89,20 +89,26 @@ public final class V15ContinuumProductionTerrainPlan {
                 continental.elevationPages(),
                 unrelaxed,
                 lakes);
-        ContinuumScalarPageSource mountains = new V13ContinuumMountainPageSource(
-                domain,
-                seed,
-                mountainDefinition,
-                lakeBase,
-                lakeAwareLand,
-                maximumZCells);
-        ContinuumScalarPageSource bathymetry = new V15ContinuumBathymetryPageSource(
-                domain,
-                seed,
-                mountains,
-                lakes,
-                lakeAwareLand,
-                minimumZCells);
+        ContinuumScalarPageSource mountains = V15GenerationProfiler.measure(
+                "v15-continuum-mountain-selection",
+                logicalCells,
+                () -> new V13ContinuumMountainPageSource(
+                        domain,
+                        seed,
+                        mountainDefinition,
+                        lakeBase,
+                        lakeAwareLand,
+                        maximumZCells));
+        ContinuumScalarPageSource bathymetry = V15GenerationProfiler.measure(
+                "v15-continuum-bathymetry-plan",
+                logicalCells,
+                () -> new V15ContinuumBathymetryPageSource(
+                        domain,
+                        seed,
+                        mountains,
+                        lakes,
+                        lakeAwareLand,
+                        minimumZCells));
 
         return new V15ContinuumProductionTerrainPlan(
                 domain,
