@@ -67,5 +67,9 @@ final class WorldGenerationElevationGridTest {
         assertEquals(999, grid.xAt(143));
         assertEquals(999, grid.yAt(143));
         assertEquals(999_000_999L, grid.elevationSubunitsAt(143, 143));
+
+        // The immediate large-world fallback must not snap an entire seven-cell interval to one
+        // source sample. A linear field should be reconstructed linearly between grid coordinates.
+        assertEquals(3_000_004L, grid.presentationFallback().elevationSubunitsAt(3, 4));
     }
 }
