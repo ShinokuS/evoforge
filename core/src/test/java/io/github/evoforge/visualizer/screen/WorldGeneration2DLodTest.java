@@ -26,6 +26,19 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
+    void actualDesktopCameraMinimumZoomCanReachExactLod() {
+        VisualizerCamera camera = new VisualizerCamera();
+        camera.resize(1_600, 765);
+        camera.setView(0f, 0f, 0.25f);
+        VisualizerCamera.VisibleRange visible = camera.visibleRange();
+        int width = visible.maxX() - visible.minX() + 1;
+        int length = visible.maxY() - visible.minY() + 1;
+
+        assertTrue(Math.multiplyExact((long) width, length) <= WorldGeneration2DLod.detailedCellBudget());
+        assertEquals(1, WorldGeneration2DLod.stride(width, length));
+    }
+
+    @Test
     void overviewUsesNestedPowerOfTwoLevelsInsteadOfEveryIntegerStride() {
         assertEquals(8, WorldGeneration2DLod.stride(600, 600));
         assertEquals(4, WorldGeneration2DLod.stride(300, 300));
