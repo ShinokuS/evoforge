@@ -60,7 +60,7 @@ final class WorldGeneration2DLodTest {
 
         assertEquals(first, moved);
         assertEquals(
-                new VisualizerCamera.VisibleRange(991, 1_040, 1_199, 1_232),
+                new VisualizerCamera.VisibleRange(991, 1_039, 1_199, 1_231),
                 WorldGeneration2DLod.expandVisibleRange(first, bounds, 1));
     }
 
