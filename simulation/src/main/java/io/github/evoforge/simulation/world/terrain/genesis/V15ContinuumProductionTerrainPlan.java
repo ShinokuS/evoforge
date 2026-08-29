@@ -5,6 +5,7 @@ import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSo
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.field.V12UnrelaxedElevationPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V13ContinuumMountainPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15ContinuumBathymetryPageSource;
 import io.github.evoforge.simulation.world.terrain.field.V15ContinuumLakeBasePageSource;
@@ -80,9 +81,13 @@ public final class V15ContinuumProductionTerrainPlan {
         V12LandRankPlan lakeAwareLand = continental.landRank().excluding(
                 Math.min(continental.landRank().landCount(), lakes.targetLakeCells()),
                 lakes::isLake);
+        ContinuumScalarPageSource unrelaxed = new V12UnrelaxedElevationPageSource(
+                domain,
+                continental.unrelaxedElevation());
         ContinuumScalarPageSource lakeBase = new V15ContinuumLakeBasePageSource(
                 domain,
                 continental.elevationPages(),
+                unrelaxed,
                 lakes);
         ContinuumScalarPageSource mountains = new V13ContinuumMountainPageSource(
                 domain,
