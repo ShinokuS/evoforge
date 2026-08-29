@@ -33,7 +33,7 @@ record WorldGenerationElevationRange(
         if (area <= MAX_EXACT_RANGE_CELLS) {
             return exact(elevation, bounds);
         }
-        return sampled(elevation, bounds, width, length);
+        return sampled(elevation);
     }
 
     private static WorldGenerationElevationRange exact(ElevationField elevation, WorldBounds bounds) {
@@ -54,21 +54,15 @@ record WorldGenerationElevationRange(
         return finish(minimumLand, maximumLand, minimumWater);
     }
 
-    private static WorldGenerationElevationRange sampled(
-            ElevationField elevation,
-            WorldBounds bounds,
-            long width,
-            long length) {
-        int samplesX = Math.toIntExact(Math.min((long) MAX_SAMPLED_AXIS, width));
-        int samplesY = Math.toIntExact(Math.min((long) MAX_SAMPLED_AXIS, length));
+    private static WorldGenerationElevationRange sampled(ElevationField elevation) {
+        WorldGenerationElevationGrid grid = WorldGenerationElevationGrid.sample(
+                elevation, MAX_SAMPLED_AXIS);
         long minimumLand = Long.MAX_VALUE;
         long maximumLand = Long.MIN_VALUE;
         long minimumWater = 0L;
-        for (int sampleX = 0; sampleX < samplesX; sampleX++) {
-            int x = sampleCoordinate(bounds.minX(), bounds.maxX(), sampleX, samplesX);
-            for (int sampleY = 0; sampleY < samplesY; sampleY++) {
-                int y = sampleCoordinate(bounds.minY(), bounds.maxY(), sampleY, samplesY);
-                long value = elevation.elevationSubunitsAt(x, y);
+        for (int y = 0; y < grid.height(); y++) {
+            for (int x = 0; x < grid.width(); x++) {
+                long value = grid.elevationSubunitsAt(x, y);
                 if (value < 0L) {
                     minimumWater = Math.min(minimumWater, value);
                     continue;
@@ -78,13 +72,6 @@ record WorldGenerationElevationRange(
             }
         }
         return finish(minimumLand, maximumLand, minimumWater);
-    }
-
-    private static int sampleCoordinate(int minimum, int maximum, int sample, int sampleCount) {
-        if (sampleCount <= 1 || minimum == maximum) return minimum;
-        long span = (long) maximum - minimum;
-        long offset = Math.round(span * sample / (double) (sampleCount - 1));
-        return Math.toIntExact(minimum + offset);
     }
 
     private static WorldGenerationElevationRange finish(
