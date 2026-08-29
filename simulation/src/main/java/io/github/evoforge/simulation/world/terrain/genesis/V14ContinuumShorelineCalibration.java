@@ -46,17 +46,11 @@ public final class V14ContinuumShorelineCalibration {
         for (int y = 0; y < rows; y++) ys[y] = sampleCoordinate(domain.height(), y, rows);
 
         boolean[] dry = new boolean[Math.multiplyExact(columns, rows)];
-        boolean[] oneCell = new boolean[1];
         boolean hasLand = false;
         boolean hasWater = false;
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < columns; x++) {
-                // Scalar isLand() recursively re-evaluates the V14 two-pass coast stencil. The
-                // one-cell window path is mathematically identical, but materializes the five-by-five
-                // raw-score support once and applies the two relaxation passes explicitly. This keeps
-                // shoreline calibration sparse while avoiding repeated recursive coast work.
-                land.fillLandWindow(xs[x], ys[y], 1, 1, oneCell);
-                boolean value = oneCell[0];
+                boolean value = land.isLand(xs[x], ys[y]);
                 dry[y * columns + x] = value;
                 hasLand |= value;
                 hasWater |= !value;
