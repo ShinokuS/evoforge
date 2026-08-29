@@ -41,4 +41,38 @@ final class V14LandmassPlanTest {
                     second.potentialPpmAt(probe[0], probe[1]));
         }
     }
+
+    @Test
+    void localPotentialWindowsMatchPointExactRelaxationAtEdgesAndInterior() {
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(96, 80);
+        V15TerrainDefinition definition = V15TerrainDefinition.balanced();
+        V12TerrainCalibration terrain = V12TerrainCalibration.compile(
+                domain, definition, V12TerrainRecipe.balanced());
+        V14LandmassPlan plan = V14LandmassPlan.prepare(domain, -918_273_645L, definition, terrain);
+
+        assertWindowMatchesPoints(plan, 0, 0, 13, 11);
+        assertWindowMatchesPoints(plan, 83, 0, 13, 9);
+        assertWindowMatchesPoints(plan, 0, 69, 15, 11);
+        assertWindowMatchesPoints(plan, 81, 67, 15, 13);
+        assertWindowMatchesPoints(plan, 27, 19, 31, 23);
+    }
+
+    private static void assertWindowMatchesPoints(
+            V14LandmassPlan plan,
+            int minX,
+            int minY,
+            int width,
+            int height) {
+        int[] actual = new int[Math.multiplyExact(width, height)];
+        plan.fillPotentialWindow(minX, minY, width, height, actual);
+        int cursor = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++, cursor++) {
+                assertEquals(
+                        plan.potentialPpmAt(minX + x, minY + y),
+                        actual[cursor],
+                        "local V14 window differs at " + (minX + x) + "," + (minY + y));
+            }
+        }
+    }
 }
