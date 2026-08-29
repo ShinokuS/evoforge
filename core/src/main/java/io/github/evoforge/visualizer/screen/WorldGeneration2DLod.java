@@ -4,31 +4,58 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.visualizer.VisualizerCamera;
 
 /**
- * Pure sampling policy that caps 2D preview work while keeping close inspection at cell detail.
+ * Pure presentation sampling policy for the V15 inspector.
  *
- * <p>Overview strides are powers of two. Combined with world-anchored sampling this makes adjacent
- * LODs nested instead of rebuilding the whole visible lattice at every integer stride. The budgets
- * affect presentation only and never world generation or provenance.</p>
+ * <p>Overview strides are nested powers of two. Cell-detail x1 is allowed across a genuinely useful
+ * regional viewport because authoritative data is now prepared by a bounded asynchronous tile cache,
+ * not by synchronous per-cell Continuum reads. The detail budget is therefore a live presentation
+ * quality knob rather than a safety switch for simulation work.</p>
  */
 final class WorldGeneration2DLod {
-    static final long DEFAULT_MAX_DETAILED_CELLS = 1_024L;
+    /** Fast default: roughly a 95x95 square may enter x1 once tiles are ready. */
+    static final long DEFAULT_MAX_DETAILED_CELLS = 9_000L;
     static final long DEFAULT_MAX_SAMPLES = 6_000L;
-    static final long MIN_DETAILED_CELLS = 32L;
-    static final long MAX_DETAILED_CELLS = 2_000L;
+    static final long MIN_DETAILED_CELLS = 2_000L;
+    /** High-quality inspection: up to roughly 500x500 visible cells at x1. */
+    static final long MAX_DETAILED_CELLS = 250_000L;
     static final long MIN_OVERVIEW_SAMPLES = 1_500L;
     static final long MAX_OVERVIEW_SAMPLES = 24_000L;
+    private static final int DETAIL_EXIT_PERCENT = 125;
 
     private static volatile long detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
     private static volatile long overviewSampleBudget = DEFAULT_MAX_SAMPLES;
+    private static volatile int previousStride = 1;
 
     private WorldGeneration2DLod() {
     }
 
-    static int stride(int widthCells, int lengthCells) {
-        if (widthCells <= 0 || lengthCells <= 0) return 1;
+    /**
+     * Chooses a nested presentation LOD with x1 hysteresis. A small zoom oscillation around the
+     * detail threshold cannot repeatedly switch the same world area between x1 and x2.
+     */
+    static synchronized int stride(int widthCells, int lengthCells) {
+        if (widthCells <= 0 || lengthCells <= 0) {
+            previousStride = 1;
+            return 1;
+        }
         long cells = Math.multiplyExact((long) widthCells, (long) lengthCells);
-        if (cells <= detailedCellBudget) return 1;
+        int raw = rawStride(cells);
+        if (previousStride == 1 && raw > 1) {
+            long exitBudget = Math.multiplyExact(detailedCellBudget, DETAIL_EXIT_PERCENT) / 100L;
+            if (cells <= exitBudget) raw = 1;
+        }
+        previousStride = raw;
+        return raw;
+    }
 
+    static boolean detailWarmupUseful(int widthCells, int lengthCells) {
+        if (widthCells <= 0 || lengthCells <= 0) return false;
+        long cells = Math.multiplyExact((long) widthCells, (long) lengthCells);
+        return cells <= Math.multiplyExact(detailedCellBudget, 3L) / 2L;
+    }
+
+    private static int rawStride(long cells) {
+        if (cells <= detailedCellBudget) return 1;
         int requiredStride = Math.max(
                 2,
                 (int) Math.ceil(Math.sqrt(cells / (double) overviewSampleBudget)));
@@ -86,15 +113,16 @@ final class WorldGeneration2DLod {
         return overviewSampleBudget;
     }
 
-    static void detailedCellBudget(long value) {
+    static synchronized void detailedCellBudget(long value) {
         detailedCellBudget = requireRange(
                 value,
                 MIN_DETAILED_CELLS,
                 MAX_DETAILED_CELLS,
                 "detailed cell budget");
+        previousStride = 1;
     }
 
-    static void overviewSampleBudget(long value) {
+    static synchronized void overviewSampleBudget(long value) {
         overviewSampleBudget = requireRange(
                 value,
                 MIN_OVERVIEW_SAMPLES,
@@ -102,9 +130,10 @@ final class WorldGeneration2DLod {
                 "overview sample budget");
     }
 
-    static void resetTuning() {
+    static synchronized void resetTuning() {
         detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
         overviewSampleBudget = DEFAULT_MAX_SAMPLES;
+        previousStride = 1;
     }
 
     private static int nextPowerOfTwo(int value) {
