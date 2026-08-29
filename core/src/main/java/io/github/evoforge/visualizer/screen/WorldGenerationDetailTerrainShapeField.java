@@ -22,10 +22,10 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>This adapter never asks the authoritative shape field to resolve individual cells. Once the
  * corresponding exact elevation detail range has been bulk-refined, one low-priority worker fits the
- * normal V15 shape law against that already materialized in-memory elevation projection. The requested
- * range includes a conservative shape-influence halo, so the visible interior observes the same local
- * V15 geometry law without reopening point-wise Continuum work. Until the fit is ready, a flat safe
- * presentation is returned immediately.
+ * normal V15 shape law against that already materialized in-memory elevation projection. The renderer
+ * supplies a conservative influence halo around the visible cells, so the displayed interior observes
+ * the same local V15 geometry law without reopening point-wise Continuum work. Until the fit is ready,
+ * a flat safe presentation is returned immediately.
  *
  * <p>This is a rebuildable presentation projection only. Camera state never changes generated terrain
  * facts.</p>
