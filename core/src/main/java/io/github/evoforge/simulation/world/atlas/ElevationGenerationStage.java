@@ -13,17 +13,21 @@ import io.github.evoforge.simulation.world.genesis.WorldGenesis;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
 import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.genesis.V15ContinuumProductionTerrainPlan;
 import io.github.evoforge.simulation.world.terrain.genesis.V15ContinuumTerrainPlan;
 import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateFrame;
 
 /**
  * Compatibility seam for the accepted historical V15 visualizer.
  *
- * <p>The old presentation still submits authored intent through this type, but terrain generation is
- * performed exclusively by the V15 Continuum plan. The returned field is page-backed: declaring a
- * large world no longer materializes {@code width * height} elevation samples up front.</p>
+ * <p>The old presentation still submits the same authored intent and receives the same page-backed
+ * elevation contract. Reference-sized worlds stay on the exact finite V15 oracle so historical
+ * parity remains directly inspectable. Larger preview worlds use the fixed-budget Continuum
+ * production execution in the declared world's real coordinate frame. Neither path scales a smaller
+ * finished terrain or membership raster onto the requested world.</p>
  */
 public final class ElevationGenerationStage {
+    private static final long MAX_EXACT_PREVIEW_AXIS = 512L;
     private static final int SMALL_WORLD_PAGE_SIDE = 64;
     private static final int MEDIUM_WORLD_PAGE_SIDE = 16;
     private static final int LARGE_WORLD_PAGE_SIDE = 4;
@@ -62,14 +66,32 @@ public final class ElevationGenerationStage {
                 mountains.plateausEnabled(),
                 mountains.plateauProbability());
 
-        V15ContinuumTerrainPlan plan = V15ContinuumTerrainPlan.prepare(
-                domain,
-                genesis.masterSeed(),
-                terrainDefinition,
-                mountainDefinition,
-                bounds.minZ(),
-                bounds.maxZ());
-        return new ContinuumElevationField(bounds, plan.elevationPages());
+        ContinuumScalarPageSource elevationPages;
+        if (usesExactReferencePlan(domain)) {
+            V15ContinuumTerrainPlan exact = V15ContinuumTerrainPlan.prepare(
+                    domain,
+                    genesis.masterSeed(),
+                    terrainDefinition,
+                    mountainDefinition,
+                    bounds.minZ(),
+                    bounds.maxZ());
+            elevationPages = exact.elevationPages();
+        } else {
+            V15ContinuumProductionTerrainPlan production = V15ContinuumProductionTerrainPlan.prepare(
+                    domain,
+                    genesis.masterSeed(),
+                    terrainDefinition,
+                    mountainDefinition,
+                    bounds.minZ(),
+                    bounds.maxZ());
+            elevationPages = production.elevationPages();
+        }
+        return new ContinuumElevationField(bounds, elevationPages);
+    }
+
+    static boolean usesExactReferencePlan(ContinuumWorldDomain domain) {
+        if (domain == null) throw new IllegalArgumentException("domain must not be null");
+        return Math.max(domain.width(), domain.height()) <= MAX_EXACT_PREVIEW_AXIS;
     }
 
     private static void requireHistoricalPreviewFrame(
