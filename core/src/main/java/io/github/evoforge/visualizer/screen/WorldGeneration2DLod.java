@@ -1,16 +1,17 @@
 package io.github.evoforge.visualizer.screen;
 
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.visualizer.VisualizerCamera;
+
 /**
- * Pure sampling policy that caps 2D preview work while keeping very close inspection exact.
+ * Pure sampling policy that caps 2D preview work while keeping the closest inspection exact.
  *
- * <p>The budgets are intentionally live-tunable from the development preview. They affect only
- * presentation work and never world generation or provenance. Production V15 pages and lazy terrain
- * shape decisions remain materially more expensive than the old dense snapshot, so the synchronous
- * exact renderer is reserved for a tiny viewport; ordinary zoom stays on the asynchronous overview
- * refinement path.</p>
+ * <p>Overview strides are powers of two. Combined with world-anchored sampling this makes adjacent
+ * LODs nested instead of rebuilding the whole visible lattice at every integer stride. The budgets
+ * affect presentation only and never world generation or provenance.</p>
  */
 final class WorldGeneration2DLod {
-    static final long DEFAULT_MAX_DETAILED_CELLS = 64L;
+    static final long DEFAULT_MAX_DETAILED_CELLS = 128L;
     static final long DEFAULT_MAX_SAMPLES = 6_000L;
     static final long MIN_DETAILED_CELLS = 32L;
     static final long MAX_DETAILED_CELLS = 2_000L;
@@ -28,10 +29,31 @@ final class WorldGeneration2DLod {
         long cells = Math.multiplyExact((long) widthCells, (long) lengthCells);
         if (cells <= detailedCellBudget) return 1;
 
-        int overviewStride = Math.max(
-                1,
+        int requiredStride = Math.max(
+                2,
                 (int) Math.ceil(Math.sqrt(cells / (double) overviewSampleBudget)));
-        return Math.max(2, overviewStride);
+        return nextPowerOfTwo(requiredStride);
+    }
+
+    /**
+     * Expands a clipped camera range to whole world-anchored LOD blocks. The returned range never
+     * leaves the world. Keeping the block origin tied to world bounds prevents a one-cell camera move
+     * from shifting every overview sample and rectangle on screen.
+     */
+    static VisualizerCamera.VisibleRange alignVisibleRange(
+            VisualizerCamera.VisibleRange visible,
+            WorldBounds bounds,
+            int stride) {
+        if (visible == null || bounds == null) {
+            throw new IllegalArgumentException("LOD alignment requires visible range and bounds");
+        }
+        if (stride <= 1) return visible;
+
+        int minX = alignedBlockStart(bounds.minX(), visible.minX(), stride);
+        int minY = alignedBlockStart(bounds.minY(), visible.minY(), stride);
+        int maxX = alignedBlockEnd(bounds.minX(), bounds.maxX(), visible.maxX(), stride);
+        int maxY = alignedBlockEnd(bounds.minY(), bounds.maxY(), visible.maxY(), stride);
+        return new VisualizerCamera.VisibleRange(minX, maxX, minY, maxY);
     }
 
     static long sampledCells(int widthCells, int lengthCells, int stride) {
@@ -69,6 +91,29 @@ final class WorldGeneration2DLod {
     static void resetTuning() {
         detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
         overviewSampleBudget = DEFAULT_MAX_SAMPLES;
+    }
+
+    private static int nextPowerOfTwo(int value) {
+        int result = 1;
+        while (result < value) {
+            if (result > (1 << 29)) return 1 << 30;
+            result <<= 1;
+        }
+        return result;
+    }
+
+    private static int alignedBlockStart(int worldMinimum, int coordinate, int stride) {
+        long block = Math.floorDiv((long) coordinate - worldMinimum, stride);
+        return Math.toIntExact((long) worldMinimum + block * stride);
+    }
+
+    private static int alignedBlockEnd(
+            int worldMinimum,
+            int worldMaximum,
+            int coordinate,
+            int stride) {
+        long blockStart = alignedBlockStart(worldMinimum, coordinate, stride);
+        return Math.toIntExact(Math.min((long) worldMaximum, blockStart + stride - 1L));
     }
 
     private static long requireRange(long value, long minimum, long maximum, String name) {
