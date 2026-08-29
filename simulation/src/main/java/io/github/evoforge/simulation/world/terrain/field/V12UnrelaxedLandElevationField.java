@@ -80,14 +80,12 @@ public final class V12UnrelaxedLandElevationField implements TerrainElevationFie
         int membershipWidth = Math.toIntExact(membershipMaxX - membershipMinX + 1L);
         int membershipHeight = Math.toIntExact(membershipMaxY - membershipMinY + 1L);
         boolean[] membership = new boolean[Math.multiplyExact(membershipWidth, membershipHeight)];
-
-        int membershipCursor = 0;
-        for (int localY = 0; localY < membershipHeight; localY++) {
-            long worldY = membershipMinY + localY;
-            for (int localX = 0; localX < membershipWidth; localX++, membershipCursor++) {
-                membership[membershipCursor] = land.isLand(membershipMinX + localX, worldY);
-            }
-        }
+        land.fillLandWindow(
+                membershipMinX,
+                membershipMinY,
+                membershipWidth,
+                membershipHeight,
+                membership);
 
         int cursor = 0;
         for (int localY = 0; localY < height; localY++) {
