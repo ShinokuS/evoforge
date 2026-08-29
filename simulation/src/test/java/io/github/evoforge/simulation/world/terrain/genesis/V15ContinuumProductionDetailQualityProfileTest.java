@@ -82,8 +82,6 @@ final class V15ContinuumProductionDetailQualityProfileTest {
                 total.exactMaxAdjacentStepSubunits / (double) TerrainElevationField.SUBUNITS_PER_CELL,
                 total.productionMaxAdjacentStepSubunits / (double) TerrainElevationField.SUBUNITS_PER_CELL);
 
-        // Diagnostic first: fail only for broken/non-finite output. Floors are set after the first
-        // profile establishes how much of the reported terrace problem is generator-side.
         assertTrue(Double.isFinite(discreteAgreement));
         assertTrue(Double.isFinite(contourIou));
         assertTrue(Double.isFinite(dryMaeCells));
@@ -96,8 +94,8 @@ final class V15ContinuumProductionDetailQualityProfileTest {
             ContinuumScalarPage exact,
             ContinuumScalarPage production) {
         DetailStats result = new DetailStats();
-        int width = exact.width();
-        int height = exact.height();
+        int width = exact.window().width();
+        int height = exact.window().height();
         boolean[][] comparable = new boolean[height][width];
         int[][] exactZ = new int[height][width];
         int[][] productionZ = new int[height][width];
