@@ -21,6 +21,12 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  * decisions across neighboring cells instead of repeatedly evaluating the same coast/rank queries.
  * Synthetic migration fixtures continue to use the generic point-source path unchanged.
  *
+ * <p>Sparse coarse requests are costed before materialization. Nearby samples still share one dense
+ * historical working raster, while a request whose sample envelope would be much larger than the sum
+ * of independent validated halos is evaluated sample-by-sample. This prevents overview/LOD sampling
+ * from turning a handful of distant probes into an O(world-area) raster without changing unit-window
+ * behavior or the validated local V12 arithmetic.
+ *
  * <p>The historical sweep is not mathematically finite-range for arbitrary adversarial rasters.
  * For the accepted V12 relief field, migration profiling across balanced and full-land oracle worlds
  * found that 48 cells reproduced the old whole-world result bit-for-bit in every tested window. The
@@ -29,6 +35,9 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  */
 public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSource {
     public static final int VALIDATED_HALO_CELLS = 48;
+    private static final long MAX_DENSE_SPARSE_ENVELOPE_CELLS = 1_048_576L;
+    private static final long SINGLE_SAMPLE_HALO_CELLS =
+            (2L * VALIDATED_HALO_CELLS + 1L) * (2L * VALIDATED_HALO_CELLS + 1L);
 
     private final ContinuumWorldDomain domain;
     private final TerrainElevationField source;
@@ -72,7 +81,28 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
     @Override
     public ContinuumScalarPage materialize(ContinuumSampleWindow window) {
         validateWindow(window);
+        if (window.step() == 1L || shouldShareDenseEnvelope(window)) {
+            return materializeDenseEnvelope(window);
+        }
+        return materializeSparseSamples(window);
+    }
 
+    private boolean shouldShareDenseEnvelope(ContinuumSampleWindow window) {
+        long requestedMaxX = window.xAt(window.width() - 1);
+        long requestedMaxY = window.yAt(window.height() - 1);
+        long haloMinX = Math.max(0L, window.minX() - VALIDATED_HALO_CELLS);
+        long haloMinY = Math.max(0L, window.minY() - VALIDATED_HALO_CELLS);
+        long haloMaxX = Math.min(domain.width() - 1L, requestedMaxX + VALIDATED_HALO_CELLS);
+        long haloMaxY = Math.min(domain.height() - 1L, requestedMaxY + VALIDATED_HALO_CELLS);
+        long haloWidth = haloMaxX - haloMinX + 1L;
+        long haloHeight = haloMaxY - haloMinY + 1L;
+        long denseCells = saturatedMultiply(haloWidth, haloHeight);
+        long samples = Math.multiplyExact((long) window.width(), window.height());
+        long independentCells = saturatedMultiply(samples, SINGLE_SAMPLE_HALO_CELLS);
+        return denseCells <= MAX_DENSE_SPARSE_ENVELOPE_CELLS && denseCells <= independentCells;
+    }
+
+    private ContinuumScalarPage materializeDenseEnvelope(ContinuumSampleWindow window) {
         long requestedMaxX = window.xAt(window.width() - 1);
         long requestedMaxY = window.yAt(window.height() - 1);
         long haloMinX = Math.max(0L, window.minX() - VALIDATED_HALO_CELLS);
@@ -84,30 +114,8 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
         int haloArea = Math.multiplyExact(haloWidth, haloHeight);
 
         long[] elevations = new long[haloArea];
-        if (source instanceof V12UnrelaxedLandElevationField acceptedV12) {
-            acceptedV12.fillWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
-        } else {
-            fillFromPointSource(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
-        }
-
-        boolean[] land = new boolean[haloArea];
-        for (int cell = 0; cell < haloArea; cell++) {
-            long value = elevations[cell];
-            if (value > calibration.maximumLandHeightSubunits()) {
-                throw new IllegalStateException(
-                        "V12 source height exceeds calibrated land-height bound");
-            }
-            land[cell] = value > 0L;
-        }
-
-        historicalDirectionalRelax(
-                elevations,
-                land,
-                haloWidth,
-                haloHeight,
-                calibration.maximumStepSubunits(),
-                calibration.maximumLandHeightSubunits(),
-                relaxationPasses);
+        fillSourceWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
+        relaxWorkingRaster(elevations, haloWidth, haloHeight);
 
         double[] output = new double[Math.multiplyExact(window.width(), window.height())];
         int sample = 0;
@@ -119,6 +127,68 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
             }
         }
         return new ContinuumScalarPage(window, output);
+    }
+
+    private ContinuumScalarPage materializeSparseSamples(ContinuumSampleWindow window) {
+        double[] output = new double[Math.multiplyExact(window.width(), window.height())];
+        int cursor = 0;
+        for (int sampleY = 0; sampleY < window.height(); sampleY++) {
+            long y = window.yAt(sampleY);
+            for (int sampleX = 0; sampleX < window.width(); sampleX++, cursor++) {
+                output[cursor] = materializeSingleSample(window.xAt(sampleX), y);
+            }
+        }
+        return new ContinuumScalarPage(window, output);
+    }
+
+    private long materializeSingleSample(long x, long y) {
+        long haloMinX = Math.max(0L, x - VALIDATED_HALO_CELLS);
+        long haloMinY = Math.max(0L, y - VALIDATED_HALO_CELLS);
+        long haloMaxX = Math.min(domain.width() - 1L, x + VALIDATED_HALO_CELLS);
+        long haloMaxY = Math.min(domain.height() - 1L, y + VALIDATED_HALO_CELLS);
+        int haloWidth = Math.toIntExact(haloMaxX - haloMinX + 1L);
+        int haloHeight = Math.toIntExact(haloMaxY - haloMinY + 1L);
+        long[] elevations = new long[Math.multiplyExact(haloWidth, haloHeight)];
+        fillSourceWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
+        relaxWorkingRaster(elevations, haloWidth, haloHeight);
+        int localX = Math.toIntExact(x - haloMinX);
+        int localY = Math.toIntExact(y - haloMinY);
+        return elevations[localY * haloWidth + localX];
+    }
+
+    private void fillSourceWindow(
+            long minX,
+            long minY,
+            int width,
+            int height,
+            long[] elevations) {
+        if (source instanceof V12UnrelaxedLandElevationField acceptedV12) {
+            acceptedV12.fillWindow(minX, minY, width, height, elevations);
+        } else {
+            fillFromPointSource(minX, minY, width, height, elevations);
+        }
+    }
+
+    private void relaxWorkingRaster(long[] elevations, int width, int height) {
+        int area = Math.multiplyExact(width, height);
+        boolean[] land = new boolean[area];
+        for (int cell = 0; cell < area; cell++) {
+            long value = elevations[cell];
+            if (value > calibration.maximumLandHeightSubunits()) {
+                throw new IllegalStateException(
+                        "V12 source height exceeds calibrated land-height bound");
+            }
+            land[cell] = value > 0L;
+        }
+
+        historicalDirectionalRelax(
+                elevations,
+                land,
+                width,
+                height,
+                calibration.maximumStepSubunits(),
+                calibration.maximumLandHeightSubunits(),
+                relaxationPasses);
     }
 
     private void fillFromPointSource(
@@ -202,6 +272,12 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
 
     private static long clampLandHeight(long value, long maximumHeight) {
         return Math.max(1L, Math.min(maximumHeight, value));
+    }
+
+    private static long saturatedMultiply(long first, long second) {
+        if (first <= 0L || second <= 0L) return 0L;
+        if (first > Long.MAX_VALUE / second) return Long.MAX_VALUE;
+        return first * second;
     }
 
     private void validateWindow(ContinuumSampleWindow window) {
