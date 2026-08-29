@@ -196,10 +196,33 @@ public final class V14LandmassPlan {
 
     public int potentialPpmAt(long x, long y) {
         requireCoordinate(x, y);
-        double score = relaxedCoastScoreAt(Math.toIntExact(x), Math.toIntExact(y));
+        return potentialPpmFromScore(relaxedCoastScoreAt(Math.toIntExact(x), Math.toIntExact(y)));
+    }
+
+    PotentialRowCursor potentialRowCursor() {
+        return new PotentialRowCursor();
+    }
+
+    private int potentialPpmFromScore(double score) {
         if (!(score > cutoff)) return 0;
         long normalized = StrictMath.round((score - cutoff) / maximumInterior * PPM);
         return (int) Math.max(1L, Math.min((long) PPM, normalized));
+    }
+
+    final class PotentialRowCursor {
+        private final RelaxedRowCache rows = new RelaxedRowCache(
+                random, graph, phase, guaranteedMargin, domain);
+        private final int width = Math.toIntExact(domain.width());
+
+        void fill(int y, int[] target) {
+            if (target == null || target.length < width) {
+                throw new IllegalArgumentException("V14 potential row target must fit domain width");
+            }
+            double[] scores = rows.row(COAST_RELAXATION_PASSES, y);
+            for (int x = 0; x < width; x++) {
+                target[x] = potentialPpmFromScore(scores[x]);
+            }
+        }
     }
 
     double relaxedCoastScoreAt(int x, int y) {
