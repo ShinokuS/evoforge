@@ -16,11 +16,27 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void closeInspectionEntersCellDetailBeforeMicroscopeZoom() {
+    void fastDefaultEntersCellDetailBeforeMicroscopeZoom() {
         assertTrue(WorldGeneration2DLod.stride(147, 147) >= 2);
-        assertEquals(2, WorldGeneration2DLod.stride(48, 24));
-        assertEquals(1, WorldGeneration2DLod.stride(32, 32));
-        assertEquals(1, WorldGeneration2DLod.stride(40, 20));
+        assertEquals(1, WorldGeneration2DLod.stride(90, 90));
+        assertEquals(1, WorldGeneration2DLod.stride(96, 80));
+    }
+
+    @Test
+    void performanceSliderCanKeepSeveralHundredCellsPerAxisAtX1() {
+        WorldGeneration2DLod.detailedCellBudget(90_000L);
+        assertEquals(1, WorldGeneration2DLod.stride(300, 300));
+
+        WorldGeneration2DLod.detailedCellBudget(WorldGeneration2DLod.MAX_DETAILED_CELLS);
+        assertEquals(1, WorldGeneration2DLod.stride(500, 500));
+    }
+
+    @Test
+    void x1UsesHysteresisInsteadOfFlappingAtTheBudgetBoundary() {
+        WorldGeneration2DLod.detailedCellBudget(90_000L);
+        assertEquals(1, WorldGeneration2DLod.stride(300, 300));
+        assertEquals(1, WorldGeneration2DLod.stride(320, 300));
+        assertEquals(2, WorldGeneration2DLod.stride(380, 320));
     }
 
     @Test
