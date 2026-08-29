@@ -12,16 +12,18 @@ import io.github.evoforge.simulation.world.terrain.genesis.V13MountainRecipe;
 import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateFrame;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Request-local large-domain execution of the accepted V13 mountain morphology.
  *
- * <p>The Continuum path keeps the accepted candidate lattice, RNG purposes, center jitter,
- * orientation, asymmetric widths, plateau profile, gradient-bound uplift and world-space support.
- * Global source-count calibration is fixed-budget, while the historical center-distance
- * deconfliction is represented by deterministic finite-neighborhood priority competition. This
- * prevents the independent-cutoff "mountain spots" failure without requiring a whole-world sort.</p>
+ * <p>The accepted candidate lattice, RNG purposes, center jitter, orientation, asymmetric widths,
+ * plateau profile, gradient-bound uplift and world-space support are preserved. When the complete
+ * mountain-candidate lattice fits a fixed 4096-candidate budget, the historical priority sort,
+ * minimum-center-distance selection and fallback are executed directly over those sparse candidates.
+ * This covers normal preview worlds through 10k without any terrain-cell scan. Larger lattices use a
+ * fixed-budget priority calibration plus deterministic local competition.</p>
  */
 public final class V13ContinuumMountainPageSource implements ContinuumScalarPageSource {
     private static final String STAGE = "world:mountains";
@@ -34,8 +36,8 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     private static final int PPM = 1_000_000;
     private static final double TWO_PI = StrictMath.PI * 2.0;
     private static final double MEAN_VISIBLE_FOOTPRINT_FRACTION = 0.72;
-    private static final double DECONFLICTION_PRESELECTION_FACTOR = 1.50;
     private static final int CANDIDATE_CALIBRATION_SIDE = 64;
+    private static final long MAX_GLOBAL_CANDIDATE_SELECTION = 4_096L;
 
     private final ContinuumWorldDomain domain;
     private final ContinuumScalarPageSource base;
@@ -44,10 +46,11 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     private final V13MountainRecipe recipe;
     private final V15TerrainCoordinateFrame frame;
     private final LegacyV15Random random;
-    private final int activationPpm;
     private final double maximumCandidateSupport;
     private final double minimumCenterDistanceSquared;
     private final int competitionLatticeRadius;
+    private final List<MountainSystem> boundedGlobalSystems;
+    private final int activationPpm;
 
     public V13ContinuumMountainPageSource(
             ContinuumWorldDomain domain,
@@ -88,7 +91,8 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
                                 (minimumCenterDistance + 2.0 * StrictMath.sqrt(2.0) * maximumJitter)
                                         / spacing)
                         + 1);
-        this.activationPpm = activationPpm();
+        this.boundedGlobalSystems = prepareBoundedGlobalSystems();
+        this.activationPpm = boundedGlobalSystems == null ? activationPpm() : 0;
     }
 
     @Override
@@ -129,6 +133,26 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     }
 
     private List<MountainSystem> systemsFor(ContinuumSampleWindow window) {
+        if (boundedGlobalSystems != null) {
+            if (boundedGlobalSystems.isEmpty()) return List.of();
+            List<MountainSystem> intersecting = new ArrayList<>();
+            double minLegacyX = frame.legacyX(window.minX());
+            double maxLegacyX = frame.legacyX(window.xAt(window.width() - 1));
+            double minLegacyY = frame.legacyY(window.minY());
+            double maxLegacyY = frame.legacyY(window.yAt(window.height() - 1));
+            for (MountainSystem system : boundedGlobalSystems) {
+                double support = support(system);
+                if (system.centerX() + support < minLegacyX
+                        || system.centerX() - support > maxLegacyX
+                        || system.centerY() + support < minLegacyY
+                        || system.centerY() - support > maxLegacyY) {
+                    continue;
+                }
+                intersecting.add(system);
+            }
+            return intersecting;
+        }
+
         if (activationPpm <= 0
                 || calibration.targetCoveragePpm() <= 0
                 || calibration.typicalUpliftSubunits() <= 0L) {
@@ -156,6 +180,86 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
             }
         }
         return systems;
+    }
+
+    private List<MountainSystem> prepareBoundedGlobalSystems() {
+        if (calibration.targetCoveragePpm() <= 0
+                || calibration.typicalUpliftSubunits() <= 0L
+                || land.landCount() <= 0L) {
+            return List.of();
+        }
+        LatticeBounds lattice = wholeWorldLattice();
+        if (lattice.population() > MAX_GLOBAL_CANDIDATE_SELECTION) return null;
+
+        List<MountainCandidate> candidates = new ArrayList<>();
+        for (long latticeY = lattice.minY(); latticeY <= lattice.maxY(); latticeY++) {
+            for (long latticeX = lattice.minX(); latticeX <= lattice.maxX(); latticeX++) {
+                MountainSystem system = createSystem(latticeX, latticeY);
+                if (system.upliftSubunits() <= 0L || !centerIsLand(system)) continue;
+                int priority = samplePpm(ACTIVE, latticeX, latticeY, 0L);
+                candidates.add(new MountainCandidate(priority, latticeX, latticeY, system));
+            }
+        }
+        if (candidates.isEmpty()) return List.of();
+        candidates.sort(Comparator
+                .comparingInt(MountainCandidate::priority)
+                .thenComparingLong(MountainCandidate::latticeY)
+                .thenComparingLong(MountainCandidate::latticeX));
+
+        int desiredSources = Math.min(desiredSourceCount(), candidates.size());
+        List<MountainSystem> selected = new ArrayList<>(desiredSources);
+        for (MountainCandidate candidate : candidates) {
+            if (selected.size() >= desiredSources) break;
+            if (tooCloseToSelected(candidate.system(), selected)) continue;
+            selected.add(candidate.system());
+        }
+        if (selected.size() < desiredSources) {
+            for (MountainCandidate candidate : candidates) {
+                if (selected.size() >= desiredSources) break;
+                if (selected.contains(candidate.system())) continue;
+                selected.add(candidate.system());
+            }
+        }
+        return List.copyOf(selected);
+    }
+
+    private boolean tooCloseToSelected(MountainSystem candidate, List<MountainSystem> selected) {
+        for (MountainSystem existing : selected) {
+            double dx = candidate.centerX() - existing.centerX();
+            double dy = candidate.centerY() - existing.centerY();
+            if (dx * dx + dy * dy < minimumCenterDistanceSquared) return true;
+        }
+        return false;
+    }
+
+    private int desiredSourceCount() {
+        double targetCells = land.landCount() * calibration.targetCoveragePpm() / (double) PPM;
+        double nominalFootprint = StrictMath.PI
+                * calibration.typicalHalfWidthCells()
+                * (double) calibration.typicalLongAxisCells()
+                * MEAN_VISIBLE_FOOTPRINT_FRACTION;
+        if (!(targetCells > 0d) || !(nominalFootprint > 0d)) return 0;
+        return Math.max(1, (int) Math.min(Integer.MAX_VALUE, StrictMath.ceil(targetCells / nominalFootprint)));
+    }
+
+    private LatticeBounds wholeWorldLattice() {
+        int spacing = calibration.candidateSpacingCells();
+        long minLegacyX = frame.legacyMinX();
+        long minLegacyY = frame.legacyMinY();
+        long maxLegacyX = Math.addExact(minLegacyX, domain.width() - 1L);
+        long maxLegacyY = Math.addExact(minLegacyY, domain.height() - 1L);
+        long minLatticeX = Math.floorDiv(minLegacyX, spacing) - 1L;
+        long maxLatticeX = Math.floorDiv(maxLegacyX, spacing) + 1L;
+        long minLatticeY = Math.floorDiv(minLegacyY, spacing) - 1L;
+        long maxLatticeY = Math.floorDiv(maxLegacyY, spacing) + 1L;
+        long width = maxLatticeX - minLatticeX + 1L;
+        long height = maxLatticeY - minLatticeY + 1L;
+        return new LatticeBounds(
+                minLatticeX,
+                maxLatticeX,
+                minLatticeY,
+                maxLatticeY,
+                Math.multiplyExact(width, height));
     }
 
     private boolean winsLocalCompetition(
@@ -292,58 +396,32 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
     }
 
     private int activationPpm() {
-        if (calibration.targetCoveragePpm() <= 0
-                || calibration.typicalUpliftSubunits() <= 0L
-                || land.landCount() <= 0L) {
-            return 0;
-        }
-        double targetCells = land.landCount() * calibration.targetCoveragePpm() / (double) PPM;
-        double nominalFootprint = StrictMath.PI
-                * calibration.typicalHalfWidthCells()
-                * (double) calibration.typicalLongAxisCells()
-                * MEAN_VISIBLE_FOOTPRINT_FRACTION;
-        if (!(targetCells > 0d) || !(nominalFootprint > 0d)) return 0;
-        double desiredSources = StrictMath.ceil(targetCells / nominalFootprint);
-        return sampledPriorityCutoff(desiredSources * DECONFLICTION_PRESELECTION_FACTOR);
+        int desiredSources = desiredSourceCount();
+        return desiredSources <= 0 ? 0 : sampledPriorityCutoff(desiredSources);
     }
 
-    /**
-     * Estimates a global ACTIVE preselection priority with a fixed candidate budget. The slightly
-     * expanded source budget supplies lower-priority replacements for candidates removed by local
-     * center-distance competition, mirroring the historical greedy selector continuing down its
-     * priority list after a collision.
-     */
     private int sampledPriorityCutoff(double desiredSources) {
-        int spacing = calibration.candidateSpacingCells();
-        long minLegacyX = frame.legacyMinX();
-        long minLegacyY = frame.legacyMinY();
-        long maxLegacyX = Math.addExact(minLegacyX, domain.width() - 1L);
-        long maxLegacyY = Math.addExact(minLegacyY, domain.height() - 1L);
-        long minLatticeX = Math.floorDiv(minLegacyX, spacing) - 1L;
-        long maxLatticeX = Math.floorDiv(maxLegacyX, spacing) + 1L;
-        long minLatticeY = Math.floorDiv(minLegacyY, spacing) - 1L;
-        long maxLatticeY = Math.floorDiv(maxLegacyY, spacing) + 1L;
-        long latticeWidth = maxLatticeX - minLatticeX + 1L;
-        long latticeHeight = maxLatticeY - minLatticeY + 1L;
-        long latticePopulation = Math.multiplyExact(latticeWidth, latticeHeight);
+        LatticeBounds lattice = wholeWorldLattice();
+        long latticeWidth = lattice.maxX() - lattice.minX() + 1L;
+        long latticeHeight = lattice.maxY() - lattice.minY() + 1L;
         int sampleColumns = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeWidth));
         int sampleRows = Math.toIntExact(Math.min(CANDIDATE_CALIBRATION_SIDE, latticeHeight));
         int[] priorities = new int[Math.multiplyExact(sampleColumns, sampleRows)];
         int eligible = 0;
         int inspected = 0;
         for (int sy = 0; sy < sampleRows; sy++) {
-            long latticeY = stratifiedCoordinate(minLatticeY, latticeHeight, sy, sampleRows);
+            long latticeY = stratifiedCoordinate(lattice.minY(), latticeHeight, sy, sampleRows);
             for (int sx = 0; sx < sampleColumns; sx++) {
-                long latticeX = stratifiedCoordinate(minLatticeX, latticeWidth, sx, sampleColumns);
+                long latticeX = stratifiedCoordinate(lattice.minX(), latticeWidth, sx, sampleColumns);
                 MountainSystem system = createSystem(latticeX, latticeY);
                 inspected++;
-                if (!centerIsLand(system)) continue;
+                if (system.upliftSubunits() <= 0L || !centerIsLand(system)) continue;
                 priorities[eligible++] = samplePpm(ACTIVE, latticeX, latticeY, 0L);
             }
         }
         if (eligible == 0 || inspected == 0) return 0;
 
-        double estimatedEligible = latticePopulation * (eligible / (double) inspected);
+        double estimatedEligible = lattice.population() * (eligible / (double) inspected);
         double selectionFraction = Math.min(1.0, desiredSources / Math.max(1.0, estimatedEligible));
         int selectedSamples = Math.max(
                 1,
@@ -403,6 +481,12 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
         return Math.max(0.0, slope * remaining * remaining / (2.0 * footEase));
     }
 
+    private double support(MountainSystem system) {
+        return Math.max(
+                Math.max(system.negativeLongAxis(), system.positiveLongAxis()),
+                Math.max(system.leftWidth(), system.rightWidth()));
+    }
+
     private int samplePpm(String purpose, long x, long y, long ordinal) {
         long unsignedHigh = random.sample(STAGE, purpose, x, y, 0L, ordinal) >>> 32;
         return (int) (unsignedHigh * PPM / 0x1_0000_0000L);
@@ -424,6 +508,19 @@ public final class V13ContinuumMountainPageSource implements ContinuumScalarPage
             throw new IllegalArgumentException("window lies outside Continuum V13 mountain domain");
         }
     }
+
+    private record MountainCandidate(
+            int priority,
+            long latticeX,
+            long latticeY,
+            MountainSystem system) {}
+
+    private record LatticeBounds(
+            long minX,
+            long maxX,
+            long minY,
+            long maxY,
+            long population) {}
 
     private record MountainSystem(
             double centerX,
