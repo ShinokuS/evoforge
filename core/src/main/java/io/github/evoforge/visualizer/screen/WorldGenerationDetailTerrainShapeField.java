@@ -95,6 +95,10 @@ final class WorldGenerationDetailTerrainShapeField implements TerrainShapeField 
         return cachedField;
     }
 
+    static synchronized void suspend(TerrainShapeField terrainShapes) {
+        if (terrainShapes != null && pendingDelegate == terrainShapes) cancelPending();
+    }
+
     static synchronized void invalidate(TerrainShapeField terrainShapes) {
         if (terrainShapes == null) return;
         if (cachedDelegate == terrainShapes) clearCache();
