@@ -170,12 +170,17 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         int width = visible.maxX() - visible.minX() + 1;
         int length = visible.maxY() - visible.minY() + 1;
         int stride = WorldGeneration2DLod.stride(width, length);
+        VisualizerCamera.VisibleRange lodVisible = stride > 1
+                ? WorldGeneration2DLod.alignVisibleRange(visible, bounds, stride)
+                : visible;
+        int renderedWidth = lodVisible.maxX() - lodVisible.minX() + 1;
+        int renderedLength = lodVisible.maxY() - lodVisible.minY() + 1;
         lastVisibleColumns = Math.multiplyExact((long) width, (long) length);
-        lastRenderedSamples = WorldGeneration2DLod.sampledCells(width, length, stride);
+        lastRenderedSamples = WorldGeneration2DLod.sampledCells(renderedWidth, renderedLength, stride);
         lastLodStride = stride;
 
         ElevationField presentationElevation = stride > 1 && (showSurface || showOcean)
-                ? WorldGenerationOverviewElevationField.preload(elevation, visible, stride)
+                ? WorldGenerationOverviewElevationField.preload(elevation, lodVisible, stride)
                 : elevation;
 
         batch.setProjectionMatrix(camera.projection());
@@ -185,7 +190,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (stride == 1) {
                 drawTerrainDetailed(batch, elevation, terrainShapes, visible, showOcean);
             } else {
-                drawTerrainOverview(batch, presentationElevation, visible, stride, showOcean);
+                drawTerrainOverview(batch, presentationElevation, lodVisible, stride, showOcean);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
@@ -197,15 +202,19 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (stride == 1) {
                 drawOceanDetailed(batch, elevation, visible);
             } else {
-                drawOceanOverview(batch, presentationElevation, visible, stride);
+                drawOceanOverview(batch, presentationElevation, lodVisible, stride);
             }
         }
         batch.end();
 
         if (showSurface && stride > 1) {
-            // Contours are presentation guidance rather than terrain samples. Running them on a
-            // coarser grid avoids a second full overview workload while retaining readable relief.
-            drawOverviewContours(presentationElevation, visible, stride * 2);
+            // Contours use the same world origin but a coarser nested level, so their geometry does
+            // not alternate between two origins while the camera crosses LOD blocks.
+            VisualizerCamera.VisibleRange contourVisible = WorldGeneration2DLod.alignVisibleRange(
+                    lodVisible,
+                    bounds,
+                    Math.multiplyExact(stride, 2));
+            drawOverviewContours(presentationElevation, contourVisible, stride * 2);
         }
         if (showSurface && showShapeDirections && stride == 1) {
             drawShapeDirections(terrainShapes, visible);
