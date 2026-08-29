@@ -34,31 +34,36 @@ final class WorldGenerationOverviewElevationFieldTest {
     }
 
     @Test
-    void preparedLargeWorldGridKeepsPanAndZoomOffAuthoritativeTerrain() {
+    void preparedLargeWorldGridKeepsPanAndZoomOffAuthoritativeTerrainSynchronously() {
         AtomicInteger bulkCalls = new AtomicInteger();
         AtomicInteger pointCalls = new AtomicInteger();
         ElevationField source = countingField(bulkCalls, pointCalls);
 
-        WorldGenerationElevationGrid.sample(source, 160);
-        bulkCalls.set(0);
-        pointCalls.set(0);
+        WorldGenerationOverviewElevationField.refinementEnabledForTests(false);
+        try {
+            WorldGenerationElevationGrid.sample(source, 160);
+            bulkCalls.set(0);
+            pointCalls.set(0);
 
-        ElevationField first = WorldGenerationOverviewElevationField.preload(
-                source,
-                new VisualizerCamera.VisibleRange(0, 999, 0, 999),
-                7);
-        first.elevationSubunitsAt(3, 3);
-        first.elevationSubunitsAt(996, 996);
+            ElevationField first = WorldGenerationOverviewElevationField.preload(
+                    source,
+                    new VisualizerCamera.VisibleRange(0, 999, 0, 999),
+                    7);
+            first.elevationSubunitsAt(3, 3);
+            first.elevationSubunitsAt(996, 996);
 
-        ElevationField panned = WorldGenerationOverviewElevationField.preload(
-                source,
-                new VisualizerCamera.VisibleRange(91, 929, 70, 908),
-                6);
-        panned.elevationSubunitsAt(94, 73);
+            ElevationField panned = WorldGenerationOverviewElevationField.preload(
+                    source,
+                    new VisualizerCamera.VisibleRange(91, 929, 70, 908),
+                    6);
+            panned.elevationSubunitsAt(94, 73);
 
-        assertEquals(0, bulkCalls.get());
-        assertEquals(0, pointCalls.get());
-        WorldGenerationOverviewElevationField.invalidate(source);
+            assertEquals(0, bulkCalls.get());
+            assertEquals(0, pointCalls.get());
+        } finally {
+            WorldGenerationOverviewElevationField.invalidate(source);
+            WorldGenerationOverviewElevationField.refinementEnabledForTests(true);
+        }
     }
 
     private static ElevationField countingField(
