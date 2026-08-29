@@ -16,13 +16,11 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void closestReachableInspectionEntersExactRendererWithoutOpeningLargeViews() {
+    void closeInspectionEntersCellDetailBeforeMicroscopeZoom() {
         assertTrue(WorldGeneration2DLod.stride(147, 147) >= 2);
-        assertTrue(WorldGeneration2DLod.stride(80, 80) >= 2);
-        assertTrue(WorldGeneration2DLod.stride(32, 32) >= 2);
-        assertEquals(2, WorldGeneration2DLod.stride(12, 12));
-        assertEquals(1, WorldGeneration2DLod.stride(11, 11));
-        assertEquals(1, WorldGeneration2DLod.stride(10, 8));
+        assertEquals(2, WorldGeneration2DLod.stride(48, 24));
+        assertEquals(1, WorldGeneration2DLod.stride(32, 32));
+        assertEquals(1, WorldGeneration2DLod.stride(40, 20));
     }
 
     @Test
@@ -46,6 +44,24 @@ final class WorldGeneration2DLodTest {
 
         assertEquals(first, moved);
         assertEquals(new VisualizerCamera.VisibleRange(-148, 147, -100, 99), first);
+    }
+
+    @Test
+    void detailCacheRangeCanBeWorldAnchoredAndHaloExpanded() {
+        WorldBounds bounds = new WorldBounds(0, 2_999, 0, 2_999, -96, 96);
+        VisualizerCamera.VisibleRange first = WorldGeneration2DLod.alignVisibleRange(
+                new VisualizerCamera.VisibleRange(1_001, 1_030, 1_201, 1_220),
+                bounds,
+                16);
+        VisualizerCamera.VisibleRange moved = WorldGeneration2DLod.alignVisibleRange(
+                new VisualizerCamera.VisibleRange(1_002, 1_031, 1_202, 1_221),
+                bounds,
+                16);
+
+        assertEquals(first, moved);
+        assertEquals(
+                new VisualizerCamera.VisibleRange(991, 1_040, 1_199, 1_232),
+                WorldGeneration2DLod.expandVisibleRange(first, bounds, 1));
     }
 
     @Test
