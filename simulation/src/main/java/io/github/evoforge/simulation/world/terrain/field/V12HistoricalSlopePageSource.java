@@ -16,10 +16,9 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
  * integer split. The requested unit window is cropped from that working raster.
  *
  * <p>Coarse Continuum requests are presentation/resolution queries rather than hidden unit-world
- * materializations. They evaluate the accepted unrelaxed V12 field at each real sampled coordinate,
- * then execute the same directional sweep law on that sampled lattice with the allowed cardinal
- * step scaled by the world distance between samples. Work is therefore O(requested samples), not
- * O(the world area covered between them). Unit-resolution terrain authorship is unchanged.</p>
+ * materializations. The accepted V12 field is evaluated as one sampled batch on the real-coordinate
+ * lattice, then the same directional sweep law is executed with the allowed cardinal step scaled by
+ * the world distance between samples. Work follows requested samples, not covered world area.</p>
  *
  * <p>The historical sweep is not mathematically finite-range for arbitrary adversarial rasters.
  * For the accepted V12 relief field, migration profiling across balanced and full-land oracle worlds
@@ -111,11 +110,15 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
     private ContinuumScalarPage materializeCoarseWindow(ContinuumSampleWindow window) {
         int area = Math.multiplyExact(window.width(), window.height());
         long[] elevations = new long[area];
-        int cursor = 0;
-        for (int sampleY = 0; sampleY < window.height(); sampleY++) {
-            long y = window.yAt(sampleY);
-            for (int sampleX = 0; sampleX < window.width(); sampleX++, cursor++) {
-                elevations[cursor] = source.elevationSubunitsAt(window.xAt(sampleX), y);
+        if (source instanceof V12UnrelaxedLandElevationField acceptedV12) {
+            acceptedV12.fillSampleWindow(window, elevations);
+        } else {
+            int cursor = 0;
+            for (int sampleY = 0; sampleY < window.height(); sampleY++) {
+                long y = window.yAt(sampleY);
+                for (int sampleX = 0; sampleX < window.width(); sampleX++, cursor++) {
+                    elevations[cursor] = source.elevationSubunitsAt(window.xAt(sampleX), y);
+                }
             }
         }
 
