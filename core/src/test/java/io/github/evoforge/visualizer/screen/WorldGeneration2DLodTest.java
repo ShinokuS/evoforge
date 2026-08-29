@@ -14,11 +14,12 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void ordinaryZoomDoesNotEnterExactPerCellRendererForThousandsOfCells() {
+    void ordinaryZoomDoesNotEnterExactPerCellRendererForExpensiveProductionViews() {
         assertTrue(WorldGeneration2DLod.stride(147, 147) >= 2);
         assertTrue(WorldGeneration2DLod.stride(80, 80) >= 2);
         assertTrue(WorldGeneration2DLod.stride(32, 32) >= 2);
-        assertEquals(1, WorldGeneration2DLod.stride(22, 22));
+        assertTrue(WorldGeneration2DLod.stride(9, 9) >= 2);
+        assertEquals(1, WorldGeneration2DLod.stride(8, 8));
     }
 
     @Test
