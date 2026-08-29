@@ -71,6 +71,8 @@ final class V15ContinuumProductionQualityProfileTest {
 
         boolean[][] exactLandMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
         boolean[][] productionLandMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
+        boolean[][] exactLakeMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
+        boolean[][] productionLakeMask = new boolean[SAMPLE_SIDE][SAMPLE_SIDE];
         double subunitsPerCell = TerrainElevationField.SUBUNITS_PER_CELL;
         for (int y = 0; y < SAMPLE_SIDE; y++) {
             long worldY = sample.yAt(y);
@@ -91,6 +93,8 @@ final class V15ContinuumProductionQualityProfileTest {
                 boolean exactLakeCell = exact.lakeBase().lakeDomain().isLake(
                         Math.toIntExact(worldX), Math.toIntExact(worldY));
                 boolean productionLakeCell = production.lakes().isLake(worldX, worldY);
+                exactLakeMask[y][x] = exactLakeCell;
+                productionLakeMask[y][x] = productionLakeCell;
                 if (exactLakeCell) exactLake++;
                 if (productionLakeCell) productionLake++;
                 if (exactLakeCell && productionLakeCell) lakeIntersection++;
@@ -129,6 +133,8 @@ final class V15ContinuumProductionQualityProfileTest {
         Arrays.sort(exactWaterDepths, 0, waterDepthCount);
         Arrays.sort(productionWaterDepths, 0, waterDepthCount);
         EdgeAgreement edges = edgeAgreement(exactLandMask, productionLandMask);
+        ComponentSummary exactLakeComponents = componentSummary(exactLakeMask);
+        ComponentSummary productionLakeComponents = componentSummary(productionLakeMask);
         System.out.printf(
                 Locale.ROOT,
                 "v15-continuum-quality-profile side=%d step=%d samples=%d "
@@ -136,6 +142,7 @@ final class V15ContinuumProductionQualityProfileTest {
                         + "landAgreement=%.6f landIoU=%.6f exactLandFraction=%.6f productionLandFraction=%.6f "
                         + "coastEdgeAgreement=%.6f coastEdgeIoU=%.6f "
                         + "lakeIoU=%.6f exactLakeFraction=%.6f productionLakeFraction=%.6f "
+                        + "exactLakeComponents=%d productionLakeComponents=%d exactLargestLakeFraction=%.6f productionLargestLakeFraction=%.6f "
                         + "mountainIoU=%.6f exactMountainFraction=%.6f productionMountainFraction=%.6f "
                         + "dryMaeCells=%.6f waterMaeCells=%.6f coastalOnlyMaeCells=%.6f "
                         + "exactDeepAdjustmentCells=%.6f exactWaterMeanDepthCells=%.6f productionWaterMeanDepthCells=%.6f "
@@ -155,6 +162,10 @@ final class V15ContinuumProductionQualityProfileTest {
                 ratio(lakeIntersection, lakeUnion),
                 ratio(exactLake, samples),
                 ratio(productionLake, samples),
+                exactLakeComponents.components(),
+                productionLakeComponents.components(),
+                ratio(exactLakeComponents.largestCells(), samples),
+                ratio(productionLakeComponents.largestCells(), samples),
                 ratio(mountainIntersection, mountainUnion),
                 ratio(exactMountain, samples),
                 ratio(productionMountain, samples),
@@ -200,6 +211,54 @@ final class V15ContinuumProductionQualityProfileTest {
         return new EdgeAgreement(agreement, total, intersection, union);
     }
 
+    private static ComponentSummary componentSummary(boolean[][] mask) {
+        int height = mask.length;
+        int width = mask[0].length;
+        boolean[][] visited = new boolean[height][width];
+        int[] queueX = new int[Math.multiplyExact(width, height)];
+        int[] queueY = new int[queueX.length];
+        int components = 0;
+        int largest = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (!mask[y][x] || visited[y][x]) continue;
+                components++;
+                int head = 0;
+                int tail = 0;
+                queueX[tail] = x;
+                queueY[tail++] = y;
+                visited[y][x] = true;
+                int cells = 0;
+                while (head < tail) {
+                    int cx = queueX[head];
+                    int cy = queueY[head++];
+                    cells++;
+                    if (cx > 0) tail = enqueue(mask, visited, queueX, queueY, tail, cx - 1, cy);
+                    if (cx + 1 < width) tail = enqueue(mask, visited, queueX, queueY, tail, cx + 1, cy);
+                    if (cy > 0) tail = enqueue(mask, visited, queueX, queueY, tail, cx, cy - 1);
+                    if (cy + 1 < height) tail = enqueue(mask, visited, queueX, queueY, tail, cx, cy + 1);
+                }
+                largest = Math.max(largest, cells);
+            }
+        }
+        return new ComponentSummary(components, largest);
+    }
+
+    private static int enqueue(
+            boolean[][] mask,
+            boolean[][] visited,
+            int[] queueX,
+            int[] queueY,
+            int tail,
+            int x,
+            int y) {
+        if (!mask[y][x] || visited[y][x]) return tail;
+        visited[y][x] = true;
+        queueX[tail] = x;
+        queueY[tail] = y;
+        return tail + 1;
+    }
+
     private static double ratio(long numerator, long denominator) {
         return denominator == 0L ? 1d : numerator / (double) denominator;
     }
@@ -211,4 +270,5 @@ final class V15ContinuumProductionQualityProfileTest {
     }
 
     private record EdgeAgreement(long agreement, long total, long intersection, long union) {}
+    private record ComponentSummary(int components, int largestCells) {}
 }
