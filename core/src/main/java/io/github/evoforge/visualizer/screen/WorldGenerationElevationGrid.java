@@ -103,7 +103,7 @@ final class WorldGenerationElevationGrid {
                     yAxis.coordinates()[height - 1],
                     1,
                     1,
-                    1L,
+                    step,
                     corner);
             values[(height - 1) * width + width - 1] = corner[0];
         }
