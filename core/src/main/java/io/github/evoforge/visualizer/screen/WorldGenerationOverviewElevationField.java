@@ -11,25 +11,21 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Read-through field for 2D overview and cell-detail presentation.
+ * Stable read-through elevation projection for the 2D world-generation inspector.
  *
- * <p>The presentation lattice is anchored to world-space LOD blocks rather than to the current camera
- * edge. Small camera movements therefore reuse the same samples instead of shifting the entire
- * rendered lattice by one cell. Queries that fall between stable coarse sample centres are linearly
- * reconstructed for presentation, so camera movement does not snap between neighbouring samples.
+ * <p>Overview LODs use a world-anchored sampled lattice and may refine that same lattice from the
+ * authoritative V15 field after camera motion settles. Cell-detail ({@code stride == 1}) is different:
+ * it never uses this overview interpolation as final terrain. Exact x1 elevation and V15 shapes are
+ * published atomically by {@link WorldGenerationExactDetailTiles}. Until that immutable tile frame is
+ * ready, x1 reads a stable world-anchored x2 parent so the renderer cannot invent one-cell terraces
+ * from an interpolated fallback.
  *
- * <p>Large previews register an already prepared bounded presentation field for the authoritative
- * elevation object. A camera move or LOD change is rendered immediately from that field. Authoritative
- * V15 refinement is deliberately debounced until the camera has remained on the same world-anchored
- * range for a short interval. This applies to stride {@code 1} as well: entering cell-detail rendering
- * must never turn the render thread into an authoritative terrain worker.
- *
- * <p>The bounded fallback and interpolation are presentation-only. Once a stable refinement completes,
- * authoritative sampled values back the same world-anchored lattice. Nothing is written into terrain
- * state.</p>
+ * <p>All projections are presentation-only and rebuildable. Camera state never changes simulation or
+ * Genesis facts.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
     private static final long REFINEMENT_SETTLE_MILLIS = 180L;
+    private static final int CELL_DETAIL_PARENT_STRIDE = 2;
     private static final Map<ElevationField, ElevationField> FALLBACKS = new WeakHashMap<>();
     private static final ScheduledThreadPoolExecutor REFINER = new ScheduledThreadPoolExecutor(
             1,
@@ -62,6 +58,10 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
     private static ScheduledFuture<?> pendingFuture;
     private static boolean refinementEnabled = true;
 
+    private static ElevationField detailFallbackDelegate;
+    private static VisualizerCamera.VisibleRange detailFallbackVisible;
+    private static ElevationField detailFallbackField;
+
     private final ElevationField delegate;
     private final SampleGrid overview;
     private final SampleGrid contours;
@@ -88,6 +88,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         if (cachedDelegate == authoritative) clearCache();
         if (refinedDelegate == authoritative) clearRefinement();
         if (pendingDelegate == authoritative) cancelPending();
+        if (detailFallbackDelegate == authoritative) clearDetailFallback();
     }
 
     static synchronized boolean hasFallback(ElevationField elevation) {
@@ -99,6 +100,9 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             VisualizerCamera.VisibleRange visible,
             int stride) {
         if (elevation == null || visible == null || stride < 1) return false;
+        if (stride == 1) {
+            return WorldGenerationExactDetailTiles.isReady(elevation, visible);
+        }
         VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
                 visible,
                 elevation.bounds(),
@@ -121,6 +125,13 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             throw new IllegalArgumentException(
                     "presentation preload requires elevation/range and stride >= 1");
         }
+        if (presentationStride == 1) {
+            WorldGenerationExactDetailTiles.DetailFrame exact =
+                    WorldGenerationExactDetailTiles.request(elevation, visible);
+            if (exact != null) return exact.elevation();
+            return stableCellDetailParent(elevation, visible);
+        }
+
         VisualizerCamera.VisibleRange stableVisible = WorldGeneration2DLod.alignVisibleRange(
                 visible,
                 elevation.bounds(),
@@ -163,17 +174,27 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         return prepared;
     }
 
+    static synchronized void prewarmCellDetail(
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible) {
+        if (elevation == null || visible == null || !FALLBACKS.containsKey(elevation)) return;
+        WorldGenerationExactDetailTiles.prewarm(elevation, visible);
+    }
+
     static synchronized void invalidate(ElevationField elevation) {
         if (elevation == null) return;
         FALLBACKS.remove(elevation);
+        WorldGenerationExactDetailTiles.invalidate(elevation);
         if (cachedDelegate == elevation) clearCache();
         if (refinedDelegate == elevation) clearRefinement();
         if (pendingDelegate == elevation) cancelPending();
+        if (detailFallbackDelegate == elevation) clearDetailFallback();
     }
 
     /** Package-private deterministic switch for tests which assert synchronous fallback reads. */
     static synchronized void refinementEnabledForTests(boolean enabled) {
         refinementEnabled = enabled;
+        WorldGenerationExactDetailTiles.enabledForTests(enabled);
         if (!enabled) cancelPending();
     }
 
@@ -210,6 +231,28 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         delegate.fillElevationSubunits(minX, minY, sampleWidth, sampleHeight, step, target);
     }
 
+    private static ElevationField stableCellDetailParent(
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible) {
+        VisualizerCamera.VisibleRange stable = WorldGeneration2DLod.alignVisibleRange(
+                visible,
+                elevation.bounds(),
+                CELL_DETAIL_PARENT_STRIDE);
+        if (detailFallbackField != null
+                && detailFallbackDelegate == elevation
+                && stable.equals(detailFallbackVisible)) {
+            return detailFallbackField;
+        }
+        ElevationField fallback = FALLBACKS.getOrDefault(elevation, elevation);
+        detailFallbackDelegate = elevation;
+        detailFallbackVisible = stable;
+        detailFallbackField = new BlockParentField(
+                fallback,
+                elevation.bounds(),
+                CELL_DETAIL_PARENT_STRIDE);
+        return detailFallbackField;
+    }
+
     private static WorldGenerationOverviewElevationField materialize(
             ElevationField source,
             VisualizerCamera.VisibleRange visible,
@@ -218,16 +261,12 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                 visible,
                 source.bounds(),
                 stride);
-        SampleGrid overview = SampleGrid.materialize(source, overviewVisible, stride);
-        if (stride == 1) {
-            return new WorldGenerationOverviewElevationField(source, overview, SampleGrid.empty());
-        }
-
         int contourStride = Math.multiplyExact(stride, 2);
         VisualizerCamera.VisibleRange contourVisible = WorldGeneration2DLod.alignVisibleRange(
                 visible,
                 source.bounds(),
                 contourStride);
+        SampleGrid overview = SampleGrid.materialize(source, overviewVisible, stride);
         SampleGrid contours = SampleGrid.materialize(source, contourVisible, contourStride);
         return new WorldGenerationOverviewElevationField(source, overview, contours);
     }
@@ -236,7 +275,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             ElevationField authoritative,
             VisualizerCamera.VisibleRange visible,
             int stride) {
-        if (!refinementEnabled) return;
+        if (!refinementEnabled || stride <= 1) return;
         if (matches(refinedDelegate, refinedVisible, refinedStride, authoritative, visible, stride)) return;
         if (matches(pendingDelegate, pendingVisible, pendingStride, authoritative, visible, stride)) return;
 
@@ -335,6 +374,12 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         refinedField = null;
     }
 
+    private static void clearDetailFallback() {
+        detailFallbackDelegate = null;
+        detailFallbackVisible = null;
+        detailFallbackField = null;
+    }
+
     private static void cancelPending() {
         refinementSequence++;
         if (pendingFuture != null) pendingFuture.cancel(false);
@@ -358,6 +403,43 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                 && left.maxZ() == right.maxZ();
     }
 
+    /** Stable x2 parent used only while an atomic x1 tile frame is still loading. */
+    private static final class BlockParentField implements ElevationField {
+        private final ElevationField source;
+        private final WorldBounds bounds;
+        private final int stride;
+
+        private BlockParentField(ElevationField source, WorldBounds bounds, int stride) {
+            this.source = source;
+            this.bounds = bounds;
+            this.stride = stride;
+        }
+
+        @Override public WorldBounds bounds() { return bounds; }
+
+        @Override
+        public int elevationAt(int x, int y) {
+            return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
+        }
+
+        @Override
+        public long elevationSubunitsAt(int x, int y) {
+            if (!contains(x, y)) throw new IllegalArgumentException("detail fallback read outside bounds");
+            int startX = alignedBlockStart(bounds.minX(), x, stride);
+            int startY = alignedBlockStart(bounds.minY(), y, stride);
+            int endX = Math.min(bounds.maxX(), startX + stride - 1);
+            int endY = Math.min(bounds.maxY(), startY + stride - 1);
+            int sampleX = startX + (endX - startX) / 2;
+            int sampleY = startY + (endY - startY) / 2;
+            return source.elevationSubunitsAt(sampleX, sampleY);
+        }
+
+        private static int alignedBlockStart(int worldMinimum, int coordinate, int stride) {
+            long block = Math.floorDiv((long) coordinate - worldMinimum, stride);
+            return Math.toIntExact((long) worldMinimum + block * stride);
+        }
+    }
+
     private static final class SampleGrid {
         private final int[] xCoordinates;
         private final int[] yCoordinates;
@@ -367,10 +449,6 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             this.xCoordinates = xCoordinates;
             this.yCoordinates = yCoordinates;
             this.values = values;
-        }
-
-        static SampleGrid empty() {
-            return new SampleGrid(new int[0], new int[0], new long[0]);
         }
 
         static SampleGrid materialize(
@@ -385,8 +463,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
 
             if (xAxis.regularCount() > 0 && yAxis.regularCount() > 0) {
                 long[] regular = new long[Math.multiplyExact(
-                        xAxis.regularCount(),
-                        yAxis.regularCount())];
+                        xAxis.regularCount(), yAxis.regularCount())];
                 elevation.fillElevationSubunits(
                         xAxis.coordinates()[0],
                         yAxis.coordinates()[0],
