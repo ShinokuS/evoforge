@@ -9,12 +9,10 @@ import io.github.evoforge.simulation.world.terrain.field.V12UnrelaxedLandElevati
 /**
  * Prepared Continuum equivalent of the accepted historical V14 oceanic base-terrain composition.
  *
- * <p>Preparation keeps only deterministic global facts needed by the historical algorithm: V12
- * calibration, the V14 control graph and cutoffs, and the V12 rank threshold/tie boundary. Requested
- * pages execute the accepted V12 relief and the historical ordered slope relaxation inside the
- * validated bounded migration halo. V14 later re-authors all standing-water bathymetry, so this
- * source needs to preserve V12 land heights and land/water membership rather than retain the old
- * globally ranked temporary ocean depths.</p>
+ * <p>The exact finite-world constructor preserves historical global cutoff/rank decisions. The
+ * large-domain {@link #prepareContinuum} constructor keeps the same V14/V12 authored coordinate laws
+ * but obtains only their global scalar cutoff/rank facts through fixed-budget sampling. Both expose
+ * the accepted V12 relief and bounded historical slope execution on demand.</p>
  */
 public final class V14ContinuumBaseTerrainPlan {
     private final ContinuumWorldDomain domain;
@@ -51,12 +49,22 @@ public final class V14ContinuumBaseTerrainPlan {
         this.elevationPages = elevationPages;
     }
 
+    /** Historical exact finite-world preparation. */
     public static V14ContinuumBaseTerrainPlan prepare(
             ContinuumWorldDomain domain,
             long seed,
             V15TerrainDefinition definition,
             int maximumLandHeightCells) {
-        return prepare(domain, seed, definition, maximumLandHeightCells, null);
+        return prepareInternal(domain, seed, definition, maximumLandHeightCells, null, false);
+    }
+
+    /** Fixed-budget large-domain preparation in the declared world's real coordinate frame. */
+    public static V14ContinuumBaseTerrainPlan prepareContinuum(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            int maximumLandHeightCells) {
+        return prepareInternal(domain, seed, definition, maximumLandHeightCells, null, true);
     }
 
     static V14ContinuumBaseTerrainPlan prepare(
@@ -65,6 +73,37 @@ public final class V14ContinuumBaseTerrainPlan {
             V15TerrainDefinition definition,
             int maximumLandHeightCells,
             V14ContinuumBaseTerrainPlan reusablePotentialSource) {
+        return prepareInternal(
+                domain,
+                seed,
+                definition,
+                maximumLandHeightCells,
+                reusablePotentialSource,
+                reusablePotentialSource != null && reusablePotentialSource.landRank().usesSampledRank());
+    }
+
+    static V14ContinuumBaseTerrainPlan prepareContinuum(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            int maximumLandHeightCells,
+            V14ContinuumBaseTerrainPlan reusablePotentialSource) {
+        return prepareInternal(
+                domain,
+                seed,
+                definition,
+                maximumLandHeightCells,
+                reusablePotentialSource,
+                true);
+    }
+
+    private static V14ContinuumBaseTerrainPlan prepareInternal(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            int maximumLandHeightCells,
+            V14ContinuumBaseTerrainPlan reusablePotentialSource,
+            boolean sampledCalibration) {
         if (domain == null || definition == null) {
             throw new IllegalArgumentException("V14 Continuum base-terrain inputs must not be null");
         }
@@ -86,6 +125,10 @@ public final class V14ContinuumBaseTerrainPlan {
                 throw new IllegalArgumentException(
                         "reusable V14 base must preserve landmass-scale and fragmentation authorship");
             }
+            if (sampledCalibration != reusablePotentialSource.landRank().usesSampledRank()) {
+                throw new IllegalArgumentException(
+                        "reusable V14 base must use the same exact/Continuum rank mode");
+            }
         }
 
         long logicalCells = Math.multiplyExact(domain.width(), domain.height());
@@ -94,19 +137,28 @@ public final class V14ContinuumBaseTerrainPlan {
         V14LandmassPlan landmass = reusablePotentialSource != null
                 ? reusablePotentialSource.landmass()
                 : V15GenerationProfiler.measure(
-                        "v14-landmass-cutoff",
+                        sampledCalibration
+                                ? "v14-continuum-landmass-calibration"
+                                : "v14-landmass-cutoff",
                         logicalCells,
-                        () -> V14LandmassPlan.prepare(domain, seed, definition, terrain));
+                        () -> sampledCalibration
+                                ? V14LandmassPlan.prepareContinuum(domain, seed, definition, terrain)
+                                : V14LandmassPlan.prepare(domain, seed, definition, terrain));
         V12LandRankPlan landRank = reusablePotentialSource != null
                 ? V15GenerationProfiler.measure(
-                        "v12-land-rerank",
+                        sampledCalibration ? "v12-continuum-rerank" : "v12-land-rerank",
                         logicalCells,
                         () -> reusablePotentialSource.landRank().rerank(terrain))
                 : V15GenerationProfiler.measure(
-                        "v12-land-rank",
+                        sampledCalibration
+                                ? "v12-continuum-rank-calibration"
+                                : "v12-land-rank",
                         logicalCells,
-                        () -> V12LandRankPlan.prepareConstrained(
-                                domain, seed, terrain, recipe, landmass));
+                        () -> sampledCalibration
+                                ? V12LandRankPlan.prepareConstrainedContinuum(
+                                        domain, seed, terrain, recipe, landmass)
+                                : V12LandRankPlan.prepareConstrained(
+                                        domain, seed, terrain, recipe, landmass));
         V12UnrelaxedLandElevationField unrelaxed = new V12UnrelaxedLandElevationField(
                 domain,
                 seed,
