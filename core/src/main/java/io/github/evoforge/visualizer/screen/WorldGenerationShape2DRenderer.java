@@ -33,7 +33,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
     private static final int VISIBLE_RANGE_ROUNDING_CELLS = 4;
     private static final int DETAIL_CACHE_BLOCK_CELLS = 16;
-    private static final int DETAIL_NEIGHBOUR_HALO_CELLS = 1;
+    private static final int DETAIL_SHAPE_HALO_CELLS = 10;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -212,6 +212,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         1);
                 presentationShapes = WorldGenerationDetailTerrainShapeField.preload(
                         terrainShapes,
+                        presentationElevation,
                         detailVisible,
                         exactElevationReady);
             } else {
@@ -648,7 +649,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         return WorldGeneration2DLod.expandVisibleRange(
                 anchored,
                 bounds,
-                DETAIL_NEIGHBOUR_HALO_CELLS);
+                DETAIL_SHAPE_HALO_CELLS);
     }
 
     private VisualizerCamera.VisibleRange clipped(VisualizerCamera.VisibleRange visible) {
