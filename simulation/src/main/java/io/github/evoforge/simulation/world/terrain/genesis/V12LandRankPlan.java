@@ -385,6 +385,76 @@ public final class V12LandRankPlan {
         requireCoordinate(x, y);
         if (landCount == 0L) return false;
         int potential = potentialAt(x, y);
+        return selectedAt(x, y, potential);
+    }
+
+    /**
+     * Fills an exact unit-resolution membership window. Full-width streaming requests reuse the V14
+     * relaxed-row cursor so each coastline row is evaluated once instead of rebuilding the point
+     * relaxation stencil per cell. Arbitrary local windows retain the point-exact fallback.
+     */
+    public void fillLandWindow(long minX, long minY, int width, int height, boolean[] target) {
+        if (width <= 0 || height <= 0 || target == null
+                || target.length < Math.multiplyExact(width, height)) {
+            throw new IllegalArgumentException("V12 land window dimensions/output are invalid");
+        }
+        long maxX = Math.addExact(minX, width - 1L);
+        long maxY = Math.addExact(minY, height - 1L);
+        if (!frame.domain().contains(minX, minY) || !frame.domain().contains(maxX, maxY)) {
+            throw new IllegalArgumentException("V12 land window lies outside the rank domain");
+        }
+        if (landCount == 0L) {
+            java.util.Arrays.fill(target, 0, Math.multiplyExact(width, height), false);
+            return;
+        }
+
+        int[] boundedPotential = distribution == null ? null : distribution.boundedPotential();
+        if (boundedPotential != null) {
+            int cursor = 0;
+            for (int localY = 0; localY < height; localY++) {
+                long y = minY + localY;
+                for (int localX = 0; localX < width; localX++, cursor++) {
+                    long x = minX + localX;
+                    int potential = boundedPotential[Math.toIntExact(frame.cellIndex(x, y))];
+                    target[cursor] = selectedAt(x, y, potential);
+                }
+            }
+            return;
+        }
+
+        if (silhouette != null && minX == 0L && width == calibration.width()) {
+            int[] silhouettePotentialRow = new int[width];
+            V14LandmassPlan.PotentialRowCursor silhouetteRows = silhouette.potentialRowCursor();
+            int cursor = 0;
+            for (int localY = 0; localY < height; localY++) {
+                int y = Math.toIntExact(minY + localY);
+                long legacyY = frame.legacyY(y);
+                silhouetteRows.fill(y, silhouettePotentialRow);
+                for (int x = 0; x < width; x++, cursor++) {
+                    int potential = basePotentialAt(
+                            random,
+                            calibration,
+                            recipe,
+                            frame.legacyX(x),
+                            legacyY);
+                    potential = blendWithSilhouette(potential, silhouettePotentialRow[x]);
+                    target[cursor] = selectedAt(x, y, potential);
+                }
+            }
+            return;
+        }
+
+        int cursor = 0;
+        for (int localY = 0; localY < height; localY++) {
+            long y = minY + localY;
+            for (int localX = 0; localX < width; localX++, cursor++) {
+                long x = minX + localX;
+                target[cursor] = isLand(x, y);
+            }
+        }
+    }
+
+    private boolean selectedAt(long x, long y, int potential) {
         boolean selected;
         if (potential < 0) {
             selected = false;
