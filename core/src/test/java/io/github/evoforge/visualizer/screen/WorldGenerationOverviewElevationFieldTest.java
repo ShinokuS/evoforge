@@ -59,6 +59,22 @@ final class WorldGenerationOverviewElevationFieldTest {
     }
 
     @Test
+    void exactCellDetailNeedsOneBulkLatticeAndNoPointReads() {
+        AtomicInteger bulkCalls = new AtomicInteger();
+        AtomicInteger pointCalls = new AtomicInteger();
+        ElevationField source = countingField(bulkCalls, pointCalls);
+        VisualizerCamera.VisibleRange detail = new VisualizerCamera.VisibleRange(400, 449, 500, 533);
+
+        ElevationField cellDetail = WorldGenerationOverviewElevationField.preload(source, detail, 1);
+        assertEquals(1, bulkCalls.get());
+        assertEquals(0, pointCalls.get());
+        assertEquals(400_000_500L, cellDetail.elevationSubunitsAt(400, 500));
+        assertEquals(1, bulkCalls.get());
+        assertEquals(0, pointCalls.get());
+        WorldGenerationOverviewElevationField.invalidate(source);
+    }
+
+    @Test
     void preparedLargeWorldGridKeepsPanAndZoomOffAuthoritativeTerrainSynchronously() {
         AtomicInteger bulkCalls = new AtomicInteger();
         AtomicInteger pointCalls = new AtomicInteger();
