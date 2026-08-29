@@ -18,19 +18,20 @@ import java.util.Map;
  * plan therefore samples a fixed real-coordinate lattice to resolve only the global support threshold
  * and candidate component envelopes. Final membership is <em>not</em> a scaled sampled mask: every
  * {@link #isLake} call re-evaluates the actual V12/V14 land elevation at that world coordinate and
- * uses the sampled component only as a bounded basin envelope.
+ * uses the sampled component only as a bounded basin envelope.</p>
  *
- * <p>The sample lattice is deliberately expressed as a fixed count rather than a fixed world-cell
- * spacing. Historical V15 clearance/component spans already scale with the declared world, so this
- * preserves their relative operating scale at 500, 1000, 10000 and beyond. Component span tests use
- * the world envelope represented by the samples, not just the distance between their centers.</p>
+ * <p>The calibration lattice is a fixed 64 x 64 maximum. Cheap land/interior tests run before the
+ * substantially more expensive authored V12 elevation evaluation, so rejected samples never pay for
+ * relief/coast evaluation. Component span tests use the world envelope represented by the samples,
+ * not merely the distance between sample centres; this keeps the V15 scale-aware minimum-span policy
+ * meaningful when the same fixed lattice addresses 500, 1000, 10000 or larger worlds.</p>
  *
  * <p>The exact {@code V15InlandLakeDomainPlan} remains the finite-world oracle.</p>
  */
 public final class V15ContinuumLakeDomainPlan {
     private static final int PPM = 1_000_000;
-    private static final int SAMPLE_SIDE = 32;
-    private static final int MINIMUM_MEMBERSHIP_POTENTIAL_PPM = 180_000;
+    private static final int SAMPLE_SIDE = 64;
+    private static final int MINIMUM_INTERIOR_POTENTIAL_PPM = 180_000;
     private static final int MAX_MEMBERSHIP_CACHE = 65_536;
 
     private final ContinuumWorldDomain domain;
@@ -81,9 +82,6 @@ public final class V15ContinuumLakeDomainPlan {
         }
 
         long limitingSpan = Math.min(domain.width(), domain.height());
-        long minimumInteriorClearance = Math.max(
-                recipe.minimumInteriorClearanceCells(),
-                limitingSpan / recipe.interiorClearanceWorldDivisor());
         long minimumSpan = Math.max(
                 recipe.minimumComponentSpanCells(),
                 limitingSpan / recipe.componentSpanWorldDivisor());
@@ -99,7 +97,6 @@ public final class V15ContinuumLakeDomainPlan {
         int sampleCount = Math.multiplyExact(columns, rows);
         long nominalBucketX = Math.max(1L, divideCeil(domain.width(), columns));
         long nominalBucketY = Math.max(1L, divideCeil(domain.height(), rows));
-
         Sample[] samples = new Sample[sampleCount];
         int drySamples = 0;
         int eligibleSamples = 0;
@@ -111,15 +108,10 @@ public final class V15ContinuumLakeDomainPlan {
                 boolean dry = continental.landRank().isLand(x, y);
                 if (dry) drySamples++;
 
-                boolean interior = dry && hasInteriorClearance(
-                        domain,
-                        continental.landRank(),
-                        x,
-                        y,
-                        minimumInteriorClearance);
+                int interior = dry ? continental.landmass().potentialPpmAt(x, y) : 0;
                 long elevation = 0L;
                 boolean eligible = false;
-                if (interior) {
+                if (dry && interior >= MINIMUM_INTERIOR_POTENTIAL_PPM) {
                     elevation = continental.unrelaxedElevation().elevationSubunitsAt(x, y);
                     eligible = elevation > 0L && elevation <= maximumSourceElevation;
                 }
@@ -160,7 +152,6 @@ public final class V15ContinuumLakeDomainPlan {
             Sample sample = samples[index];
             support[index] = sample.eligible() && sample.elevationSubunits() <= supportThreshold;
         }
-        removeIsolatedSupport(support, columns, rows);
 
         double representedCellsPerSample = domain.width() * (double) domain.height() / sampleCount;
         List<Component> components = collectComponents(
@@ -294,52 +285,7 @@ public final class V15ContinuumLakeDomainPlan {
                 || elevation > candidate.maximumElevationSubunits()) {
             return false;
         }
-        return continental.landmass().potentialPpmAt(x, y) >= MINIMUM_MEMBERSHIP_POTENTIAL_PPM;
-    }
-
-    private static boolean hasInteriorClearance(
-            ContinuumWorldDomain domain,
-            V12LandRankPlan land,
-            long x,
-            long y,
-            long clearance) {
-        if (clearance <= 1L) return true;
-        long half = Math.max(1L, clearance / 2L);
-        return dryIfInside(domain, land, x - half, y)
-                && dryIfInside(domain, land, x + half, y)
-                && dryIfInside(domain, land, x, y - half)
-                && dryIfInside(domain, land, x, y + half)
-                && dryIfInside(domain, land, x - clearance, y)
-                && dryIfInside(domain, land, x + clearance, y)
-                && dryIfInside(domain, land, x, y - clearance)
-                && dryIfInside(domain, land, x, y + clearance)
-                && dryIfInside(domain, land, x - clearance, y - clearance)
-                && dryIfInside(domain, land, x + clearance, y - clearance)
-                && dryIfInside(domain, land, x - clearance, y + clearance)
-                && dryIfInside(domain, land, x + clearance, y + clearance);
-    }
-
-    private static boolean dryIfInside(
-            ContinuumWorldDomain domain,
-            V12LandRankPlan land,
-            long x,
-            long y) {
-        return !domain.contains(x, y) || land.isLand(x, y);
-    }
-
-    private static void removeIsolatedSupport(boolean[] support, int width, int height) {
-        boolean[] original = support.clone();
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int cell = y * width + x;
-                if (!original[cell]) continue;
-                boolean neighbor = (x > 0 && original[cell - 1])
-                        || (x + 1 < width && original[cell + 1])
-                        || (y > 0 && original[cell - width])
-                        || (y + 1 < height && original[cell + width]);
-                if (!neighbor) support[cell] = false;
-            }
-        }
+        return continental.landmass().potentialPpmAt(x, y) >= MINIMUM_INTERIOR_POTENTIAL_PPM;
     }
 
     private static List<Component> collectComponents(
@@ -387,12 +333,8 @@ public final class V15ContinuumLakeDomainPlan {
                 if (sy > 0) tail = enqueue(support, visited, queue, tail, cell - width);
                 if (sy + 1 < height) tail = enqueue(support, visited, queue, tail, cell + width);
             }
-            long representedSpanX = Math.min(
-                    Long.MAX_VALUE,
-                    maxX - minX + nominalBucketX);
-            long representedSpanY = Math.min(
-                    Long.MAX_VALUE,
-                    maxY - minY + nominalBucketY);
+            long representedSpanX = maxX - minX + nominalBucketX;
+            long representedSpanY = maxY - minY + nominalBucketY;
             double estimatedCells = count * representedCellsPerSample;
             if (representedSpanX < minimumSpan
                     || representedSpanY < minimumSpan
