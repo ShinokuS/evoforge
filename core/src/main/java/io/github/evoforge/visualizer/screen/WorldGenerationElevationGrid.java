@@ -2,6 +2,7 @@ package io.github.evoforge.visualizer.screen;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import java.util.Arrays;
 
 /**
  * Bounded presentation grid sampled from one generated elevation field.
@@ -9,17 +10,25 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
  * <p>The regular interior uses one common world-coordinate step and therefore one bulk elevation
  * request. A final boundary column/row is appended when necessary so the preview mesh still reaches
  * the exact declared world bounds. At most {@code O(axisSamples)} point reads are needed for those
- * boundary strips; the interior is never expanded into per-column point queries.</p>
+ * boundary strips; the interior is never expanded into per-column point queries.
+ *
+ * <p>The grid also implements {@link ElevationField} as a nearest-sample <em>presentation fallback</em>.
+ * This lets a large 2D overview pan and zoom immediately from the already prepared 3D grid instead of
+ * synchronously reopening the production terrain pipeline on the render thread. The fallback never
+ * becomes authoritative terrain and is not used at detailed {@code LOD x1}.</p>
  */
-final class WorldGenerationElevationGrid {
+final class WorldGenerationElevationGrid implements ElevationField {
+    private final WorldBounds bounds;
     private final int[] xCoordinates;
     private final int[] yCoordinates;
     private final long[] elevations;
 
     private WorldGenerationElevationGrid(
+            WorldBounds bounds,
             int[] xCoordinates,
             int[] yCoordinates,
             long[] elevations) {
+        this.bounds = bounds;
         this.xCoordinates = xCoordinates;
         this.yCoordinates = yCoordinates;
         this.elevations = elevations;
@@ -80,7 +89,12 @@ final class WorldGenerationElevationGrid {
         }
 
         return new WorldGenerationElevationGrid(
-                xAxis.coordinates(), yAxis.coordinates(), values);
+                bounds, xAxis.coordinates(), yAxis.coordinates(), values);
+    }
+
+    @Override
+    public WorldBounds bounds() {
+        return bounds;
     }
 
     int width() {
@@ -101,6 +115,62 @@ final class WorldGenerationElevationGrid {
 
     long elevationSubunitsAt(int sampleX, int sampleY) {
         return elevations[sampleY * width() + sampleX];
+    }
+
+    @Override
+    public int elevationAt(int x, int y) {
+        return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
+    }
+
+    @Override
+    public long elevationSubunitsAt(int x, int y) {
+        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
+            throw new IllegalArgumentException("coordinate lies outside preview elevation grid");
+        }
+        int sampleX = nearestCoordinateIndex(xCoordinates, x);
+        int sampleY = nearestCoordinateIndex(yCoordinates, y);
+        return elevations[sampleY * width() + sampleX];
+    }
+
+    @Override
+    public void fillElevationSubunits(
+            int minX,
+            int minY,
+            int sampleWidth,
+            int sampleHeight,
+            long step,
+            long[] target) {
+        if (sampleWidth <= 0 || sampleHeight <= 0 || step <= 0L || target == null
+                || target.length < Math.multiplyExact(sampleWidth, sampleHeight)) {
+            throw new IllegalArgumentException("preview elevation-grid sample request is invalid");
+        }
+        long maxX = minX + Math.multiplyExact(sampleWidth - 1L, step);
+        long maxY = minY + Math.multiplyExact(sampleHeight - 1L, step);
+        if (minX < bounds.minX() || maxX > bounds.maxX()
+                || minY < bounds.minY() || maxY > bounds.maxY()) {
+            throw new IllegalArgumentException("preview elevation-grid sample lies outside bounds");
+        }
+        int cursor = 0;
+        for (int sampleY = 0; sampleY < sampleHeight; sampleY++) {
+            int worldY = Math.toIntExact(minY + sampleY * step);
+            int yIndex = nearestCoordinateIndex(yCoordinates, worldY);
+            for (int sampleX = 0; sampleX < sampleWidth; sampleX++, cursor++) {
+                int worldX = Math.toIntExact(minX + sampleX * step);
+                int xIndex = nearestCoordinateIndex(xCoordinates, worldX);
+                target[cursor] = elevations[yIndex * width() + xIndex];
+            }
+        }
+    }
+
+    private static int nearestCoordinateIndex(int[] coordinates, int coordinate) {
+        int exact = Arrays.binarySearch(coordinates, coordinate);
+        if (exact >= 0) return exact;
+        int insertion = -exact - 1;
+        if (insertion <= 0) return 0;
+        if (insertion >= coordinates.length) return coordinates.length - 1;
+        int lower = coordinates[insertion - 1];
+        int upper = coordinates[insertion];
+        return coordinate - lower <= upper - coordinate ? insertion - 1 : insertion;
     }
 
     private static Axis axis(int minimum, int maximum, long step) {
