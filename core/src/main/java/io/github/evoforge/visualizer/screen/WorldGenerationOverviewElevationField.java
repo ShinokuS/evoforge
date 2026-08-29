@@ -4,6 +4,8 @@ import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.visualizer.VisualizerCamera;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Read-through field for 2D overview rendering.
@@ -14,12 +16,19 @@ import java.util.Arrays;
  * coordinates without triggering duplicate terrain page materializations for surface, water and
  * contour passes.
  *
+ * <p>Large previews may register an already prepared bounded presentation field for the exact
+ * elevation object. Overview materialization then reads that field instead of reopening the
+ * authoritative terrain pipeline on the render thread. The mapping is weak and presentation-only;
+ * detailed {@code LOD x1} renderer reads never pass through this class and remain authoritative.</p>
+ *
  * <p>The most recent stable viewport/LOD result is retained across frames. A stationary overview
  * therefore performs no terrain work after the first materialization; pan, zoom, LOD change or a new
  * elevation field invalidates the entry by identity/value key. Only one viewport is retained, so
  * preview memory stays bounded.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
+    private static final Map<ElevationField, ElevationField> FALLBACKS = new WeakHashMap<>();
+
     private static ElevationField cachedDelegate;
     private static VisualizerCamera.VisibleRange cachedVisible;
     private static int cachedStride;
@@ -38,6 +47,21 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         this.contours = contours;
     }
 
+    static synchronized void registerFallback(
+            ElevationField authoritative,
+            ElevationField fallback) {
+        if (authoritative == null || fallback == null) {
+            throw new IllegalArgumentException("overview fallback fields must not be null");
+        }
+        if (!sameBounds(authoritative.bounds(), fallback.bounds())) {
+            throw new IllegalArgumentException("overview fallback must share authoritative bounds");
+        }
+        FALLBACKS.put(authoritative, fallback);
+        if (cachedDelegate == authoritative) {
+            clearCache();
+        }
+    }
+
     static synchronized ElevationField preload(
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible,
@@ -51,11 +75,12 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                 && visible.equals(cachedVisible)) {
             return cachedField;
         }
-        SampleGrid overview = SampleGrid.materialize(elevation, visible, overviewStride);
+        ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
+        SampleGrid overview = SampleGrid.materialize(presentationSource, visible, overviewStride);
         int contourStride = Math.multiplyExact(overviewStride, 2);
-        SampleGrid contours = SampleGrid.materialize(elevation, visible, contourStride);
+        SampleGrid contours = SampleGrid.materialize(presentationSource, visible, contourStride);
         WorldGenerationOverviewElevationField prepared = new WorldGenerationOverviewElevationField(
-                elevation, overview, contours);
+                presentationSource, overview, contours);
         cachedDelegate = elevation;
         cachedVisible = visible;
         cachedStride = overviewStride;
@@ -64,11 +89,11 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
     }
 
     static synchronized void invalidate(ElevationField elevation) {
-        if (cachedDelegate != elevation) return;
-        cachedDelegate = null;
-        cachedVisible = null;
-        cachedStride = 0;
-        cachedField = null;
+        if (elevation == null) return;
+        FALLBACKS.remove(elevation);
+        if (cachedDelegate == elevation) {
+            clearCache();
+        }
     }
 
     @Override
@@ -98,6 +123,22 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
             long step,
             long[] target) {
         delegate.fillElevationSubunits(minX, minY, sampleWidth, sampleHeight, step, target);
+    }
+
+    private static void clearCache() {
+        cachedDelegate = null;
+        cachedVisible = null;
+        cachedStride = 0;
+        cachedField = null;
+    }
+
+    private static boolean sameBounds(WorldBounds left, WorldBounds right) {
+        return left.minX() == right.minX()
+                && left.maxX() == right.maxX()
+                && left.minY() == right.minY()
+                && left.maxY() == right.maxY()
+                && left.minZ() == right.minZ()
+                && left.maxZ() == right.maxZ();
     }
 
     private static final class SampleGrid {
