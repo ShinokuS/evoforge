@@ -12,7 +12,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/** Cell-scale diagnostic against the accepted V15 finite oracle. */
+/** Cell-scale quality gate against the accepted V15 finite oracle. */
 @Tag("scale-profile")
 final class V15ContinuumProductionDetailQualityProfileTest {
     private static final long SEED = -4_774_846_722_868_265_927L;
@@ -26,7 +26,7 @@ final class V15ContinuumProductionDetailQualityProfileTest {
     };
 
     @Test
-    void profileUnitResolutionTerracesAndLocalGradientsAgainstExactOracle() {
+    void unitResolutionTerracesAndLocalGradientsStayCloseToExactOracle() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(SIDE, SIDE);
         V15TerrainDefinition terrain = V15TerrainDefinition.balanced();
         V13MountainDefinition mountains = V13MountainDefinition.balanced();
@@ -51,6 +51,8 @@ final class V15ContinuumProductionDetailQualityProfileTest {
         double productionContourDensity = ratio(total.productionContourEdges, total.comparableEdges);
         double exactSingleStepDensity = ratio(total.exactSingleStepEdges, total.comparableEdges);
         double productionSingleStepDensity = ratio(total.productionSingleStepEdges, total.comparableEdges);
+        double contourDensityRatio = productionContourDensity / exactContourDensity;
+        double singleStepDensityRatio = productionSingleStepDensity / exactSingleStepDensity;
         double dryMaeCells = total.bothDry == 0L
                 ? 0d
                 : total.dryAbsErrorSubunits / total.bothDry / TerrainElevationField.SUBUNITS_PER_CELL;
@@ -64,7 +66,8 @@ final class V15ContinuumProductionDetailQualityProfileTest {
                 "v15-continuum-detail-quality side=%d patches=%d patchSide=%d cells=%d bothDry=%d "
                         + "discreteZAgreement=%.6f dryMaeCells=%.6f "
                         + "contourIoU=%.6f exactContourDensity=%.6f productionContourDensity=%.6f "
-                        + "exactSingleStepDensity=%.6f productionSingleStepDensity=%.6f "
+                        + "contourDensityRatio=%.6f exactSingleStepDensity=%.6f "
+                        + "productionSingleStepDensity=%.6f singleStepDensityRatio=%.6f "
                         + "gradientMaeCells=%.6f exactMaxAdjacentStepCells=%.6f productionMaxAdjacentStepCells=%.6f%n",
                 SIDE,
                 PATCHES.length,
@@ -76,18 +79,28 @@ final class V15ContinuumProductionDetailQualityProfileTest {
                 contourIou,
                 exactContourDensity,
                 productionContourDensity,
+                contourDensityRatio,
                 exactSingleStepDensity,
                 productionSingleStepDensity,
+                singleStepDensityRatio,
                 gradientMaeCells,
                 total.exactMaxAdjacentStepSubunits / (double) TerrainElevationField.SUBUNITS_PER_CELL,
                 total.productionMaxAdjacentStepSubunits / (double) TerrainElevationField.SUBUNITS_PER_CELL);
 
-        assertTrue(Double.isFinite(discreteAgreement));
-        assertTrue(Double.isFinite(contourIou));
-        assertTrue(Double.isFinite(dryMaeCells));
-        assertTrue(Double.isFinite(gradientMaeCells));
         assertTrue(total.bothDry > 0L);
         assertTrue(total.comparableEdges > 0L);
+        assertTrue(discreteAgreement >= 0.96,
+                "production V15 changed too many exact cell Z levels");
+        assertTrue(dryMaeCells <= 0.08,
+                "production V15 local dry relief moved too far from exact V15");
+        assertTrue(contourIou >= 0.82,
+                "production V15 local terrace/contour placement drifted too far");
+        assertTrue(contourDensityRatio >= 0.90 && contourDensityRatio <= 1.10,
+                "production V15 introduced or removed too many discrete terrace edges");
+        assertTrue(singleStepDensityRatio >= 0.90 && singleStepDensityRatio <= 1.10,
+                "production V15 introduced or removed too many one-cell elevation layers");
+        assertTrue(gradientMaeCells <= 0.02,
+                "production V15 local adjacent gradients drifted too far from exact V15");
     }
 
     private static DetailStats compare(
