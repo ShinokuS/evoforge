@@ -32,8 +32,8 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
     private static final int VISIBLE_RANGE_ROUNDING_CELLS = 4;
-    private static final int DETAIL_CACHE_BLOCK_CELLS = 16;
-    private static final int DETAIL_SHAPE_HALO_CELLS = 10;
+    /** Full ramps/walls/neighbour art is useful only when individual cells are visually large. */
+    private static final long MAX_FULL_CELL_ART_CELLS = 20_000L;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -188,12 +188,11 @@ final class WorldGenerationShape2DRenderer implements Disposable {
 
         boolean boundedLargeWorldDetail = stride == 1
                 && WorldGenerationOverviewElevationField.hasFallback(elevation);
-        VisualizerCamera.VisibleRange detailVisible = boundedLargeWorldDetail
-                ? detailPresentationRange(visible)
-                : visible;
+        VisualizerCamera.VisibleRange detailVisible = visible;
 
         ElevationField presentationElevation = elevation;
         TerrainShapeField presentationShapes = terrainShapes;
+        boolean exactCellDetailReady = !boundedLargeWorldDetail;
         if (stride > 1 && (showSurface || showOcean)) {
             presentationElevation = WorldGenerationOverviewElevationField.preload(
                     elevation,
@@ -205,38 +204,45 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     elevation,
                     detailVisible,
                     1);
+            exactCellDetailReady = WorldGenerationOverviewElevationField.isRefined(
+                    elevation,
+                    detailVisible,
+                    1);
             if (showSurface) {
-                boolean exactElevationReady = WorldGenerationOverviewElevationField.isRefined(
-                        elevation,
-                        detailVisible,
-                        1);
                 presentationShapes = WorldGenerationDetailTerrainShapeField.preload(
                         terrainShapes,
                         presentationElevation,
                         detailVisible,
-                        exactElevationReady);
+                        exactCellDetailReady);
             } else {
                 WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
             }
         }
+        boolean fullCellArt = stride == 1
+                && exactCellDetailReady
+                && lastVisibleColumns <= MAX_FULL_CELL_ART_CELLS;
 
         batch.setProjectionMatrix(camera.projection());
         batch.begin();
         if (showSurface) {
             elevationShader.apply(batch);
-            if (stride == 1) {
+            if (stride == 1 && fullCellArt) {
                 drawTerrainDetailed(
                         batch,
                         presentationElevation,
                         presentationShapes,
                         visible,
                         showOcean);
+            } else if (stride == 1) {
+                // Cell-exact data remains one sample per world cell, but distant x1 deliberately
+                // skips expensive shape-neighbour art. This is only a rendering-detail decision.
+                drawTerrainOverview(batch, presentationElevation, visible, 1, showOcean);
             } else {
                 drawTerrainOverview(batch, presentationElevation, lodVisible, stride, showOcean);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
-            if (stride == 1) {
+            if (fullCellArt) {
                 drawRelief(
                         batch,
                         presentationElevation,
@@ -263,7 +269,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                     Math.multiplyExact(stride, 2));
             drawOverviewContours(presentationElevation, contourVisible, stride * 2);
         }
-        if (showSurface && showShapeDirections && stride == 1) {
+        if (showSurface && showShapeDirections && fullCellArt) {
             drawShapeDirections(presentationShapes, visible);
         }
 
@@ -638,18 +644,6 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (!Float.isFinite(cameraSpan) || cameraSpan <= 0f || worldSpan <= 0) return 1;
         long rounded = (long) StrictMath.ceil(cameraSpan) + VISIBLE_RANGE_ROUNDING_CELLS;
         return Math.toIntExact(Math.min((long) worldSpan, Math.max(1L, rounded)));
-    }
-
-    private VisualizerCamera.VisibleRange detailPresentationRange(
-            VisualizerCamera.VisibleRange visible) {
-        VisualizerCamera.VisibleRange anchored = WorldGeneration2DLod.alignVisibleRange(
-                visible,
-                bounds,
-                DETAIL_CACHE_BLOCK_CELLS);
-        return WorldGeneration2DLod.expandVisibleRange(
-                anchored,
-                bounds,
-                DETAIL_SHAPE_HALO_CELLS);
     }
 
     private VisualizerCamera.VisibleRange clipped(VisualizerCamera.VisibleRange visible) {
