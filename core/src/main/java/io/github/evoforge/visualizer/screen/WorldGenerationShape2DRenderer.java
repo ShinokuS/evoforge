@@ -174,6 +174,10 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         lastRenderedSamples = WorldGeneration2DLod.sampledCells(width, length, stride);
         lastLodStride = stride;
 
+        ElevationField presentationElevation = stride > 1 && (showSurface || showOcean)
+                ? WorldGenerationOverviewElevationField.preload(elevation, visible, stride)
+                : elevation;
+
         batch.setProjectionMatrix(camera.projection());
         batch.begin();
         if (showSurface) {
@@ -181,7 +185,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (stride == 1) {
                 drawTerrainDetailed(batch, elevation, terrainShapes, visible, showOcean);
             } else {
-                drawTerrainOverview(batch, elevation, visible, stride, showOcean);
+                drawTerrainOverview(batch, presentationElevation, visible, stride, showOcean);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
@@ -193,7 +197,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (stride == 1) {
                 drawOceanDetailed(batch, elevation, visible);
             } else {
-                drawOceanOverview(batch, elevation, visible, stride);
+                drawOceanOverview(batch, presentationElevation, visible, stride);
             }
         }
         batch.end();
@@ -201,7 +205,7 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         if (showSurface && stride > 1) {
             // Contours are presentation guidance rather than terrain samples. Running them on a
             // coarser grid avoids a second full overview workload while retaining readable relief.
-            drawOverviewContours(elevation, visible, stride * 2);
+            drawOverviewContours(presentationElevation, visible, stride * 2);
         }
         if (showSurface && showShapeDirections && stride == 1) {
             drawShapeDirections(terrainShapes, visible);
