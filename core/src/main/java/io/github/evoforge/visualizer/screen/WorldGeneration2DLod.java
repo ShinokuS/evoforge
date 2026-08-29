@@ -4,14 +4,14 @@ import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import io.github.evoforge.visualizer.VisualizerCamera;
 
 /**
- * Pure sampling policy that caps 2D preview work while keeping the closest inspection exact.
+ * Pure sampling policy that caps 2D preview work while keeping close inspection at cell detail.
  *
  * <p>Overview strides are powers of two. Combined with world-anchored sampling this makes adjacent
  * LODs nested instead of rebuilding the whole visible lattice at every integer stride. The budgets
  * affect presentation only and never world generation or provenance.</p>
  */
 final class WorldGeneration2DLod {
-    static final long DEFAULT_MAX_DETAILED_CELLS = 128L;
+    static final long DEFAULT_MAX_DETAILED_CELLS = 1_024L;
     static final long DEFAULT_MAX_SAMPLES = 6_000L;
     static final long MIN_DETAILED_CELLS = 32L;
     static final long MAX_DETAILED_CELLS = 2_000L;
@@ -54,6 +54,20 @@ final class WorldGeneration2DLod {
         int maxX = alignedBlockEnd(bounds.minX(), bounds.maxX(), visible.maxX(), stride);
         int maxY = alignedBlockEnd(bounds.minY(), bounds.maxY(), visible.maxY(), stride);
         return new VisualizerCamera.VisibleRange(minX, maxX, minY, maxY);
+    }
+
+    static VisualizerCamera.VisibleRange expandVisibleRange(
+            VisualizerCamera.VisibleRange visible,
+            WorldBounds bounds,
+            int marginCells) {
+        if (visible == null || bounds == null || marginCells < 0) {
+            throw new IllegalArgumentException("LOD expansion requires range/bounds and non-negative margin");
+        }
+        return new VisualizerCamera.VisibleRange(
+                Math.max(bounds.minX(), visible.minX() - marginCells),
+                Math.min(bounds.maxX(), visible.maxX() + marginCells),
+                Math.max(bounds.minY(), visible.minY() - marginCells),
+                Math.min(bounds.maxY(), visible.maxY() + marginCells));
     }
 
     static long sampledCells(int widthCells, int lengthCells, int stride) {
