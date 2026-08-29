@@ -78,7 +78,7 @@ public final class V15ContinuumLakeBasePlan {
                             seed,
                             exactDefinition,
                             HISTORICAL_V12_BASE_CEILING_CELLS,
-                            placement.landmass()));
+                            placement));
             authoritativePages = ReusableExactTerrainSnapshotPageSource.captureIfPractical(
                     "v12-authoritative-slope",
                     authoritative.elevationPages());
