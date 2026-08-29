@@ -10,34 +10,25 @@ import io.github.evoforge.simulation.world.terrain.genesis.V12TerrainRecipe;
 /**
  * Bounded materialization of the accepted historical V12 directional slope relaxation.
  *
- * <p>The arithmetic and traversal order inside the working raster are the historical V12 algorithm:
- * alternating forward/reverse in-place cardinal sweeps and the original asymmetric integer split of
- * every excess step. The only Continuum adaptation is representation: a request materializes a
- * finite unit-resolution working raster around the requested window, performs the old sweeps, crops
- * the requested samples, then discards the working raster.
+ * <p>Unit-resolution requests preserve the migration-validated historical implementation: a finite
+ * working raster plus a 48-cell halo is filled with the accepted V12 unrelaxed field, then the old
+ * alternating forward/reverse in-place cardinal sweeps are executed with the original asymmetric
+ * integer split. The requested unit window is cropped from that working raster.
  *
- * <p>When the accepted V12 unrelaxed source is available directly, the halo is filled through its
- * bounded batch path. That preserves every authored value while reusing local land-membership
- * decisions across neighboring cells instead of repeatedly evaluating the same coast/rank queries.
- * Synthetic migration fixtures continue to use the generic point-source path unchanged.
- *
- * <p>Sparse coarse requests are costed before materialization. Nearby samples still share one dense
- * historical working raster, while a request whose sample envelope would be much larger than the sum
- * of independent validated halos is evaluated sample-by-sample. This prevents overview/LOD sampling
- * from turning a handful of distant probes into an O(world-area) raster without changing unit-window
- * behavior or the validated local V12 arithmetic.
+ * <p>Coarse Continuum requests are presentation/resolution queries rather than hidden unit-world
+ * materializations. They evaluate the accepted unrelaxed V12 field at each real sampled coordinate,
+ * then execute the same directional sweep law on that sampled lattice with the allowed cardinal
+ * step scaled by the world distance between samples. Work is therefore O(requested samples), not
+ * O(the world area covered between them). Unit-resolution terrain authorship is unchanged.</p>
  *
  * <p>The historical sweep is not mathematically finite-range for arbitrary adversarial rasters.
  * For the accepted V12 relief field, migration profiling across balanced and full-land oracle worlds
- * found that 48 cells reproduced the old whole-world result bit-for-bit in every tested window. The
- * value is therefore deliberately named a validated migration halo rather than an exact theoretical
- * radius.
+ * found that 48 cells reproduced the old whole-world result bit-for-bit in every tested unit window.
+ * The value is therefore deliberately named a validated migration halo rather than an exact
+ * theoretical radius.</p>
  */
 public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSource {
     public static final int VALIDATED_HALO_CELLS = 48;
-    private static final long MAX_DENSE_SPARSE_ENVELOPE_CELLS = 1_048_576L;
-    private static final long SINGLE_SAMPLE_HALO_CELLS =
-            (2L * VALIDATED_HALO_CELLS + 1L) * (2L * VALIDATED_HALO_CELLS + 1L);
 
     private final ContinuumWorldDomain domain;
     private final TerrainElevationField source;
@@ -81,28 +72,12 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
     @Override
     public ContinuumScalarPage materialize(ContinuumSampleWindow window) {
         validateWindow(window);
-        if (window.step() == 1L || shouldShareDenseEnvelope(window)) {
-            return materializeDenseEnvelope(window);
-        }
-        return materializeSparseSamples(window);
+        return window.step() == 1L
+                ? materializeUnitWindow(window)
+                : materializeCoarseWindow(window);
     }
 
-    private boolean shouldShareDenseEnvelope(ContinuumSampleWindow window) {
-        long requestedMaxX = window.xAt(window.width() - 1);
-        long requestedMaxY = window.yAt(window.height() - 1);
-        long haloMinX = Math.max(0L, window.minX() - VALIDATED_HALO_CELLS);
-        long haloMinY = Math.max(0L, window.minY() - VALIDATED_HALO_CELLS);
-        long haloMaxX = Math.min(domain.width() - 1L, requestedMaxX + VALIDATED_HALO_CELLS);
-        long haloMaxY = Math.min(domain.height() - 1L, requestedMaxY + VALIDATED_HALO_CELLS);
-        long haloWidth = haloMaxX - haloMinX + 1L;
-        long haloHeight = haloMaxY - haloMinY + 1L;
-        long denseCells = saturatedMultiply(haloWidth, haloHeight);
-        long samples = Math.multiplyExact((long) window.width(), window.height());
-        long independentCells = saturatedMultiply(samples, SINGLE_SAMPLE_HALO_CELLS);
-        return denseCells <= MAX_DENSE_SPARSE_ENVELOPE_CELLS && denseCells <= independentCells;
-    }
-
-    private ContinuumScalarPage materializeDenseEnvelope(ContinuumSampleWindow window) {
+    private ContinuumScalarPage materializeUnitWindow(ContinuumSampleWindow window) {
         long requestedMaxX = window.xAt(window.width() - 1);
         long requestedMaxY = window.yAt(window.height() - 1);
         long haloMinX = Math.max(0L, window.minX() - VALIDATED_HALO_CELLS);
@@ -115,7 +90,11 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
 
         long[] elevations = new long[haloArea];
         fillSourceWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
-        relaxWorkingRaster(elevations, haloWidth, haloHeight);
+        relaxWorkingRaster(
+                elevations,
+                haloWidth,
+                haloHeight,
+                calibration.maximumStepSubunits());
 
         double[] output = new double[Math.multiplyExact(window.width(), window.height())];
         int sample = 0;
@@ -129,31 +108,33 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
         return new ContinuumScalarPage(window, output);
     }
 
-    private ContinuumScalarPage materializeSparseSamples(ContinuumSampleWindow window) {
-        double[] output = new double[Math.multiplyExact(window.width(), window.height())];
+    private ContinuumScalarPage materializeCoarseWindow(ContinuumSampleWindow window) {
+        int area = Math.multiplyExact(window.width(), window.height());
+        long[] elevations = new long[area];
         int cursor = 0;
         for (int sampleY = 0; sampleY < window.height(); sampleY++) {
             long y = window.yAt(sampleY);
             for (int sampleX = 0; sampleX < window.width(); sampleX++, cursor++) {
-                output[cursor] = materializeSingleSample(window.xAt(sampleX), y);
+                elevations[cursor] = source.elevationSubunitsAt(window.xAt(sampleX), y);
             }
         }
+
+        long scaledMaximumStep = scaledMaximumStep(window.step());
+        relaxWorkingRaster(elevations, window.width(), window.height(), scaledMaximumStep);
+        double[] output = new double[area];
+        for (int cell = 0; cell < area; cell++) output[cell] = elevations[cell];
         return new ContinuumScalarPage(window, output);
     }
 
-    private long materializeSingleSample(long x, long y) {
-        long haloMinX = Math.max(0L, x - VALIDATED_HALO_CELLS);
-        long haloMinY = Math.max(0L, y - VALIDATED_HALO_CELLS);
-        long haloMaxX = Math.min(domain.width() - 1L, x + VALIDATED_HALO_CELLS);
-        long haloMaxY = Math.min(domain.height() - 1L, y + VALIDATED_HALO_CELLS);
-        int haloWidth = Math.toIntExact(haloMaxX - haloMinX + 1L);
-        int haloHeight = Math.toIntExact(haloMaxY - haloMinY + 1L);
-        long[] elevations = new long[Math.multiplyExact(haloWidth, haloHeight)];
-        fillSourceWindow(haloMinX, haloMinY, haloWidth, haloHeight, elevations);
-        relaxWorkingRaster(elevations, haloWidth, haloHeight);
-        int localX = Math.toIntExact(x - haloMinX);
-        int localY = Math.toIntExact(y - haloMinY);
-        return elevations[localY * haloWidth + localX];
+    private long scaledMaximumStep(long step) {
+        long maximumStep = calibration.maximumStepSubunits();
+        if (maximumStep == 0L || step == 0L) return 0L;
+        if (maximumStep > Long.MAX_VALUE / step) {
+            return calibration.maximumLandHeightSubunits();
+        }
+        return Math.min(
+                calibration.maximumLandHeightSubunits(),
+                maximumStep * step);
     }
 
     private void fillSourceWindow(
@@ -169,7 +150,11 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
         }
     }
 
-    private void relaxWorkingRaster(long[] elevations, int width, int height) {
+    private void relaxWorkingRaster(
+            long[] elevations,
+            int width,
+            int height,
+            long maximumStep) {
         int area = Math.multiplyExact(width, height);
         boolean[] land = new boolean[area];
         for (int cell = 0; cell < area; cell++) {
@@ -186,7 +171,7 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
                 land,
                 width,
                 height,
-                calibration.maximumStepSubunits(),
+                maximumStep,
                 calibration.maximumLandHeightSubunits(),
                 relaxationPasses);
     }
@@ -272,12 +257,6 @@ public final class V12HistoricalSlopePageSource implements ContinuumScalarPageSo
 
     private static long clampLandHeight(long value, long maximumHeight) {
         return Math.max(1L, Math.min(maximumHeight, value));
-    }
-
-    private static long saturatedMultiply(long first, long second) {
-        if (first <= 0L || second <= 0L) return 0L;
-        if (first > Long.MAX_VALUE / second) return Long.MAX_VALUE;
-        return first * second;
     }
 
     private void validateWindow(ContinuumSampleWindow window) {
