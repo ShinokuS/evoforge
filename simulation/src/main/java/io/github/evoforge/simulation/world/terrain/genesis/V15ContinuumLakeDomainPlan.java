@@ -295,8 +295,7 @@ public final class V15ContinuumLakeDomainPlan {
                 count++;
                 elevationSum += sample.elevationSubunits();
                 maximumElevation = Math.max(maximumElevation, sample.elevationSubunits());
-                long rowMajor = Math.addExact(Math.multiplyExact(sample.y(), Long.MAX_VALUE / Math.max(1, height)), sample.x());
-                minimumCell = Math.min(minimumCell, rowMajor);
+                minimumCell = Math.min(minimumCell, cell);
                 minX = Math.min(minX, sample.x());
                 maxX = Math.max(maxX, sample.x());
                 minY = Math.min(minY, sample.y());
