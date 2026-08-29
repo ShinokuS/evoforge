@@ -307,106 +307,112 @@ public final class V14LandmassPlan {
             boolean[] phase,
             int guaranteedMargin,
             long maximumLandCells) {
-        long positiveCount = countPositive(domain, random, graph, phase, guaranteedMargin);
-        if (positiveCount == 0L) {
+        long[] histogram = new long[1 << 16];
+        InitialRadixScan initial = initialRadixScan(
+                domain, random, graph, phase, guaranteedMargin, histogram);
+        if (initial.positiveCount() == 0L) {
             throw new IllegalStateException("regularized V14 land phase produced no terrestrial support");
         }
 
-        double cutoff = 0d;
-        if (positiveCount > maximumLandCells) {
-            long targetRank = positiveCount - maximumLandCells;
-            cutoff = selectPositiveByRank(
-                    domain, random, graph, phase, guaranteedMargin, targetRank);
+        if (initial.positiveCount() <= maximumLandCells) {
+            return new Preparation(0d, initial.maximumPositive(), initial.positiveCount());
         }
 
-        Stats stats = supportStats(domain, random, graph, phase, guaranteedMargin, cutoff);
-        if (stats.supportCellCount() == 0L || stats.supportCellCount() > maximumLandCells) {
-            throw new IllegalStateException("regularized V14 land support violated land capacity");
-        }
-        if (!(stats.maximumInterior() > 0d)) {
-            throw new IllegalStateException("regularized V14 land support has no positive interior");
-        }
-        return new Preparation(cutoff, stats.maximumInterior(), stats.supportCellCount());
-    }
-
-    private static long countPositive(
-            ContinuumWorldDomain domain,
-            LegacyV15Random random,
-            ControlGraph graph,
-            boolean[] phase,
-            int guaranteedMargin) {
-        RelaxedRowCache rows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
-        long count = 0L;
-        for (int y = 0; y < domain.height(); y++) {
-            double[] row = rows.row(COAST_RELAXATION_PASSES, y);
-            for (double value : row) if (value > 0d) count++;
-        }
-        return count;
-    }
-
-    private static double selectPositiveByRank(
-            ContinuumWorldDomain domain,
-            LegacyV15Random random,
-            ControlGraph graph,
-            boolean[] phase,
-            int guaranteedMargin,
-            long targetRank) {
+        long targetRank = initial.positiveCount() - maximumLandCells;
+        long rank = targetRank;
         long prefix = 0L;
         long mask = 0L;
-        long rank = targetRank;
-        for (int shift = 48; shift >= 0; shift -= 16) {
-            long[] histogram = new long[1 << 16];
-            RelaxedRowCache rows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
-            for (int y = 0; y < domain.height(); y++) {
-                double[] row = rows.row(COAST_RELAXATION_PASSES, y);
-                for (double value : row) {
-                    if (!(value > 0d)) continue;
-                    long bits = Double.doubleToRawLongBits(value);
-                    if ((bits & mask) != prefix) continue;
-                    histogram[(int) ((bits >>> shift) & 0xffffL)]++;
-                }
-            }
+        RadixBucket selected = selectRadixBucket(histogram, rank);
+        rank -= selected.before();
+        prefix |= (long) selected.bucket() << 48;
+        mask |= 0xffffL << 48;
 
-            int selected = -1;
-            long before = 0L;
-            for (int bucket = 0; bucket < histogram.length; bucket++) {
-                long count = histogram[bucket];
-                if (rank < before + count) {
-                    selected = bucket;
-                    rank -= before;
-                    break;
-                }
-                before += count;
-            }
-            if (selected < 0) {
-                throw new IllegalStateException("unable to resolve V14 coastline cutoff rank");
-            }
-            long bucketMask = 0xffffL << shift;
-            prefix |= ((long) selected) << shift;
-            mask |= bucketMask;
+        for (int shift = 32; shift >= 0; shift -= 16) {
+            Arrays.fill(histogram, 0L);
+            fillRadixHistogram(
+                    domain,
+                    random,
+                    graph,
+                    phase,
+                    guaranteedMargin,
+                    prefix,
+                    mask,
+                    shift,
+                    histogram);
+            selected = selectRadixBucket(histogram, rank);
+            rank -= selected.before();
+            prefix |= (long) selected.bucket() << shift;
+            mask |= 0xffffL << shift;
         }
-        return Double.longBitsToDouble(prefix);
+
+        double cutoff = Double.longBitsToDouble(prefix);
+        long lessThanCutoff = targetRank - rank;
+        long supportCount = initial.positiveCount() - lessThanCutoff - selected.count();
+        double maximumInterior = initial.maximumPositive() - cutoff;
+        if (supportCount == 0L || supportCount > maximumLandCells) {
+            throw new IllegalStateException("regularized V14 land support violated land capacity");
+        }
+        if (!(maximumInterior > 0d)) {
+            throw new IllegalStateException("regularized V14 land support has no positive interior");
+        }
+        return new Preparation(cutoff, maximumInterior, supportCount);
     }
 
-    private static Stats supportStats(
+    private static InitialRadixScan initialRadixScan(
             ContinuumWorldDomain domain,
             LegacyV15Random random,
             ControlGraph graph,
             boolean[] phase,
             int guaranteedMargin,
-            double cutoff) {
+            long[] highHistogram) {
         RelaxedRowCache rows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
-        long supportCount = 0L;
-        double maximumInterior = 0d;
+        long positiveCount = 0L;
+        double maximumPositive = 0d;
         for (int y = 0; y < domain.height(); y++) {
             double[] row = rows.row(COAST_RELAXATION_PASSES, y);
             for (double value : row) {
-                if (!(value > cutoff)) continue;
-                supportCount++;
-                maximumInterior = Math.max(maximumInterior, value - cutoff);
+                if (!(value > 0d)) continue;
+                positiveCount++;
+                maximumPositive = Math.max(maximumPositive, value);
+                long bits = Double.doubleToRawLongBits(value);
+                highHistogram[(int) ((bits >>> 48) & 0xffffL)]++;
             }
         }
-        return new Stats(supportCount, maximumInterior);
+        return new InitialRadixScan(positiveCount, maximumPositive);
+    }
+
+    private static void fillRadixHistogram(
+            ContinuumWorldDomain domain,
+            LegacyV15Random random,
+            ControlGraph graph,
+            boolean[] phase,
+            int guaranteedMargin,
+            long prefix,
+            long mask,
+            int shift,
+            long[] histogram) {
+        RelaxedRowCache rows = new RelaxedRowCache(random, graph, phase, guaranteedMargin, domain);
+        for (int y = 0; y < domain.height(); y++) {
+            double[] row = rows.row(COAST_RELAXATION_PASSES, y);
+            for (double value : row) {
+                if (!(value > 0d)) continue;
+                long bits = Double.doubleToRawLongBits(value);
+                if ((bits & mask) != prefix) continue;
+                histogram[(int) ((bits >>> shift) & 0xffffL)]++;
+            }
+        }
+    }
+
+    private static RadixBucket selectRadixBucket(long[] histogram, long rank) {
+        long before = 0L;
+        for (int bucket = 0; bucket < histogram.length; bucket++) {
+            long count = histogram[bucket];
+            if (rank < before + count) {
+                return new RadixBucket(bucket, before, count);
+            }
+            before += count;
+        }
+        throw new IllegalStateException("unable to resolve V14 coastline cutoff rank");
     }
 
     private static ControlGraph createControlGraph(
@@ -920,7 +926,8 @@ public final class V14LandmassPlan {
 
     private record RowKey(int pass, int y) {}
     private record Preparation(double cutoff, double maximumInterior, long supportCellCount) {}
-    private record Stats(long supportCellCount, double maximumInterior) {}
+    private record InitialRadixScan(long positiveCount, double maximumPositive) {}
+    private record RadixBucket(int bucket, long before, long count) {}
     private record CandidateNeighbor(int site, double distanceSquared) {}
     private record NeighborSet(int[] sites, double[] weights) {}
     private record GeographicForcing(double[] score, double[] separationPenalty) {}
