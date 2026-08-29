@@ -64,31 +64,49 @@ public final class V14ContinuumBaseTerrainPlan {
             long seed,
             V15TerrainDefinition definition,
             int maximumLandHeightCells,
-            V14LandmassPlan reusableLandmass) {
+            V14ContinuumBaseTerrainPlan reusablePotentialSource) {
         if (domain == null || definition == null) {
             throw new IllegalArgumentException("V14 Continuum base-terrain inputs must not be null");
         }
         if (maximumLandHeightCells <= 0) {
             throw new IllegalArgumentException("maximumLandHeightCells must be > 0");
         }
-        if (reusableLandmass != null && !domain.equals(reusableLandmass.domain())) {
-            throw new IllegalArgumentException("reusable V14 landmass must match the base-terrain domain");
+        if (reusablePotentialSource != null) {
+            if (!domain.equals(reusablePotentialSource.domain())) {
+                throw new IllegalArgumentException(
+                        "reusable V14 base must match the requested base-terrain domain");
+            }
+            if (seed != reusablePotentialSource.seed()) {
+                throw new IllegalArgumentException("reusable V14 base must use the same seed");
+            }
+            if (definition.landmassScale().partsPerMillion()
+                            != reusablePotentialSource.definition().landmassScale().partsPerMillion()
+                    || definition.fragmentation().partsPerMillion()
+                            != reusablePotentialSource.definition().fragmentation().partsPerMillion()) {
+                throw new IllegalArgumentException(
+                        "reusable V14 base must preserve landmass-scale and fragmentation authorship");
+            }
         }
 
         long logicalCells = Math.multiplyExact(domain.width(), domain.height());
         V12TerrainRecipe recipe = V12TerrainRecipe.balanced();
         V12TerrainCalibration terrain = V12TerrainCalibration.compile(domain, definition, recipe);
-        V14LandmassPlan landmass = reusableLandmass != null
-                ? reusableLandmass
+        V14LandmassPlan landmass = reusablePotentialSource != null
+                ? reusablePotentialSource.landmass()
                 : V15GenerationProfiler.measure(
                         "v14-landmass-cutoff",
                         logicalCells,
                         () -> V14LandmassPlan.prepare(domain, seed, definition, terrain));
-        V12LandRankPlan landRank = V15GenerationProfiler.measure(
-                "v12-land-rank",
-                logicalCells,
-                () -> V12LandRankPlan.prepareConstrained(
-                        domain, seed, terrain, recipe, landmass));
+        V12LandRankPlan landRank = reusablePotentialSource != null
+                ? V15GenerationProfiler.measure(
+                        "v12-land-rerank",
+                        logicalCells,
+                        () -> reusablePotentialSource.landRank().rerank(terrain))
+                : V15GenerationProfiler.measure(
+                        "v12-land-rank",
+                        logicalCells,
+                        () -> V12LandRankPlan.prepareConstrained(
+                                domain, seed, terrain, recipe, landmass));
         V12UnrelaxedLandElevationField unrelaxed = new V12UnrelaxedLandElevationField(
                 domain,
                 seed,
