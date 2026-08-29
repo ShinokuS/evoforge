@@ -14,11 +14,11 @@ import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
  * the exact per-cell potential while avoiding a recursive coast-stencil rebuild for every ranked
  * cell. Only one {@code int[width]} silhouette row is retained.</p>
  *
- * <p>For genuinely small finite domains, the first mandatory histogram pass also retains the exact
- * derived potential in a hard-bounded cache. This avoids re-running the expensive V14 coastline
- * evaluation during the stable-rank pass and later V12 slope/materialization queries. The cache is
- * capped at 512 x 512 cells (1 MiB of {@code int}s), cannot scale with the Continuum address space,
- * and is immutable execution metadata rather than authoritative terrain output.</p>
+ * <p>The immutable 65,536-bin potential distribution is retained as compact generation metadata.
+ * V15 lake compensation changes only the requested land count, not the potential field itself, so an
+ * authoritative rank can reuse this distribution exactly. On small oracle domains the existing
+ * bounded potential cache also makes the stable tie lookup a cheap integer scan; on larger domains
+ * reranking needs at most one row-streaming tie pass rather than another histogram pass.</p>
  */
 public final class V12LandRankPlan {
     private static final int MAX_BOUNDED_POTENTIAL_CELLS = 512 * 512;
@@ -37,7 +37,7 @@ public final class V12LandRankPlan {
     private final long thresholdLastCellIndex;
     private final long landCount;
     private final CoordinateExclusion exclusion;
-    private final int[] boundedPotential;
+    private final PotentialDistribution distribution;
 
     private V12LandRankPlan(
             V15TerrainCoordinateFrame frame,
@@ -48,7 +48,7 @@ public final class V12LandRankPlan {
             int thresholdPotential,
             long thresholdLastCellIndex,
             long landCount,
-            int[] boundedPotential) {
+            PotentialDistribution distribution) {
         this(
                 frame,
                 random,
@@ -59,7 +59,7 @@ public final class V12LandRankPlan {
                 thresholdLastCellIndex,
                 landCount,
                 null,
-                boundedPotential);
+                distribution);
     }
 
     private V12LandRankPlan(
@@ -72,7 +72,7 @@ public final class V12LandRankPlan {
             long thresholdLastCellIndex,
             long landCount,
             CoordinateExclusion exclusion,
-            int[] boundedPotential) {
+            PotentialDistribution distribution) {
         this.frame = frame;
         this.random = random;
         this.calibration = calibration;
@@ -82,7 +82,7 @@ public final class V12LandRankPlan {
         this.thresholdLastCellIndex = thresholdLastCellIndex;
         this.landCount = landCount;
         this.exclusion = exclusion;
-        this.boundedPotential = boundedPotential;
+        this.distribution = distribution;
     }
 
     public static V12LandRankPlan prepareUnconstrained(
@@ -114,37 +114,69 @@ public final class V12LandRankPlan {
             V12TerrainCalibration calibration,
             V12TerrainRecipe recipe,
             V14LandmassPlan silhouette) {
-        if (domain == null || calibration == null || recipe == null) {
-            throw new IllegalArgumentException("V12 land-rank inputs must not be null");
-        }
-        if (domain.width() != calibration.width() || domain.height() != calibration.height()) {
-            throw new IllegalArgumentException("V12 calibration must match its Continuum domain");
-        }
+        requireInputs(domain, calibration, recipe);
         V15TerrainCoordinateFrame frame = V15TerrainCoordinateFrame.centered(domain);
-        long landCount = silhouette == null
-                ? calibration.landCount()
-                : Math.min(calibration.landCount(), silhouette.supportCellCount());
-        int[] boundedPotential = boundedPotentialCache(domain);
+        long landCount = resolvedLandCount(calibration, silhouette);
+        LegacyV15Random random = new LegacyV15Random(seed);
         if (landCount <= 0L) {
-            return new V12LandRankPlan(
-                    frame,
-                    new LegacyV15Random(seed),
-                    calibration,
-                    recipe,
-                    silhouette,
-                    LegacyV12Noise.SAMPLE_MAX + 1,
-                    -1L,
-                    0L,
-                    boundedPotential);
+            return emptyPlan(frame, random, calibration, recipe, silhouette, null);
         }
 
-        LegacyV15Random random = new LegacyV15Random(seed);
+        PotentialDistribution distribution = buildDistribution(
+                domain, frame, random, calibration, recipe, silhouette);
+        return resolveRank(
+                frame,
+                random,
+                calibration,
+                recipe,
+                silhouette,
+                distribution,
+                landCount);
+    }
+
+    /**
+     * Re-resolves only the global rank target over the exact same immutable V12/V14 potential field.
+     * This is valid when a caller changes land coverage while preserving every input that authors the
+     * potential value itself, as V15 lake compensation does.
+     */
+    V12LandRankPlan rerank(V12TerrainCalibration newCalibration) {
+        if (newCalibration == null) {
+            throw new IllegalArgumentException("rerank calibration must not be null");
+        }
+        if (exclusion != null) {
+            throw new IllegalStateException("cannot rerank an already-excluded land plan");
+        }
+        requireSamePotentialField(calibration, newCalibration);
+        long newLandCount = resolvedLandCount(newCalibration, silhouette);
+        if (newLandCount <= 0L) {
+            return emptyPlan(frame, random, newCalibration, recipe, silhouette, distribution);
+        }
+        if (distribution == null) {
+            throw new IllegalStateException("V12 potential distribution is unavailable for rerank");
+        }
+        return resolveRank(
+                frame,
+                random,
+                newCalibration,
+                recipe,
+                silhouette,
+                distribution,
+                newLandCount);
+    }
+
+    private static PotentialDistribution buildDistribution(
+            ContinuumWorldDomain domain,
+            V15TerrainCoordinateFrame frame,
+            LegacyV15Random random,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette) {
         int width = Math.toIntExact(domain.width());
         int height = Math.toIntExact(domain.height());
+        int[] boundedPotential = boundedPotentialCache(domain);
         int[] silhouettePotentialRow = silhouette == null ? null : new int[width];
         V14LandmassPlan.PotentialRowCursor silhouetteRows =
                 silhouette == null ? null : silhouette.potentialRowCursor();
-
         long[] histogram = new long[LegacyV12Noise.SAMPLE_MAX + 1];
         long cellIndex = 0L;
         for (int y = 0; y < height; y++) {
@@ -166,69 +198,151 @@ public final class V12LandRankPlan {
                 if (potential >= 0) histogram[potential]++;
             }
         }
+        return new PotentialDistribution(histogram, boundedPotential);
+    }
 
-        int threshold = -1;
-        long higher = 0L;
-        long selectedAtThreshold = 0L;
-        for (int potential = LegacyV12Noise.SAMPLE_MAX; potential >= 0; potential--) {
-            long count = histogram[potential];
-            if (higher + count >= landCount) {
-                threshold = potential;
-                selectedAtThreshold = landCount - higher;
-                break;
-            }
-            higher += count;
-        }
-        if (threshold < 0 || selectedAtThreshold <= 0L) {
-            throw new IllegalStateException("unable to resolve V12 land-rank threshold");
-        }
-
-        long thresholdLastIndex = -1L;
-        long seenAtThreshold = 0L;
-        cellIndex = 0L;
-        V14LandmassPlan.PotentialRowCursor tieSilhouetteRows =
-                boundedPotential == null && silhouette != null ? silhouette.potentialRowCursor() : null;
-        outer:
-        for (int y = 0; y < height; y++) {
-            long legacyY = frame.legacyY(y);
-            if (tieSilhouetteRows != null) tieSilhouetteRows.fill(y, silhouettePotentialRow);
-            for (int x = 0; x < width; x++, cellIndex++) {
-                int potential;
-                if (boundedPotential != null) {
-                    potential = boundedPotential[Math.toIntExact(cellIndex)];
-                } else {
-                    potential = basePotentialAt(
-                            random,
-                            calibration,
-                            recipe,
-                            frame.legacyX(x),
-                            legacyY);
-                    if (silhouettePotentialRow != null) {
-                        potential = blendWithSilhouette(potential, silhouettePotentialRow[x]);
-                    }
-                }
-                if (potential != threshold) continue;
-                seenAtThreshold++;
-                if (seenAtThreshold == selectedAtThreshold) {
-                    thresholdLastIndex = cellIndex;
-                    break outer;
-                }
-            }
-        }
-        if (thresholdLastIndex < 0L) {
-            throw new IllegalStateException("unable to resolve V12 stable rank tie boundary");
-        }
-
+    private static V12LandRankPlan resolveRank(
+            V15TerrainCoordinateFrame frame,
+            LegacyV15Random random,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette,
+            PotentialDistribution distribution,
+            long landCount) {
+        ThresholdSelection selection = selectThreshold(distribution.histogram(), landCount);
+        long thresholdLastIndex = resolveTieBoundary(
+                frame,
+                random,
+                calibration,
+                recipe,
+                silhouette,
+                distribution,
+                selection.threshold(),
+                selection.selectedAtThreshold());
         return new V12LandRankPlan(
                 frame,
                 random,
                 calibration,
                 recipe,
                 silhouette,
-                threshold,
+                selection.threshold(),
                 thresholdLastIndex,
                 landCount,
-                boundedPotential);
+                distribution);
+    }
+
+    private static ThresholdSelection selectThreshold(long[] histogram, long landCount) {
+        long higher = 0L;
+        for (int potential = LegacyV12Noise.SAMPLE_MAX; potential >= 0; potential--) {
+            long count = histogram[potential];
+            if (higher + count >= landCount) {
+                long selectedAtThreshold = landCount - higher;
+                if (selectedAtThreshold <= 0L) break;
+                return new ThresholdSelection(potential, selectedAtThreshold);
+            }
+            higher += count;
+        }
+        throw new IllegalStateException("unable to resolve V12 land-rank threshold");
+    }
+
+    private static long resolveTieBoundary(
+            V15TerrainCoordinateFrame frame,
+            LegacyV15Random random,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette,
+            PotentialDistribution distribution,
+            int threshold,
+            long selectedAtThreshold) {
+        int[] boundedPotential = distribution.boundedPotential();
+        if (boundedPotential != null) {
+            long seen = 0L;
+            for (int cell = 0; cell < boundedPotential.length; cell++) {
+                if (boundedPotential[cell] != threshold) continue;
+                seen++;
+                if (seen == selectedAtThreshold) return cell;
+            }
+            throw new IllegalStateException("unable to resolve bounded V12 stable rank tie boundary");
+        }
+
+        int width = calibration.width();
+        int height = calibration.height();
+        int[] silhouettePotentialRow = silhouette == null ? null : new int[width];
+        V14LandmassPlan.PotentialRowCursor silhouetteRows =
+                silhouette == null ? null : silhouette.potentialRowCursor();
+        long seen = 0L;
+        long cellIndex = 0L;
+        for (int y = 0; y < height; y++) {
+            long legacyY = frame.legacyY(y);
+            if (silhouetteRows != null) silhouetteRows.fill(y, silhouettePotentialRow);
+            for (int x = 0; x < width; x++, cellIndex++) {
+                int potential = basePotentialAt(
+                        random,
+                        calibration,
+                        recipe,
+                        frame.legacyX(x),
+                        legacyY);
+                if (silhouettePotentialRow != null) {
+                    potential = blendWithSilhouette(potential, silhouettePotentialRow[x]);
+                }
+                if (potential != threshold) continue;
+                seen++;
+                if (seen == selectedAtThreshold) return cellIndex;
+            }
+        }
+        throw new IllegalStateException("unable to resolve V12 stable rank tie boundary");
+    }
+
+    private static V12LandRankPlan emptyPlan(
+            V15TerrainCoordinateFrame frame,
+            LegacyV15Random random,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe,
+            V14LandmassPlan silhouette,
+            PotentialDistribution distribution) {
+        return new V12LandRankPlan(
+                frame,
+                random,
+                calibration,
+                recipe,
+                silhouette,
+                LegacyV12Noise.SAMPLE_MAX + 1,
+                -1L,
+                0L,
+                distribution);
+    }
+
+    private static long resolvedLandCount(
+            V12TerrainCalibration calibration,
+            V14LandmassPlan silhouette) {
+        return silhouette == null
+                ? calibration.landCount()
+                : Math.min(calibration.landCount(), silhouette.supportCellCount());
+    }
+
+    private static void requireInputs(
+            ContinuumWorldDomain domain,
+            V12TerrainCalibration calibration,
+            V12TerrainRecipe recipe) {
+        if (domain == null || calibration == null || recipe == null) {
+            throw new IllegalArgumentException("V12 land-rank inputs must not be null");
+        }
+        if (domain.width() != calibration.width() || domain.height() != calibration.height()) {
+            throw new IllegalArgumentException("V12 calibration must match its Continuum domain");
+        }
+    }
+
+    private static void requireSamePotentialField(
+            V12TerrainCalibration first,
+            V12TerrainCalibration second) {
+        if (first.width() != second.width()
+                || first.height() != second.height()
+                || first.coherentLandmassScale() != second.coherentLandmassScale()
+                || first.fragmentedLandmassScale() != second.fragmentedLandmassScale()
+                || first.fragmentationPpm() != second.fragmentationPpm()) {
+            throw new IllegalArgumentException(
+                    "rerank calibration changes V12 potential authorship, not only land count");
+        }
     }
 
     /**
@@ -256,7 +370,7 @@ public final class V12LandRankPlan {
                 thresholdLastCellIndex,
                 landCount - excludedLandCount,
                 excludedCoordinates,
-                boundedPotential);
+                distribution);
     }
 
     public long landCount() {
@@ -286,6 +400,7 @@ public final class V12LandRankPlan {
 
     public int potentialAt(long x, long y) {
         requireCoordinate(x, y);
+        int[] boundedPotential = distribution == null ? null : distribution.boundedPotential();
         if (boundedPotential != null) {
             return boundedPotential[Math.toIntExact(frame.cellIndex(x, y))];
         }
@@ -357,4 +472,7 @@ public final class V12LandRankPlan {
                         / LegacyV12Noise.PPM);
         return LegacyV12Noise.ppmToSample(blendedPpm);
     }
+
+    private record PotentialDistribution(long[] histogram, int[] boundedPotential) {}
+    private record ThresholdSelection(int threshold, long selectedAtThreshold) {}
 }
