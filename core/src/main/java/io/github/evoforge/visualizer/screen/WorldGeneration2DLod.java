@@ -4,14 +4,16 @@ package io.github.evoforge.visualizer.screen;
  * Pure sampling policy that caps 2D preview work while keeping close inspection exact.
  *
  * <p>The budgets are intentionally live-tunable from the development preview. They affect only
- * presentation work and never world generation or provenance. Conservative defaults preserve the
- * accepted fast path, while developers can spend more samples when inspecting distant terrain.</p>
+ * presentation work and never world generation or provenance. The exact per-cell renderer is
+ * deliberately reserved for a very small viewport: production V15 pages and lazy terrain-shape
+ * decisions are substantially more expensive than the old dense snapshot and must never be entered
+ * merely because one ordinary wheel step crosses an LOD threshold.</p>
  */
 final class WorldGeneration2DLod {
-    static final long DEFAULT_MAX_DETAILED_CELLS = 9_000L;
+    static final long DEFAULT_MAX_DETAILED_CELLS = 512L;
     static final long DEFAULT_MAX_SAMPLES = 6_000L;
-    static final long MIN_DETAILED_CELLS = 2_000L;
-    static final long MAX_DETAILED_CELLS = 20_000L;
+    static final long MIN_DETAILED_CELLS = 128L;
+    static final long MAX_DETAILED_CELLS = 5_000L;
     static final long MIN_OVERVIEW_SAMPLES = 1_500L;
     static final long MAX_OVERVIEW_SAMPLES = 24_000L;
 
