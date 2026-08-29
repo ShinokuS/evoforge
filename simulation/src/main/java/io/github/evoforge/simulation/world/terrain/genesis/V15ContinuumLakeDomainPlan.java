@@ -1,7 +1,10 @@
 package io.github.evoforge.simulation.world.terrain.genesis;
 
+import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
 import io.github.evoforge.simulation.world.terrain.field.TerrainElevationField;
+import io.github.evoforge.simulation.world.terrain.field.V12UnrelaxedElevationPageSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -17,12 +20,16 @@ import java.util.Map;
  * An unbounded Continuum domain cannot reproduce those global passes without O(area) startup. This
  * plan therefore samples a fixed real-coordinate lattice to resolve only the global support threshold
  * and candidate component envelopes. Final membership is <em>not</em> a scaled sampled mask: every
- * {@link #isLake} call re-evaluates the actual V12/V14 land elevation at that world coordinate and
- * uses the sampled component only as a bounded basin envelope.</p>
+ * {@link #isLake} call re-evaluates the actual V12/V14 land elevation at that world coordinate.</p>
  *
- * <p>The calibration lattice is a fixed 64 x 64 maximum. Cheap land/interior tests run before the
- * substantially more expensive authored V12 elevation evaluation, so rejected samples never pay for
- * relief/coast evaluation. Component selection first requires the same world-coordinate center span
+ * <p>The sampled component is now only a basin guide. Its connected sample points provide a broad
+ * irregular influence envelope, while the shoreline itself is selected from the native-coordinate
+ * lowland height and interiority. The old component-bounding ellipse remains only as a normalized
+ * coordinate for lake-depth presentation; it no longer cuts the shoreline into an artificial blob.</p>
+ *
+ * <p>The calibration lattice is a fixed 64 x 64 maximum. Its V12 elevations are materialized in
+ * sampled rows through the Continuum batch contract so calibration never expands into hidden
+ * unit-resolution terrain. Component selection first requires the same world-coordinate center span
  * used by the earlier high-fidelity migration profile. Only when that strict pass finds no basin do
  * we account for each sample's represented bucket footprint. If the historical three-times support
  * budget is still disconnected solely at this coarse calibration resolution, progressively broader
@@ -37,6 +44,9 @@ public final class V15ContinuumLakeDomainPlan {
     private static final int MINIMUM_INTERIOR_POTENTIAL_PPM = 180_000;
     private static final int MAX_MEMBERSHIP_CACHE = 65_536;
     private static final int[] SUPPORT_MULTIPLIERS = {3, 4, 6, 8};
+    private static final double GUIDE_RADIUS_BUCKETS = 1.55;
+    private static final int SHORELINE_RANGE_NUMERATOR = 3;
+    private static final int SHORELINE_RANGE_DENOMINATOR = 5;
 
     private final ContinuumWorldDomain domain;
     private final V14ContinuumBaseTerrainPlan continental;
@@ -101,26 +111,30 @@ public final class V15ContinuumLakeDomainPlan {
         int sampleCount = Math.multiplyExact(columns, rows);
         long nominalBucketX = Math.max(1L, divideCeil(domain.width(), columns));
         long nominalBucketY = Math.max(1L, divideCeil(domain.height(), rows));
+        SampleAxis xAxis = sampledAxis(domain.width(), columns);
+        SampleAxis yAxis = sampledAxis(domain.height(), rows);
+        long[] sampledElevations = sampledElevations(domain, continental, xAxis, yAxis, columns, rows);
+
         Sample[] samples = new Sample[sampleCount];
         int drySamples = 0;
         int eligibleSamples = 0;
         long[] eligibleElevations = new long[sampleCount];
         for (int sy = 0; sy < rows; sy++) {
-            long y = sampledCoordinate(domain.height(), sy, rows);
+            long y = yAxis.coordinate(sy);
             for (int sx = 0; sx < columns; sx++) {
-                long x = sampledCoordinate(domain.width(), sx, columns);
+                int sampleIndex = sy * columns + sx;
+                long x = xAxis.coordinate(sx);
                 boolean dry = continental.landRank().isLand(x, y);
                 if (dry) drySamples++;
 
                 int interior = dry ? continental.landmass().potentialPpmAt(x, y) : 0;
-                long elevation = 0L;
-                boolean eligible = false;
-                if (dry && interior >= MINIMUM_INTERIOR_POTENTIAL_PPM) {
-                    elevation = continental.unrelaxedElevation().elevationSubunitsAt(x, y);
-                    eligible = elevation > 0L && elevation <= maximumSourceElevation;
-                }
+                long elevation = sampledElevations[sampleIndex];
+                boolean eligible = dry
+                        && interior >= MINIMUM_INTERIOR_POTENTIAL_PPM
+                        && elevation > 0L
+                        && elevation <= maximumSourceElevation;
                 if (eligible) eligibleElevations[eligibleSamples++] = elevation;
-                samples[sy * columns + sx] = new Sample(x, y, elevation, eligible);
+                samples[sampleIndex] = new Sample(x, y, elevation, eligible);
             }
         }
         if (drySamples == 0 || eligibleSamples == 0) {
@@ -177,16 +191,29 @@ public final class V15ContinuumLakeDomainPlan {
 
         List<LakeBody> bodies = new ArrayList<>(selected.size());
         for (Component component : selected) {
-            long marginX = Math.max(1L, nominalBucketX / 2L);
-            long marginY = Math.max(1L, nominalBucketY / 2L);
+            long marginX = Math.max(1L, Math.round(nominalBucketX * GUIDE_RADIUS_BUCKETS));
+            long marginY = Math.max(1L, Math.round(nominalBucketY * GUIDE_RADIUS_BUCKETS));
             long minX = Math.max(0L, component.minX() - marginX);
             long maxX = Math.min(domain.width() - 1L, component.maxX() + marginX);
             long minY = Math.max(0L, component.minY() - marginY);
             long maxY = Math.min(domain.height() - 1L, component.maxY() + marginY);
-            double centerX = (minX + maxX) * 0.5;
-            double centerY = (minY + maxY) * 0.5;
+            double centerX = component.basinX();
+            double centerY = component.basinY();
             double radiusX = Math.max(minimumSpan / 2.0, (maxX - minX + 1L) * 0.56);
             double radiusY = Math.max(minimumSpan / 2.0, (maxY - minY + 1L) * 0.56);
+            long meanElevation = Math.round(component.meanElevation());
+            long regularizedThreshold = meanElevation + Math.max(
+                    0L,
+                    (component.maximumElevation() - meanElevation)
+                            * SHORELINE_RANGE_NUMERATOR / SHORELINE_RANGE_DENOMINATOR);
+            long shorelineThreshold = Math.min(selection.supportThreshold(), regularizedThreshold);
+            long[] guideX = new long[component.sampleCells().length];
+            long[] guideY = new long[component.sampleCells().length];
+            for (int index = 0; index < component.sampleCells().length; index++) {
+                Sample guide = samples[component.sampleCells()[index]];
+                guideX[index] = guide.x();
+                guideY[index] = guide.y();
+            }
             bodies.add(new LakeBody(
                     minX,
                     maxX,
@@ -196,7 +223,11 @@ public final class V15ContinuumLakeDomainPlan {
                     centerY,
                     radiusX,
                     radiusY,
-                    Math.min(selection.supportThreshold(), component.maximumElevation())));
+                    Math.max(component.minimumElevation(), shorelineThreshold),
+                    Math.max(1.0, nominalBucketX * GUIDE_RADIUS_BUCKETS),
+                    Math.max(1.0, nominalBucketY * GUIDE_RADIUS_BUCKETS),
+                    guideX,
+                    guideY));
         }
         return new V15ContinuumLakeDomainPlan(
                 domain,
@@ -265,11 +296,13 @@ public final class V15ContinuumLakeDomainPlan {
 
     private boolean computeMembership(long x, long y, long elevation) {
         LakeBody candidate = null;
+        double bestGuideDistance = Double.POSITIVE_INFINITY;
         for (LakeBody body : bodies) {
             if (!body.inEnvelope(x, y)) continue;
-            if (body.normalizedRadius(x, y) > 1.18) continue;
+            double guideDistance = body.normalizedGuideDistance(x, y);
+            if (guideDistance > 1.0 || guideDistance >= bestGuideDistance) continue;
             candidate = body;
-            break;
+            bestGuideDistance = guideDistance;
         }
         if (candidate == null) return false;
         if (elevation <= 0L
@@ -278,6 +311,31 @@ public final class V15ContinuumLakeDomainPlan {
             return false;
         }
         return continental.landmass().potentialPpmAt(x, y) >= MINIMUM_INTERIOR_POTENTIAL_PPM;
+    }
+
+    private static long[] sampledElevations(
+            ContinuumWorldDomain domain,
+            V14ContinuumBaseTerrainPlan continental,
+            SampleAxis xAxis,
+            SampleAxis yAxis,
+            int columns,
+            int rows) {
+        long[] elevations = new long[Math.multiplyExact(columns, rows)];
+        V12UnrelaxedElevationPageSource source = new V12UnrelaxedElevationPageSource(
+                domain, continental.unrelaxedElevation());
+        for (int sy = 0; sy < rows; sy++) {
+            long y = yAxis.coordinate(sy);
+            ContinuumScalarPage row = source.materialize(new ContinuumSampleWindow(
+                    xAxis.first(),
+                    y,
+                    columns,
+                    1,
+                    xAxis.step()));
+            for (int sx = 0; sx < columns; sx++) {
+                elevations[sy * columns + sx] = Math.round(row.sample(sx, 0));
+            }
+        }
+        return elevations;
     }
 
     private static ComponentSelection resolveComponents(
@@ -361,6 +419,9 @@ public final class V15ContinuumLakeDomainPlan {
             int count = 0;
             long elevationSum = 0L;
             long maximumElevation = 0L;
+            long minimumElevation = Long.MAX_VALUE;
+            long basinX = samples[start].x();
+            long basinY = samples[start].y();
             long minimumCell = Long.MAX_VALUE;
             long minX = Long.MAX_VALUE;
             long maxX = Long.MIN_VALUE;
@@ -374,6 +435,11 @@ public final class V15ContinuumLakeDomainPlan {
                 count++;
                 elevationSum += sample.elevationSubunits();
                 maximumElevation = Math.max(maximumElevation, sample.elevationSubunits());
+                if (sample.elevationSubunits() < minimumElevation) {
+                    minimumElevation = sample.elevationSubunits();
+                    basinX = sample.x();
+                    basinY = sample.y();
+                }
                 minimumCell = Math.min(minimumCell, cell);
                 minX = Math.min(minX, sample.x());
                 maxX = Math.max(maxX, sample.x());
@@ -396,12 +462,16 @@ public final class V15ContinuumLakeDomainPlan {
                     count,
                     elevationSum,
                     maximumElevation,
+                    minimumElevation,
+                    basinX,
+                    basinY,
                     minimumCell,
                     minX,
                     maxX,
                     minY,
                     maxY,
-                    estimatedCells));
+                    estimatedCells,
+                    Arrays.copyOf(queue, tail)));
         }
         return result;
     }
@@ -418,11 +488,16 @@ public final class V15ContinuumLakeDomainPlan {
         return tail + 1;
     }
 
-    private static long sampledCoordinate(long extent, int bucket, int buckets) {
-        if (buckets == extent) return bucket;
-        long start = (long) bucket * extent / buckets;
-        long endExclusive = (long) (bucket + 1) * extent / buckets;
-        return Math.min(extent - 1L, start + Math.max(0L, (endExclusive - start - 1L) / 2L));
+    private static SampleAxis sampledAxis(long extent, int buckets) {
+        if (buckets <= 0 || buckets > extent) {
+            throw new IllegalArgumentException("sample-axis buckets must fit the world extent");
+        }
+        if (buckets == 1) return new SampleAxis((extent - 1L) / 2L, 1L);
+        if (buckets == extent) return new SampleAxis(0L, 1L);
+        long step = Math.max(1L, (extent - 1L) / (buckets - 1L));
+        long covered = Math.multiplyExact(step, buckets - 1L);
+        long first = Math.max(0L, (extent - 1L - covered) / 2L);
+        return new SampleAxis(first, step);
     }
 
     private static long divideCeil(long value, long divisor) {
@@ -433,6 +508,12 @@ public final class V15ContinuumLakeDomainPlan {
         long quotient = value / PPM;
         long remainder = value % PPM;
         return quotient * ppm + remainder * ppm / PPM;
+    }
+
+    private record SampleAxis(long first, long step) {
+        long coordinate(int index) {
+            return Math.addExact(first, Math.multiplyExact((long) index, step));
+        }
     }
 
     private record Sample(
@@ -449,12 +530,16 @@ public final class V15ContinuumLakeDomainPlan {
             int samples,
             long elevationSum,
             long maximumElevation,
+            long minimumElevation,
+            long basinX,
+            long basinY,
             long minimumCell,
             long minX,
             long maxX,
             long minY,
             long maxY,
-            double estimatedCells) {
+            double estimatedCells,
+            int[] sampleCells) {
         double meanElevation() {
             return elevationSum / (double) samples;
         }
@@ -469,9 +554,25 @@ public final class V15ContinuumLakeDomainPlan {
             double centerY,
             double radiusX,
             double radiusY,
-            long maximumElevationSubunits) {
+            long maximumElevationSubunits,
+            double guideRadiusX,
+            double guideRadiusY,
+            long[] guideX,
+            long[] guideY) {
         boolean inEnvelope(long x, long y) {
             return x >= minX && x <= maxX && y >= minY && y <= maxY;
+        }
+
+        double normalizedGuideDistance(long x, long y) {
+            double best = Double.POSITIVE_INFINITY;
+            for (int index = 0; index < guideX.length; index++) {
+                best = Math.min(
+                        best,
+                        StrictMath.hypot(
+                                (x - guideX[index]) / guideRadiusX,
+                                (y - guideY[index]) / guideRadiusY));
+            }
+            return best;
         }
 
         double normalizedRadius(long x, long y) {
