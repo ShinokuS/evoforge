@@ -12,7 +12,12 @@ import java.util.Map;
  *
  * <p>The accepted V14 control graph and coastline mathematics are preserved. Whole-world raster
  * materialization is replaced by bounded row streaming plus exact radix selection of the global
- * coastline cutoff.</p>
+ * coastline cutoff for historical finite-world parity.</p>
+ *
+ * <p>Large Continuum domains can instead use {@link #prepareContinuum}. That path keeps the same
+ * graph, phase regularization, raw coastline law and two relaxation passes, but estimates only the
+ * global scalar cutoff/normalization facts from a fixed stratified sample budget in the declared
+ * world's real coordinates. It never generates or stretches a smaller terrain raster.</p>
  */
 public final class V14LandmassPlan {
     private static final int PPM = 1_000_000;
@@ -28,6 +33,7 @@ public final class V14LandmassPlan {
     private static final String WARP_X = "world:v14-phase-coast-warp-x";
     private static final String WARP_Y = "world:v14-phase-coast-warp-y";
     private static final String COAST_DETAIL = "world:v14-phase-coast-detail";
+    private static final String CONTINUUM_CALIBRATION = "world:v14-continuum-calibration";
 
     private static final int GRAPH_NEIGHBORS = 8;
     private static final int GRAPH_SEARCH_RADIUS = 2;
@@ -72,6 +78,7 @@ public final class V14LandmassPlan {
     private static final int COAST_RELAXATION_ORTHOGONAL_WEIGHT_PPM = 90_000;
     private static final int COAST_RELAXATION_DIAGONAL_WEIGHT_PPM = 35_000;
     private static final int COAST_RELAXATION_MAX_SHIFT_PPM = 450_000;
+    private static final int CONTINUUM_CALIBRATION_SIDE = 128;
 
     public static final int SILHOUETTE_INFLUENCE_PPM = 900_000;
 
@@ -111,6 +118,27 @@ public final class V14LandmassPlan {
             long seed,
             V15TerrainDefinition definition,
             V12TerrainCalibration terrain) {
+        return prepareInternal(domain, seed, definition, terrain, false);
+    }
+
+    /**
+     * Fixed-budget large-domain preparation. Only global scalar cutoff facts are sampled; every
+     * queried coast score remains the accepted V14 law evaluated at the real world coordinate.
+     */
+    public static V14LandmassPlan prepareContinuum(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            V12TerrainCalibration terrain) {
+        return prepareInternal(domain, seed, definition, terrain, true);
+    }
+
+    private static V14LandmassPlan prepareInternal(
+            ContinuumWorldDomain domain,
+            long seed,
+            V15TerrainDefinition definition,
+            V12TerrainCalibration terrain,
+            boolean sampledCalibration) {
         if (domain == null || definition == null || terrain == null) {
             throw new IllegalArgumentException("V14 landmass inputs must not be null");
         }
@@ -163,8 +191,11 @@ public final class V14LandmassPlan {
             phase = regularizePhase(graph, phase, forcing, seeds, desiredSites);
         }
 
-        Preparation preparation = prepareRasterFacts(
-                domain, random, graph, phase, guaranteedMargin, maximumLandCells);
+        Preparation preparation = sampledCalibration
+                ? prepareSampledRasterFacts(
+                        domain, random, graph, phase, guaranteedMargin, maximumLandCells)
+                : prepareRasterFacts(
+                        domain, random, graph, phase, guaranteedMargin, maximumLandCells);
         return new V14LandmassPlan(
                 domain,
                 random,
@@ -197,6 +228,82 @@ public final class V14LandmassPlan {
     public int potentialPpmAt(long x, long y) {
         requireCoordinate(x, y);
         return potentialPpmFromScore(relaxedCoastScoreAt(Math.toIntExact(x), Math.toIntExact(y)));
+    }
+
+    /**
+     * Exact request-local V14 potential evaluation. The two historical relaxation passes require only
+     * a two-cell raw-score halo, so arbitrary Continuum windows do not need full-width row materialization.
+     */
+    public void fillPotentialWindow(long minX, long minY, int width, int height, int[] target) {
+        if (width <= 0 || height <= 0 || target == null
+                || target.length < Math.multiplyExact(width, height)) {
+            throw new IllegalArgumentException("V14 potential window dimensions/output are invalid");
+        }
+        long maxX = Math.addExact(minX, width - 1L);
+        long maxY = Math.addExact(minY, height - 1L);
+        if (!domain.contains(minX, minY) || !domain.contains(maxX, maxY)) {
+            throw new IllegalArgumentException("V14 potential window lies outside the domain");
+        }
+
+        int worldWidth = Math.toIntExact(domain.width());
+        int worldHeight = Math.toIntExact(domain.height());
+        int requestedMinX = Math.toIntExact(minX);
+        int requestedMinY = Math.toIntExact(minY);
+        int requestedMaxX = Math.toIntExact(maxX);
+        int requestedMaxY = Math.toIntExact(maxY);
+        int rawMinX = Math.max(0, requestedMinX - COAST_RELAXATION_PASSES);
+        int rawMinY = Math.max(0, requestedMinY - COAST_RELAXATION_PASSES);
+        int rawMaxX = Math.min(worldWidth - 1, requestedMaxX + COAST_RELAXATION_PASSES);
+        int rawMaxY = Math.min(worldHeight - 1, requestedMaxY + COAST_RELAXATION_PASSES);
+        int rawWidth = rawMaxX - rawMinX + 1;
+        int rawHeight = rawMaxY - rawMinY + 1;
+        double[] raw = new double[Math.multiplyExact(rawWidth, rawHeight)];
+        int cursor = 0;
+        for (int y = rawMinY; y <= rawMaxY; y++) {
+            for (int x = rawMinX; x <= rawMaxX; x++) {
+                raw[cursor++] = rawCoastScoreAt(
+                        random, graph, phase, guaranteedMargin, worldWidth, worldHeight, x, y);
+            }
+        }
+
+        int passOneMinX = Math.max(0, requestedMinX - 1);
+        int passOneMinY = Math.max(0, requestedMinY - 1);
+        int passOneMaxX = Math.min(worldWidth - 1, requestedMaxX + 1);
+        int passOneMaxY = Math.min(worldHeight - 1, requestedMaxY + 1);
+        int passOneWidth = passOneMaxX - passOneMinX + 1;
+        int passOneHeight = passOneMaxY - passOneMinY + 1;
+        double[] passOne = new double[Math.multiplyExact(passOneWidth, passOneHeight)];
+        relaxWindowPass(
+                raw,
+                rawMinX,
+                rawMinY,
+                rawWidth,
+                rawHeight,
+                passOne,
+                passOneMinX,
+                passOneMinY,
+                passOneWidth,
+                passOneHeight,
+                worldWidth,
+                worldHeight);
+
+        double[] passTwo = new double[Math.multiplyExact(width, height)];
+        relaxWindowPass(
+                passOne,
+                passOneMinX,
+                passOneMinY,
+                passOneWidth,
+                passOneHeight,
+                passTwo,
+                requestedMinX,
+                requestedMinY,
+                width,
+                height,
+                worldWidth,
+                worldHeight);
+        for (int cell = 0; cell < passTwo.length; cell++) {
+            target[cell] = potentialPpmFromScore(passTwo[cell]);
+        }
     }
 
     PotentialRowCursor potentialRowCursor() {
@@ -294,6 +401,95 @@ public final class V14LandmassPlan {
         return center + shift;
     }
 
+    private static void relaxWindowPass(
+            double[] source,
+            int sourceMinX,
+            int sourceMinY,
+            int sourceWidth,
+            int sourceHeight,
+            double[] target,
+            int targetMinX,
+            int targetMinY,
+            int targetWidth,
+            int targetHeight,
+            int worldWidth,
+            int worldHeight) {
+        int cursor = 0;
+        double bandWidth = Double.NaN;
+        for (int localY = 0; localY < targetHeight; localY++) {
+            int y = targetMinY + localY;
+            for (int localX = 0; localX < targetWidth; localX++, cursor++) {
+                int x = targetMinX + localX;
+                int sourceX = x - sourceMinX;
+                int sourceY = y - sourceMinY;
+                double center = source[sourceY * sourceWidth + sourceX];
+                target[cursor] = center;
+            }
+        }
+        // The actual historical pass depends on graph spacing and is applied by the instance helper.
+        // This placeholder is overwritten by the instance overload below.
+    }
+
+    private void relaxWindowPass(
+            double[] source,
+            int sourceMinX,
+            int sourceMinY,
+            int sourceWidth,
+            int sourceHeight,
+            double[] target,
+            int targetMinX,
+            int targetMinY,
+            int targetWidth,
+            int targetHeight,
+            int worldWidth,
+            int worldHeight) {
+        double bandWidth = Math.max(
+                1.5d,
+                graph.spacingCells() * COAST_RELAXATION_BAND_WIDTH_SPACING_PPM / (double) PPM);
+        double maximumShift = COAST_RELAXATION_MAX_SHIFT_PPM / (double) PPM;
+        int cursor = 0;
+        for (int localY = 0; localY < targetHeight; localY++) {
+            int y = targetMinY + localY;
+            for (int localX = 0; localX < targetWidth; localX++, cursor++) {
+                int x = targetMinX + localX;
+                int sourceX = x - sourceMinX;
+                int sourceY = y - sourceMinY;
+                double center = source[sourceY * sourceWidth + sourceX];
+                if (edgeDistance(x, y, worldWidth, worldHeight) < guaranteedMargin
+                        || !Double.isFinite(center)
+                        || StrictMath.abs(center) > bandWidth) {
+                    target[cursor] = center;
+                    continue;
+                }
+                double weighted = center * COAST_RELAXATION_SELF_WEIGHT_PPM;
+                long totalWeight = COAST_RELAXATION_SELF_WEIGHT_PPM;
+                for (int oy = -1; oy <= 1; oy++) {
+                    int ny = y + oy;
+                    if (ny < 0 || ny >= worldHeight) continue;
+                    int localSourceY = ny - sourceMinY;
+                    if (localSourceY < 0 || localSourceY >= sourceHeight) continue;
+                    for (int ox = -1; ox <= 1; ox++) {
+                        if (ox == 0 && oy == 0) continue;
+                        int nx = x + ox;
+                        if (nx < 0 || nx >= worldWidth) continue;
+                        int localSourceX = nx - sourceMinX;
+                        if (localSourceX < 0 || localSourceX >= sourceWidth) continue;
+                        double neighbor = source[localSourceY * sourceWidth + localSourceX];
+                        if (!Double.isFinite(neighbor)) continue;
+                        int weight = ox == 0 || oy == 0
+                                ? COAST_RELAXATION_ORTHOGONAL_WEIGHT_PPM
+                                : COAST_RELAXATION_DIAGONAL_WEIGHT_PPM;
+                        weighted += neighbor * weight;
+                        totalWeight += weight;
+                    }
+                }
+                double desired = weighted / totalWeight;
+                double shift = Math.max(-maximumShift, Math.min(maximumShift, desired - center));
+                target[cursor] = center + shift;
+            }
+        }
+    }
+
     private void requireCoordinate(long x, long y) {
         if (!domain.contains(x, y)) {
             throw new IllegalArgumentException("coordinate lies outside the V14 landmass domain");
@@ -356,6 +552,88 @@ public final class V14LandmassPlan {
             throw new IllegalStateException("regularized V14 land support has no positive interior");
         }
         return new Preparation(cutoff, maximumInterior, supportCount);
+    }
+
+    private static Preparation prepareSampledRasterFacts(
+            ContinuumWorldDomain domain,
+            LegacyV15Random random,
+            ControlGraph graph,
+            boolean[] phase,
+            int guaranteedMargin,
+            long maximumLandCells) {
+        int sampleColumns = Math.min(CONTINUUM_CALIBRATION_SIDE, Math.toIntExact(domain.width()));
+        int sampleRows = Math.min(CONTINUUM_CALIBRATION_SIDE, Math.toIntExact(domain.height()));
+        int sampleCount = Math.multiplyExact(sampleColumns, sampleRows);
+        double[] positive = new double[sampleCount];
+        int positiveCount = 0;
+        double maximumPositive = 0d;
+        int width = Math.toIntExact(domain.width());
+        int height = Math.toIntExact(domain.height());
+        for (int sy = 0; sy < sampleRows; sy++) {
+            int y = sampledCoordinate(random, sy, sampleRows, height, 1L);
+            for (int sx = 0; sx < sampleColumns; sx++) {
+                int x = sampledCoordinate(random, sx, sampleColumns, width, 0L ^ ((long) sy << 32));
+                double value = relaxedCoastScoreAt(
+                        random,
+                        graph,
+                        phase,
+                        guaranteedMargin,
+                        width,
+                        height,
+                        COAST_RELAXATION_PASSES,
+                        x,
+                        y);
+                if (!(value > 0d)) continue;
+                positive[positiveCount++] = value;
+                maximumPositive = Math.max(maximumPositive, value);
+            }
+        }
+        if (positiveCount == 0) {
+            throw new IllegalStateException("sampled V14 land phase produced no terrestrial support");
+        }
+
+        long area = Math.multiplyExact(domain.width(), domain.height());
+        long estimatedPositive = Math.max(
+                1L,
+                Math.min(area, Math.round(positiveCount / (double) sampleCount * area)));
+        if (estimatedPositive <= maximumLandCells) {
+            return new Preparation(0d, maximumPositive, estimatedPositive);
+        }
+
+        Arrays.sort(positive, 0, positiveCount);
+        long targetKeep = Math.max(
+                1L,
+                Math.min(
+                        positiveCount - 1L,
+                        Math.round(maximumLandCells / (double) area * sampleCount)));
+        int targetRank = Math.max(0, positiveCount - Math.toIntExact(targetKeep));
+        double cutoff = positive[targetRank];
+        int supportSamples = 0;
+        for (int index = targetRank + 1; index < positiveCount; index++) {
+            if (positive[index] > cutoff) supportSamples++;
+        }
+        long supportCount = Math.max(
+                1L,
+                Math.min(
+                        maximumLandCells,
+                        Math.round(supportSamples / (double) sampleCount * area)));
+        double maximumInterior = maximumPositive - cutoff;
+        if (!(maximumInterior > 0d)) maximumInterior = Math.ulp(Math.max(1d, maximumPositive));
+        return new Preparation(cutoff, maximumInterior, supportCount);
+    }
+
+    private static int sampledCoordinate(
+            LegacyV15Random random,
+            int bucket,
+            int buckets,
+            int extent,
+            long ordinal) {
+        long start = (long) bucket * extent / buckets;
+        long endExclusive = (long) (bucket + 1) * extent / buckets;
+        long span = Math.max(1L, endExclusive - start);
+        int jitter = randomPpm(random, CONTINUUM_CALIBRATION, bucket, buckets, ordinal);
+        long offset = Math.min(span - 1L, (long) jitter * span / PPM);
+        return Math.toIntExact(Math.min(extent - 1L, start + offset));
     }
 
     private static InitialRadixScan initialRadixScan(
