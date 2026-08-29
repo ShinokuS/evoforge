@@ -3,6 +3,7 @@ package io.github.evoforge.visualizer.screen;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import io.github.evoforge.simulation.world.atlas.ElevationField;
 import io.github.evoforge.simulation.world.geometry.FullShape;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -19,12 +20,14 @@ final class WorldGenerationDetailTerrainShapeFieldTest {
         AtomicInteger surfaceCalls = new AtomicInteger();
         AtomicInteger shapeCalls = new AtomicInteger();
         TerrainShapeField source = countingField(surfaceCalls, shapeCalls);
+        ElevationField elevation = flatElevation(source.bounds());
         VisualizerCamera.VisibleRange visible = new VisualizerCamera.VisibleRange(400, 449, 500, 533);
 
         WorldGenerationDetailTerrainShapeField.refinementEnabledForTests(false);
         try {
             TerrainShapeField presentation = WorldGenerationDetailTerrainShapeField.preload(
                     source,
+                    elevation,
                     visible,
                     true);
 
@@ -69,6 +72,20 @@ final class WorldGenerationDetailTerrainShapeFieldTest {
             @Override
             public long overrideCount() {
                 return 1_000_000L;
+            }
+        };
+    }
+
+    private static ElevationField flatElevation(WorldBounds bounds) {
+        return new ElevationField() {
+            @Override
+            public WorldBounds bounds() {
+                return bounds;
+            }
+
+            @Override
+            public int elevationAt(int x, int y) {
+                return 0;
             }
         };
     }
