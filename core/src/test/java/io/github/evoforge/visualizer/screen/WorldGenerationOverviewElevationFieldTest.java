@@ -43,7 +43,7 @@ final class WorldGenerationOverviewElevationFieldTest {
                 source,
                 new VisualizerCamera.VisibleRange(91, 929, 70, 908),
                 4);
-        assertEquals(8, bulkCalls.get());
+        assertEquals(2, bulkCalls.get());
         assertEquals(92_000_073L, first.elevationSubunitsAt(92, 73));
         assertEquals(0, pointCalls.get());
 
@@ -51,7 +51,7 @@ final class WorldGenerationOverviewElevationFieldTest {
                 source,
                 new VisualizerCamera.VisibleRange(90, 930, 69, 909),
                 4);
-        assertEquals(8, bulkCalls.get());
+        assertEquals(2, bulkCalls.get());
         assertEquals(92_000_073L, moved.elevationSubunitsAt(92, 73));
         assertEquals(0, pointCalls.get());
         WorldGenerationOverviewElevationField.invalidate(source);
