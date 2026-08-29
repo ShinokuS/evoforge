@@ -55,9 +55,6 @@ public final class ReusableExactTerrainSnapshotPageSource implements ContinuumSc
             throw new IllegalArgumentException("reusable exact snapshot inputs must not be null/blank");
         }
 
-        ContinuumScalarPageSource bounded = BoundedExactTerrainSnapshotPageSource.captureIfBounded(source);
-        if (bounded != source) return bounded;
-
         ContinuumWorldDomain domain = source.domain();
         long cells;
         long bytes;
@@ -69,6 +66,17 @@ public final class ReusableExactTerrainSnapshotPageSource implements ContinuumSc
         } catch (ArithmeticException exception) {
             return source;
         }
+
+        long boundedStarted = System.nanoTime();
+        ContinuumScalarPageSource bounded = BoundedExactTerrainSnapshotPageSource.captureIfBounded(source);
+        if (bounded != source) {
+            V15GenerationProfiler.record(
+                    stageName + ":bounded-snapshot",
+                    cells,
+                    System.nanoTime() - boundedStarted);
+            return bounded;
+        }
+
         if (bytes > MAX_FILE_SNAPSHOT_BYTES) return source;
         return new ReusableExactTerrainSnapshotPageSource(stageName, source);
     }
