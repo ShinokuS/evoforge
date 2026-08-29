@@ -12,12 +12,12 @@ import java.util.Arrays;
  * the exact declared world bounds. At most {@code O(axisSamples)} point reads are needed for those
  * boundary strips; the interior is never expanded into per-column point queries.
  *
- * <p>The grid also implements {@link ElevationField} as a nearest-sample <em>presentation fallback</em>.
- * This lets a large 2D overview pan and zoom immediately from the already prepared 3D grid instead of
- * synchronously reopening the production terrain pipeline on the render thread. The fallback never
- * becomes authoritative terrain and is not used at detailed {@code LOD x1}.</p>
+ * <p>Large-world grids also register a nearest-sample read-only adapter as the 2D overview fallback
+ * for the exact elevation field they were sampled from. The adapter is presentation-only: detailed
+ * {@code LOD x1} continues to read the authoritative terrain, while distant pan/zoom can reuse this
+ * already prepared bounded grid without synchronously reopening the production terrain pipeline.</p>
  */
-final class WorldGenerationElevationGrid implements ElevationField {
+final class WorldGenerationElevationGrid {
     private final WorldBounds bounds;
     private final int[] xCoordinates;
     private final int[] yCoordinates;
@@ -88,13 +88,11 @@ final class WorldGenerationElevationGrid implements ElevationField {
                     xAxis.coordinates()[width - 1], yAxis.coordinates()[height - 1]);
         }
 
-        return new WorldGenerationElevationGrid(
+        WorldGenerationElevationGrid grid = new WorldGenerationElevationGrid(
                 bounds, xAxis.coordinates(), yAxis.coordinates(), values);
-    }
-
-    @Override
-    public WorldBounds bounds() {
-        return bounds;
+        WorldGenerationOverviewElevationField.registerFallback(
+                elevation, grid.presentationFallback());
+        return grid;
     }
 
     int width() {
@@ -117,49 +115,62 @@ final class WorldGenerationElevationGrid implements ElevationField {
         return elevations[sampleY * width() + sampleX];
     }
 
-    @Override
-    public int elevationAt(int x, int y) {
-        return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
-    }
-
-    @Override
-    public long elevationSubunitsAt(int x, int y) {
-        if (x < bounds.minX() || x > bounds.maxX() || y < bounds.minY() || y > bounds.maxY()) {
-            throw new IllegalArgumentException("coordinate lies outside preview elevation grid");
-        }
-        int sampleX = nearestCoordinateIndex(xCoordinates, x);
-        int sampleY = nearestCoordinateIndex(yCoordinates, y);
-        return elevations[sampleY * width() + sampleX];
-    }
-
-    @Override
-    public void fillElevationSubunits(
-            int minX,
-            int minY,
-            int sampleWidth,
-            int sampleHeight,
-            long step,
-            long[] target) {
-        if (sampleWidth <= 0 || sampleHeight <= 0 || step <= 0L || target == null
-                || target.length < Math.multiplyExact(sampleWidth, sampleHeight)) {
-            throw new IllegalArgumentException("preview elevation-grid sample request is invalid");
-        }
-        long maxX = minX + Math.multiplyExact(sampleWidth - 1L, step);
-        long maxY = minY + Math.multiplyExact(sampleHeight - 1L, step);
-        if (minX < bounds.minX() || maxX > bounds.maxX()
-                || minY < bounds.minY() || maxY > bounds.maxY()) {
-            throw new IllegalArgumentException("preview elevation-grid sample lies outside bounds");
-        }
-        int cursor = 0;
-        for (int sampleY = 0; sampleY < sampleHeight; sampleY++) {
-            int worldY = Math.toIntExact(minY + sampleY * step);
-            int yIndex = nearestCoordinateIndex(yCoordinates, worldY);
-            for (int sampleX = 0; sampleX < sampleWidth; sampleX++, cursor++) {
-                int worldX = Math.toIntExact(minX + sampleX * step);
-                int xIndex = nearestCoordinateIndex(xCoordinates, worldX);
-                target[cursor] = elevations[yIndex * width() + xIndex];
+    ElevationField presentationFallback() {
+        return new ElevationField() {
+            @Override
+            public WorldBounds bounds() {
+                return bounds;
             }
-        }
+
+            @Override
+            public int elevationAt(int x, int y) {
+                return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
+            }
+
+            @Override
+            public long elevationSubunitsAt(int x, int y) {
+                if (x < bounds.minX() || x > bounds.maxX()
+                        || y < bounds.minY() || y > bounds.maxY()) {
+                    throw new IllegalArgumentException(
+                            "coordinate lies outside preview elevation grid");
+                }
+                int sampleX = nearestCoordinateIndex(xCoordinates, x);
+                int sampleY = nearestCoordinateIndex(yCoordinates, y);
+                return elevations[sampleY * width() + sampleX];
+            }
+
+            @Override
+            public void fillElevationSubunits(
+                    int minX,
+                    int minY,
+                    int sampleWidth,
+                    int sampleHeight,
+                    long step,
+                    long[] target) {
+                if (sampleWidth <= 0 || sampleHeight <= 0 || step <= 0L || target == null
+                        || target.length < Math.multiplyExact(sampleWidth, sampleHeight)) {
+                    throw new IllegalArgumentException(
+                            "preview elevation-grid sample request is invalid");
+                }
+                long maxX = minX + Math.multiplyExact(sampleWidth - 1L, step);
+                long maxY = minY + Math.multiplyExact(sampleHeight - 1L, step);
+                if (minX < bounds.minX() || maxX > bounds.maxX()
+                        || minY < bounds.minY() || maxY > bounds.maxY()) {
+                    throw new IllegalArgumentException(
+                            "preview elevation-grid sample lies outside bounds");
+                }
+                int cursor = 0;
+                for (int sampleY = 0; sampleY < sampleHeight; sampleY++) {
+                    int worldY = Math.toIntExact(minY + sampleY * step);
+                    int yIndex = nearestCoordinateIndex(yCoordinates, worldY);
+                    for (int sampleX = 0; sampleX < sampleWidth; sampleX++, cursor++) {
+                        int worldX = Math.toIntExact(minX + sampleX * step);
+                        int xIndex = nearestCoordinateIndex(xCoordinates, worldX);
+                        target[cursor] = elevations[yIndex * width() + xIndex];
+                    }
+                }
+            }
+        };
     }
 
     private static int nearestCoordinateIndex(int[] coordinates, int coordinate) {
