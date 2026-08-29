@@ -6,15 +6,25 @@ import io.github.evoforge.visualizer.VisualizerCamera;
 import java.util.Arrays;
 
 /**
- * Frame-local read-through field for 2D overview rendering.
+ * Read-through field for 2D overview rendering.
  *
  * <p>The regular block-centre lattice is materialized through the elevation bulk contract once. A
  * possible truncated edge block is filled with O(axis) point reads. The contour lattice is preloaded
  * the same way. Existing renderer code can then keep asking for the historical block-centre
  * coordinates without triggering duplicate terrain page materializations for surface, water and
- * contour passes.</p>
+ * contour passes.
+ *
+ * <p>The most recent stable viewport/LOD result is retained across frames. A stationary overview
+ * therefore performs no terrain work after the first materialization; pan, zoom, LOD change or a new
+ * elevation field invalidates the entry by identity/value key. Only one viewport is retained, so
+ * preview memory stays bounded.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
+    private static ElevationField cachedDelegate;
+    private static VisualizerCamera.VisibleRange cachedVisible;
+    private static int cachedStride;
+    private static WorldGenerationOverviewElevationField cachedField;
+
     private final ElevationField delegate;
     private final SampleGrid overview;
     private final SampleGrid contours;
@@ -28,17 +38,37 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         this.contours = contours;
     }
 
-    static ElevationField preload(
+    static synchronized ElevationField preload(
             ElevationField elevation,
             VisualizerCamera.VisibleRange visible,
             int overviewStride) {
         if (elevation == null || visible == null || overviewStride <= 1) {
             throw new IllegalArgumentException("overview preload requires elevation/range and stride > 1");
         }
+        if (cachedField != null
+                && cachedDelegate == elevation
+                && cachedStride == overviewStride
+                && visible.equals(cachedVisible)) {
+            return cachedField;
+        }
         SampleGrid overview = SampleGrid.materialize(elevation, visible, overviewStride);
         int contourStride = Math.multiplyExact(overviewStride, 2);
         SampleGrid contours = SampleGrid.materialize(elevation, visible, contourStride);
-        return new WorldGenerationOverviewElevationField(elevation, overview, contours);
+        WorldGenerationOverviewElevationField prepared = new WorldGenerationOverviewElevationField(
+                elevation, overview, contours);
+        cachedDelegate = elevation;
+        cachedVisible = visible;
+        cachedStride = overviewStride;
+        cachedField = prepared;
+        return prepared;
+    }
+
+    static synchronized void invalidate(ElevationField elevation) {
+        if (cachedDelegate != elevation) return;
+        cachedDelegate = null;
+        cachedVisible = null;
+        cachedStride = 0;
+        cachedField = null;
     }
 
     @Override
