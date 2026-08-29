@@ -28,6 +28,8 @@ import io.github.evoforge.simulation.world.terrain.shape.TerrainShapeGenerationS
 import io.github.evoforge.visualizer.VisualizerPerformanceTelemetry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Interactive 2D/3D inspection workspace for generated world morphology and surface geometry. */
 public final class WorldGenerationPreviewScreen extends ScreenAdapter {
@@ -65,10 +67,16 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private final PreviewInput input = new PreviewInput();
     private final WorldGenerationShape2DRenderer shape2DRenderer = new WorldGenerationShape2DRenderer();
     private final VisualizerPerformanceTelemetry performance = new VisualizerPerformanceTelemetry();
+    private final ExecutorService generationExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "evoforge-world-generation-preview");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final WorldGenerationSettingsPanel settingsPanel;
     private final InputMultiplexer inputMultiplexer;
 
     private WorldGenerationPreviewConfig generatedConfig;
+    private WorldGenerationPreviewConfig pendingConfig;
     private WorldBounds bounds;
     private ElevationField generatedElevation;
     private WorldGenerationElevationRange elevationRange = new WorldGenerationElevationRange(0L, 0L);
@@ -87,6 +95,10 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
     private int previewLength;
     private double generationMillis;
     private double lastCpuMillis;
+    private long generationRequestId;
+    private boolean generationInProgress;
+    private String generationError;
+    private volatile boolean disposed;
     private int lastMouseX;
     private int lastMouseY;
     private boolean orbiting;
@@ -213,7 +225,11 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        disposed = true;
+        generationRequestId++;
+        generationExecutor.shutdownNow();
         hide();
+        WorldGenerationOverviewElevationField.invalidate(generatedElevation);
         disposeMeshes();
         shape2DRenderer.dispose();
         settingsPanel.dispose();
@@ -222,28 +238,97 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         font.dispose();
     }
 
+    /**
+     * Keeps the initial small reference preview synchronous, then prepares user-requested worlds on a
+     * dedicated worker. The currently displayed world remains interactive while the replacement is
+     * authored. Only immutable/CPU terrain state is built off-thread; LibGDX meshes are swapped and
+     * rebuilt on the render thread after completion.
+     */
     private void regenerate() {
-        WorldGenerationPreviewConfig previous = generatedConfig;
-        generatedConfig = settings.snapshot();
-        bounds = generatedConfig.bounds();
+        WorldGenerationPreviewConfig requested = settings.snapshot();
+        int meshAxisSamples = WorldGeneration3DDetail.maxAxisSamples();
+        if (generatedConfig == null) {
+            applyPreparedGeneration(prepareGeneration(requested, meshAxisSamples));
+            return;
+        }
+
+        long requestId = ++generationRequestId;
+        pendingConfig = requested;
+        generationInProgress = true;
+        generationError = null;
+        generationExecutor.execute(() -> {
+            try {
+                PreparedGeneration prepared = prepareGeneration(requested, meshAxisSamples);
+                if (disposed) return;
+                Gdx.app.postRunnable(() -> {
+                    if (disposed || requestId != generationRequestId) return;
+                    applyPreparedGeneration(prepared);
+                });
+            } catch (RuntimeException exception) {
+                if (disposed) return;
+                String message = exception.getMessage();
+                String failure = exception.getClass().getSimpleName()
+                        + (message == null || message.isBlank() ? "" : ": " + message);
+                Gdx.app.postRunnable(() -> {
+                    if (disposed || requestId != generationRequestId) return;
+                    generationInProgress = false;
+                    pendingConfig = null;
+                    generationError = failure;
+                });
+            }
+        });
+    }
+
+    private PreparedGeneration prepareGeneration(
+            WorldGenerationPreviewConfig config,
+            int meshAxisSamples) {
+        WorldBounds preparedBounds = config.bounds();
         WorldGenesis genesis = new WorldGenesis(
-                new WorldSpec(bounds),
-                generatedConfig.seed(),
+                new WorldSpec(preparedBounds),
+                config.seed(),
                 PREVIEW_REVISION,
                 RngRevision.V1,
-                generatedConfig.intent());
+                config.intent());
 
         long started = System.nanoTime();
-        generatedElevation = new ElevationGenerationStage().generate(genesis);
-        generatedShapes = TerrainShapeGenerationStage
+        ElevationField elevation = new ElevationGenerationStage().generate(genesis);
+        TerrainShapeField shapes = TerrainShapeGenerationStage
                 .forRevision(PREVIEW_REVISION)
-                .generate(generatedElevation);
-        prepareSurfaceElevationGrid();
-        elevationRange = surfaceElevationGrid == null
-                ? WorldGenerationElevationRange.from(generatedElevation)
-                : WorldGenerationElevationRange.from(surfaceElevationGrid);
-        generationMillis = (System.nanoTime() - started) / 1_000_000d;
+                .generate(elevation);
+        WorldGenerationElevationGrid grid = config.columnCount() <= MAX_POINT_SAMPLED_PREVIEW_CELLS
+                ? null
+                : WorldGenerationElevationGrid.sample(elevation, meshAxisSamples);
+        WorldGenerationElevationRange range = grid == null
+                ? WorldGenerationElevationRange.from(elevation)
+                : WorldGenerationElevationRange.from(grid);
+        double elapsedMillis = (System.nanoTime() - started) / 1_000_000d;
+        return new PreparedGeneration(
+                config,
+                preparedBounds,
+                elevation,
+                shapes,
+                grid,
+                range,
+                elapsedMillis);
+    }
 
+    private void applyPreparedGeneration(PreparedGeneration prepared) {
+        WorldGenerationPreviewConfig previous = generatedConfig;
+        ElevationField previousElevation = generatedElevation;
+        generatedConfig = prepared.config();
+        bounds = prepared.bounds();
+        generatedElevation = prepared.elevation();
+        generatedShapes = prepared.shapes();
+        surfaceElevationGrid = prepared.surfaceGrid();
+        elevationRange = prepared.range();
+        generationMillis = prepared.generationMillis();
+        generationInProgress = false;
+        pendingConfig = null;
+        generationError = null;
+
+        if (previousElevation != null) {
+            WorldGenerationOverviewElevationField.invalidate(previousElevation);
+        }
         disposeMeshes();
         rebuildSurfaceMeshes();
         oceanMesh = buildOcean(bounds);
@@ -606,6 +691,23 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
                     24f,
                     Gdx.graphics.getHeight() - 120f);
         }
+        if (generationInProgress && pendingConfig != null) {
+            font.setColor(Color.GOLD);
+            font.draw(batch, String.format(
+                    "GENERATING %dx%d / seed %d in background - current world stays interactive",
+                    pendingConfig.width(),
+                    pendingConfig.length(),
+                    pendingConfig.seed()),
+                    24f,
+                    Gdx.graphics.getHeight() - 144f);
+        } else if (generationError != null) {
+            font.setColor(Color.SCARLET);
+            font.draw(
+                    batch,
+                    "GENERATION FAILED: " + generationError,
+                    24f,
+                    Gdx.graphics.getHeight() - 144f);
+        }
 
         font.setColor(Color.LIGHT_GRAY);
         if (twoDimensional) {
@@ -645,6 +747,15 @@ public final class WorldGenerationPreviewScreen extends ScreenAdapter {
         long span = (long) max - min;
         return Math.toIntExact(min + span * sampleIndex / (sampleCount - 1L));
     }
+
+    private record PreparedGeneration(
+            WorldGenerationPreviewConfig config,
+            WorldBounds bounds,
+            ElevationField elevation,
+            TerrainShapeField shapes,
+            WorldGenerationElevationGrid surfaceGrid,
+            WorldGenerationElevationRange range,
+            double generationMillis) {}
 
     private final class PreviewInput extends InputAdapter {
         @Override
