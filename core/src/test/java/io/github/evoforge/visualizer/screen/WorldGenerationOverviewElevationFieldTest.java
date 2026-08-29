@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 final class WorldGenerationOverviewElevationFieldTest {
 
     @Test
-    void overviewSurfaceWaterAndContourReadsReuseTwoBulkLattices() {
+    void overviewSurfaceWaterAndContourReadsReuseBulkLatticesAndBoundaryStrips() {
         AtomicInteger bulkCalls = new AtomicInteger();
         AtomicInteger pointCalls = new AtomicInteger();
         ElevationField source = countingField(bulkCalls, pointCalls);
@@ -21,8 +21,8 @@ final class WorldGenerationOverviewElevationFieldTest {
                 new VisualizerCamera.VisibleRange(0, 999, 0, 999),
                 14);
 
-        assertEquals(2, bulkCalls.get());
-        assertEquals(214, pointCalls.get());
+        assertEquals(8, bulkCalls.get());
+        assertEquals(0, pointCalls.get());
         int beforeCachedReads = pointCalls.get();
         assertEquals(7_000_007L, cached.elevationSubunitsAt(7, 7));
         assertEquals(14_000_014L, cached.elevationSubunitsAt(14, 14));
