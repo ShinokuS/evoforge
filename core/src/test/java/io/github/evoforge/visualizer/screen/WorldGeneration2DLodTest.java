@@ -76,12 +76,16 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void x1PrewarmTracksDetailedDistanceInsteadOfFarBudget() {
+    void x1PrewarmNeverRequestsMoreThanTheExactCacheCanKeepResident() {
         WorldGeneration2DLod.detailedRangeCells(300);
         WorldGeneration2DLod.overviewSamplesPerAxis(32);
 
-        assertTrue(WorldGeneration2DLod.detailWarmupUseful(600, 580));
-        assertFalse(WorldGeneration2DLod.detailWarmupUseful(601, 580));
+        assertTrue(WorldGeneration2DLod.detailWarmupUseful(480, 470));
+        assertFalse(WorldGeneration2DLod.detailWarmupUseful(481, 470));
+
+        WorldGeneration2DLod.detailedRangeCells(WorldGeneration2DLod.MAX_DETAILED_RANGE_CELLS);
+        assertTrue(WorldGeneration2DLod.detailWarmupUseful(480, 480));
+        assertFalse(WorldGeneration2DLod.detailWarmupUseful(481, 480));
     }
 
     @Test
