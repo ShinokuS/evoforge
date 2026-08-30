@@ -6,57 +6,69 @@ import io.github.evoforge.visualizer.VisualizerCamera;
 /**
  * Pure presentation sampling policy for the V15 inspector.
  *
- * <p>Overview strides are nested powers of two. Cell-detail x1 is allowed across a genuinely useful
- * regional viewport because authoritative data is prepared by a bounded asynchronous tile cache,
- * not by synchronous per-cell Continuum reads. The two quality budgets are coupled deliberately:
- * raising cell detail may make the immediately adjacent parent levels somewhat denser, but it can
- * never make the renderer skip a nested level such as x4 -> x1. That adjacency is required for
- * visually seamless refinement.</p>
+ * <p>The user-facing controls are deliberately axis distances, not opaque area budgets. Detailed
+ * range is the visible world span at which exact x1 becomes eligible. Far detail is the target number
+ * of overview samples along the longest visible axis. Overview strides remain nested powers of two.
+ * Normal camera zooms move by at most one LOD level per rendered frame; changing a performance slider
+ * resets hysteresis so the new setting takes effect immediately on the current viewport.</p>
  */
 final class WorldGeneration2DLod {
-    /** Fast default: roughly a 95x95 square may enter x1 once tiles are ready. */
-    static final long DEFAULT_MAX_DETAILED_CELLS = 9_000L;
-    static final long DEFAULT_MAX_SAMPLES = 6_000L;
-    static final long MIN_DETAILED_CELLS = 2_000L;
-    /** High-quality inspection: up to roughly 500x500 visible cells at x1. */
-    static final long MAX_DETAILED_CELLS = 250_000L;
-    static final long MIN_OVERVIEW_SAMPLES = 1_500L;
-    static final long MAX_OVERVIEW_SAMPLES = 24_000L;
+    static final int DEFAULT_DETAILED_RANGE_CELLS = 96;
+    static final int MIN_DETAILED_RANGE_CELLS = 32;
+    static final int MAX_DETAILED_RANGE_CELLS = 512;
 
-    /** Leave a dead-band around every level boundary so wheel noise cannot flap LODs. */
-    private static final int LOD_EXIT_PERCENT = 115;
-    private static final int LOD_ENTER_PERCENT = 95;
+    static final int DEFAULT_OVERVIEW_SAMPLES_PER_AXIS = 96;
+    static final int MIN_OVERVIEW_SAMPLES_PER_AXIS = 32;
+    static final int MAX_OVERVIEW_SAMPLES_PER_AXIS = 256;
 
-    private static volatile long detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
-    private static volatile long overviewSampleBudget = DEFAULT_MAX_SAMPLES;
-    private static volatile int previousStride = 1;
+    /* Compatibility constants/methods for older tests and call sites while the UI uses axis values. */
+    static final long DEFAULT_MAX_DETAILED_CELLS =
+            (long) DEFAULT_DETAILED_RANGE_CELLS * DEFAULT_DETAILED_RANGE_CELLS;
+    static final long DEFAULT_MAX_SAMPLES =
+            (long) DEFAULT_OVERVIEW_SAMPLES_PER_AXIS * DEFAULT_OVERVIEW_SAMPLES_PER_AXIS;
+    static final long MIN_DETAILED_CELLS =
+            (long) MIN_DETAILED_RANGE_CELLS * MIN_DETAILED_RANGE_CELLS;
+    static final long MAX_DETAILED_CELLS =
+            (long) MAX_DETAILED_RANGE_CELLS * MAX_DETAILED_RANGE_CELLS;
+    static final long MIN_OVERVIEW_SAMPLES =
+            (long) MIN_OVERVIEW_SAMPLES_PER_AXIS * MIN_OVERVIEW_SAMPLES_PER_AXIS;
+    static final long MAX_OVERVIEW_SAMPLES =
+            (long) MAX_OVERVIEW_SAMPLES_PER_AXIS * MAX_OVERVIEW_SAMPLES_PER_AXIS;
+
+    /** Small dead-band for wheel noise; deliberately much smaller than the old 15% area band. */
+    private static final int LOD_EXIT_PERCENT = 108;
+    private static final int LOD_ENTER_PERCENT = 92;
+
+    private static volatile int detailedRangeCells = DEFAULT_DETAILED_RANGE_CELLS;
+    private static volatile int overviewSamplesPerAxis = DEFAULT_OVERVIEW_SAMPLES_PER_AXIS;
+    /** Zero means the next call must apply tuning without hysteresis. */
+    private static volatile int previousStride;
 
     private WorldGeneration2DLod() {
     }
 
-    /**
-     * Chooses a nested presentation LOD with hysteresis on every boundary.
-     *
-     * <p>The old policy independently compared x1 with {@code detailedCellBudget} and overview levels
-     * with {@code overviewSampleBudget}. At high Detailed range that could make one zoom step jump
-     * directly from x4 (or worse) to x1. The new capacity ladder blends the two budgets: the near
-     * budget decays gradually with stride while the far budget takes over naturally. Consecutive
-     * zoom thresholds therefore always differ by exactly one power-of-two level.</p>
-     */
     static synchronized int stride(int widthCells, int lengthCells) {
         if (widthCells <= 0 || lengthCells <= 0) {
-            previousStride = 1;
+            previousStride = 0;
             return 1;
         }
-        long cells = Math.multiplyExact((long) widthCells, (long) lengthCells);
-        int raw = rawStride(cells);
+        int span = Math.max(widthCells, lengthCells);
+        int raw = rawStride(span);
+
+        if (previousStride == 0) {
+            previousStride = raw;
+            return raw;
+        }
 
         if (raw > previousStride) {
-            long exitCapacity = percent(levelCapacity(previousStride), LOD_EXIT_PERCENT);
-            if (cells <= exitCapacity) raw = previousStride;
+            long exitSpan = percent(levelMaximumSpan(previousStride), LOD_EXIT_PERCENT);
+            if (span <= exitSpan) return previousStride;
+            raw = nextCoarser(previousStride, raw);
         } else if (raw < previousStride) {
-            long enterCapacity = percent(levelCapacity(raw), LOD_ENTER_PERCENT);
-            if (cells > enterCapacity) raw = previousStride;
+            int child = nextFiner(previousStride, raw);
+            long enterSpan = percent(levelMaximumSpan(child), LOD_ENTER_PERCENT);
+            if (span > enterSpan) return previousStride;
+            raw = child;
         }
 
         previousStride = raw;
@@ -64,42 +76,40 @@ final class WorldGeneration2DLod {
     }
 
     /**
-     * Exact x1 tiles start warming throughout the adjacent x2 band, not only immediately before x1.
-     * This gives the worker an entire visual LOD level to make the child frame resident before it can
-     * become visible, while still bounding speculative work by the configured near-detail quality.
+     * Starts exact-tile residency throughout a deterministic band around the x1 threshold. This is
+     * based solely on Detailed range, so changing Far detail cannot accidentally disable x1 prewarm.
      */
     static boolean detailWarmupUseful(int widthCells, int lengthCells) {
         if (widthCells <= 0 || lengthCells <= 0) return false;
-        long cells = Math.multiplyExact((long) widthCells, (long) lengthCells);
-        return cells <= levelCapacity(2);
+        int span = Math.max(widthCells, lengthCells);
+        return span <= Math.multiplyExact(detailedRangeCells, 2);
     }
 
-    private static int rawStride(long cells) {
-        if (cells <= detailedCellBudget) return 1;
-
+    private static int rawStride(int spanCells) {
+        if (spanCells <= detailedRangeCells) return 1;
+        long required = divideCeil(spanCells, overviewSamplesPerAxis);
         int stride = 2;
-        while (cells > levelCapacity(stride)) {
+        while (stride < required) {
             if (stride >= (1 << 29)) return 1 << 30;
             stride <<= 1;
         }
         return stride;
     }
 
-    /**
-     * Maximum world-cell area represented by one LOD before it must become coarser.
-     *
-     * <p>The near-detail contribution falls linearly with stride ({@code detail * stride}), while the
-     * ordinary overview budget scales with the number of cells represented by one sample
-     * ({@code far * stride^2}). The maximum of both gives a monotonic nested ladder. With the default
-     * 9k/6k tuning this reproduces the historical x1/x2/x4/x8 thresholds; with a raised Detailed range
-     * it prevents skipped levels instead of silently exploding Far detail.</p>
-     */
-    private static long levelCapacity(int stride) {
-        if (stride <= 1) return detailedCellBudget;
-        long nearCapacity = saturatingMultiply(detailedCellBudget, stride);
-        long strideSquared = saturatingMultiply(stride, stride);
-        long farCapacity = saturatingMultiply(overviewSampleBudget, strideSquared);
-        return Math.max(nearCapacity, farCapacity);
+    private static long levelMaximumSpan(int stride) {
+        if (stride <= 1) return detailedRangeCells;
+        return Math.multiplyExact((long) overviewSamplesPerAxis, stride);
+    }
+
+    private static int nextCoarser(int previous, int target) {
+        if (previous <= 0 || previous >= target) return target;
+        if (previous >= (1 << 29)) return target;
+        return Math.min(target, previous << 1);
+    }
+
+    private static int nextFiner(int previous, int target) {
+        if (previous <= target) return target;
+        return Math.max(target, previous >> 1);
     }
 
     /**
@@ -145,36 +155,54 @@ final class WorldGeneration2DLod {
         return Math.multiplyExact(x, y);
     }
 
+    static int detailedRangeCells() {
+        return detailedRangeCells;
+    }
+
+    static int overviewSamplesPerAxis() {
+        return overviewSamplesPerAxis;
+    }
+
+    static synchronized void detailedRangeCells(int value) {
+        detailedRangeCells = requireRange(
+                value,
+                MIN_DETAILED_RANGE_CELLS,
+                MAX_DETAILED_RANGE_CELLS,
+                "detailed range");
+        previousStride = 0;
+    }
+
+    static synchronized void overviewSamplesPerAxis(int value) {
+        overviewSamplesPerAxis = requireRange(
+                value,
+                MIN_OVERVIEW_SAMPLES_PER_AXIS,
+                MAX_OVERVIEW_SAMPLES_PER_AXIS,
+                "overview samples per axis");
+        previousStride = 0;
+    }
+
     static long detailedCellBudget() {
-        return detailedCellBudget;
+        return Math.multiplyExact((long) detailedRangeCells, detailedRangeCells);
     }
 
     static long overviewSampleBudget() {
-        return overviewSampleBudget;
+        return Math.multiplyExact((long) overviewSamplesPerAxis, overviewSamplesPerAxis);
     }
 
     static synchronized void detailedCellBudget(long value) {
-        detailedCellBudget = requireRange(
-                value,
-                MIN_DETAILED_CELLS,
-                MAX_DETAILED_CELLS,
-                "detailed cell budget");
-        previousStride = 1;
+        long checked = requireRange(value, MIN_DETAILED_CELLS, MAX_DETAILED_CELLS, "detailed cell budget");
+        detailedRangeCells(nearestAxis(checked));
     }
 
     static synchronized void overviewSampleBudget(long value) {
-        overviewSampleBudget = requireRange(
-                value,
-                MIN_OVERVIEW_SAMPLES,
-                MAX_OVERVIEW_SAMPLES,
-                "overview sample budget");
-        previousStride = 1;
+        long checked = requireRange(value, MIN_OVERVIEW_SAMPLES, MAX_OVERVIEW_SAMPLES, "overview sample budget");
+        overviewSamplesPerAxis(nearestAxis(checked));
     }
 
     static synchronized void resetTuning() {
-        detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
-        overviewSampleBudget = DEFAULT_MAX_SAMPLES;
-        previousStride = 1;
+        detailedRangeCells = DEFAULT_DETAILED_RANGE_CELLS;
+        overviewSamplesPerAxis = DEFAULT_OVERVIEW_SAMPLES_PER_AXIS;
+        previousStride = 0;
     }
 
     private static int alignedBlockStart(int worldMinimum, int coordinate, int stride) {
@@ -192,14 +220,24 @@ final class WorldGeneration2DLod {
     }
 
     private static long percent(long value, int percent) {
-        if (value == Long.MAX_VALUE || value > Long.MAX_VALUE / percent) return Long.MAX_VALUE;
+        if (value > Long.MAX_VALUE / percent) return Long.MAX_VALUE;
         return value * percent / 100L;
     }
 
-    private static long saturatingMultiply(long left, long right) {
-        if (left == 0L || right == 0L) return 0L;
-        if (left > Long.MAX_VALUE / right) return Long.MAX_VALUE;
-        return left * right;
+    private static long divideCeil(long value, long divisor) {
+        return Math.floorDiv(value - 1L, divisor) + 1L;
+    }
+
+    private static int nearestAxis(long area) {
+        return Math.toIntExact(Math.round(StrictMath.sqrt(area)));
+    }
+
+    private static int requireRange(int value, int minimum, int maximum, String name) {
+        if (value < minimum || value > maximum) {
+            throw new IllegalArgumentException(
+                    name + " must be between " + minimum + " and " + maximum + ": " + value);
+        }
+        return value;
     }
 
     private static long requireRange(long value, long minimum, long maximum, String name) {
