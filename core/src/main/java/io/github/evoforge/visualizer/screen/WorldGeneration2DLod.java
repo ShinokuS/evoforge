@@ -13,8 +13,8 @@ import io.github.evoforge.visualizer.VisualizerCamera;
  * resets hysteresis so the new setting takes effect immediately on the current viewport.</p>
  */
 final class WorldGeneration2DLod {
-    static final int DEFAULT_DETAILED_RANGE_CELLS = 96;
-    static final int MIN_DETAILED_RANGE_CELLS = 32;
+    static final int DEFAULT_DETAILED_RANGE_CELLS = 100;
+    static final int MIN_DETAILED_RANGE_CELLS = 30;
     /**
      * 480 keeps visible x1 + neighbour halo + one 64-cell prefetch ring within the 128-tile x1 LRU
      * even at the worst world/tile alignment. A larger slider value could otherwise create permanent
@@ -24,14 +24,15 @@ final class WorldGeneration2DLod {
     private static final int MAX_SAFE_PREWARM_SPAN_CELLS = 480;
 
     static final int DEFAULT_OVERVIEW_SAMPLES_PER_AXIS = 80;
-    static final int MIN_OVERVIEW_SAMPLES_PER_AXIS = 32;
-    static final int MAX_OVERVIEW_SAMPLES_PER_AXIS = 256;
+    static final int MIN_OVERVIEW_SAMPLES_PER_AXIS = 30;
+    static final int MAX_OVERVIEW_SAMPLES_PER_AXIS = 250;
 
     /**
      * Existing settings-panel plumbing still speaks long "budget" values. Keep that API temporarily,
      * but make it a linear fixed-point representation instead of the old area budget: 100 slider
      * units equal one visible cell/sample along an axis. The UI's existing 500-unit step therefore
-     * changes the actual distance by exactly five cells everywhere on the slider.
+     * changes the actual distance by exactly five cells everywhere on the slider. Min/max/default
+     * values are all aligned to that 500-unit UI lattice, so the widget and setter cannot disagree.
      */
     private static final long LEGACY_SLIDER_UNITS_PER_AXIS = 100L;
     static final long DEFAULT_MAX_DETAILED_CELLS =
