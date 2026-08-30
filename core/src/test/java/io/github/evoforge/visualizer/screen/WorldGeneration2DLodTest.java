@@ -85,10 +85,13 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void compatibilityBudgetSetterStillMapsToAnAxisDistance() {
-        WorldGeneration2DLod.detailedCellBudget(90_000L);
+    void legacySliderMappingIsLinearInAxisDistance() {
+        WorldGeneration2DLod.detailedCellBudget(30_000L);
         assertEquals(300, WorldGeneration2DLod.detailedRangeCells());
-        assertEquals(1, WorldGeneration2DLod.stride(300, 260));
+        assertEquals(30_000L, WorldGeneration2DLod.detailedCellBudget());
+
+        WorldGeneration2DLod.detailedCellBudget(30_500L);
+        assertEquals(305, WorldGeneration2DLod.detailedRangeCells());
     }
 
     @Test
