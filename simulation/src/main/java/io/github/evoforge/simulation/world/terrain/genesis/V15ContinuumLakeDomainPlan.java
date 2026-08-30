@@ -22,25 +22,21 @@ import java.util.Map;
  * and candidate component envelopes. Final membership is <em>not</em> a scaled sampled mask: every
  * {@link #isLake} call re-evaluates the actual V12/V14 land elevation at that world coordinate.</p>
  *
- * <p>The sampled component is now only a basin guide. Its connected sample points provide a broad
+ * <p>The sampled component is only a basin guide. Its connected sample points provide a broad
  * irregular influence envelope, while the shoreline itself is selected from the native-coordinate
- * lowland height and interiority. The old component-bounding ellipse remains only as a normalized
- * coordinate for lake-depth presentation; it no longer cuts the shoreline into an artificial blob.</p>
+ * lowland height and interiority. The component-bounding ellipse remains only as a normalized
+ * coordinate for lake-depth presentation; it does not cut the shoreline into an artificial blob.</p>
  *
- * <p>The calibration lattice is a fixed 64 x 64 maximum. Its V12 elevations are materialized in
- * sampled rows through the Continuum batch contract so calibration never expands into hidden
- * unit-resolution terrain. Component selection first requires the same world-coordinate center span
- * used by the earlier high-fidelity migration profile. Only when that strict pass finds no basin do
- * we account for each sample's represented bucket footprint. If the historical three-times support
- * budget is still disconnected solely at this coarse calibration resolution, progressively broader
- * lowland support thresholds are tried from the same real-coordinate samples. Reference-sized worlds
- * that resolve a basin at the historical threshold are therefore unchanged.</p>
- *
- * <p>The exact {@code V15InlandLakeDomainPlan} remains the finite-world oracle.</p>
+ * <p>The calibration lattice is a fixed 96 x 96 maximum. This remains a size-independent preparation
+ * cost, but gives the sparse basin search enough spatial resolution to follow the accepted V15
+ * lowlands without the over-broad envelopes produced by the older 64 x 64 guide. Its V12 elevations
+ * are materialized in sampled rows through the Continuum batch contract, so calibration never expands
+ * into hidden unit-resolution terrain. Reference-sized exact worlds still use the finite oracle.</p>
  */
 public final class V15ContinuumLakeDomainPlan {
     private static final int PPM = 1_000_000;
-    private static final int SAMPLE_SIDE = 64;
+    /** Fixed cost: better basin localization than the earlier 64x64 guide, independent of world area. */
+    private static final int SAMPLE_SIDE = 96;
     private static final int MINIMUM_INTERIOR_POTENTIAL_PPM = 180_000;
     private static final int MAX_MEMBERSHIP_CACHE = 65_536;
     private static final int[] SUPPORT_MULTIPLIERS = {3, 4, 6, 8};
