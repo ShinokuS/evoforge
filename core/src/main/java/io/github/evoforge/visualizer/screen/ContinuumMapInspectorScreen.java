@@ -20,22 +20,21 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Slider;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.ui.TextField;
 import com.badlogic.gdx.scenes.scene2d.ui.Window;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import io.github.evoforge.simulation.definition.NormalizedValue;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapTile;
 import io.github.evoforge.simulation.world.continuum.map.ContinuumMapViewport;
-import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsDefinition;
-import io.github.evoforge.simulation.world.geophysics.MacroGeophysicsPreset;
+import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
 import io.github.evoforge.visualizer.continuum.BoundedRenderCache;
 import io.github.evoforge.visualizer.continuum.ContinuumMapInspectorModel;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** World-oriented pan/zoom view of the Stage 5 macro-geophysical skeleton. */
+/** World-oriented pan/zoom view of the accepted exact V15 Continuum terrain. */
 public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final Color BACKGROUND = new Color(0.025f, 0.032f, 0.038f, 1f);
     private static final Color FINE_BORDER = new Color(0.30f, 0.86f, 0.65f, 0.9f);
@@ -45,9 +44,9 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private static final int MAX_GPU_TEXTURES = 192;
     private static final float SETTINGS_MARGIN = 14f;
     private static final float SETTINGS_SLIDER_WIDTH = 150f;
-    private static final byte[] PALETTE_R = geophysicalPalette(0);
-    private static final byte[] PALETTE_G = geophysicalPalette(1);
-    private static final byte[] PALETTE_B = geophysicalPalette(2);
+    private static final byte[] PALETTE_R = terrainPalette(0);
+    private static final byte[] PALETTE_G = terrainPalette(1);
+    private static final byte[] PALETTE_B = terrainPalette(2);
 
     private final Runnable returnToMenu;
     private final ShapeRenderer shapes = new ShapeRenderer();
@@ -64,16 +63,20 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     private final Label profileLabel = new Label("", skin);
     private final TextField seedField = new TextField("", skin);
     private final Label seedStatus = new Label("", skin);
-    private final Slider oceanSlider = normalizedSlider();
-    private final Slider scaleSlider = normalizedSlider();
-    private final Slider cohesionSlider = normalizedSlider();
+    private final Slider landCoverageSlider = normalizedSlider();
+    private final Slider landmassScaleSlider = normalizedSlider();
     private final Slider fragmentationSlider = normalizedSlider();
-    private final Slider variationSlider = normalizedSlider();
-    private final Label oceanValue = new Label("", skin);
-    private final Label scaleValue = new Label("", skin);
-    private final Label cohesionValue = new Label("", skin);
+    private final Slider reliefSlider = normalizedSlider();
+    private final Slider localReliefSlider = normalizedSlider();
+    private final Slider landformScaleSlider = normalizedSlider();
+    private final Slider ruggednessSlider = normalizedSlider();
+    private final Label landCoverageValue = new Label("", skin);
+    private final Label landmassScaleValue = new Label("", skin);
     private final Label fragmentationValue = new Label("", skin);
-    private final Label variationValue = new Label("", skin);
+    private final Label reliefValue = new Label("", skin);
+    private final Label localReliefValue = new Label("", skin);
+    private final Label landformScaleValue = new Label("", skin);
+    private final Label ruggednessValue = new Label("", skin);
     private final InputMultiplexer input;
 
     private ContinuumMapInspectorModel model;
@@ -144,7 +147,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     }
 
     private Window createSettingsWindow() {
-        Window window = new Window("WORLD GENERATION", skin);
+        Window window = new Window("V15 TERRAIN", skin);
         window.setMovable(false);
         window.setResizable(false);
         window.pad(30f, 14f, 14f, 14f);
@@ -178,22 +181,25 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         window.add(seedStatus).colspan(3).left().growX();
         window.row();
 
-        Table presets = new Table();
-        addPresetButton(presets, "Supercontinent", MacroGeophysicsPreset.SUPERCONTINENT);
-        addPresetButton(presets, "Balanced", MacroGeophysicsPreset.BALANCED);
-        presets.row();
-        addPresetButton(presets, "Archipelago", MacroGeophysicsPreset.ARCHIPELAGO);
-        addPresetButton(presets, "Oceanic", MacroGeophysicsPreset.OCEANIC);
-        window.add(presets).colspan(3).growX();
+        TextButton balanced = new TextButton("Reset balanced V15", skin);
+        balanced.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                applyBalancedDefinition();
+            }
+        });
+        window.add(balanced).colspan(3).growX().height(28f);
         window.row();
 
-        addSettingRow(window, "Ocean prevalence", oceanSlider, oceanValue);
-        addSettingRow(window, "Continental scale", scaleSlider, scaleValue);
-        addSettingRow(window, "Landmass cohesion", cohesionSlider, cohesionValue);
+        addSettingRow(window, "Land coverage", landCoverageSlider, landCoverageValue);
+        addSettingRow(window, "Landmass scale", landmassScaleSlider, landmassScaleValue);
         addSettingRow(window, "Fragmentation", fragmentationSlider, fragmentationValue);
-        addSettingRow(window, "Macro variation", variationSlider, variationValue);
+        addSettingRow(window, "Relief", reliefSlider, reliefValue);
+        addSettingRow(window, "Local relief", localReliefSlider, localReliefValue);
+        addSettingRow(window, "Landform scale", landformScaleSlider, landformScaleValue);
+        addSettingRow(window, "Ruggedness", ruggednessSlider, ruggednessValue);
 
-        TextButton apply = new TextButton("Apply custom", skin);
+        TextButton apply = new TextButton("Apply V15 terrain", skin);
         apply.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
@@ -203,7 +209,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         window.add(apply).colspan(3).growX().height(30f).padTop(8f);
         window.row();
 
-        Label hint = new Label("Presets apply immediately. Sliders apply on button.", skin);
+        Label hint = new Label("Exact V15; controls rebuild the bounded inspection world.", skin);
         hint.setColor(MUTED);
         window.add(hint).colspan(3).left().padTop(4f);
 
@@ -213,11 +219,13 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                 updateValueLabels();
             }
         };
-        oceanSlider.addListener(values);
-        scaleSlider.addListener(values);
-        cohesionSlider.addListener(values);
+        landCoverageSlider.addListener(values);
+        landmassScaleSlider.addListener(values);
         fragmentationSlider.addListener(values);
-        variationSlider.addListener(values);
+        reliefSlider.addListener(values);
+        localReliefSlider.addListener(values);
+        landformScaleSlider.addListener(values);
+        ruggednessSlider.addListener(values);
 
         seedField.addListener(new InputListener() {
             @Override
@@ -228,8 +236,6 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
             }
         });
 
-        // The settings block is intentionally an input boundary. Empty panel space, sliders and
-        // buttons must not also pan the underlying map.
         window.addListener(new InputListener() {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -241,25 +247,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return window;
     }
 
-    private void addPresetButton(
-            Table table,
-            String text,
-            MacroGeophysicsPreset preset) {
-        TextButton button = new TextButton(text, skin);
-        button.addListener(new ChangeListener() {
-            @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                selectPreset(preset);
-            }
-        });
-        table.add(button).width(130f).height(28f).pad(2f);
-    }
-
-    private void addSettingRow(
-            Window window,
-            String text,
-            Slider slider,
-            Label value) {
+    private void addSettingRow(Window window, String text, Slider slider, Label value) {
         window.add(new Label(text, skin)).left();
         window.add(slider).width(SETTINGS_SLIDER_WIDTH).growX();
         window.add(value).width(38f).right();
@@ -270,10 +258,11 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         return new Slider(0f, 1f, 0.01f, false, skin);
     }
 
-    private void selectPreset(MacroGeophysicsPreset preset) {
-        boolean changed = model.applyPreset(preset);
+    private void applyBalancedDefinition() {
+        V15TerrainDefinition balanced = V15TerrainDefinition.balanced();
+        boolean changed = model.applyDefinition(balanced);
         if (changed) textures.clear();
-        syncControls(model.definition());
+        syncControls(balanced);
     }
 
     private void applySeedFromField() {
@@ -316,37 +305,43 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
     }
 
     private void applyCustomDefinition() {
-        MacroGeophysicsDefinition custom = MacroGeophysicsDefinition.of(
-                oceanSlider.getValue(),
-                scaleSlider.getValue(),
-                cohesionSlider.getValue(),
-                fragmentationSlider.getValue(),
-                variationSlider.getValue());
+        V15TerrainDefinition custom = new V15TerrainDefinition(
+                NormalizedValue.of(landCoverageSlider.getValue()),
+                NormalizedValue.of(landmassScaleSlider.getValue()),
+                NormalizedValue.of(fragmentationSlider.getValue()),
+                NormalizedValue.of(reliefSlider.getValue()),
+                NormalizedValue.of(localReliefSlider.getValue()),
+                NormalizedValue.of(landformScaleSlider.getValue()),
+                NormalizedValue.of(ruggednessSlider.getValue()));
         boolean changed = model.applyDefinition(custom);
         if (changed) textures.clear();
         updateProfileLabel();
     }
 
-    private void syncControls(MacroGeophysicsDefinition definition) {
-        oceanSlider.setValue((float) definition.oceanPrevalence().value());
-        scaleSlider.setValue((float) definition.continentalScale().value());
-        cohesionSlider.setValue((float) definition.landmassCohesion().value());
+    private void syncControls(V15TerrainDefinition definition) {
+        landCoverageSlider.setValue((float) definition.landCoverage().value());
+        landmassScaleSlider.setValue((float) definition.landmassScale().value());
         fragmentationSlider.setValue((float) definition.fragmentation().value());
-        variationSlider.setValue((float) definition.macroVariation().value());
+        reliefSlider.setValue((float) definition.relief().value());
+        localReliefSlider.setValue((float) definition.localRelief().value());
+        landformScaleSlider.setValue((float) definition.landformScale().value());
+        ruggednessSlider.setValue((float) definition.ruggedness().value());
         updateValueLabels();
         updateProfileLabel();
     }
 
     private void updateValueLabels() {
-        oceanValue.setText(percent(oceanSlider.getValue()));
-        scaleValue.setText(percent(scaleSlider.getValue()));
-        cohesionValue.setText(percent(cohesionSlider.getValue()));
+        landCoverageValue.setText(percent(landCoverageSlider.getValue()));
+        landmassScaleValue.setText(percent(landmassScaleSlider.getValue()));
         fragmentationValue.setText(percent(fragmentationSlider.getValue()));
-        variationValue.setText(percent(variationSlider.getValue()));
+        reliefValue.setText(percent(reliefSlider.getValue()));
+        localReliefValue.setText(percent(localReliefSlider.getValue()));
+        landformScaleValue.setText(percent(landformScaleSlider.getValue()));
+        ruggednessValue.setText(percent(ruggednessSlider.getValue()));
     }
 
     private void updateProfileLabel() {
-        profileLabel.setText("Macro profile: " + model.profileName());
+        profileLabel.setText("Exact V15 profile: " + model.profileName());
     }
 
     private void positionSettingsWindow() {
@@ -409,20 +404,21 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         batch.begin();
         font.getData().setScale(0.86f);
         font.setColor(TEXT);
-        font.draw(batch, "STAGE 5 / MACRO OCEAN + GEOPHYSICAL SKELETON", 22f, height - 24f);
+        font.draw(batch, "V15 / EXACT CONTINUUM TERRAIN", 22f, height - 24f);
 
         font.getData().setScale(0.72f);
         font.setColor(MUTED);
         font.draw(batch,
                 "seed " + model.seed()
-                        + "   revision " + ContinuumMapInspectorModel.GEOPHYSICS_REVISION
+                        + "   terrain revision " + ContinuumMapInspectorModel.TERRAIN_REVISION
+                        + "   profile " + model.profileName()
                         + "   center " + Math.round(model.centerX()) + ", " + Math.round(model.centerY())
                         + "   LOD L" + frame.desiredLevel(),
                 22f,
                 height - 50f);
 
         font.draw(batch,
-                "drag: move   wheel: zoom   Home: whole world   G: diagnostics   Esc: back",
+                "drag: move   wheel: zoom   Home: whole world   1: balanced   G: diagnostics   Esc: back",
                 22f,
                 27f);
 
@@ -444,10 +440,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
                     22f,
                     height - 98f);
             font.setColor(FALLBACK_BORDER);
-            font.draw(batch,
-                    "orange = temporary coarse parent fallback",
-                    22f,
-                    height - 122f);
+            font.draw(batch, "orange = temporary coarse parent fallback", 22f, height - 122f);
             font.setColor(FINE_BORDER);
             font.draw(batch, "green border = requested detail ready", 22f, height - 144f);
         }
@@ -491,7 +484,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         }
     }
 
-    private static byte[] geophysicalPalette(int channel) {
+    private static byte[] terrainPalette(int channel) {
         byte[] palette = new byte[256];
         for (int value = 0; value < palette.length; value++) {
             float[] start;
@@ -555,10 +548,7 @@ public final class ContinuumMapInspectorScreen extends ScreenAdapter {
         public boolean keyDown(int keycode) {
             switch (keycode) {
                 case Input.Keys.HOME -> model.fitWholeWorld();
-                case Input.Keys.NUM_1, Input.Keys.NUMPAD_1 -> selectPreset(MacroGeophysicsPreset.SUPERCONTINENT);
-                case Input.Keys.NUM_2, Input.Keys.NUMPAD_2 -> selectPreset(MacroGeophysicsPreset.BALANCED);
-                case Input.Keys.NUM_3, Input.Keys.NUMPAD_3 -> selectPreset(MacroGeophysicsPreset.ARCHIPELAGO);
-                case Input.Keys.NUM_4, Input.Keys.NUMPAD_4 -> selectPreset(MacroGeophysicsPreset.OCEANIC);
+                case Input.Keys.NUM_1, Input.Keys.NUMPAD_1 -> applyBalancedDefinition();
                 case Input.Keys.G -> showDiagnostics = !showDiagnostics;
                 case Input.Keys.ESCAPE -> returnToMenu.run();
                 default -> {

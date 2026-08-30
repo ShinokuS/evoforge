@@ -35,7 +35,6 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
     private final ScenarioCatalog catalog;
     private final ScenarioMenuModel model;
     private final Consumer<VisualizerScenario> openScenario;
-    private final Runnable openContinuumInspector;
     private final Runnable returnToWorkspace;
     private final SpriteBatch batch = new SpriteBatch();
     private final ShapeRenderer shapes = new ShapeRenderer();
@@ -52,26 +51,14 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
             ScenarioCatalog catalog,
             Consumer<VisualizerScenario> openScenario,
             Runnable returnToWorkspace) {
-        this(catalog, openScenario, () -> {}, returnToWorkspace);
-    }
-
-    public ScenarioMenuScreen(
-            ScenarioCatalog catalog,
-            Consumer<VisualizerScenario> openScenario,
-            Runnable openContinuumInspector,
-            Runnable returnToWorkspace) {
         if (catalog == null) throw new IllegalArgumentException("catalog must not be null");
         if (openScenario == null) throw new IllegalArgumentException("openScenario must not be null");
-        if (openContinuumInspector == null) {
-            throw new IllegalArgumentException("openContinuumInspector must not be null");
-        }
         if (returnToWorkspace == null) {
             throw new IllegalArgumentException("returnToWorkspace must not be null");
         }
         this.catalog = catalog;
         this.model = new ScenarioMenuModel(catalog);
         this.openScenario = openScenario;
-        this.openContinuumInspector = openContinuumInspector;
         this.returnToWorkspace = returnToWorkspace;
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -156,7 +143,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         font.getData().setScale(0.88f);
         font.setColor(MUTED);
         font.draw(batch,
-                catalog.size() + " scenarios / " + catalog.groups().size() + " groups  |  F2 Continuum Inspector",
+                catalog.size() + " scenarios / " + catalog.groups().size() + " groups",
                 MARGIN,
                 height - 74f);
 
@@ -266,7 +253,7 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
         font.getData().setScale(0.78f);
         font.setColor(MUTED);
         font.draw(batch,
-                "Up/Down select | Left/Right collapse/expand | Enter open | F2 Continuum | mouse wheel scroll | Backspace edit search | Esc clear/back",
+                "Up/Down select | Left/Right collapse/expand | Enter open | mouse wheel scroll | Backspace edit search | Esc clear/back",
                 x,
                 LIST_BOTTOM + 34f,
                 available,
@@ -371,10 +358,6 @@ public final class ScenarioMenuScreen extends ScreenAdapter {
                 }
                 case Input.Keys.ENTER -> {
                     activateSelected();
-                    return true;
-                }
-                case Input.Keys.F2 -> {
-                    openContinuumInspector.run();
                     return true;
                 }
                 case Input.Keys.BACKSPACE -> {

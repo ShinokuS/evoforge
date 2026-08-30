@@ -9,13 +9,14 @@ import com.badlogic.gdx.graphics.GL20;
 import io.github.evoforge.logging.Slf4jApplicationLogger;
 import io.github.evoforge.visualizer.scenario.ScenarioCatalog;
 import io.github.evoforge.visualizer.scenario.VisualizerScenario;
-import io.github.evoforge.visualizer.screen.ContinuumMapInspectorScreen;
 import io.github.evoforge.visualizer.screen.ScenarioMenuScreen;
 import io.github.evoforge.visualizer.screen.ScenarioScreen;
+import io.github.evoforge.visualizer.screen.VisualizerHomeScreen;
+import io.github.evoforge.visualizer.screen.WorldGenerationPreviewScreen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Launches the EvoForge development visualizer. */
+/** Launches the focused EvoForge development visualizer workspaces. */
 public final class Main extends Game {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
@@ -39,7 +40,7 @@ public final class Main extends Game {
                 .log("EvoForge application ready");
 
         scenarios = ScenarioCatalog.standard();
-        showScenarioMenuNow();
+        showHomeNow();
     }
 
     @Override
@@ -51,28 +52,33 @@ public final class Main extends Game {
         if (current != null) current.dispose();
     }
 
+    private void requestHome() {
+        Gdx.app.postRunnable(this::showHomeNow);
+    }
+
     private void requestScenarioMenu() {
         Gdx.app.postRunnable(this::showScenarioMenuNow);
+    }
+
+    private void requestWorldPreview() {
+        Gdx.app.postRunnable(this::showWorldPreviewNow);
     }
 
     private void requestScenario(VisualizerScenario scenario) {
         Gdx.app.postRunnable(() -> showScenarioNow(scenario));
     }
 
-    private void requestContinuumInspector() {
-        Gdx.app.postRunnable(this::showContinuumInspectorNow);
-    }
-
-    private void requestExit() {
-        Gdx.app.postRunnable(Gdx.app::exit);
+    private void showHomeNow() {
+        replaceScreen(new VisualizerHomeScreen(
+                this::requestScenarioMenu,
+                this::requestWorldPreview));
     }
 
     private void showScenarioMenuNow() {
         replaceScreen(new ScenarioMenuScreen(
                 scenarios,
                 this::requestScenario,
-                this::requestContinuumInspector,
-                this::requestExit));
+                this::requestHome));
     }
 
     private void showScenarioNow(VisualizerScenario scenario) {
@@ -82,8 +88,8 @@ public final class Main extends Game {
                 this::requestScenarioMenu));
     }
 
-    private void showContinuumInspectorNow() {
-        replaceScreen(new ContinuumMapInspectorScreen(this::requestScenarioMenu));
+    private void showWorldPreviewNow() {
+        replaceScreen(new WorldGenerationPreviewScreen(this::requestHome));
     }
 
     private void replaceScreen(Screen next) {

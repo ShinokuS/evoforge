@@ -1,8 +1,8 @@
 package io.github.evoforge.simulation.world.continuum.query;
 
-import io.github.evoforge.simulation.world.continuum.field.ContinuumMaterializer;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import io.github.evoforge.simulation.world.continuum.page.ContinuumPageCacheMetrics;
 import io.github.evoforge.simulation.world.continuum.page.ContinuumPageKey;
 import io.github.evoforge.simulation.world.continuum.page.ContinuumPageLayout;
@@ -19,26 +19,26 @@ import java.util.Set;
  *
  * <p>Consumers never receive cached pages directly. The service deduplicates the technical regions
  * needed by a batch, loads each unique region once, then returns a clipped immutable local view for
- * every consumer.</p>
+ * every consumer. Page sources may be simple point samplers or bounded halo-aware materializers.</p>
  */
 public final class ContinuumLocalQueryService {
     private final ContinuumPageLayout layout;
-    private final ContinuumMaterializer materializer;
+    private final ContinuumScalarPageSource pageSource;
     private final int maxResidentPages;
     private final long maxResidentPayloadBytes;
     private volatile State state;
 
     public ContinuumLocalQueryService(
             ContinuumPageLayout layout,
-            ContinuumMaterializer materializer,
+            ContinuumScalarPageSource pageSource,
             int maxResidentPages,
             long maxResidentPayloadBytes,
             long initialRevision) {
-        if (layout == null || materializer == null) {
-            throw new IllegalArgumentException("layout and materializer must not be null");
+        if (layout == null || pageSource == null) {
+            throw new IllegalArgumentException("layout and pageSource must not be null");
         }
-        if (!layout.domain().equals(materializer.domain())) {
-            throw new IllegalArgumentException("layout and materializer must use the same logical domain");
+        if (!layout.domain().equals(pageSource.domain())) {
+            throw new IllegalArgumentException("layout and pageSource must use the same logical domain");
         }
         if (maxResidentPages <= 0 || maxResidentPayloadBytes <= 0L) {
             throw new IllegalArgumentException("cache budgets must be > 0");
@@ -47,7 +47,7 @@ public final class ContinuumLocalQueryService {
             throw new IllegalArgumentException("initialRevision must be >= 0");
         }
         this.layout = layout;
-        this.materializer = materializer;
+        this.pageSource = pageSource;
         this.maxResidentPages = maxResidentPages;
         this.maxResidentPayloadBytes = maxResidentPayloadBytes;
         this.state = new State(initialRevision, newCache());
@@ -212,7 +212,7 @@ public final class ContinuumLocalQueryService {
 
     private ContinuumScalarPageCache newCache() {
         return new ContinuumScalarPageCache(
-                layout, materializer, maxResidentPages, maxResidentPayloadBytes);
+                layout, pageSource, maxResidentPages, maxResidentPayloadBytes);
     }
 
     private record State(long revision, ContinuumScalarPageCache cache) {

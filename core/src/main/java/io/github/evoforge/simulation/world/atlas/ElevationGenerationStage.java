@@ -1,0 +1,213 @@
+package io.github.evoforge.simulation.world.atlas;
+
+import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
+import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
+import io.github.evoforge.simulation.world.continuum.page.ContinuumPageKey;
+import io.github.evoforge.simulation.world.continuum.page.ContinuumPageLayout;
+import io.github.evoforge.simulation.world.continuum.page.ContinuumScalarPageCache;
+import io.github.evoforge.simulation.world.genesis.GenerationRevision;
+import io.github.evoforge.simulation.world.genesis.MountainIntent;
+import io.github.evoforge.simulation.world.genesis.WorldGenerationIntent;
+import io.github.evoforge.simulation.world.genesis.WorldGenesis;
+import io.github.evoforge.simulation.world.spatial.WorldBounds;
+import io.github.evoforge.simulation.world.terrain.definition.V13MountainDefinition;
+import io.github.evoforge.simulation.world.terrain.definition.V15TerrainDefinition;
+import io.github.evoforge.simulation.world.terrain.genesis.V15ContinuumProductionTerrainPlan;
+import io.github.evoforge.simulation.world.terrain.genesis.V15ContinuumTerrainPlan;
+import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateFrame;
+
+/**
+ * Compatibility seam for the accepted historical V15 visualizer.
+ *
+ * <p>The old presentation still submits the same authored intent. Reference-sized worlds stay on
+ * the exact finite V15 oracle; larger worlds use the fixed-budget Continuum production execution in
+ * the declared world's real coordinate frame. Only exact reference worlds are fully materialized.
+ * Production previews stay page-backed so generating a 1000x1000, 3000x3000 or larger world never
+ * turns preview startup into an O(world area) elevation copy followed by an O(world area) shape fit.
+ * The bounded overview grid and exact-detail tile cache own presentation residency instead.
+ * Neither path scales a smaller finished terrain or membership raster onto the requested world.</p>
+ */
+public final class ElevationGenerationStage {
+    private static final long MAX_EXACT_PREVIEW_AXIS = 512L;
+    private static final int SMALL_WORLD_PAGE_SIDE = 64;
+    private static final int MEDIUM_WORLD_PAGE_SIDE = 16;
+    private static final int LARGE_WORLD_PAGE_SIDE = 4;
+    private static final int MAX_RESIDENT_PAGES = 32_768;
+    private static final long MAX_RESIDENT_PAGE_BYTES = 16L * 1024L * 1024L;
+
+    public ElevationField generate(WorldGenesis genesis) {
+        if (genesis == null) throw new IllegalArgumentException("genesis must not be null");
+        if (!GenerationRevision.V15.equals(genesis.generationRevision())) {
+            throw new IllegalArgumentException("Continuum preview compatibility supports V15 only");
+        }
+
+        WorldBounds bounds = genesis.spec().bounds();
+        long width = Math.addExact(Math.subtractExact((long) bounds.maxX(), bounds.minX()), 1L);
+        long length = Math.addExact(Math.subtractExact((long) bounds.maxY(), bounds.minY()), 1L);
+        ContinuumWorldDomain domain = new ContinuumWorldDomain(width, length);
+        V15TerrainCoordinateFrame frame = V15TerrainCoordinateFrame.centered(domain);
+        requireHistoricalPreviewFrame(bounds, frame, width, length);
+
+        WorldGenerationIntent intent = genesis.generationIntent();
+        V15TerrainDefinition terrainDefinition = new V15TerrainDefinition(
+                intent.landCoverage(),
+                intent.landmassScale(),
+                intent.fragmentation(),
+                intent.relief(),
+                intent.localRelief(),
+                intent.landformScale(),
+                intent.ruggedness());
+        MountainIntent mountains = intent.mountains();
+        V13MountainDefinition mountainDefinition = new V13MountainDefinition(
+                mountains.abundance(),
+                mountains.height(),
+                mountains.scale(),
+                mountains.chaininess(),
+                mountains.peakSharpness(),
+                mountains.plateausEnabled(),
+                mountains.plateauProbability());
+
+        ContinuumScalarPageSource elevationPages;
+        if (usesExactReferencePlan(domain)) {
+            V15ContinuumTerrainPlan exact = V15ContinuumTerrainPlan.prepare(
+                    domain,
+                    genesis.masterSeed(),
+                    terrainDefinition,
+                    mountainDefinition,
+                    bounds.minZ(),
+                    bounds.maxZ());
+            elevationPages = exact.elevationPages();
+        } else {
+            V15ContinuumProductionTerrainPlan production = V15ContinuumProductionTerrainPlan.prepare(
+                    domain,
+                    genesis.masterSeed(),
+                    terrainDefinition,
+                    mountainDefinition,
+                    bounds.minZ(),
+                    bounds.maxZ());
+            elevationPages = production.elevationPages();
+        }
+
+        ElevationField elevation = new ContinuumElevationField(bounds, elevationPages);
+        return usesPreloadedPreview(domain)
+                ? MaterializedElevationField.copyOf(elevation)
+                : elevation;
+    }
+
+    static boolean usesExactReferencePlan(ContinuumWorldDomain domain) {
+        if (domain == null) throw new IllegalArgumentException("domain must not be null");
+        return Math.max(domain.width(), domain.height()) <= MAX_EXACT_PREVIEW_AXIS;
+    }
+
+    /**
+     * Full unit-resolution materialization is reserved for the exact finite reference path.
+     * Production Continuum previews must remain page-backed regardless of their bounded UI size.
+     */
+    static boolean usesPreloadedPreview(ContinuumWorldDomain domain) {
+        if (domain == null) throw new IllegalArgumentException("domain must not be null");
+        return usesExactReferencePlan(domain);
+    }
+
+    private static void requireHistoricalPreviewFrame(
+            WorldBounds bounds,
+            V15TerrainCoordinateFrame frame,
+            long width,
+            long length) {
+        long expectedMaxX = Math.addExact(frame.legacyMinX(), width - 1L);
+        long expectedMaxY = Math.addExact(frame.legacyMinY(), length - 1L);
+        if (bounds.minX() != frame.legacyMinX()
+                || bounds.minY() != frame.legacyMinY()
+                || bounds.maxX() != expectedMaxX
+                || bounds.maxY() != expectedMaxY) {
+            throw new IllegalArgumentException(
+                    "V15 Continuum preview requires the historical centered coordinate frame");
+        }
+    }
+
+    private static int pageSideFor(ContinuumWorldDomain domain) {
+        long maximumSide = Math.max(domain.width(), domain.height());
+        if (maximumSide <= 512L) return SMALL_WORLD_PAGE_SIDE;
+        if (maximumSide <= 2_048L) return MEDIUM_WORLD_PAGE_SIDE;
+        return LARGE_WORLD_PAGE_SIDE;
+    }
+
+    private static final class ContinuumElevationField implements ElevationField {
+        private final WorldBounds bounds;
+        private final ContinuumScalarPageSource source;
+        private final ContinuumPageLayout layout;
+        private final ContinuumScalarPageCache pages;
+
+        private ContinuumElevationField(
+                WorldBounds bounds,
+                ContinuumScalarPageSource source) {
+            this.bounds = bounds;
+            this.source = source;
+            int pageSide = pageSideFor(source.domain());
+            this.layout = new ContinuumPageLayout(source.domain(), pageSide, pageSide);
+            this.pages = new ContinuumScalarPageCache(
+                    layout,
+                    source,
+                    MAX_RESIDENT_PAGES,
+                    MAX_RESIDENT_PAGE_BYTES);
+        }
+
+        @Override
+        public WorldBounds bounds() {
+            return bounds;
+        }
+
+        @Override
+        public int elevationAt(int x, int y) {
+            return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
+        }
+
+        @Override
+        public long elevationSubunitsAt(int x, int y) {
+            if (!contains(x, y)) {
+                throw new IllegalArgumentException(
+                        "position outside elevation field: (" + x + ", " + y + ")");
+            }
+            long localX = (long) x - bounds.minX();
+            long localY = (long) y - bounds.minY();
+            ContinuumPageKey key = layout.pageAt(localX, localY);
+            ContinuumScalarPage page = pages.page(key);
+            int sampleX = Math.toIntExact(localX - page.window().minX());
+            int sampleY = Math.toIntExact(localY - page.window().minY());
+            return Math.round(page.sample(sampleX, sampleY));
+        }
+
+        @Override
+        public void fillElevationSubunits(
+                int minX,
+                int minY,
+                int sampleWidth,
+                int sampleHeight,
+                long step,
+                long[] target) {
+            if (sampleWidth <= 0 || sampleHeight <= 0 || step <= 0L || target == null
+                    || target.length < Math.multiplyExact(sampleWidth, sampleHeight)) {
+                throw new IllegalArgumentException("elevation sample grid dimensions/output are invalid");
+            }
+            long localMinX = (long) minX - bounds.minX();
+            long localMinY = (long) minY - bounds.minY();
+            ContinuumSampleWindow window = new ContinuumSampleWindow(
+                    localMinX, localMinY, sampleWidth, sampleHeight, step);
+            long localMaxX = window.xAt(sampleWidth - 1);
+            long localMaxY = window.yAt(sampleHeight - 1);
+            if (!source.domain().contains(localMinX, localMinY)
+                    || !source.domain().contains(localMaxX, localMaxY)) {
+                throw new IllegalArgumentException("elevation sample grid lies outside field bounds");
+            }
+
+            ContinuumScalarPage page = source.materialize(window);
+            int cursor = 0;
+            for (int y = 0; y < sampleHeight; y++) {
+                for (int x = 0; x < sampleWidth; x++, cursor++) {
+                    target[cursor] = Math.round(page.sample(x, y));
+                }
+            }
+        }
+    }
+}

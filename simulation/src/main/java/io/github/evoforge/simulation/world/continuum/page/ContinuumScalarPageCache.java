@@ -1,8 +1,8 @@
 package io.github.evoforge.simulation.world.continuum.page;
 
-import io.github.evoforge.simulation.world.continuum.field.ContinuumMaterializer;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
+import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPageSource;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,12 +14,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * Bounded LRU cache for scalar proof pages.
  *
  * <p>The cache is never authoritative: eviction changes only resident representation. A later request
- * rematerializes the page from the authoritative field. Concurrent requests for the same missing page
- * share one in-progress materialization instead of starting duplicate work.</p>
+ * rematerializes the page from the authoritative page source. Concurrent requests for the same
+ * missing page share one in-progress materialization instead of starting duplicate work.</p>
  */
 public final class ContinuumScalarPageCache {
     private final ContinuumPageLayout layout;
-    private final ContinuumMaterializer materializer;
+    private final ContinuumScalarPageSource pageSource;
     private final int maxResidentPages;
     private final long maxResidentPayloadBytes;
     private final Object residencyLock = new Object();
@@ -37,14 +37,14 @@ public final class ContinuumScalarPageCache {
 
     public ContinuumScalarPageCache(
             ContinuumPageLayout layout,
-            ContinuumMaterializer materializer,
+            ContinuumScalarPageSource pageSource,
             int maxResidentPages,
             long maxResidentPayloadBytes) {
-        if (layout == null || materializer == null) {
-            throw new IllegalArgumentException("layout and materializer must not be null");
+        if (layout == null || pageSource == null) {
+            throw new IllegalArgumentException("layout and pageSource must not be null");
         }
-        if (!layout.domain().equals(materializer.domain())) {
-            throw new IllegalArgumentException("layout and materializer must use the same logical domain");
+        if (!layout.domain().equals(pageSource.domain())) {
+            throw new IllegalArgumentException("layout and pageSource must use the same logical domain");
         }
         if (maxResidentPages <= 0) {
             throw new IllegalArgumentException("maxResidentPages must be > 0");
@@ -53,7 +53,7 @@ public final class ContinuumScalarPageCache {
             throw new IllegalArgumentException("maxResidentPayloadBytes must be > 0");
         }
         this.layout = layout;
-        this.materializer = materializer;
+        this.pageSource = pageSource;
         this.maxResidentPages = maxResidentPages;
         this.maxResidentPayloadBytes = maxResidentPayloadBytes;
     }
@@ -88,7 +88,7 @@ public final class ContinuumScalarPageCache {
         }
 
         try {
-            ContinuumScalarPage loaded = materializer.materialize(window);
+            ContinuumScalarPage loaded = pageSource.materialize(window);
             synchronized (residencyLock) {
                 ContinuumScalarPage alreadyResident = pages.get(key);
                 if (alreadyResident != null) {
