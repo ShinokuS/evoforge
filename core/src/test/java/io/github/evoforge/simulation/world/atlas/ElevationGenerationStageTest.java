@@ -29,6 +29,16 @@ final class ElevationGenerationStageTest {
                 new ContinuumWorldDomain(1_000, 1_000)));
         assertFalse(ElevationGenerationStage.usesExactReferencePlan(
                 new ContinuumWorldDomain(10_000, 10_000)));
+
+        assertTrue(ElevationGenerationStage.usesPreloadedPreview(
+                new ContinuumWorldDomain(512, 512)));
+        assertFalse(ElevationGenerationStage.usesPreloadedPreview(
+                new ContinuumWorldDomain(513, 513)));
+        assertFalse(ElevationGenerationStage.usesPreloadedPreview(
+                new ContinuumWorldDomain(1_000, 1_000)));
+        assertFalse(ElevationGenerationStage.usesPreloadedPreview(
+                new ContinuumWorldDomain(3_000, 3_000)));
+
         assertThrows(
                 IllegalArgumentException.class,
                 () -> ElevationGenerationStage.usesExactReferencePlan(null));
@@ -46,6 +56,8 @@ final class ElevationGenerationStageTest {
 
         ElevationField elevation = new ElevationGenerationStage().generate(genesis);
         assertEquals(bounds, elevation.bounds());
+        assertFalse(elevation instanceof MaterializedElevationField,
+                "production preview must stay page-backed instead of copying the whole world");
 
         long[] first = new long[25];
         long[] repeated = new long[25];
