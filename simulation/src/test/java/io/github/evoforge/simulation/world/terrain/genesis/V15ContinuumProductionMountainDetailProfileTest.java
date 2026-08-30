@@ -1,5 +1,7 @@
 package io.github.evoforge.simulation.world.terrain.genesis;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.github.evoforge.simulation.world.continuum.field.ContinuumSampleWindow;
 import io.github.evoforge.simulation.world.continuum.field.ContinuumScalarPage;
 import io.github.evoforge.simulation.world.continuum.model.ContinuumWorldDomain;
@@ -16,6 +18,13 @@ final class V15ContinuumProductionMountainDetailProfileTest {
     private static final long SEED = -4_774_846_722_868_265_927L;
     private static final int SIDE = 500;
     private static final int PATCH_SIDE = 64;
+    private static final double MIN_MASK_IOU = 0.95;
+    private static final double MAX_COVERAGE_DRIFT = 0.03;
+    private static final double MAX_UPLIFT_MAE_CELLS = 0.08;
+    private static final double MIN_NEIGHBOUR_VARIATION_RATIO = 0.75;
+    private static final double MAX_NEIGHBOUR_VARIATION_RATIO = 1.30;
+    private static final double MAX_CURVATURE_RATIO = 1.60;
+    private static final int MAX_EXTRA_ISOLATED_PEAKS = 1;
     private static final int[][] PATCHES = {
             {24, 24},
             {188, 48},
@@ -24,7 +33,7 @@ final class V15ContinuumProductionMountainDetailProfileTest {
     };
 
     @Test
-    void profileRawMountainUpliftAgainstExactOracle() {
+    void rawMountainUpliftStaysCanonicalAndDoesNotGainNoise() {
         ContinuumWorldDomain domain = new ContinuumWorldDomain(SIDE, SIDE);
         V15TerrainDefinition terrain = V15TerrainDefinition.balanced();
         V13MountainDefinition mountains = V13MountainDefinition.balanced();
@@ -105,29 +114,53 @@ final class V15ContinuumProductionMountainDetailProfileTest {
         }
 
         double maskIou = ratio(maskIntersection, maskUnion);
+        double exactCoverage = ratio(exactPositive, cells);
+        double productionCoverage = ratio(productionPositive, cells);
+        double upliftMae = upliftAbsError / cells;
+        double exactVariation = exactNeighbourVariation / neighbourPairs;
+        double productionVariation = productionNeighbourVariation / neighbourPairs;
+        double variationRatio = productionVariation / Math.max(1e-12d, exactVariation);
+        double exactCurvatureMean = exactCurvature / curvatureSamples;
+        double productionCurvatureMean = productionCurvature / curvatureSamples;
+        double curvatureRatio = productionCurvatureMean / Math.max(1e-12d, exactCurvatureMean);
+
         System.out.printf(
                 Locale.ROOT,
                 "v15-continuum-mountain-detail side=%d patches=%d patchSide=%d cells=%d "
                         + "maskIoU=%.6f exactCoverage=%.6f productionCoverage=%.6f upliftMaeCells=%.6f "
                         + "exactLocalMaxima=%d productionLocalMaxima=%d exactIsolated=%d productionIsolated=%d "
-                        + "exactNeighbourVariation=%.6f productionNeighbourVariation=%.6f "
-                        + "exactCurvature=%.6f productionCurvature=%.6f%n",
+                        + "exactNeighbourVariation=%.6f productionNeighbourVariation=%.6f variationRatio=%.6f "
+                        + "exactCurvature=%.6f productionCurvature=%.6f curvatureRatio=%.6f%n",
                 SIDE,
                 PATCHES.length,
                 PATCH_SIDE,
                 cells,
                 maskIou,
-                ratio(exactPositive, cells),
-                ratio(productionPositive, cells),
-                upliftAbsError / cells,
+                exactCoverage,
+                productionCoverage,
+                upliftMae,
                 exactLocalMaxima,
                 productionLocalMaxima,
                 exactIsolated,
                 productionIsolated,
-                exactNeighbourVariation / neighbourPairs,
-                productionNeighbourVariation / neighbourPairs,
-                exactCurvature / curvatureSamples,
-                productionCurvature / curvatureSamples);
+                exactVariation,
+                productionVariation,
+                variationRatio,
+                exactCurvatureMean,
+                productionCurvatureMean,
+                curvatureRatio);
+
+        assertTrue(maskIou >= MIN_MASK_IOU, "raw mountain mask drifted from exact V13");
+        assertTrue(Math.abs(productionCoverage - exactCoverage) <= MAX_COVERAGE_DRIFT,
+                "raw mountain coverage drifted from exact V13");
+        assertTrue(upliftMae <= MAX_UPLIFT_MAE_CELLS, "raw mountain uplift became too different");
+        assertTrue(variationRatio >= MIN_NEIGHBOUR_VARIATION_RATIO
+                        && variationRatio <= MAX_NEIGHBOUR_VARIATION_RATIO,
+                "raw mountain neighbour variation gained/lost too much high-frequency structure");
+        assertTrue(curvatureRatio <= MAX_CURVATURE_RATIO,
+                "raw mountain curvature became materially noisier than exact V13");
+        assertTrue(productionIsolated <= exactIsolated + MAX_EXTRA_ISOLATED_PEAKS,
+                "production V13 introduced isolated one-cell mountain spikes");
     }
 
     private static double[][] uplift(ContinuumScalarPage base, ContinuumScalarPage mountains) {
