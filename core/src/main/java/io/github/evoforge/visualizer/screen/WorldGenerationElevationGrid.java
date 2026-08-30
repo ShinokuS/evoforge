@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.MaterializedElevationField;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
 import java.util.Arrays;
 
@@ -12,11 +13,11 @@ import java.util.Arrays;
  * the exact declared world bounds. Boundary strips are also fetched through the bulk contract; a
  * large preview never turns O(axis) edge samples into expensive unit-resolution page requests.
  *
- * <p>Large-world grids also register a read-only interpolated adapter as the immediate 2D overview
- * fallback for the exact elevation field they were sampled from. Interpolation is presentation-only:
- * it prevents the coarse grid from turning a shoreline into large nearest-neighbour rectangles while
- * an authoritative viewport refinement is prepared in the background. It is never fed back into
- * simulation state and detailed authoritative sampling remains unchanged.</p>
+ * <p>Page-backed large-world grids register a read-only interpolated adapter as the immediate 2D
+ * overview fallback for the authoritative elevation field they were sampled from. A fully
+ * {@link MaterializedElevationField} deliberately skips that fallback: its unit-resolution world is
+ * already resident and camera movement must read that immutable snapshot directly rather than enter
+ * the asynchronous overview/detail refinement path.</p>
  */
 final class WorldGenerationElevationGrid {
     private final WorldBounds bounds;
@@ -110,8 +111,10 @@ final class WorldGenerationElevationGrid {
 
         WorldGenerationElevationGrid grid = new WorldGenerationElevationGrid(
                 bounds, xAxis.coordinates(), yAxis.coordinates(), values);
-        WorldGenerationOverviewElevationField.registerFallback(
-                elevation, grid.presentationFallback());
+        if (!(elevation instanceof MaterializedElevationField)) {
+            WorldGenerationOverviewElevationField.registerFallback(
+                    elevation, grid.presentationFallback());
+        }
         return grid;
     }
 
