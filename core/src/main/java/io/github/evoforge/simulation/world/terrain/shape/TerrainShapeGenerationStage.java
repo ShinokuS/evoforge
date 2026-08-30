@@ -1,6 +1,7 @@
 package io.github.evoforge.simulation.world.terrain.shape;
 
 import io.github.evoforge.simulation.world.atlas.ElevationField;
+import io.github.evoforge.simulation.world.atlas.MaterializedElevationField;
 import io.github.evoforge.simulation.world.genesis.GenerationRevision;
 import io.github.evoforge.simulation.world.geometry.Shape;
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -15,11 +16,11 @@ import java.util.Map;
  * selected template carries an opaque runtime Shape override for later materialization. Abrupt or
  * poorly represented terrain falls back to ordinary full-cell geometry instead of forcing access.
  *
- * <p>Small finite worlds retain the historical dense presentation field. Larger Continuum worlds
- * fit only requested columns and keep a bounded LRU of presentation decisions; declared world area
- * therefore no longer creates a world-sized {@code byte[]} during preview generation. Telemetry on
- * the lazy field is cache-local as well and never traverses the declared world merely to count shape
- * overrides.</p>
+ * <p>Small finite worlds retain the historical dense presentation field. Larger page-backed
+ * Continuum worlds fit only requested columns and keep a bounded LRU of presentation decisions.
+ * A {@link MaterializedElevationField} is different: its entire bounded preview is already resident,
+ * so shape fitting is deliberately completed once up front as a compact byte-per-cell field. Camera
+ * movement can therefore never turn into new shape-generation work after the preview is published.</p>
  */
 public final class TerrainShapeGenerationStage implements TerrainShapeGenerator {
     private static final long MAX_DENSE_SHAPE_CELLS = 512L * 512L;
@@ -80,7 +81,7 @@ public final class TerrainShapeGenerationStage implements TerrainShapeGenerator 
         int width = Math.toIntExact((long) bounds.maxX() - bounds.minX() + 1L);
         int length = Math.toIntExact((long) bounds.maxY() - bounds.minY() + 1L);
         long area = Math.multiplyExact((long) width, length);
-        if (area > MAX_DENSE_SHAPE_CELLS) {
+        if (area > MAX_DENSE_SHAPE_CELLS && !(elevation instanceof MaterializedElevationField)) {
             return new LazyTerrainShapeField(bounds, elevation, palette.templates());
         }
 
