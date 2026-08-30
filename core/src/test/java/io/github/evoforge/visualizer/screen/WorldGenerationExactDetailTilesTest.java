@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -57,6 +58,38 @@ final class WorldGenerationExactDetailTilesTest {
 
             assertEquals(0, pointCalls.get(),
                     "x1 tile loading must use bounded bulk elevation requests only");
+        } finally {
+            WorldGenerationExactDetailTiles.invalidate(source);
+        }
+    }
+
+    @Test
+    void prewarmedFirstPublishMorphsFromNestedX2ThenBecomesExact() throws Exception {
+        AtomicInteger bulkCalls = new AtomicInteger();
+        AtomicInteger pointCalls = new AtomicInteger();
+        ElevationField source = deterministicElevation(bulkCalls, pointCalls);
+        VisualizerCamera.VisibleRange visible = new VisualizerCamera.VisibleRange(40, 139, 50, 149);
+
+        try {
+            WorldGenerationExactDetailTiles.prewarm(source, visible);
+            WorldGenerationExactDetailTiles.awaitIdleForTests(5_000L);
+
+            WorldGenerationExactDetailTiles.DetailFrame first =
+                    WorldGenerationExactDetailTiles.request(source, visible);
+            assertNotNull(first);
+            assertNotNull(WorldGenerationExactDetailTiles.shapesFor(first.elevation()));
+            assertNotEquals(
+                    expectedValue(41, 51),
+                    first.elevation().elevationSubunitsAt(41, 51),
+                    "first prewarmed x1 publish should start from its nested x2 parent");
+
+            Thread.sleep(160L);
+            WorldGenerationExactDetailTiles.DetailFrame settled =
+                    WorldGenerationExactDetailTiles.request(source, visible);
+            assertNotNull(settled);
+            assertEquals(expectedValue(41, 51), settled.elevation().elevationSubunitsAt(41, 51));
+            assertEquals(0, pointCalls.get(),
+                    "presentation morph must use only already-resident exact tile data");
         } finally {
             WorldGenerationExactDetailTiles.invalidate(source);
         }
