@@ -17,61 +17,78 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void fastDefaultEntersCellDetailBeforeMicroscopeZoom() {
-        assertTrue(WorldGeneration2DLod.stride(147, 147) >= 2);
+    void detailedRangeIsARealLongestAxisDistance() {
+        WorldGeneration2DLod.detailedRangeCells(64);
+        assertEquals(1, WorldGeneration2DLod.stride(64, 40));
+
+        WorldGeneration2DLod.resetTuning();
+        WorldGeneration2DLod.detailedRangeCells(64);
+        assertEquals(2, WorldGeneration2DLod.stride(65, 40));
+    }
+
+    @Test
+    void detailedSliderChangesCurrentViewportImmediately() {
+        WorldGeneration2DLod.detailedRangeCells(64);
+        assertEquals(2, WorldGeneration2DLod.stride(120, 120));
+
+        WorldGeneration2DLod.detailedRangeCells(160);
+        assertEquals(1, WorldGeneration2DLod.stride(120, 120));
+
+        WorldGeneration2DLod.detailedRangeCells(64);
+        assertEquals(2, WorldGeneration2DLod.stride(120, 120));
+    }
+
+    @Test
+    void farDetailSliderChangesCurrentOverviewImmediately() {
+        WorldGeneration2DLod.detailedRangeCells(64);
+        WorldGeneration2DLod.overviewSamplesPerAxis(48);
+        assertEquals(8, WorldGeneration2DLod.stride(300, 300));
+
+        WorldGeneration2DLod.overviewSamplesPerAxis(160);
+        assertEquals(2, WorldGeneration2DLod.stride(300, 300));
+    }
+
+    @Test
+    void x1UsesSmallHysteresisWithoutIgnoringTheConfiguredDistance() {
+        WorldGeneration2DLod.detailedRangeCells(100);
+        assertEquals(1, WorldGeneration2DLod.stride(95, 95));
+        assertEquals(1, WorldGeneration2DLod.stride(105, 105));
+        assertEquals(2, WorldGeneration2DLod.stride(115, 115));
+        assertEquals(2, WorldGeneration2DLod.stride(95, 95));
         assertEquals(1, WorldGeneration2DLod.stride(90, 90));
-        assertEquals(1, WorldGeneration2DLod.stride(96, 80));
     }
 
     @Test
-    void performanceSliderCanKeepSeveralHundredCellsPerAxisAtX1() {
-        WorldGeneration2DLod.detailedCellBudget(90_000L);
-        assertEquals(1, WorldGeneration2DLod.stride(300, 300));
+    void normalZoomNeverSkipsTheImmediateParentLevel() {
+        WorldGeneration2DLod.detailedRangeCells(96);
+        WorldGeneration2DLod.overviewSamplesPerAxis(32);
 
-        WorldGeneration2DLod.detailedCellBudget(WorldGeneration2DLod.MAX_DETAILED_CELLS);
-        assertEquals(1, WorldGeneration2DLod.stride(500, 500));
+        assertEquals(1, WorldGeneration2DLod.stride(90, 90));
+        assertEquals(2, WorldGeneration2DLod.stride(120, 120));
+        assertEquals(4, WorldGeneration2DLod.stride(120, 120));
     }
 
     @Test
-    void x1UsesHysteresisInsteadOfFlappingAtTheBudgetBoundary() {
-        WorldGeneration2DLod.detailedCellBudget(90_000L);
-        assertEquals(1, WorldGeneration2DLod.stride(300, 300));
-        assertEquals(1, WorldGeneration2DLod.stride(320, 300));
-        assertTrue(WorldGeneration2DLod.stride(380, 320) > 1);
-    }
-
-    @Test
-    void overviewUsesNestedPowerOfTwoLevelsInsteadOfEveryIntegerStride() {
+    void overviewUsesNestedPowerOfTwoLevels() {
         assertEquals(8, WorldGeneration2DLod.stride(600, 600));
         assertEquals(4, WorldGeneration2DLod.stride(300, 300));
         assertEquals(2, WorldGeneration2DLod.stride(150, 150));
     }
 
     @Test
-    void raisedDetailedRangeCannotSkipTheX2Parent() {
-        WorldGeneration2DLod.detailedCellBudget(90_000L);
+    void x1PrewarmTracksDetailedDistanceInsteadOfFarBudget() {
+        WorldGeneration2DLod.detailedRangeCells(300);
+        WorldGeneration2DLod.overviewSamplesPerAxis(32);
 
-        assertEquals(4, WorldGeneration2DLod.stride(500, 500));
-        assertEquals(2, WorldGeneration2DLod.stride(400, 400));
-        assertEquals(2, WorldGeneration2DLod.stride(300, 300));
-        assertEquals(1, WorldGeneration2DLod.stride(290, 290));
+        assertTrue(WorldGeneration2DLod.detailWarmupUseful(600, 580));
+        assertFalse(WorldGeneration2DLod.detailWarmupUseful(601, 580));
     }
 
     @Test
-    void maximumDetailedRangeStillDescendsThroughEveryNestedLevel() {
-        WorldGeneration2DLod.detailedCellBudget(WorldGeneration2DLod.MAX_DETAILED_CELLS);
-
-        assertEquals(4, WorldGeneration2DLod.stride(800, 800));
-        assertEquals(2, WorldGeneration2DLod.stride(650, 650));
-        assertEquals(1, WorldGeneration2DLod.stride(480, 480));
-    }
-
-    @Test
-    void x1PrewarmGetsTheWholeAdjacentX2Band() {
+    void compatibilityBudgetSetterStillMapsToAnAxisDistance() {
         WorldGeneration2DLod.detailedCellBudget(90_000L);
-
-        assertTrue(WorldGeneration2DLod.detailWarmupUseful(424, 424));
-        assertFalse(WorldGeneration2DLod.detailWarmupUseful(425, 425));
+        assertEquals(300, WorldGeneration2DLod.detailedRangeCells());
+        assertEquals(1, WorldGeneration2DLod.stride(300, 260));
     }
 
     @Test
@@ -109,7 +126,7 @@ final class WorldGeneration2DLodTest {
     }
 
     @Test
-    void sampledWorkRemainsBoundedAtReportedSixHundredWorldViewport() {
+    void sampledWorkRemainsBoundedAtRegionalViewport() {
         int stride = WorldGeneration2DLod.stride(147, 147);
         assertEquals(2, stride);
         assertEquals(5_476L, WorldGeneration2DLod.sampledCells(147, 147, stride));
