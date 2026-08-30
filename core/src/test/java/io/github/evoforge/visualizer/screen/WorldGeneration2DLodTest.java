@@ -54,8 +54,8 @@ final class WorldGeneration2DLodTest {
         assertEquals(1, WorldGeneration2DLod.stride(95, 95));
         assertEquals(1, WorldGeneration2DLod.stride(105, 105));
         assertEquals(2, WorldGeneration2DLod.stride(115, 115));
-        assertEquals(2, WorldGeneration2DLod.stride(95, 95));
-        assertEquals(1, WorldGeneration2DLod.stride(90, 90));
+        assertEquals(2, WorldGeneration2DLod.stride(96, 96));
+        assertEquals(1, WorldGeneration2DLod.stride(94, 94));
     }
 
     @Test
