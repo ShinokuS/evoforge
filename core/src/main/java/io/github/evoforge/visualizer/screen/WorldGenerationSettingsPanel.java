@@ -260,33 +260,35 @@ final class WorldGenerationSettingsPanel implements Disposable {
         addSection(content, "2D LOD QUALITY");
 
         Label explanation = new Label(
-                "Live presentation-only tuning. Higher values keep more terrain samples and look smoother from far away, but cost more FPS.",
+                "Live presentation-only tuning. Detailed range is the longest visible world span that may use exact x1. Far detail is the target number of overview samples along the longest visible axis.",
                 skin,
                 "subtitle");
         explanation.setWrap(true);
         content.add(explanation).growX().minWidth(0f).left().padBottom(12f);
         content.row();
 
-        Slider detail = addBudgetControl(
+        Slider detail = addLodControl(
                 content,
                 "Detailed range",
-                WorldGeneration2DLod.MIN_DETAILED_CELLS,
-                WorldGeneration2DLod.MAX_DETAILED_CELLS,
-                500L,
-                WorldGeneration2DLod.detailedCellBudget(),
-                WorldGeneration2DLod::detailedCellBudget);
+                WorldGeneration2DLod.MIN_DETAILED_RANGE_CELLS,
+                WorldGeneration2DLod.MAX_DETAILED_RANGE_CELLS,
+                5,
+                WorldGeneration2DLod.detailedRangeCells(),
+                WorldGeneration2DLod::detailedRangeCells,
+                " cells");
 
-        Slider overview = addBudgetControl(
+        Slider overview = addLodControl(
                 content,
                 "Far detail",
-                WorldGeneration2DLod.MIN_OVERVIEW_SAMPLES,
-                WorldGeneration2DLod.MAX_OVERVIEW_SAMPLES,
-                500L,
-                WorldGeneration2DLod.overviewSampleBudget(),
-                WorldGeneration2DLod::overviewSampleBudget);
+                WorldGeneration2DLod.MIN_OVERVIEW_SAMPLES_PER_AXIS,
+                WorldGeneration2DLod.MAX_OVERVIEW_SAMPLES_PER_AXIS,
+                5,
+                WorldGeneration2DLod.overviewSamplesPerAxis(),
+                WorldGeneration2DLod::overviewSamplesPerAxis,
+                "/axis");
 
         Label detailHint = new Label(
-                "Raise Far detail first for rounder coastlines and less compressed distant terrain. Detailed range only controls how long exact LOD x1 is retained.",
+                "Changing either control invalidates LOD hysteresis immediately. Exact x1 is prewarmed only while the requested tile set fits the resident cache; otherwise the renderer stays on its nested parent until entering the safe exact-detail band.",
                 skin,
                 "subtitle");
         detailHint.setWrap(true);
@@ -324,8 +326,8 @@ final class WorldGenerationSettingsPanel implements Disposable {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
                 WorldGeneration2DLod.resetTuning();
-                detail.setValue(WorldGeneration2DLod.detailedCellBudget());
-                overview.setValue(WorldGeneration2DLod.overviewSampleBudget());
+                detail.setValue(WorldGeneration2DLod.detailedRangeCells());
+                overview.setValue(WorldGeneration2DLod.overviewSamplesPerAxis());
                 meshDetail.accept(WorldGeneration3DDetail.DEFAULT_MAX_AXIS_SAMPLES);
                 mesh.setValue(WorldGeneration3DDetail.maxAxisSamples());
                 statusLabel.setText("Performance defaults restored. Applied live.");
@@ -335,7 +337,7 @@ final class WorldGenerationSettingsPanel implements Disposable {
         content.row();
 
         Label defaults = new Label(
-                "Fast defaults: 9k detailed / 6k far samples / 160 3D mesh axis.",
+                "Fast defaults: x1 through 100 visible cells / 80 far samples per axis / 160 3D mesh axis.",
                 skin,
                 "subtitle");
         defaults.setWrap(true);
@@ -473,24 +475,26 @@ final class WorldGenerationSettingsPanel implements Disposable {
         content.row();
     }
 
-    private Slider addBudgetControl(
+    private Slider addLodControl(
             Table content,
             String name,
-            long minimum,
-            long maximum,
-            long step,
-            long initial,
-            java.util.function.LongConsumer setter) {
+            int minimum,
+            int maximum,
+            int step,
+            int initial,
+            IntConsumer setter,
+            String suffix) {
         Slider slider = new Slider(minimum, maximum, step, false, skin);
         slider.setValue(initial);
-        Label value = new Label(formatBudget(initial), skin);
+        Label value = new Label(initial + suffix, skin);
         slider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                long selected = Math.round(slider.getValue() / step) * step;
+                int selected = Math.round(slider.getValue() / step) * step;
+                selected = Math.max(minimum, Math.min(maximum, selected));
                 setter.accept(selected);
-                value.setText(formatBudget(selected));
-                statusLabel.setText("Performance tuning applied live.");
+                value.setText(selected + suffix);
+                statusLabel.setText("2D LOD tuning applied live.");
             }
         });
 
@@ -646,15 +650,5 @@ final class WorldGenerationSettingsPanel implements Disposable {
 
     private static String formatPercent(int ppm) {
         return Math.round(ppm / 10_000f) + "%";
-    }
-
-    private static String formatBudget(long value) {
-        if (value >= 1_000L) {
-            float thousands = value / 1_000f;
-            return thousands == Math.round(thousands)
-                    ? Math.round(thousands) + "k"
-                    : String.format("%.1fk", thousands);
-        }
-        return Long.toString(value);
     }
 }
