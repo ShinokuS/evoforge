@@ -503,7 +503,8 @@ final class WorldGenerationExactDetailTiles {
             }
         }
 
-        private boolean contains(int x, int y) {
+        @Override
+        public boolean contains(int x, int y) {
             return x >= bounds.minX() && x <= bounds.maxX()
                     && y >= bounds.minY() && y <= bounds.maxY();
         }
