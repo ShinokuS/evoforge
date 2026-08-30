@@ -1,6 +1,7 @@
 package io.github.evoforge.visualizer.screen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.evoforge.simulation.world.spatial.WorldBounds;
@@ -44,6 +45,33 @@ final class WorldGeneration2DLodTest {
         assertEquals(8, WorldGeneration2DLod.stride(600, 600));
         assertEquals(4, WorldGeneration2DLod.stride(300, 300));
         assertEquals(2, WorldGeneration2DLod.stride(150, 150));
+    }
+
+    @Test
+    void raisedDetailedRangeCannotSkipTheX2Parent() {
+        WorldGeneration2DLod.detailedCellBudget(90_000L);
+
+        assertEquals(4, WorldGeneration2DLod.stride(500, 500));
+        assertEquals(2, WorldGeneration2DLod.stride(400, 400));
+        assertEquals(2, WorldGeneration2DLod.stride(300, 300));
+        assertEquals(1, WorldGeneration2DLod.stride(290, 290));
+    }
+
+    @Test
+    void maximumDetailedRangeStillDescendsThroughEveryNestedLevel() {
+        WorldGeneration2DLod.detailedCellBudget(WorldGeneration2DLod.MAX_DETAILED_CELLS);
+
+        assertEquals(4, WorldGeneration2DLod.stride(800, 800));
+        assertEquals(2, WorldGeneration2DLod.stride(650, 650));
+        assertEquals(1, WorldGeneration2DLod.stride(480, 480));
+    }
+
+    @Test
+    void x1PrewarmGetsTheWholeAdjacentX2Band() {
+        WorldGeneration2DLod.detailedCellBudget(90_000L);
+
+        assertTrue(WorldGeneration2DLod.detailWarmupUseful(424, 424));
+        assertFalse(WorldGeneration2DLod.detailWarmupUseful(425, 425));
     }
 
     @Test
