@@ -17,23 +17,29 @@ final class WorldGeneration2DLod {
     static final int MIN_DETAILED_RANGE_CELLS = 32;
     static final int MAX_DETAILED_RANGE_CELLS = 512;
 
-    static final int DEFAULT_OVERVIEW_SAMPLES_PER_AXIS = 96;
+    static final int DEFAULT_OVERVIEW_SAMPLES_PER_AXIS = 80;
     static final int MIN_OVERVIEW_SAMPLES_PER_AXIS = 32;
     static final int MAX_OVERVIEW_SAMPLES_PER_AXIS = 256;
 
-    /* Compatibility constants/methods for older tests and call sites while the UI uses axis values. */
+    /**
+     * Existing settings-panel plumbing still speaks long "budget" values. Keep that API temporarily,
+     * but make it a linear fixed-point representation instead of the old area budget: 100 slider
+     * units equal one visible cell/sample along an axis. The UI's existing 500-unit step therefore
+     * changes the actual distance by exactly five cells everywhere on the slider.
+     */
+    private static final long LEGACY_SLIDER_UNITS_PER_AXIS = 100L;
     static final long DEFAULT_MAX_DETAILED_CELLS =
-            (long) DEFAULT_DETAILED_RANGE_CELLS * DEFAULT_DETAILED_RANGE_CELLS;
+            DEFAULT_DETAILED_RANGE_CELLS * LEGACY_SLIDER_UNITS_PER_AXIS;
     static final long DEFAULT_MAX_SAMPLES =
-            (long) DEFAULT_OVERVIEW_SAMPLES_PER_AXIS * DEFAULT_OVERVIEW_SAMPLES_PER_AXIS;
+            DEFAULT_OVERVIEW_SAMPLES_PER_AXIS * LEGACY_SLIDER_UNITS_PER_AXIS;
     static final long MIN_DETAILED_CELLS =
-            (long) MIN_DETAILED_RANGE_CELLS * MIN_DETAILED_RANGE_CELLS;
+            MIN_DETAILED_RANGE_CELLS * LEGACY_SLIDER_UNITS_PER_AXIS;
     static final long MAX_DETAILED_CELLS =
-            (long) MAX_DETAILED_RANGE_CELLS * MAX_DETAILED_RANGE_CELLS;
+            MAX_DETAILED_RANGE_CELLS * LEGACY_SLIDER_UNITS_PER_AXIS;
     static final long MIN_OVERVIEW_SAMPLES =
-            (long) MIN_OVERVIEW_SAMPLES_PER_AXIS * MIN_OVERVIEW_SAMPLES_PER_AXIS;
+            MIN_OVERVIEW_SAMPLES_PER_AXIS * LEGACY_SLIDER_UNITS_PER_AXIS;
     static final long MAX_OVERVIEW_SAMPLES =
-            (long) MAX_OVERVIEW_SAMPLES_PER_AXIS * MAX_OVERVIEW_SAMPLES_PER_AXIS;
+            MAX_OVERVIEW_SAMPLES_PER_AXIS * LEGACY_SLIDER_UNITS_PER_AXIS;
 
     /** Small dead-band for wheel noise; deliberately much smaller than the old 15% area band. */
     private static final int LOD_EXIT_PERCENT = 108;
@@ -182,21 +188,21 @@ final class WorldGeneration2DLod {
     }
 
     static long detailedCellBudget() {
-        return Math.multiplyExact((long) detailedRangeCells, detailedRangeCells);
+        return detailedRangeCells * LEGACY_SLIDER_UNITS_PER_AXIS;
     }
 
     static long overviewSampleBudget() {
-        return Math.multiplyExact((long) overviewSamplesPerAxis, overviewSamplesPerAxis);
+        return overviewSamplesPerAxis * LEGACY_SLIDER_UNITS_PER_AXIS;
     }
 
     static synchronized void detailedCellBudget(long value) {
-        long checked = requireRange(value, MIN_DETAILED_CELLS, MAX_DETAILED_CELLS, "detailed cell budget");
-        detailedRangeCells(nearestAxis(checked));
+        long checked = requireRange(value, MIN_DETAILED_CELLS, MAX_DETAILED_CELLS, "detailed slider value");
+        detailedRangeCells(axisFromLegacySlider(checked));
     }
 
     static synchronized void overviewSampleBudget(long value) {
-        long checked = requireRange(value, MIN_OVERVIEW_SAMPLES, MAX_OVERVIEW_SAMPLES, "overview sample budget");
-        overviewSamplesPerAxis(nearestAxis(checked));
+        long checked = requireRange(value, MIN_OVERVIEW_SAMPLES, MAX_OVERVIEW_SAMPLES, "overview slider value");
+        overviewSamplesPerAxis(axisFromLegacySlider(checked));
     }
 
     static synchronized void resetTuning() {
@@ -228,8 +234,8 @@ final class WorldGeneration2DLod {
         return Math.floorDiv(value - 1L, divisor) + 1L;
     }
 
-    private static int nearestAxis(long area) {
-        return Math.toIntExact(Math.round(StrictMath.sqrt(area)));
+    private static int axisFromLegacySlider(long value) {
+        return Math.toIntExact(Math.round(value / (double) LEGACY_SLIDER_UNITS_PER_AXIS));
     }
 
     private static int requireRange(int value, int minimum, int maximum, String name) {
