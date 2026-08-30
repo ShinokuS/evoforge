@@ -23,9 +23,9 @@ final class WorldGeneration2DLod {
     static final long MIN_OVERVIEW_SAMPLES = 1_500L;
     static final long MAX_OVERVIEW_SAMPLES = 24_000L;
 
-    /** Leave a generous dead-band around every level boundary so wheel noise cannot flap LODs. */
+    /** Leave a dead-band around every level boundary so wheel noise cannot flap LODs. */
     private static final int LOD_EXIT_PERCENT = 115;
-    private static final int LOD_ENTER_PERCENT = 88;
+    private static final int LOD_ENTER_PERCENT = 95;
 
     private static volatile long detailedCellBudget = DEFAULT_MAX_DETAILED_CELLS;
     private static volatile long overviewSampleBudget = DEFAULT_MAX_SAMPLES;
@@ -192,12 +192,8 @@ final class WorldGeneration2DLod {
     }
 
     private static long percent(long value, int percent) {
-        if (value == Long.MAX_VALUE) return Long.MAX_VALUE;
-        long whole = value / 100L;
-        long remainder = value % 100L;
-        return Math.min(
-                Long.MAX_VALUE,
-                saturatingMultiply(whole, percent) + remainder * percent / 100L);
+        if (value == Long.MAX_VALUE || value > Long.MAX_VALUE / percent) return Long.MAX_VALUE;
+        return value * percent / 100L;
     }
 
     private static long saturatingMultiply(long left, long right) {
