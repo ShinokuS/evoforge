@@ -15,7 +15,13 @@ import io.github.evoforge.visualizer.VisualizerCamera;
 final class WorldGeneration2DLod {
     static final int DEFAULT_DETAILED_RANGE_CELLS = 96;
     static final int MIN_DETAILED_RANGE_CELLS = 32;
-    static final int MAX_DETAILED_RANGE_CELLS = 512;
+    /**
+     * 480 keeps visible x1 + neighbour halo + one 64-cell prefetch ring within the 128-tile x1 LRU
+     * even at the worst world/tile alignment. A larger slider value could otherwise create permanent
+     * cache churn where the worker rebuilds required tiles that it has just evicted.
+     */
+    static final int MAX_DETAILED_RANGE_CELLS = 480;
+    private static final int MAX_SAFE_PREWARM_SPAN_CELLS = 480;
 
     static final int DEFAULT_OVERVIEW_SAMPLES_PER_AXIS = 80;
     static final int MIN_OVERVIEW_SAMPLES_PER_AXIS = 32;
@@ -82,13 +88,15 @@ final class WorldGeneration2DLod {
     }
 
     /**
-     * Starts exact-tile residency throughout a deterministic band around the x1 threshold. This is
-     * based solely on Detailed range, so changing Far detail cannot accidentally disable x1 prewarm.
+     * Starts exact-tile residency before x1 when the speculative viewport still fits the exact-detail
+     * residency budget. This avoids the previous failure mode where a large Detailed setting asked
+     * the 128-tile LRU to keep hundreds of required tiles and the worker could never become idle.
      */
     static boolean detailWarmupUseful(int widthCells, int lengthCells) {
         if (widthCells <= 0 || lengthCells <= 0) return false;
         int span = Math.max(widthCells, lengthCells);
-        return span <= Math.multiplyExact(detailedRangeCells, 2);
+        int desiredWarmupSpan = Math.multiplyExact(detailedRangeCells, 2);
+        return span <= Math.min(desiredWarmupSpan, MAX_SAFE_PREWARM_SPAN_CELLS);
     }
 
     private static int rawStride(int spanCells) {
