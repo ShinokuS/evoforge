@@ -23,9 +23,8 @@ import java.util.concurrent.Executors;
  *
  * <p>Exact detail is authored in 64x64 world tiles, never in camera-relative rectangles. Elevation
  * and terrain shapes for one tile come from the same unit-resolution elevation snapshot and become
- * visible together. A one-tile prefetch ring is included in every published frame, so small pans and
- * micro-zooms continue to read the exact same tile objects instead of replacing an already visible
- * place with another presentation approximation.
+ * visible together. Visible tiles are published atomically; a one-tile prefetch ring continues in
+ * the background so small pans and micro-zooms reuse the same exact tile objects.
  *
  * <p>Tile generation is presentation work only. It is bounded by the requested viewport and does not
  * change authoritative terrain or make camera state part of Genesis.</p>
@@ -62,7 +61,7 @@ final class WorldGenerationExactDetailTiles {
     private WorldGenerationExactDetailTiles() {
     }
 
-    /** Returns an exact immutable frame when the visible tiles are covered, otherwise {@code null}. */
+    /** Returns an exact immutable frame when every currently visible tile is ready. */
     static synchronized DetailFrame request(
             ElevationField authoritative,
             VisualizerCamera.VisibleRange visible) {
@@ -75,8 +74,8 @@ final class WorldGenerationExactDetailTiles {
             return cachedFrame;
         }
         startWorkerIfNeeded();
-        if (!allReady(desired)) return null;
-        return buildFrame(authoritative, desired);
+        if (!allReady(required)) return null;
+        return buildFrame(authoritative, required);
     }
 
     /** Starts the same exact tile work before x1 becomes the selected presentation level. */
@@ -202,7 +201,7 @@ final class WorldGenerationExactDetailTiles {
 
     private static void startWorkerIfNeeded() {
         if (!enabled || workerRunning || source == null) return;
-        if (missingDesired().isEmpty()) return;
+        if (nextMissingBatch().isEmpty()) return;
         workerRunning = true;
         WORKER.execute(WorldGenerationExactDetailTiles::drain);
     }
@@ -213,7 +212,7 @@ final class WorldGenerationExactDetailTiles {
             List<TileKey> batch;
             synchronized (WorldGenerationExactDetailTiles.class) {
                 capturedSource = source;
-                batch = missingDesired();
+                batch = nextMissingBatch();
                 if (!enabled || capturedSource == null || batch.isEmpty()) {
                     workerRunning = false;
                     return;
@@ -237,13 +236,19 @@ final class WorldGenerationExactDetailTiles {
         }
     }
 
-    /** One viewport/prefetch generation is one bounded elevation materialization, not N page probes. */
-    private static List<TileKey> missingDesired() {
-        List<TileKey> missing = new ArrayList<>();
-        for (TileKey key : desired) {
-            if (!READY.containsKey(key)) missing.add(key);
+    /** Visible tiles are always one bulk batch; the prefetch ring is a later, lower-priority batch. */
+    private static List<TileKey> nextMissingBatch() {
+        List<TileKey> visibleMissing = new ArrayList<>();
+        for (TileKey key : required) {
+            if (!READY.containsKey(key)) visibleMissing.add(key);
         }
-        return missing;
+        if (!visibleMissing.isEmpty()) return visibleMissing;
+
+        List<TileKey> prefetchMissing = new ArrayList<>();
+        for (TileKey key : desired) {
+            if (!READY.containsKey(key)) prefetchMissing.add(key);
+        }
+        return prefetchMissing;
     }
 
     private static Map<TileKey, Tile> buildBatch(
@@ -496,6 +501,11 @@ final class WorldGenerationExactDetailTiles {
                     target[cursor] = elevationSubunitsAt(x, y);
                 }
             }
+        }
+
+        private boolean contains(int x, int y) {
+            return x >= bounds.minX() && x <= bounds.maxX()
+                    && y >= bounds.minY() && y <= bounds.maxY();
         }
     }
 }
