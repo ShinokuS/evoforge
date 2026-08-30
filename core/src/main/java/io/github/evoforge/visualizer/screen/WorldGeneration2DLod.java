@@ -41,9 +41,9 @@ final class WorldGeneration2DLod {
     static final long MAX_OVERVIEW_SAMPLES =
             MAX_OVERVIEW_SAMPLES_PER_AXIS * LEGACY_SLIDER_UNITS_PER_AXIS;
 
-    /** Small dead-band for wheel noise; deliberately much smaller than the old 15% area band. */
+    /** Small dead-band for wheel noise; deliberately much smaller than the old area-based band. */
     private static final int LOD_EXIT_PERCENT = 108;
-    private static final int LOD_ENTER_PERCENT = 92;
+    private static final int LOD_ENTER_PERCENT = 95;
 
     private static volatile int detailedRangeCells = DEFAULT_DETAILED_RANGE_CELLS;
     private static volatile int overviewSamplesPerAxis = DEFAULT_OVERVIEW_SAMPLES_PER_AXIS;
@@ -118,11 +118,6 @@ final class WorldGeneration2DLod {
         return Math.max(target, previous >> 1);
     }
 
-    /**
-     * Expands a clipped camera range to whole world-anchored LOD blocks. The returned range never
-     * leaves the world. Keeping the block origin tied to world bounds prevents a one-cell camera move
-     * from shifting every overview sample and rectangle on screen.
-     */
     static VisualizerCamera.VisibleRange alignVisibleRange(
             VisualizerCamera.VisibleRange visible,
             WorldBounds bounds,
