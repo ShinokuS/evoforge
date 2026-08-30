@@ -32,8 +32,8 @@ final class WorldGenerationShape2DRenderer implements Disposable {
     private static final float MIN_CAMERA_MARGIN = 2f;
     private static final float CAMERA_MARGIN_FRACTION = 0.03f;
     private static final int VISIBLE_RANGE_ROUNDING_CELLS = 4;
-    /** Full ramps/walls/neighbour art is useful only when individual cells are visually large. */
-    private static final long MAX_FULL_CELL_ART_CELLS = 20_000L;
+    /** Full ramps/walls/neighbour art is useful only at genuinely close inspection. */
+    private static final long MAX_FULL_CELL_ART_CELLS = 2_500L;
     private static final float DIAGNOSTIC_SHADOW_PIXELS = 5f;
     private static final float DIAGNOSTIC_STROKE_PIXELS = 2.75f;
     private static final Color DIAGNOSTIC_SHADOW =
@@ -176,48 +176,61 @@ final class WorldGenerationShape2DRenderer implements Disposable {
         int worldLength = bounds.maxY() - bounds.minY() + 1;
         int lodWidth = stableLodSpan(camera.visibleWorldWidth(), worldWidth);
         int lodLength = stableLodSpan(camera.visibleWorldHeight(), worldLength);
-        int stride = WorldGeneration2DLod.stride(lodWidth, lodLength);
-        VisualizerCamera.VisibleRange lodVisible = stride > 1
+        int desiredStride = WorldGeneration2DLod.stride(lodWidth, lodLength);
+        boolean boundedLargeWorld = WorldGenerationOverviewElevationField.hasFallback(elevation);
+        boolean drawingTerrain = showSurface || showOcean;
+
+        if (boundedLargeWorld
+                && drawingTerrain
+                && WorldGeneration2DLod.detailWarmupUseful(lodWidth, lodLength)) {
+            WorldGenerationExactDetailTiles.prewarm(elevation, visible);
+        }
+
+        int stride = desiredStride;
+        ElevationField presentationElevation = elevation;
+        TerrainShapeField presentationShapes = terrainShapes;
+        boolean exactCellDetailReady = !boundedLargeWorld;
+
+        if (boundedLargeWorld && desiredStride == 1 && drawingTerrain) {
+            WorldGenerationExactDetailTiles.DetailFrame frame =
+                    WorldGenerationExactDetailTiles.request(elevation, visible);
+            if (frame == null) {
+                // x1 is never exposed partially. Keep a stable nested x2 parent until the complete
+                // visible exact tile frame is available, then swap the whole frame at once.
+                stride = 2;
+                VisualizerCamera.VisibleRange parentVisible =
+                        WorldGeneration2DLod.alignVisibleRange(visible, bounds, stride);
+                presentationElevation = WorldGenerationOverviewElevationField.preload(
+                        elevation,
+                        parentVisible,
+                        stride);
+                WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
+            } else {
+                stride = 1;
+                presentationElevation = frame.elevation();
+                presentationShapes = frame.shapes();
+                exactCellDetailReady = true;
+                WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
+            }
+        } else if (desiredStride > 1 && drawingTerrain) {
+            VisualizerCamera.VisibleRange overviewVisible =
+                    WorldGeneration2DLod.alignVisibleRange(visible, bounds, desiredStride);
+            presentationElevation = WorldGenerationOverviewElevationField.preload(
+                    elevation,
+                    overviewVisible,
+                    desiredStride);
+            WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
+        }
+
+        VisualizerCamera.VisibleRange renderVisible = stride > 1
                 ? WorldGeneration2DLod.alignVisibleRange(visible, bounds, stride)
                 : visible;
-        int renderedWidth = lodVisible.maxX() - lodVisible.minX() + 1;
-        int renderedLength = lodVisible.maxY() - lodVisible.minY() + 1;
+        int renderedWidth = renderVisible.maxX() - renderVisible.minX() + 1;
+        int renderedLength = renderVisible.maxY() - renderVisible.minY() + 1;
         lastVisibleColumns = Math.multiplyExact((long) width, (long) length);
         lastRenderedSamples = WorldGeneration2DLod.sampledCells(renderedWidth, renderedLength, stride);
         lastLodStride = stride;
 
-        boolean boundedLargeWorldDetail = stride == 1
-                && WorldGenerationOverviewElevationField.hasFallback(elevation);
-        VisualizerCamera.VisibleRange detailVisible = visible;
-
-        ElevationField presentationElevation = elevation;
-        TerrainShapeField presentationShapes = terrainShapes;
-        boolean exactCellDetailReady = !boundedLargeWorldDetail;
-        if (stride > 1 && (showSurface || showOcean)) {
-            presentationElevation = WorldGenerationOverviewElevationField.preload(
-                    elevation,
-                    lodVisible,
-                    stride);
-            WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
-        } else if (boundedLargeWorldDetail && (showSurface || showOcean)) {
-            presentationElevation = WorldGenerationOverviewElevationField.preload(
-                    elevation,
-                    detailVisible,
-                    1);
-            exactCellDetailReady = WorldGenerationOverviewElevationField.isRefined(
-                    elevation,
-                    detailVisible,
-                    1);
-            if (showSurface) {
-                presentationShapes = WorldGenerationDetailTerrainShapeField.preload(
-                        terrainShapes,
-                        presentationElevation,
-                        detailVisible,
-                        exactCellDetailReady);
-            } else {
-                WorldGenerationDetailTerrainShapeField.suspend(terrainShapes);
-            }
-        }
         boolean fullCellArt = stride == 1
                 && exactCellDetailReady
                 && lastVisibleColumns <= MAX_FULL_CELL_ART_CELLS;
@@ -234,11 +247,9 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                         visible,
                         showOcean);
             } else if (stride == 1) {
-                // Cell-exact data remains one sample per world cell, but distant x1 deliberately
-                // skips expensive shape-neighbour art. This is only a rendering-detail decision.
-                drawTerrainOverview(batch, presentationElevation, visible, 1, showOcean);
+                drawTerrainExactLight(batch, presentationElevation, visible, showOcean);
             } else {
-                drawTerrainOverview(batch, presentationElevation, lodVisible, stride, showOcean);
+                drawTerrainOverview(batch, presentationElevation, renderVisible, stride, showOcean);
             }
             elevationShader.clear(batch);
             batch.setColor(Color.WHITE);
@@ -255,16 +266,14 @@ final class WorldGenerationShape2DRenderer implements Disposable {
             if (stride == 1) {
                 drawOceanDetailed(batch, presentationElevation, visible);
             } else {
-                drawOceanOverview(batch, presentationElevation, lodVisible, stride);
+                drawOceanOverview(batch, presentationElevation, renderVisible, stride);
             }
         }
         batch.end();
 
         if (showSurface && stride > 1) {
-            // Contours use the same world origin but a coarser nested level, so their geometry does
-            // not alternate between two origins while the camera crosses LOD blocks.
             VisualizerCamera.VisibleRange contourVisible = WorldGeneration2DLod.alignVisibleRange(
-                    lodVisible,
+                    renderVisible,
                     bounds,
                     Math.multiplyExact(stride, 2));
             drawOverviewContours(presentationElevation, contourVisible, stride * 2);
@@ -360,6 +369,28 @@ final class WorldGenerationShape2DRenderer implements Disposable {
                 y,
                 1f,
                 1f);
+    }
+
+    /** Exact one-cell sampling without the close-up ramp/wall/neighbour-art workload. */
+    private void drawTerrainExactLight(
+            SpriteBatch batch,
+            ElevationField elevation,
+            VisualizerCamera.VisibleRange visible,
+            boolean oceanVisible) {
+        for (int x = visible.minX(); x <= visible.maxX(); x++) {
+            for (int y = visible.minY(); y <= visible.maxY(); y++) {
+                long height = elevation.elevationSubunitsAt(x, y);
+                if (oceanVisible && height < 0L) continue;
+                batch.setColor(WorldGenerationElevationTint.shaderColor(
+                        height,
+                        elevationRange,
+                        elevationTintPpm,
+                        elevationColor));
+                // Keep distant x1 visually quiet. Surface texture variants are close-up decoration,
+                // not terrain signal, and otherwise look like mountain noise at regional scales.
+                batch.draw(landscapePack.surface(0xFF, 0), x, y, 1f, 1f);
+            }
+        }
     }
 
     private void drawTerrainOverview(
