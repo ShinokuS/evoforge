@@ -21,14 +21,16 @@ import io.github.evoforge.simulation.world.terrain.genesis.V15TerrainCoordinateF
 /**
  * Compatibility seam for the accepted historical V15 visualizer.
  *
- * <p>The old presentation still submits the same authored intent and receives the same page-backed
- * elevation contract. Reference-sized worlds stay on the exact finite V15 oracle so historical
- * parity remains directly inspectable. Larger preview worlds use the fixed-budget Continuum
- * production execution in the declared world's real coordinate frame. Neither path scales a smaller
- * finished terrain or membership raster onto the requested world.</p>
+ * <p>The old presentation still submits the same authored intent. Reference-sized worlds stay on
+ * the exact finite V15 oracle; larger worlds use the fixed-budget Continuum production execution in
+ * the declared world's real coordinate frame. Bounded development-preview worlds are then fully
+ * materialized once before publication so camera motion can never become terrain-generation work.
+ * Neither path scales a smaller finished terrain or membership raster onto the requested world.</p>
  */
 public final class ElevationGenerationStage {
     private static final long MAX_EXACT_PREVIEW_AXIS = 512L;
+    /** 4096² cells = 128 MiB of immutable long elevation data before compact shape indices. */
+    private static final long MAX_PRELOADED_PREVIEW_CELLS = 4_096L * 4_096L;
     private static final int SMALL_WORLD_PAGE_SIDE = 64;
     private static final int MEDIUM_WORLD_PAGE_SIDE = 16;
     private static final int LARGE_WORLD_PAGE_SIDE = 4;
@@ -87,12 +89,21 @@ public final class ElevationGenerationStage {
                     bounds.maxZ());
             elevationPages = production.elevationPages();
         }
-        return new ContinuumElevationField(bounds, elevationPages);
+
+        ElevationField elevation = new ContinuumElevationField(bounds, elevationPages);
+        return usesPreloadedPreview(domain)
+                ? MaterializedElevationField.copyOf(elevation)
+                : elevation;
     }
 
     static boolean usesExactReferencePlan(ContinuumWorldDomain domain) {
         if (domain == null) throw new IllegalArgumentException("domain must not be null");
         return Math.max(domain.width(), domain.height()) <= MAX_EXACT_PREVIEW_AXIS;
+    }
+
+    static boolean usesPreloadedPreview(ContinuumWorldDomain domain) {
+        if (domain == null) throw new IllegalArgumentException("domain must not be null");
+        return Math.multiplyExact(domain.width(), domain.height()) <= MAX_PRELOADED_PREVIEW_CELLS;
     }
 
     private static void requireHistoricalPreviewFrame(
