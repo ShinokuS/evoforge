@@ -14,21 +14,27 @@ import java.util.concurrent.TimeUnit;
  * Stable read-through elevation projection for the 2D world-generation inspector.
  *
  * <p>Overview LODs use a world-anchored sampled lattice and may refine that same lattice from the
- * authoritative V15 field after camera motion settles. Cell-detail ({@code stride == 1}) is different:
- * it never uses overview interpolation as final terrain. Exact x1 elevation and V15 shapes are
- * published atomically by {@link WorldGenerationExactDetailTiles}. Until that immutable tile frame is
- * ready, x1 reads a stable world-anchored x2 parent so the renderer cannot invent one-cell terraces
- * from an interpolated fallback.
+ * authoritative V15 field after camera motion settles. Refinement never replaces a visible overview
+ * in one frame: once the authoritative lattice is resident, elevation geomorphs from the already
+ * visible fallback to the authoritative values over a short presentation-only interval. This keeps
+ * coastlines and relief from popping while preserving immutable source terrain.</p>
+ *
+ * <p>Cell-detail ({@code stride == 1}) is different: it never uses overview interpolation as final
+ * terrain. Exact x1 elevation and V15 shapes are published atomically by
+ * {@link WorldGenerationExactDetailTiles}. Until that immutable tile frame is ready, x1 reads a
+ * stable world-anchored x2 parent so the renderer cannot invent one-cell terraces from an
+ * interpolated fallback.</p>
  *
  * <p>When x2 approaches the configured detail budget, the exact world tiles are prewarmed in the
  * background. Raising Detailed range can therefore expose hundreds of cells per axis without making
- * the render thread perform the corresponding unit-resolution terrain work at the LOD transition.
+ * the render thread perform the corresponding unit-resolution terrain work at the LOD transition.</p>
  *
- * <p>All projections are presentation-only and rebuildable. Camera state never changes simulation or
- * Genesis facts.</p>
+ * <p>All projections, blends and caches are presentation-only and rebuildable. Camera state never
+ * changes simulation or Genesis facts.</p>
  */
 final class WorldGenerationOverviewElevationField implements ElevationField {
     private static final long REFINEMENT_SETTLE_MILLIS = 180L;
+    private static final long REFINEMENT_BLEND_NANOS = TimeUnit.MILLISECONDS.toNanos(140L);
     private static final int CELL_DETAIL_PARENT_STRIDE = 2;
     private static final Map<ElevationField, ElevationField> FALLBACKS = new WeakHashMap<>();
     private static final ScheduledThreadPoolExecutor REFINER = new ScheduledThreadPoolExecutor(
@@ -53,6 +59,13 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
     private static VisualizerCamera.VisibleRange refinedVisible;
     private static int refinedStride;
     private static WorldGenerationOverviewElevationField refinedField;
+
+    private static ElevationField transitionDelegate;
+    private static VisualizerCamera.VisibleRange transitionVisible;
+    private static int transitionStride;
+    private static WorldGenerationOverviewElevationField transitionFrom;
+    private static WorldGenerationOverviewElevationField transitionTo;
+    private static long transitionStartedNanos;
 
     private static ElevationField pendingDelegate;
     private static VisualizerCamera.VisibleRange pendingVisible;
@@ -91,6 +104,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         FALLBACKS.put(authoritative, fallback);
         if (cachedDelegate == authoritative) clearCache();
         if (refinedDelegate == authoritative) clearRefinement();
+        if (transitionDelegate == authoritative) clearTransition();
         if (pendingDelegate == authoritative) cancelPending();
         if (detailFallbackDelegate == authoritative) clearDetailFallback();
     }
@@ -159,8 +173,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                         stableVisible,
                         presentationStride)
                 && refinedField != null) {
-            cache(elevation, stableVisible, presentationStride, refinedField);
-            return refinedField;
+            return refinedPresentation(elevation, stableVisible, presentationStride);
         }
 
         ElevationField presentationSource = FALLBACKS.getOrDefault(elevation, elevation);
@@ -202,6 +215,7 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         WorldGenerationExactDetailTiles.invalidate(elevation);
         if (cachedDelegate == elevation) clearCache();
         if (refinedDelegate == elevation) clearRefinement();
+        if (transitionDelegate == elevation) clearTransition();
         if (pendingDelegate == elevation) cancelPending();
         if (detailFallbackDelegate == elevation) clearDetailFallback();
     }
@@ -210,7 +224,10 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
     static synchronized void refinementEnabledForTests(boolean enabled) {
         refinementEnabled = enabled;
         WorldGenerationExactDetailTiles.enabledForTests(enabled);
-        if (!enabled) cancelPending();
+        if (!enabled) {
+            cancelPending();
+            clearTransition();
+        }
     }
 
     @Override
@@ -330,15 +347,65 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
                     || !FALLBACKS.containsKey(authoritative)) {
                 return;
             }
+            WorldGenerationOverviewElevationField visibleBeforeRefinement =
+                    matches(cachedDelegate, cachedVisible, cachedStride, authoritative, visible, stride)
+                            ? cachedField
+                            : null;
             refinedDelegate = authoritative;
             refinedVisible = visible;
             refinedStride = stride;
             refinedField = prepared;
-            if (matches(cachedDelegate, cachedVisible, cachedStride, authoritative, visible, stride)) {
-                cachedField = prepared;
+            if (visibleBeforeRefinement != null && visibleBeforeRefinement != prepared) {
+                beginTransition(
+                        authoritative,
+                        visible,
+                        stride,
+                        visibleBeforeRefinement,
+                        prepared);
+            } else {
+                clearTransition();
             }
             clearPendingState();
         }
+    }
+
+    private static ElevationField refinedPresentation(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible,
+            int stride) {
+        if (transitionFrom != null
+                && transitionTo != null
+                && matches(
+                        transitionDelegate,
+                        transitionVisible,
+                        transitionStride,
+                        authoritative,
+                        visible,
+                        stride)) {
+            long elapsed = Math.max(0L, System.nanoTime() - transitionStartedNanos);
+            if (elapsed < REFINEMENT_BLEND_NANOS) {
+                double linear = elapsed / (double) REFINEMENT_BLEND_NANOS;
+                double smooth = linear * linear * (3d - 2d * linear);
+                return new BlendedElevationField(transitionFrom, transitionTo, smooth);
+            }
+            clearTransition();
+        }
+        cache(authoritative, visible, stride, refinedField);
+        return refinedField;
+    }
+
+    private static void beginTransition(
+            ElevationField authoritative,
+            VisualizerCamera.VisibleRange visible,
+            int stride,
+            WorldGenerationOverviewElevationField from,
+            WorldGenerationOverviewElevationField to) {
+        transitionDelegate = authoritative;
+        transitionVisible = visible;
+        transitionStride = stride;
+        transitionFrom = from;
+        transitionTo = to;
+        transitionStartedNanos = System.nanoTime();
     }
 
     private static boolean pendingMatches(
@@ -387,6 +454,15 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         refinedVisible = null;
         refinedStride = 0;
         refinedField = null;
+    }
+
+    private static void clearTransition() {
+        transitionDelegate = null;
+        transitionVisible = null;
+        transitionStride = 0;
+        transitionFrom = null;
+        transitionTo = null;
+        transitionStartedNanos = 0L;
     }
 
     private static void clearDetailFallback() {
@@ -452,6 +528,59 @@ final class WorldGenerationOverviewElevationField implements ElevationField {
         private static int alignedBlockStart(int worldMinimum, int coordinate, int stride) {
             long block = Math.floorDiv((long) coordinate - worldMinimum, stride);
             return Math.toIntExact((long) worldMinimum + block * stride);
+        }
+    }
+
+    /** Immutable presentation-only morph between two already materialized views of the same world. */
+    private static final class BlendedElevationField implements ElevationField {
+        private final ElevationField from;
+        private final ElevationField to;
+        private final double alpha;
+
+        private BlendedElevationField(ElevationField from, ElevationField to, double alpha) {
+            if (from == null || to == null || !sameBounds(from.bounds(), to.bounds())) {
+                throw new IllegalArgumentException("LOD blend fields must share world bounds");
+            }
+            this.from = from;
+            this.to = to;
+            this.alpha = Math.max(0d, Math.min(1d, alpha));
+        }
+
+        @Override public WorldBounds bounds() { return to.bounds(); }
+
+        @Override
+        public int elevationAt(int x, int y) {
+            return Math.toIntExact(Math.floorDiv(elevationSubunitsAt(x, y), SUBUNITS_PER_CELL));
+        }
+
+        @Override
+        public long elevationSubunitsAt(int x, int y) {
+            long a = from.elevationSubunitsAt(x, y);
+            long b = to.elevationSubunitsAt(x, y);
+            return Math.round(a + (b - (double) a) * alpha);
+        }
+
+        @Override
+        public void fillElevationSubunits(
+                int minX,
+                int minY,
+                int sampleWidth,
+                int sampleHeight,
+                long step,
+                long[] target) {
+            int samples = Math.multiplyExact(sampleWidth, sampleHeight);
+            if (target == null || target.length < samples) {
+                throw new IllegalArgumentException("LOD blend target is too small");
+            }
+            long[] fromValues = new long[samples];
+            long[] toValues = new long[samples];
+            from.fillElevationSubunits(minX, minY, sampleWidth, sampleHeight, step, fromValues);
+            to.fillElevationSubunits(minX, minY, sampleWidth, sampleHeight, step, toValues);
+            for (int sample = 0; sample < samples; sample++) {
+                long a = fromValues[sample];
+                long b = toValues[sample];
+                target[sample] = Math.round(a + (b - (double) a) * alpha);
+            }
         }
     }
 
